@@ -1,0 +1,51 @@
+[package]
+name = "skl"
+version = "0.1.1"
+edition = "2021"
+repository = "https://github.com/al8n/skl-rs"
+description = "A template for creating Rust open-source repo on GitHub"
+license = "MIT/Apache-2.0"
+
+[[bench]]
+path = "benches/foo.rs"
+name = "foo"
+harness = false
+
+[features]
+default = ["std"]
+std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-skiplist/std", "crossbeam-epoch/std"]
+inline_more = []
+loom = ["crossbeam-epoch/loom", "loom-crate", "crossbeam-utils/loom"]
+
+[target.'cfg(skl_loom)'.dependencies.loom-crate]
+package = "loom"
+version = "0.5"
+optional = true
+
+[dependencies]
+crossbeam-epoch = { version = "0.9", optional = true, default-features = false }
+crossbeam-skiplist = { path = "crossbeam/crossbeam-skiplist", optional = true, default-features = false }
+crossbeam-utils = "0.8"
+getrandom = { version = "0.2", default-features = false, features = ["rdrand"] }
+kvstructs = { version = "0.0.15", default-features = false }
+rand = { version = "0.8", optional = true }
+
+[dev-dependencies]
+criterion = "0.3"
+tempfile = "3"
+
+[profile.bench]
+opt-level = 3
+debug = false
+codegen-units = 1
+lto = 'thin'
+incremental = false
+debug-assertions = false
+overflow-checks = false
+rpath = false
+
+
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

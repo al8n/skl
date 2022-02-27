@@ -599,7 +599,7 @@ pub struct UniSKLIterator<'a, D: Dropper> {
     reversed: bool,
 }
 
-impl<'a, D: Dropper> UniSKLIterator<'a, D> {
+impl<'a, D: Dropper> kvstructs::iterator::Iterator for UniSKLIterator<'a, D> {
     #[inline]
     fn next(&mut self) {
         if !self.reversed {

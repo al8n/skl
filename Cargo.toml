@@ -3,7 +3,7 @@ name = "skl"
 version = "0.1.1"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
-description = "A template for creating Rust open-source repo on GitHub"
+description = "A placeholder"
 license = "MIT/Apache-2.0"
 
 [[bench]]
@@ -13,7 +13,7 @@ harness = false
 
 [features]
 default = ["std"]
-std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-skiplist/std", "crossbeam-epoch/std"]
+std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-skiplist/std", "crossbeam-epoch/std", "parking_lot/default"]
 inline_more = []
 loom = ["crossbeam-epoch/loom", "loom-crate", "crossbeam-utils/loom"]
 
@@ -27,6 +27,7 @@ crossbeam-epoch = { version = "0.9", optional = true, default-features = false }
 crossbeam-skiplist = { path = "crossbeam/crossbeam-skiplist", optional = true, default-features = false }
 crossbeam-utils = "0.8"
 getrandom = { version = "0.2", default-features = false, features = ["rdrand"] }
+parking_lot = { version = "0.12", optional = true }
 kvstructs = { version = "0.0.15", default-features = false }
 rand = { version = "0.8", optional = true }
 

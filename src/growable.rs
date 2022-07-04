@@ -1,7 +1,12 @@
-use crate::skl::{Dropper, InsertResult, NoopDropper};
-use crate::skl::{Node, HEIGHT_INCREASE, MAX_HEIGHT, MAX_NODE_SIZE, NODE_ALIGN, OFFSET_SIZE};
-use crate::skl::fixed_arena::FixedArena;
-use crate::sync::{Arc, AtomicU32, Ordering};
+use crate::arena::growable::{encode_value, Key, NewNode, Value, MAX_NODE_SIZE};
+
+use super::arena::growable::{ArenaRef, GrowableArena};
+use super::sync::{Arc, AtomicU32, Ordering};
+use super::utils::random_height;
+use super::{
+    Dropper, InsertResult, Node as NodeInner, NoopDropper, HEIGHT_INCREASE, MAX_HEIGHT, NODE_ALIGN,
+    OFFSET_SIZE,
+};
 use core::cmp;
 use core::fmt::{Debug, Formatter};
 use core::mem::{self, replace};
@@ -9,18 +14,16 @@ use core::ptr::{drop_in_place, null, null_mut};
 use core::ptr::{slice_from_raw_parts, write, write_bytes, NonNull};
 use crossbeam_utils::CachePadded;
 use kvstructs::bytes::Bytes;
-use kvstructs::{Key, KeyExt, KeyRef, Value, ValueExt, ValueRef};
-
-
+use kvstructs::{KeyExt, KeyRef, ValueExt, ValueRef as ValueRefInner};
 
 /// Fixed size lock-free ARENA based skiplist.
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct SKL<D: Dropper> {
-    inner: Arc<SKLInner<D>>,
+pub struct GrowableSKL<D: Dropper> {
+    inner: Arc<Inner<D>>,
 }
 
-impl<D: Dropper> Clone for SKL<D> {
+impl<D: Dropper> Clone for GrowableSKL<D> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -43,30 +46,177 @@ impl HotData {
 }
 
 #[derive(Debug)]
-struct SKLInner<D: Dropper> {
+struct Inner<D: Dropper> {
     // Current height. 1 <= height <= kMaxHeight. CAS.
     hot_data: CachePadded<HotData>,
-    arena: FixedArena,
+    arena: GrowableArena,
+    head_offset: u32,
     on_drop: Option<D>,
 }
 
-impl<D: Dropper> SKLInner<D> {
+impl<D: Dropper> Inner<D> {
     #[inline]
-    fn new(arena: FixedArena, dropper: Option<D>) -> Self {
+    fn new(arena: GrowableArena, dropper: Option<D>) -> Self {
+        let head = arena.new_node(kvstructs::Key::new(), kvstructs::Value::new(), MAX_HEIGHT);
+        let ho = arena.get_node_offset(head);
         Self {
-            hot_data: CachePadded::new(HotData::new(0)),
+            hot_data: CachePadded::new(HotData::new(1)),
             arena,
+            head_offset: ho,
             on_drop: dropper,
         }
     }
 
     #[inline]
-    fn get_next(&self, nd: *const Node, height: usize) -> *const Node {
+    fn get_head(&self) -> *const NewNode {
+        self.arena.get_node(self.head_offset)
+    }
+
+    #[inline]
+    fn get_next(&self, nd: *const NewNode, height: usize) -> *const NewNode {
         unsafe {
             match nd.as_ref() {
                 None => null(),
-                Some(nd) => self.arena.get_node_ptr(nd.get_next_offset(height)),
+                Some(nd) => self.arena.get_node(nd.get_next_offset(height)),
             }
+        }
+    }
+
+    // findNear finds the node near to key.
+    // If less=true, it finds rightmost node such that node.key < key (if allowEqual=false) or
+    // node.key <= key (if allowEqual=true).
+    // If less=false, it finds leftmost node such that node.key > key (if allowEqual=false) or
+    // node.key >= key (if allowEqual=true).
+    // Returns the node found. The bool returned is true if the node has key equal to given key.
+    fn find_near(&self, key: impl KeyExt, less: bool, allow_equal: bool) -> (*const NewNode, bool) {
+        let key = key.as_key_ref();
+        let mut curr = self.get_head();
+        let mut level = (self.get_height() - 1) as usize;
+        loop {
+            // Assume curr.key < key.
+            let next = self.get_next(curr, level);
+
+            if next.is_null() {
+                // curr.key < key < END OF LIST
+                if level > 0 {
+                    // Can descend further to iterate closer to the end.
+                    level -= 1;
+                    continue;
+                }
+
+                // Level=0. Cannot descend further. Let's return something that makes sense.
+                if !less {
+                    return (null(), false);
+                }
+
+                // Try to return curr. Make sure it is not a curr node.
+                if curr == self.get_head() {
+                    return (null(), false);
+                }
+                return (curr, false);
+            }
+
+            // Safety: we have checked next is not null
+            let next_ref = unsafe { &*next };
+            match key.compare_key(next_ref.get_key(&self.arena)) {
+                cmp::Ordering::Less => {
+                    // cmp < 0. In other words, curr.key < key < next.
+                    if level > 0 {
+                        level -= 1;
+                        continue;
+                    }
+
+                    // At base level. Need to return something.
+                    if !less {
+                        return (next, false);
+                    }
+
+                    // Try to return curr. Make sure it is not a head node.
+                    if curr == self.get_head() {
+                        return (null(), false);
+                    }
+
+                    return (curr, false);
+                }
+                cmp::Ordering::Equal => {
+                    // curr.key < key == next.key.
+                    if allow_equal {
+                        return (next, true);
+                    }
+
+                    if !less {
+                        // We want >, so go to base level to grab the next bigger node.
+                        return (self.get_next(next, 0), false);
+                    }
+
+                    // We want <. If not base level, we should go closer in the next level.
+                    if level > 0 {
+                        level -= 1;
+                        continue;
+                    }
+
+                    // On base level. Return curr.
+                    if curr == self.get_head() {
+                        return (null(), false);
+                    }
+                    return (curr, false);
+                }
+                cmp::Ordering::Greater => {
+                    // curr.key < next.key < key. We can continue to move right.
+                    curr = next;
+                    continue;
+                }
+            }
+        }
+    }
+
+    /// findSpliceForLevel returns (outBefore, outAfter) with outBefore.key <= key <= outAfter.key.
+    /// The input "before" tells us where to start looking.
+    /// If we found a node with the same key, then we return outBefore = outAfter.
+    /// Otherwise, outBefore.key < key < outAfter.key.
+    fn find_splice_for_level(&self, key: impl KeyExt, mut before: u32, level: usize) -> (u32, u32) {
+        let key = key.as_key_ref();
+        loop {
+            // Assume before.key < key.
+            let before_node = self.arena.get_node(before);
+            // Safety: before is not null.
+            let before_node_ref = unsafe { &*before_node };
+            let next = before_node_ref.get_next_offset(level);
+            let next_node = self.arena.get_node(next);
+            if next_node.is_null() {
+                return (before, next);
+            }
+            // Safety: we have checked next_node is not null.
+            let next_ref = unsafe { &*next_node };
+            let next_key = next_ref.get_key(&self.arena);
+            match key.compare_key(next_key) {
+                cmp::Ordering::Less => return (before, next),
+                cmp::Ordering::Equal => return (next, next),
+                cmp::Ordering::Greater => {
+                    // Keep moving right on this level.
+                    before = next;
+                    continue;
+                }
+            }
+        }
+    }
+
+    fn find_last(&self) -> *const NewNode {
+        let mut n = self.get_head();
+        let mut level = self.get_height() - 1;
+        loop {
+            let next = self.get_next(n, level as usize);
+            if !next.is_null() {
+                n = next;
+                continue;
+            }
+            if level == 0 {
+                if n == self.get_head() {
+                    return null();
+                }
+                return n;
+            }
+            level -= 1;
         }
     }
 
@@ -78,47 +228,52 @@ impl<D: Dropper> SKLInner<D> {
     /// is_empty returns if the Skiplist is empty.
     #[inline]
     fn is_empty(&self) -> bool {
-        unsafe { self.arena.get_head().get_next_offset(0) == 0 }
+        self.find_last().is_null()
     }
 
-    /// Push inserts the key-value pair.
-    #[inline]
-    fn insert_in(&self, key: Key, val: Value) -> InsertResult {
-        let v = val.to_encoded().leak_data();
+    /// Get gets the value associated with the key. It returns a valid value if it finds equal or earlier
+    /// version of the same key.
+    fn put(&self, key: impl KeyExt, val: impl ValueExt) {
+        let key_ref = key.as_key_ref();
+        let val_ref = val.as_value_ref();
+
         // Since we allow overwrite, we may not need to create a new node. We might not even need to
         // increase the height. Let's defer these actions.
-        let mut list_height = self.get_height();
-        let mut prev = [null_mut(); MAX_HEIGHT + 1];
-        let mut nxt = [null_mut(); MAX_HEIGHT + 1];
-        prev[list_height as usize + 1] = self.arena.get_head_mut();
-        nxt[list_height as usize + 1] = null_mut();
 
-        for idx in (0..=list_height as usize).rev() {
+        let mut list_height = self.get_height();
+        let mut prev = [0u32; MAX_HEIGHT + 1];
+        let mut next = [0u32; MAX_HEIGHT + 1];
+        prev[list_height as usize] = self.head_offset;
+        for i in (0..list_height as usize).rev() {
             // Use higher level to speed up for current level.
-            let (p, n) = self.find_splice_for_level(key.as_bytes(), prev[idx + 1], idx);
-            prev[idx] = p;
-            nxt[idx] = n;
-            if p == n {
-                unsafe {
-                    let p_node = &mut (*p);
-                    if p_node.value != v {
-                        let val = replace(&mut p_node.value, v);
-                        return InsertResult::Update(Value::decode_bytes( val));
-                    }
-                }
-                return InsertResult::Equal(key, val);
+            let (prev_i, next_i) = self.find_splice_for_level(key_ref, prev[i + 1], i);
+            prev[i] = prev_i;
+            next[i] = next_i;
+            // we found a node has the same key with `key`
+            // hence we only update the value
+            if prev_i == next_i {
+                let val_offset = self.arena.put_val(val_ref);
+                let val_encode_size = val.encoded_size();
+                let encode_value = encode_value(val_offset, val_encode_size);
+                let prev_node = self.arena.get_node(prev_i);
+                // Safety: find_splice_for_level make sure this node ptr is not null
+                let prev_node_ref = unsafe { &*prev_node };
+                prev_node_ref.set_val(encode_value);
+                return;
             }
         }
 
         // We do need to create a new node.
         let height = random_height();
+        let mut curr = self.arena.new_node(key_ref, val_ref, height);
 
-        let new_node_offset =
-            self.arena.allocate_node(key, v, height);
+        // Safety: we just created a new node, so curr cannot be null.
+        let curr_ref = unsafe { &mut *curr };
 
         // Try to increase s.height via CAS.
-        while height > list_height as usize {
-            match self.hot_data.height.compare_exchange_weak(
+        list_height = self.get_height();
+        while height as u32 > list_height {
+            match self.hot_data.height.compare_exchange(
                 list_height,
                 height as u32,
                 Ordering::SeqCst,
@@ -126,84 +281,80 @@ impl<D: Dropper> SKLInner<D> {
             ) {
                 // Successfully increased skiplist.height.
                 Ok(_) => break,
-                Err(height) => list_height = height,
+                Err(_) => list_height = self.get_height(),
             }
         }
 
-        let new_node = unsafe { &mut *self.arena.get_node_mut::<Node>(new_node_offset) };
-
         // We always insert from the base level and up. After you add a node in base level, we cannot
         // create a node in the level above because it would have discovered the node in the base level.
-        for i in 0..=height {
+        for i in 0..height {
             loop {
-                if prev[i].is_null() {
+                if self.arena.get_node(prev[i]).is_null() {
                     assert!(i > 1); // This cannot happen in base level.
-                    // We haven't computed prev, next for this level because height exceeds old listHeight.
-                    // For these levels, we expect the lists to be sparse, so we can just search from head.
-                    let (p, n) =
-                        self.find_splice_for_level(&new_node.key, self.arena.get_head_mut(), i);
-                    prev[i] = p;
-                    nxt[i] = n;
+                                    // We haven't computed prev, next for this level because height exceeds old listHeight.
+                                    // For these levels, we expect the lists to be sparse, so we can just search from head.
+                    let (prev_i, next_i) = self.find_splice_for_level(key_ref, self.head_offset, i);
+                    prev[i] = prev_i;
+                    next[i] = next_i;
+
                     // Someone adds the exact same key before we are able to do so. This can only happen on
                     // the base level. But we know we are not on the base level.
-                    assert_ne!(p, n);
+                    assert!(prev_i != next_i);
                 }
 
-                let nxt_offset = self.arena.get_node_offset(nxt[i]);
-                new_node.tower[i].store(nxt_offset, Ordering::SeqCst);
-
-                match unsafe { (&*prev[i]) }.tower[i].compare_exchange(
-                    nxt_offset,
-                    new_node_offset,
+                curr_ref.tower[i] = AtomicU32::new(next[i]);
+                let parent_node = self.arena.get_node(prev[i]);
+                let parent_node_ref = unsafe { &*parent_node };
+                match parent_node_ref.tower[i].compare_exchange(
+                    next[i],
+                    self.arena.get_node_offset(curr),
                     Ordering::SeqCst,
                     Ordering::SeqCst,
                 ) {
+                    // Managed to insert curr between prev[i] and next[i]. Go to the next level.
                     Ok(_) => break,
                     Err(_) => {
                         // CAS failed. We need to recompute prev and next.
                         // It is unlikely to be helpful to try to use a different level as we redo the search,
                         // because it is unlikely that lots of nodes are inserted between prev[i] and next[i].
-                        let (p, n) = self.find_splice_for_level(&new_node.key, prev[i], i);
-                        if p == n {
+                        let (prev_i, next_i) = self.find_splice_for_level(key_ref, prev[i], i);
+                        prev[i] = prev_i;
+                        next[i] = next_i;
+                        if prev_i == next_i {
                             assert_eq!(i, 0, "Equality can happen only on base level: {}", i);
-                            unsafe {
-                                let p_node = &(*p);
-                                if p_node.value != new_node.value {
-                                    // insertion failed, get back the key and value
-                                    let key = replace(&mut new_node.key, Key::new());
-                                    let val = replace(&mut new_node.value, Bytes::new());
-                                    return InsertResult::Fail(key, Value::decode_bytes(val));
-                                }
-                                drop_in_place(new_node);
-                            }
-                            return InsertResult::Success;
+                            let value_offset = self.arena.put_val(val_ref);
+                            let encode_value_size = val_ref.encoded_size();
+                            let encode_value = encode_value(value_offset, encode_value_size);
+                            let prev_node = self.arena.get_node(prev_i);
+                            // Safety: prev_node is not null, we checked it in find_splice_for_level
+                            let prev_node_ref = unsafe { &mut *prev_node };
+                            prev_node_ref.set_val(encode_value);
+                            return;
                         }
-                        prev[i] = p;
-                        nxt[i] = n;
                     }
                 }
             }
         }
-        InsertResult::Success
-
-
-
     }
 
-    /// Get gets the value associated with the key. It returns a valid value if it finds equal or earlier
-    /// version of the same key.
-    fn get_in(&self, key: impl KeyExt) -> Option<ValueRef> {
-        let (n, _) = self.find_near(key.as_bytes(), false, true); // findGreaterOrEqual
+    fn get(&self, key: impl KeyExt) -> Option<crate::arena::growable::Value> {
+        let key = key.as_key_ref();
+        let (n, _) = self.find_near(key, false, true); // findGreaterOrEqual.
         if n.is_null() {
-            None
-        } else {
-            let n = unsafe { &*n };
-            if !key.as_key_ref().eq(&n.key) {
-                None
-            } else {
-                Some(ValueRef::decode_value_ref(n.value.as_ref()))
-            }
+            return None;
         }
+
+        // Safety: we already checked n is not null.
+        let n_ref = unsafe { &*n };
+        let next_key = self.arena.get_key(n_ref.key_offset, n_ref.key_size);
+        let timestamp = next_key.parse_timestamp();
+        if !key.same_key(next_key) {
+            return None;
+        }
+        let (value_offset, value_size) = n_ref.get_value_offset();
+        let mut vs = self.arena.get_val(value_offset, value_size);
+        vs.set_version(timestamp);
+        Some(vs)
     }
 
     /// cap returns the capacity of the Skiplist in terms of how much memory is used within its internal
@@ -219,156 +370,9 @@ impl<D: Dropper> SKLInner<D> {
     fn len(&self) -> usize {
         self.arena.len()
     }
-
-    /// Finds the node near to key.
-    /// If less=true, it finds rightmost node such that node.key < key (if allowEqual=false) or
-    /// node.key <= key (if allowEqual=true).
-    /// If less=false, it finds leftmost node such that node.key > key (if allowEqual=false) or
-    /// node.key >= key (if allowEqual=true).
-    /// Returns the node found. The bool returned is true if the node has key equal to given key.
-    fn find_near(&self, key: &[u8], less: bool, allow_equal: bool) -> (*const Node, bool) {
-        let mut curr = self.arena.get_head_ptr();
-        let mut lvl = self.get_height();
-        unsafe {
-            loop {
-                // Assume x.key < key
-                let nxt_offset = (&*curr).get_next_offset(lvl as usize);
-                if nxt_offset == 0 {
-                    // x.key < key < END OF LIST
-                    if lvl > 0 {
-                        // Can descend further to iterate closer to the end.
-                        lvl -= 1;
-                        continue;
-                    }
-
-                    // lvl = 0. Cannot descend further. Let's return something that makes sense.
-                    if !less {
-                        return (null(), false);
-                    }
-
-                    // Try to return x. Make sure it is not a head node.
-                    if self.arena.is_head(curr) {
-                        return (null(), false);
-                    }
-
-                    return (curr, false);
-                }
-
-                let nxt_node = self.arena.get_node_mut::<Node>(nxt_offset);
-                let nxt = &*nxt_node;
-
-                match key.cmp(&nxt.key) {
-                    cmp::Ordering::Less => {
-                        if lvl > 0 {
-                            lvl -= 1;
-                            continue;
-                        }
-
-                        // At base level. Need to return something.
-                        if !less {
-                            return (nxt, false);
-                        }
-
-                        // Try to return x. Make sure it is not a head node.
-                        if self.arena.is_head(curr) {
-                            return (null(), false);
-                        }
-                        return (curr, false);
-                    }
-                    cmp::Ordering::Equal => {
-                        // x.key < key == next.key.
-                        if allow_equal {
-                            return (nxt, true);
-                        }
-                        if !less {
-                            // We want >, so go to base level to grab the next bigger note.
-                            let offset = nxt.get_next_offset(0);
-                            return if offset == 0 {
-                                (null(), false)
-                            } else {
-                                (self.arena.get_node_mut(offset), false)
-                            };
-                        }
-
-                        // We want <. If not base level, we should go closer in the next level.
-                        if lvl > 0 {
-                            lvl -= 1;
-                            continue;
-                        }
-
-                        // On base level. Return x.
-                        if self.arena.is_head(curr) {
-                            return (null(), false);
-                        }
-                        return (curr, false);
-                    }
-                    cmp::Ordering::Greater => {
-                        curr = nxt_node;
-                        continue;
-                    }
-                }
-            }
-        }
-    }
-
-    /// find_splice_for_level returns (outBefore, outAfter) with outBefore.key <= key <= outAfter.key.
-    /// The input "before" tells us where to start looking.
-    /// If we found a node with the same key, then we return outBefore = outAfter.
-    /// Otherwise, outBefore.key < key < outAfter.key.
-    #[cfg_attr(feature = "inline_more", inline)]
-    fn find_splice_for_level(
-        &self,
-        key: &[u8],
-        mut before: *mut Node,
-        lvl: usize,
-    ) -> (*mut Node, *mut Node) {
-        loop {
-            unsafe {
-                // assume before key < key.
-                let nxt_offset = (&*before).get_next_offset(lvl);
-                if nxt_offset == 0 {
-                    return (before, null_mut());
-                }
-
-                let nxt_ptr = self.arena.get_node_mut::<Node>(nxt_offset);
-                let nxt_node = &*nxt_ptr;
-                match key.cmp(&nxt_node.key) {
-                    // before.key < key < next.key. We are done for this level.
-                    cmp::Ordering::Less => return (before, nxt_ptr),
-                    // Equality case.
-                    cmp::Ordering::Equal => return (nxt_ptr, nxt_ptr),
-                    // Keep moving right on this level.
-                    cmp::Ordering::Greater => before = nxt_ptr,
-                }
-            }
-        }
-    }
-
-    /// find_last returns the last element. If head (empty list), we return nil. All the find functions
-    /// will NEVER return the head nodes.
-    #[cfg_attr(feature = "inline_more", inline)]
-    fn find_last(&self) -> *const Node {
-        let mut curr = self.arena.get_head_ptr();
-        let mut lvl = self.get_height();
-        loop {
-            let nxt = unsafe { &*curr }.get_next_offset(lvl as usize);
-            if nxt != 0 {
-                curr = unsafe { self.arena.get_node_mut(nxt) };
-                continue;
-            } else {
-                if lvl == 0 {
-                    if self.arena.is_head(curr) {
-                        return null();
-                    }
-                    return curr;
-                }
-                lvl -= 1;
-            }
-        }
-    }
 }
 
-impl<D: Dropper> Drop for SKLInner<D> {
+impl<D: Dropper> Drop for Inner<D> {
     fn drop(&mut self) {
         match self.on_drop.as_mut() {
             None => {}
@@ -377,10 +381,10 @@ impl<D: Dropper> Drop for SKLInner<D> {
     }
 }
 
-unsafe impl<D: Send + Dropper> Send for SKLInner<D> {}
-unsafe impl<D: Send + Sync + Dropper> Sync for SKLInner<D> {}
+unsafe impl<D: Send + Dropper> Send for Inner<D> {}
+unsafe impl<D: Send + Sync + Dropper> Sync for Inner<D> {}
 
-impl SKL<NoopDropper> {
+impl GrowableSKL<NoopDropper> {
     /// Create a new skiplist according to the given capacity
     ///
     /// **Note:** The capacity stands for how many memory allocated,
@@ -390,7 +394,7 @@ impl SKL<NoopDropper> {
     }
 }
 
-impl<D: Dropper> SKL<D> {
+impl<D: Dropper> GrowableSKL<D> {
     /// Create a new skiplist according to the given capacity and [`Dropper`]
     ///
     /// **Note:** The capacity stands for how many memory allocated,
@@ -402,33 +406,33 @@ impl<D: Dropper> SKL<D> {
     }
 
     fn new_with_dropper_in(sz: usize, closer: Option<D>) -> Self {
-        let arena = FixedArena::new(sz);
+        let arena = GrowableArena::new(sz);
         Self::new_in(arena, closer)
     }
 }
 
-impl<D: Dropper> SKL<D> {
-    fn new_in(arena: FixedArena, dropper: Option<D>) -> Self {
+impl<D: Dropper> GrowableSKL<D> {
+    fn new_in(arena: GrowableArena, dropper: Option<D>) -> Self {
         Self {
-            inner: Arc::new(SKLInner::new(arena, dropper)),
+            inner: Arc::new(Inner::new(arena, dropper)),
         }
     }
 
     /// Inserts the key-value pair.
-    pub fn insert(&self, key: Key, val: Value) -> InsertResult {
-        self.inner.insert_in(key, val)
+    pub fn insert(&self, key: impl KeyExt, val: impl ValueExt) {
+        self.inner.put(key, val)
     }
 
     /// Gets the value associated with the key. It returns a valid value if it finds equal or earlier
     /// version of the same key.
-    pub fn get(&self, key: impl KeyExt) -> Option<ValueRef> {
-        self.inner.get_in(key)
+    pub fn get(&self, key: impl KeyExt) -> Option<crate::arena::growable::Value> {
+        self.inner.get(key)
     }
 
     /// Returns a skiplist iterator.
     #[inline]
-    fn iter(&self) -> SKLIterator<'_, D> {
-        SKLIterator {
+    fn iter(&self) -> GrowableSKLIterator<'_, D> {
+        GrowableSKLIterator {
             skl: self,
             curr: null(),
         }
@@ -451,102 +455,100 @@ impl<D: Dropper> SKL<D> {
     pub fn cap(&self) -> usize {
         self.inner.cap()
     }
-
-    // #[inline]
-    // pub fn could_insert(&self) -> bool {
-    //     self.inner.arena.could_insert()
-    // }
 }
 
-impl<K: KeyExt, D: Dropper> PartialEq<K> for SKL<D> {
-    fn eq(&self, other: &K) -> bool {
-        match unsafe { self.inner.find_last().as_ref() } {
-            None => false,
-            Some(node) => node.key.eq(other),
-        }
-    }
-}
+// impl<K: KeyExt, D: Dropper> PartialEq<K> for GrowableSKL<D> {
+//     fn eq(&self, other: &K) -> bool {
+//         match unsafe { self.inner.find_last().as_ref() } {
+//             None => false,
+//             Some(node) => node.key.eq(other),
+//         }
+//     }
+// }
 
-impl<D: Dropper> PartialEq<SKL<D>> for SKL<D> {
-    fn eq(&self, other: &SKL<D>) -> bool {
-        match unsafe { self.inner.find_last().as_ref() } {
-            None => other.inner.find_last().is_null(),
-            Some(node) => match unsafe { other.inner.find_last().as_ref() } {
-                None => false,
-                Some(other_node) => node.key.eq(&other_node.key),
-            },
-        }
-    }
-}
+// impl<D: Dropper> PartialEq<GrowableSKL<D>> for GrowableSKL<D> {
+//     fn eq(&self, other: &GrowableSKL<D>) -> bool {
+//         match unsafe { self.inner.find_last().as_ref() } {
+//             None => other.inner.find_last().is_null(),
+//             Some(node) => match unsafe { other.inner.find_last().as_ref() } {
+//                 None => false,
+//                 Some(other_node) => node.key.eq(&other_node.key),
+//             },
+//         }
+//     }
+// }
 
-impl<D: Dropper> Eq for SKL<D> {}
+// impl<D: Dropper> Eq for GrowableSKL<D> {}
 
-impl<K: KeyExt, D: Dropper> PartialOrd<K> for SKL<D> {
-    fn partial_cmp(&self, other: &K) -> Option<cmp::Ordering> {
-        match unsafe { self.inner.find_last().as_ref() } {
-            None => None,
-            Some(node) => node.key.partial_cmp(other),
-        }
-    }
-}
+// impl<K: KeyExt, D: Dropper> PartialOrd<K> for GrowableSKL<D> {
+//     fn partial_cmp(&self, other: &K) -> Option<cmp::Ordering> {
+//         match unsafe { self.inner.find_last().as_ref() } {
+//             None => None,
+//             Some(node) => node.key.partial_cmp(other),
+//         }
+//     }
+// }
 
-impl<D: Dropper> PartialOrd<SKL<D>> for SKL<D> {
-    fn partial_cmp(&self, other: &SKL<D>) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl<D: Dropper> PartialOrd<GrowableSKL<D>> for GrowableSKL<D> {
+//     fn partial_cmp(&self, other: &GrowableSKL<D>) -> Option<cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
 
-impl<D: Dropper> Ord for SKL<D> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        match unsafe { self.inner.find_last().as_ref() } {
-            None => match unsafe { other.inner.find_last().as_ref() } {
-                None => cmp::Ordering::Equal,
-                Some(_) => cmp::Ordering::Greater,
-            },
-            Some(node) => match unsafe { other.inner.find_last().as_ref() } {
-                None => cmp::Ordering::Less,
-                Some(other_node) => node.key.cmp(&other_node.key),
-            },
-        }
-    }
-}
+// impl<D: Dropper> Ord for GrowableSKL<D> {
+//     fn cmp(&self, other: &Self) -> cmp::Ordering {
+//         match unsafe { self.inner.find_last().as_ref() } {
+//             None => match unsafe { other.inner.find_last().as_ref() } {
+//                 None => cmp::Ordering::Equal,
+//                 Some(_) => cmp::Ordering::Greater,
+//             },
+//             Some(node) => match unsafe { other.inner.find_last().as_ref() } {
+//                 None => cmp::Ordering::Less,
+//                 Some(other_node) => node.key.cmp(&other_node.key),
+//             },
+//         }
+//     }
+// }
 
-// SKLIterator is an iterator over skiplist object. For new objects, you just
-// need to initialize SKLIterator.list.
+/// GrowableSKLIterator is an iterator over skiplist object. For new objects, you just
+/// need to initialize GrowableSKLIterator.list.
 #[derive(Copy, Clone, Debug)]
-pub struct SKLIterator<'a, D: Dropper> {
-    skl: &'a SKL<D>,
-    curr: *const Node,
+pub struct GrowableSKLIterator<'a, D: Dropper> {
+    skl: &'a GrowableSKL<D>,
+    curr: *const NewNode,
 }
 
-impl<'a, D: Dropper> SKLIterator<'a, D> {
+impl<'a, D: Dropper> GrowableSKLIterator<'a, D> {
     /// Key returns the key at the current position.
     #[inline]
-    pub fn key(&self) -> KeyRef {
+    pub fn key(&self) -> Key {
         unsafe {
             let curr = &*self.curr;
-            curr.key.as_key_ref()
+            self.skl.inner.arena.get_key(curr.key_offset, curr.key_size)
         }
     }
 
     /// Value returns value.
     #[inline]
-    pub fn value(&self) -> ValueRef {
-        unsafe { ValueRef::decode_value_ref(&(*self.curr).value) }
+    pub fn value(&self) -> Value {
+        let curr = unsafe { &*self.curr };
+        let (value_offset, value_size) = curr.get_value_offset();
+        self.skl.inner.arena.get_val(value_offset, value_size)
     }
 
     /// next advances to the next position.
     #[inline]
     pub fn next(&mut self) {
-        let nxt = self.skl.inner.get_next(self.curr, 0);
-        self.curr = nxt;
+        assert!(self.valid());
+        self.curr = self.skl.inner.get_next(self.curr, 0);
     }
 
     /// Prev advances to the previous position.
     #[inline]
     pub fn prev(&mut self) {
-        let (prev, _) = self.skl.inner.find_near(self.key().as_slice(), true, false); // find <. No equality allowed.
-        self.curr = prev;
+        assert!(self.valid());
+        let (prev, _) = self.skl.inner.find_near(self.key(), true, false);
+        self.curr = prev; // find <. No equality allowed.
     }
 
     /// Seek advances to the first entry with a key >= target.
@@ -568,11 +570,7 @@ impl<'a, D: Dropper> SKLIterator<'a, D> {
     #[inline]
     pub fn seek_to_first(&mut self) {
         // find <=
-        let tgt = self
-            .skl
-            .inner
-            .get_next(self.skl.inner.arena.get_head_ptr(), 0);
-        self.curr = tgt;
+        self.curr = self.skl.inner.get_next(self.skl.inner.get_head(), 0);
     }
 
     /// seek_to_last seeks position at the last entry in list.
@@ -594,12 +592,12 @@ impl<'a, D: Dropper> SKLIterator<'a, D> {
 /// Iterator. We like to keep Iterator as before, because it is more powerful and
 /// we might support bidirectional iterators in the future.
 #[derive(Copy, Clone, Debug)]
-pub struct UniSKLIterator<'a, D: Dropper> {
-    iter: SKLIterator<'a, D>,
+pub struct UniGrowableSKLIterator<'a, D: Dropper> {
+    iter: GrowableSKLIterator<'a, D>,
     reversed: bool,
 }
 
-impl<'a, D: Dropper> kvstructs::iterator::Iterator for UniSKLIterator<'a, D> {
+impl<'a, D: Dropper> kvstructs::iterator::Iterator<Key, Value> for UniGrowableSKLIterator<'a, D> {
     #[inline]
     fn next(&mut self) {
         if !self.reversed {
@@ -619,7 +617,7 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator for UniSKLIterator<'a, D> {
     }
 
     #[inline]
-    fn seek<K: KeyExt>(&mut self, key: K) {
+    fn seek<Q: KeyExt>(&mut self, key: Q) {
         if !self.reversed {
             self.iter.seek(key)
         } else {
@@ -628,38 +626,22 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator for UniSKLIterator<'a, D> {
     }
 
     #[inline]
-    fn entry(&self) -> Option<(KeyRef, ValueRef)> {
-        unsafe {
-            match self.iter.curr.as_ref() {
-                None => None,
-                Some(curr) => Some((
-                    curr.key.as_key_ref(),
-                    ValueRef::decode_value_ref(curr.value.as_ref()),
-                )),
-            }
-        }
+    fn entry(&self) -> Option<(Key, Value)> {
+        self.iter
+            .valid()
+            .then(|| (self.iter.key(), self.iter.value()))
     }
 
     /// Key returns the key at the current position.
     #[inline]
-    fn key(&self) -> Option<KeyRef> {
-        unsafe {
-            match self.iter.curr.as_ref() {
-                None => None,
-                Some(curr) => Some(curr.key.as_key_ref()),
-            }
-        }
+    fn key(&self) -> Option<Key> {
+        self.valid().then(|| self.iter.key())
     }
 
     /// Value returns value.
     #[inline]
-    fn val(&self) -> Option<ValueRef> {
-        unsafe {
-            match self.iter.curr.as_ref() {
-                None => None,
-                Some(curr) => Some(ValueRef::decode_value_ref(curr.value.as_ref())),
-            }
-        }
+    fn val(&self) -> Option<Value> {
+        self.valid().then(|| self.iter.value())
     }
 
     #[inline]
@@ -668,44 +650,17 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator for UniSKLIterator<'a, D> {
     }
 }
 
-#[cfg(feature = "std")]
-#[inline]
-fn random_height() -> usize {
-    use rand::{thread_rng, Rng};
-    let mut rng = thread_rng();
-    for h in 0..(MAX_HEIGHT - 1) {
-        if !rng.gen_ratio(HEIGHT_INCREASE, u32::MAX) {
-            return h;
-        }
-    }
-    MAX_HEIGHT - 1
-}
-
-#[cfg(not(feature = "std"))]
-#[inline]
-fn random_height() -> usize {
-    let mut h = 1;
-    let mh = MAX_HEIGHT as u32;
-    while h < mh {
-        let mut rbuf = [0; 4];
-        getrandom::getrandom(rbuf.as_mut()).unwrap();
-        if u32::from_ne_bytes(rbuf) <= HEIGHT_INCREASE {
-            h += 1;
-        } else {
-            break h;
-        }
-    }
-    h as usize
-}
-
 #[cfg(test)]
 mod tests {
+    use core::ops::Deref;
+
     use super::*;
+    use alloc::format;
     use kvstructs::bytes::BufMut;
     use kvstructs::{bytes::Bytes, Key, Value, ValueExt, ValueMut, ValueMutExt};
     use rand::Rng;
 
-    const ARENA_SIZE: usize = 1 << 20;
+    const ARENA_SIZE: usize = 10;
 
     fn key(i: usize) -> Key {
         Key::from(format!("{:05}", i)).with_timestamp(0)
@@ -721,8 +676,9 @@ mod tests {
         vm
     }
 
-    fn length<D: Dropper>(s: SKL<D>) -> usize {
-        let mut x = s.inner.get_next(s.inner.arena.get_head_ptr(), 0);
+    fn length<D: Dropper>(s: GrowableSKL<D>) -> usize {
+        let head = s.inner.get_head();
+        let mut x = s.inner.get_next(head, 0);
         let mut ctr = 0;
         while !x.is_null() {
             ctr += 1;
@@ -733,22 +689,22 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let k1 = Key::from("key1".as_bytes().to_vec()).with_timestamp(0);
         let v1 = new_value(42).freeze();
         let v1c = new_value(42).freeze();
         let ir = l.insert(k1.clone(), v1);
-        assert!(matches!(ir, InsertResult::Success));
-        let ir1 = l.insert(k1.clone(), v1c);
-        assert!(matches!(ir1, InsertResult::Equal(..)));
-        let v2 = new_value(52).freeze();
-        let ir2 = l.insert(k1.clone(), v2);
-        assert!(matches!(ir2, InsertResult::Update(..)));
+        // assert!(matches!(ir, InsertResult::Success));
+        // let ir1 = l.insert(k1.clone(), v1c);
+        // assert!(matches!(ir1, InsertResult::Equal(..)));
+        // let v2 = new_value(52).freeze();
+        // let ir2 = l.insert(k1.clone(), v2);
+        // assert!(matches!(ir2, InsertResult::Update(..)));
     }
 
     #[test]
     fn test_basic() {
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(200);
         let mut v1 = new_value(42);
         let mut v2 = new_value(52);
         let mut v3 = new_value(62);
@@ -766,10 +722,11 @@ mod tests {
             Key::from("key1".as_bytes().to_vec()).with_timestamp(0),
             v1.freeze(),
         );
-
+        let v = l
+            .get(&Key::from("key1".as_bytes()).with_timestamp(0))
+            .unwrap();
         v2.set_meta(56);
         l.insert(Key::from("key2".as_bytes()).with_timestamp(2), v2.freeze());
-
         v3.set_meta(57);
         l.insert(Key::from("key3".as_bytes()).with_timestamp(0), v3.freeze());
 
@@ -815,7 +772,7 @@ mod tests {
         assert_eq!(v.get_meta(), 60);
     }
 
-    fn test_basic_large_testcases_in<D: Dropper>(l: SKL<D>) {
+    fn test_basic_large_testcases_in<D: Dropper>(l: GrowableSKL<D>) {
         let n = 1000;
 
         for i in 0..n {
@@ -832,12 +789,12 @@ mod tests {
 
     #[test]
     fn test_basic_large_testcases() {
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         test_basic_large_testcases_in(l);
     }
 
     fn assert_find_near_not_null<D: Dropper>(
-        l: SKL<D>,
+        l: GrowableSKL<D>,
         less: bool,
         allow_equal: bool,
         fk: Key,
@@ -847,12 +804,18 @@ mod tests {
         let (n, eq) = l.inner.find_near(fk.as_slice(), less, allow_equal);
         unsafe {
             let n = &*n;
-            assert!(n.key.eq(&ek));
+            let key = n.get_key(&l.inner.arena);
+            assert!(key.same_key(&ek));
         }
         assert_eq!(is_eq, eq);
     }
 
-    fn assert_find_near_null<D: Dropper>(l: SKL<D>, less: bool, allow_equal: bool, fk: Key) {
+    fn assert_find_near_null<D: Dropper>(
+        l: GrowableSKL<D>,
+        less: bool,
+        allow_equal: bool,
+        fk: Key,
+    ) {
         let (n, eq) = l.inner.find_near(fk.as_slice(), less, allow_equal);
         assert!(n.is_null());
         assert!(!eq);
@@ -860,7 +823,7 @@ mod tests {
 
     #[test]
     fn test_find_near() {
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         for i in 0..1000 {
             let k = Key::from(format!("{:05}", i * 10 + 5)).with_timestamp(0);
             l.insert(k, new_value(i).freeze());
@@ -1055,7 +1018,7 @@ mod tests {
     #[test]
     fn test_iter_next() {
         let n = 100;
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();
@@ -1070,7 +1033,7 @@ mod tests {
         for i in 0..n {
             assert!(iter.valid());
             let v = iter.value();
-            assert_eq!(new_value(i).freeze().as_value_ref(), v);
+            assert_eq!(new_value(i).freeze().as_value_ref(), v.as_value_ref());
             iter.next();
         }
 
@@ -1081,7 +1044,7 @@ mod tests {
     #[test]
     fn test_iter_prev() {
         let n = 100;
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();
@@ -1095,16 +1058,16 @@ mod tests {
 
         iter.seek_to_last();
         for i in (0..n).rev() {
-            assert!(iter.valid());
+            assert!(iter.valid(), "{i}");
             let v = iter.value();
-            assert_eq!(new_value(i).freeze().as_value_ref(), v);
+            assert_eq!(new_value(i).freeze().as_value_ref(), v.as_value_ref());
             iter.prev();
         }
 
         assert!(!iter.valid());
     }
 
-    fn assert_seek<D: Dropper>(iter: &mut SKLIterator<D>, seek_to: &'static str) {
+    fn assert_seek<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
         iter.seek(&Key::from(seek_to).with_timestamp(0));
         assert!(iter.valid());
         assert_eq!(
@@ -1113,7 +1076,7 @@ mod tests {
         );
     }
 
-    fn assert_seek_null<D: Dropper>(iter: &mut SKLIterator<D>, seek_to: &'static str) {
+    fn assert_seek_null<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
         iter.seek(&Key::from(seek_to).with_timestamp(0));
         assert!(!iter.valid());
     }
@@ -1121,7 +1084,7 @@ mod tests {
     #[test]
     fn test_iter_seek() {
         let n = 100;
-        let l = SKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();

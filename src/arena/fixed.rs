@@ -1,10 +1,11 @@
+use crate::sync::{Arc, AtomicU32, Ordering};
+use crate::{Node, MAX_HEIGHT, MAX_NODE_SIZE, NODE_ALIGN, OFFSET_SIZE};
+use alloc::{vec, vec::Vec};
 use core::fmt::{Debug, Formatter};
-use core::ptr::{write, write_bytes, NonNull, null, null_mut, slice_from_raw_parts};
-use core::mem;
+use core::mem::{self, ManuallyDrop};
+use core::ptr::{null, null_mut, slice_from_raw_parts, write, write_bytes, NonNull};
 use kvstructs::bytes::Bytes;
 use kvstructs::Key;
-use crate::skl::{MAX_HEIGHT, MAX_NODE_SIZE, Node, NODE_ALIGN, OFFSET_SIZE};
-use crate::sync::{AtomicU32, Ordering};
 
 /// FixedArena should be lock-free
 pub(crate) struct FixedArena {
@@ -66,13 +67,7 @@ impl FixedArena {
     }
 
     #[inline(always)]
-    fn allocate_node_helper(
-        &self,
-        key: Key,
-        val: Bytes,
-        height: usize,
-        offset: u32,
-    ) -> u32 {
+    fn allocate_node_helper(&self, key: Key, val: Bytes, height: usize, offset: u32) -> u32 {
         unsafe {
             let node_ptr: *mut Node = self.get_node_mut(offset);
             let node = &mut *node_ptr;

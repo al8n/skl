@@ -25,3 +25,26 @@ pub(crate) fn random_height() -> usize {
     }
     MAX_HEIGHT - 1
 }
+
+#[cfg(test)]
+pub(crate) fn key(i: usize) -> kvstructs::Key {
+    use alloc::format;
+
+    kvstructs::Key::from(format!("{:05}", i)).with_timestamp(0)
+}
+
+#[cfg(test)]
+pub(crate) fn big_value(i: usize) -> kvstructs::Value {
+    use alloc::format;
+    kvstructs::Value::from(format!("{:01048576}", i))
+}
+
+#[cfg(test)]
+pub(crate) fn new_value(i: usize) -> kvstructs::ValueMut {
+    use alloc::format;
+    use kvstructs::bytes::BufMut;
+
+    let mut vm = kvstructs::ValueMut::default();
+    vm.put_slice(format!("{:05}", i).as_bytes());
+    vm
+}

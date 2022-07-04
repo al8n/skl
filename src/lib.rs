@@ -16,7 +16,7 @@ mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
 mod growable;
-pub use crate::growable::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
+pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
 
 mod sync {
     #[cfg(not(loom))]
@@ -92,19 +92,31 @@ impl Dropper for NoopDropper {
 }
 
 /// Insert result
-#[derive(Clone)]
-pub enum InsertResult {
+pub enum InsertResult<K: kvstructs::KeyExt, V: kvstructs::ValueExt> {
     /// Equal
-    Equal(Key, Value),
+    Equal(K, V),
     /// Fail to insert
-    Fail(Key, Value),
+    Fail(K, V),
     /// Update old value
-    Update(Value),
+    Update(V),
     /// Successfully inserted
     Success,
 }
 
-impl core::fmt::Debug for InsertResult {
+impl<K: kvstructs::KeyExt + Clone, V: kvstructs::ValueExt + Clone> Clone for InsertResult<K, V> {
+    fn clone(&self) -> Self {
+        match self {
+            InsertResult::Equal(k, v) => InsertResult::Equal(k.clone(), v.clone()),
+            InsertResult::Fail(k, v) => InsertResult::Fail(k.clone(), v.clone()),
+            InsertResult::Update(v) => InsertResult::Update(v.clone()),
+            InsertResult::Success => InsertResult::Success,
+        }
+    }
+}
+
+impl<K: kvstructs::KeyExt + Copy, V: kvstructs::ValueExt + Copy> Copy for InsertResult<K, V> {}
+
+impl<K: kvstructs::KeyExt + core::fmt::Debug, V: kvstructs::ValueExt + core::fmt::Debug> core::fmt::Debug for InsertResult<K, V> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             InsertResult::Equal(k, v) => f

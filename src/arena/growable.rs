@@ -1,5 +1,7 @@
-use crate::sync::{Arc, AtomicU32, Ordering};
+use crate::sync::{AtomicU32, Ordering};
+
 use crate::{Node as NodeInner, MAX_HEIGHT, NODE_ALIGN, OFFSET_SIZE};
+use alloc::rc::Rc;
 use alloc::{vec, vec::Vec};
 use core::cell::UnsafeCell;
 use core::fmt::{Debug, Formatter};
@@ -15,13 +17,13 @@ pub(crate) const MAX_NODE_SIZE: usize = mem::size_of::<NewNode>();
 
 #[derive(Debug, Clone)]
 pub(crate) struct ArenaRef {
-    refs: Arc<NonNull<u8>>,
+    refs: Rc<NonNull<u8>>,
     cap: usize,
 }
 
 impl Drop for ArenaRef {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.refs) == 1 {
+        if Rc::strong_count(&self.refs) == 1 {
             unsafe {
                 let _ = alloc::vec::Vec::from_raw_parts(self.refs.as_ptr(), self.cap, self.cap);
             }
@@ -29,26 +31,23 @@ impl Drop for ArenaRef {
     }
 }
 
-unsafe impl Sync for ArenaRef {}
-unsafe impl Send for ArenaRef {}
-
-pub struct Key {
+pub struct RcKey {
     key: RawKeyPointer,
     refs: ArenaRef,
 }
 
-impl KeyExt for Key {
+impl KeyExt for RcKey {
     fn as_bytes(&self) -> &[u8] {
         self.key.as_bytes()
     }
 }
 
-pub struct Value {
+pub struct RcValue {
     val: RawValuePointer,
     refs: ArenaRef,
 }
 
-impl Value {
+impl RcValue {
     #[inline]
     pub fn set_version(&mut self, version: u64) {
         self.val.set_version(version)
@@ -60,7 +59,7 @@ impl Value {
     }
 }
 
-impl ValueExt for Value {
+impl ValueExt for RcValue {
     fn parse_value(&self) -> &[u8] {
         self.val.parse_value()
     }
@@ -142,7 +141,7 @@ impl NewNode {
 #[derive(Debug)]
 struct Inner {
     vec: ManuallyDrop<Vec<u8>>,
-    refs: Arc<NonNull<u8>>,
+    refs: Rc<NonNull<u8>>,
 }
 
 impl Inner {
@@ -151,7 +150,7 @@ impl Inner {
         let ptr = vec.as_mut_ptr();
         Self {
             vec: ManuallyDrop::new(vec),
-            refs: Arc::new(unsafe { NonNull::new_unchecked(ptr) }),
+            refs: Rc::new(unsafe { NonNull::new_unchecked(ptr) }),
         }
     }
 
@@ -166,7 +165,7 @@ impl Inner {
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.refs) == 1 {
+        if Rc::strong_count(&self.refs) == 1 {
             let cap = self.vec.capacity();
             unsafe {
                 let _ = Vec::from_raw_parts(self.vec.as_mut_ptr(), cap, cap);
@@ -303,10 +302,10 @@ impl GrowableArena {
         }
     }
 
-    pub(crate) fn get_key(&self, offset: u32, size: u16) -> Key {
+    pub(crate) fn get_key(&self, offset: u32, size: u16) -> RcKey {
         let inner = unsafe { &*self.inner.get() };
         let size = size as u32;
-        Key {
+        RcKey {
             key: unsafe {
                 RawKeyPointer::new(
                     inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
@@ -317,9 +316,9 @@ impl GrowableArena {
         }
     }
 
-    pub(crate) fn get_val(&self, offset: u32, size: u32) -> Value {
+    pub(crate) fn get_val(&self, offset: u32, size: u32) -> RcValue {
         let inner = unsafe { &*self.inner.get() };
-        Value {
+        RcValue {
             val: unsafe {
                 RawValuePointer::new(
                     inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
@@ -336,19 +335,7 @@ impl GrowableArena {
         }
         let inner = unsafe { &*self.inner.get() };
         node as u32 - inner.vec.as_ptr() as u32
-    }
-
-    #[inline]
-    fn as_ptr_mut(&self) -> *mut u8 {
-        let inner = unsafe { &*self.inner.get() };
-        inner.refs.as_ptr()
-    }
-
-    #[inline]
-    fn as_ptr(&self) -> *const u8 {
-        let inner = unsafe { &*self.inner.get() };
-        inner.vec.as_ptr()
-    }
+    } 
 
     #[inline]
     pub(crate) fn cap(&self) -> usize {

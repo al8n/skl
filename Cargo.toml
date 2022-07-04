@@ -12,14 +12,16 @@ name = "foo"
 harness = false
 
 [features]
-default = []
-std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more"]
+default = ["std"]
+alloc = []
+std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-epoch/default"]
 inline_more = []
 
 [target.'cfg(loom)'.dependencies]
 loom = "0.5.6"
 
 [dependencies]
+crossbeam-epoch = { version = "0.9", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
 kvstructs = { version = "0.0.20", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }

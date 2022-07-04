@@ -84,7 +84,7 @@ impl<D: Dropper> Inner<D> {
 
     /// Push inserts the key-value pair.
     #[inline]
-    fn insert_in(&self, key: Key, val: Value) -> InsertResult {
+    fn insert_in(&self, key: Key, val: Value) -> InsertResult<Key, Value> {
         let v = val.to_encoded().leak_data();
         // Since we allow overwrite, we may not need to create a new node. We might not even need to
         // increase the height. Let's defer these actions.
@@ -412,7 +412,7 @@ impl<D: Dropper> FixedSKL<D> {
     }
 
     /// Inserts the key-value pair.
-    pub fn insert(&self, key: Key, val: Value) -> InsertResult {
+    pub fn insert(&self, key: Key, val: Value) -> InsertResult<Key, Value> {
         self.inner.insert_in(key, val)
     }
 

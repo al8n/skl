@@ -1,5 +1,4 @@
-use crate::arena::growable::{encode_value, Key, NewNode, Value, MAX_NODE_SIZE};
-
+use crate::arena::growable::{encode_value, RcKey, NewNode, RcValue, MAX_NODE_SIZE};
 use super::arena::growable::{ArenaRef, GrowableArena};
 use super::sync::{Arc, AtomicU32, Ordering};
 use super::utils::random_height;
@@ -14,16 +13,20 @@ use core::ptr::{drop_in_place, null, null_mut};
 use core::ptr::{slice_from_raw_parts, write, write_bytes, NonNull};
 use crossbeam_utils::CachePadded;
 use kvstructs::bytes::Bytes;
-use kvstructs::{KeyExt, KeyRef, ValueExt, ValueRef as ValueRefInner};
+use kvstructs::{KeyExt, ValueExt};
 
-/// Fixed size lock-free ARENA based skiplist.
+/// Growable lock-free ARENA based skiplist.
+/// 
+/// **Note:** This struct is like Rc, which means you cannot use this struct between threads
+/// - If you want a thread-safe Growable skiplist, see `ArcGrowableSKL` 
+/// - If you want a thread-safe with fixed size skiplist, see `FixedSKL`
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct GrowableSKL<D: Dropper> {
+pub struct RcGrowableSKL<D: Dropper> {
     inner: Arc<Inner<D>>,
 }
 
-impl<D: Dropper> Clone for GrowableSKL<D> {
+impl<D: Dropper> Clone for RcGrowableSKL<D> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -258,6 +261,8 @@ impl<D: Dropper> Inner<D> {
                 let prev_node = self.arena.get_node(prev_i);
                 // Safety: find_splice_for_level make sure this node ptr is not null
                 let prev_node_ref = unsafe { &*prev_node };
+                let (prev_val_offset, prev_val_size) = prev_node_ref.get_value_offset();
+                let prev_val = self.arena.get_val(prev_val_offset, prev_val_size);
                 prev_node_ref.set_val(encode_value);
                 return;
             }
@@ -337,7 +342,7 @@ impl<D: Dropper> Inner<D> {
         }
     }
 
-    fn get(&self, key: impl KeyExt) -> Option<crate::arena::growable::Value> {
+    fn get(&self, key: impl KeyExt) -> Option<RcValue> {
         let key = key.as_key_ref();
         let (n, _) = self.find_near(key, false, true); // findGreaterOrEqual.
         if n.is_null() {
@@ -381,10 +386,7 @@ impl<D: Dropper> Drop for Inner<D> {
     }
 }
 
-unsafe impl<D: Send + Dropper> Send for Inner<D> {}
-unsafe impl<D: Send + Sync + Dropper> Sync for Inner<D> {}
-
-impl GrowableSKL<NoopDropper> {
+impl RcGrowableSKL<NoopDropper> {
     /// Create a new skiplist according to the given capacity
     ///
     /// **Note:** The capacity stands for how many memory allocated,
@@ -394,7 +396,7 @@ impl GrowableSKL<NoopDropper> {
     }
 }
 
-impl<D: Dropper> GrowableSKL<D> {
+impl<D: Dropper> RcGrowableSKL<D> {
     /// Create a new skiplist according to the given capacity and [`Dropper`]
     ///
     /// **Note:** The capacity stands for how many memory allocated,
@@ -411,7 +413,7 @@ impl<D: Dropper> GrowableSKL<D> {
     }
 }
 
-impl<D: Dropper> GrowableSKL<D> {
+impl<D: Dropper> RcGrowableSKL<D> {
     fn new_in(arena: GrowableArena, dropper: Option<D>) -> Self {
         Self {
             inner: Arc::new(Inner::new(arena, dropper)),
@@ -425,14 +427,14 @@ impl<D: Dropper> GrowableSKL<D> {
 
     /// Gets the value associated with the key. It returns a valid value if it finds equal or earlier
     /// version of the same key.
-    pub fn get(&self, key: impl KeyExt) -> Option<crate::arena::growable::Value> {
+    pub fn get(&self, key: impl KeyExt) -> Option<RcValue> {
         self.inner.get(key)
     }
 
     /// Returns a skiplist iterator.
     #[inline]
-    fn iter(&self) -> GrowableSKLIterator<'_, D> {
-        GrowableSKLIterator {
+    fn iter(&self) -> RcGrowableSKLIterator<'_, D> {
+        RcGrowableSKLIterator {
             skl: self,
             curr: null(),
         }
@@ -444,10 +446,17 @@ impl<D: Dropper> GrowableSKL<D> {
         self.inner.is_empty()
     }
 
-    /// Returns the length
+    /// Returns the exact length of skiplist,
+    /// this function will iterates over skiplist to give exact length
     #[inline]
     pub fn len(&self) -> usize {
-        self.inner.arena.len()
+        let mut curr = self.inner.get_next(self.inner.get_head(), 0);
+        let mut ctr = 0;
+        while !curr.is_null() {
+            ctr += 1;
+            curr = self.inner.get_next(curr, 0);
+        }
+        ctr
     }
 
     /// Returns the skiplist's capacity
@@ -457,71 +466,18 @@ impl<D: Dropper> GrowableSKL<D> {
     }
 }
 
-// impl<K: KeyExt, D: Dropper> PartialEq<K> for GrowableSKL<D> {
-//     fn eq(&self, other: &K) -> bool {
-//         match unsafe { self.inner.find_last().as_ref() } {
-//             None => false,
-//             Some(node) => node.key.eq(other),
-//         }
-//     }
-// }
-
-// impl<D: Dropper> PartialEq<GrowableSKL<D>> for GrowableSKL<D> {
-//     fn eq(&self, other: &GrowableSKL<D>) -> bool {
-//         match unsafe { self.inner.find_last().as_ref() } {
-//             None => other.inner.find_last().is_null(),
-//             Some(node) => match unsafe { other.inner.find_last().as_ref() } {
-//                 None => false,
-//                 Some(other_node) => node.key.eq(&other_node.key),
-//             },
-//         }
-//     }
-// }
-
-// impl<D: Dropper> Eq for GrowableSKL<D> {}
-
-// impl<K: KeyExt, D: Dropper> PartialOrd<K> for GrowableSKL<D> {
-//     fn partial_cmp(&self, other: &K) -> Option<cmp::Ordering> {
-//         match unsafe { self.inner.find_last().as_ref() } {
-//             None => None,
-//             Some(node) => node.key.partial_cmp(other),
-//         }
-//     }
-// }
-
-// impl<D: Dropper> PartialOrd<GrowableSKL<D>> for GrowableSKL<D> {
-//     fn partial_cmp(&self, other: &GrowableSKL<D>) -> Option<cmp::Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }
-
-// impl<D: Dropper> Ord for GrowableSKL<D> {
-//     fn cmp(&self, other: &Self) -> cmp::Ordering {
-//         match unsafe { self.inner.find_last().as_ref() } {
-//             None => match unsafe { other.inner.find_last().as_ref() } {
-//                 None => cmp::Ordering::Equal,
-//                 Some(_) => cmp::Ordering::Greater,
-//             },
-//             Some(node) => match unsafe { other.inner.find_last().as_ref() } {
-//                 None => cmp::Ordering::Less,
-//                 Some(other_node) => node.key.cmp(&other_node.key),
-//             },
-//         }
-//     }
-// }
-
-/// GrowableSKLIterator is an iterator over skiplist object. For new objects, you just
-/// need to initialize GrowableSKLIterator.list.
+/// RcGrowableSKLIterator is an iterator over skiplist object. For new objects, you just
+/// need to initialize RcGrowableSKLIterator.list.
 #[derive(Copy, Clone, Debug)]
-pub struct GrowableSKLIterator<'a, D: Dropper> {
-    skl: &'a GrowableSKL<D>,
+pub struct RcGrowableSKLIterator<'a, D: Dropper> {
+    skl: &'a RcGrowableSKL<D>,
     curr: *const NewNode,
 }
 
-impl<'a, D: Dropper> GrowableSKLIterator<'a, D> {
+impl<'a, D: Dropper> RcGrowableSKLIterator<'a, D> {
     /// Key returns the key at the current position.
     #[inline]
-    pub fn key(&self) -> Key {
+    pub fn key(&self) -> RcKey {
         unsafe {
             let curr = &*self.curr;
             self.skl.inner.arena.get_key(curr.key_offset, curr.key_size)
@@ -530,7 +486,7 @@ impl<'a, D: Dropper> GrowableSKLIterator<'a, D> {
 
     /// Value returns value.
     #[inline]
-    pub fn value(&self) -> Value {
+    pub fn value(&self) -> RcValue {
         let curr = unsafe { &*self.curr };
         let (value_offset, value_size) = curr.get_value_offset();
         self.skl.inner.arena.get_val(value_offset, value_size)
@@ -592,12 +548,12 @@ impl<'a, D: Dropper> GrowableSKLIterator<'a, D> {
 /// Iterator. We like to keep Iterator as before, because it is more powerful and
 /// we might support bidirectional iterators in the future.
 #[derive(Copy, Clone, Debug)]
-pub struct UniGrowableSKLIterator<'a, D: Dropper> {
-    iter: GrowableSKLIterator<'a, D>,
+pub struct UniRcGrowableSKLIterator<'a, D: Dropper> {
+    iter: RcGrowableSKLIterator<'a, D>,
     reversed: bool,
 }
 
-impl<'a, D: Dropper> kvstructs::iterator::Iterator<Key, Value> for UniGrowableSKLIterator<'a, D> {
+impl<'a, D: Dropper> kvstructs::iterator::Iterator<RcKey, RcValue> for UniRcGrowableSKLIterator<'a, D> {
     #[inline]
     fn next(&mut self) {
         if !self.reversed {
@@ -626,7 +582,7 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator<Key, Value> for UniGrowableSK
     }
 
     #[inline]
-    fn entry(&self) -> Option<(Key, Value)> {
+    fn entry(&self) -> Option<(RcKey, RcValue)> {
         self.iter
             .valid()
             .then(|| (self.iter.key(), self.iter.value()))
@@ -634,13 +590,13 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator<Key, Value> for UniGrowableSK
 
     /// Key returns the key at the current position.
     #[inline]
-    fn key(&self) -> Option<Key> {
+    fn key(&self) -> Option<RcKey> {
         self.valid().then(|| self.iter.key())
     }
 
     /// Value returns value.
     #[inline]
-    fn val(&self) -> Option<Value> {
+    fn val(&self) -> Option<RcValue> {
         self.valid().then(|| self.iter.value())
     }
 
@@ -676,7 +632,7 @@ mod tests {
         vm
     }
 
-    fn length<D: Dropper>(s: GrowableSKL<D>) -> usize {
+    fn length<D: Dropper>(s: RcGrowableSKL<D>) -> usize {
         let head = s.inner.get_head();
         let mut x = s.inner.get_next(head, 0);
         let mut ctr = 0;
@@ -689,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let l = GrowableSKL::new(ARENA_SIZE);
+        let l = RcGrowableSKL::new(ARENA_SIZE);
         let k1 = Key::from("key1".as_bytes().to_vec()).with_timestamp(0);
         let v1 = new_value(42).freeze();
         let v1c = new_value(42).freeze();
@@ -704,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let l = GrowableSKL::new(200);
+        let l = RcGrowableSKL::new(200);
         let mut v1 = new_value(42);
         let mut v2 = new_value(52);
         let mut v3 = new_value(62);
@@ -772,7 +728,7 @@ mod tests {
         assert_eq!(v.get_meta(), 60);
     }
 
-    fn test_basic_large_testcases_in<D: Dropper>(l: GrowableSKL<D>) {
+    fn test_basic_large_testcases_in<D: Dropper>(l: RcGrowableSKL<D>) {
         let n = 1000;
 
         for i in 0..n {
@@ -789,12 +745,46 @@ mod tests {
 
     #[test]
     fn test_basic_large_testcases() {
-        let l = GrowableSKL::new(ARENA_SIZE);
+        let l = RcGrowableSKL::new(ARENA_SIZE);
         test_basic_large_testcases_in(l);
     }
 
+    // #[test]
+    // fn test_concurrent_basic() {
+    //     const n: usize = 1000;
+    //     let l = RcGrowableSKL::new(1 << 20);
+    //     let wg = Arc::new(());
+    //     for i in 0..n {
+    //         let w = wg.clone();
+    //         let l = l.clone();
+    //         std::thread::spawn(move || {
+    //             l.insert(key(i), new_value(i));
+    //             drop(w);
+    //         });
+    //     }
+    //     while Arc::strong_count(&wg) > 1 {}
+    //     assert_eq!(n, l.len());
+    // }
+
+    // #[test]
+    // fn test_concurrent_basic_big_values() {
+    //     const n: usize = 100;
+    //     let l = RcGrowableSKL::new(120 << 20); // 120 MB
+    //     let wg = Arc::new(());
+    //     for i in 0..n {
+    //         let w = wg.clone();
+    //         let l = l.clone();
+    //         std::thread::spawn(move || {
+    //             l.insert(key(i), big_value(i));
+    //             drop(w);
+    //         });
+    //     }
+    //     while Arc::strong_count(&wg) > 1 {}
+    //     assert_eq!(n, l.len());
+    // }
+
     fn assert_find_near_not_null<D: Dropper>(
-        l: GrowableSKL<D>,
+        l: RcGrowableSKL<D>,
         less: bool,
         allow_equal: bool,
         fk: Key,
@@ -811,7 +801,7 @@ mod tests {
     }
 
     fn assert_find_near_null<D: Dropper>(
-        l: GrowableSKL<D>,
+        l: RcGrowableSKL<D>,
         less: bool,
         allow_equal: bool,
         fk: Key,
@@ -823,7 +813,7 @@ mod tests {
 
     #[test]
     fn test_find_near() {
-        let l = GrowableSKL::new(ARENA_SIZE);
+        let l = RcGrowableSKL::new(ARENA_SIZE);
         for i in 0..1000 {
             let k = Key::from(format!("{:05}", i * 10 + 5)).with_timestamp(0);
             l.insert(k, new_value(i).freeze());
@@ -1018,7 +1008,7 @@ mod tests {
     #[test]
     fn test_iter_next() {
         let n = 100;
-        let l = GrowableSKL::new(ARENA_SIZE);
+        let l = RcGrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();
@@ -1044,7 +1034,7 @@ mod tests {
     #[test]
     fn test_iter_prev() {
         let n = 100;
-        let l = GrowableSKL::new(ARENA_SIZE);
+        let l = RcGrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();
@@ -1067,7 +1057,7 @@ mod tests {
         assert!(!iter.valid());
     }
 
-    fn assert_seek<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
+    fn assert_seek<D: Dropper>(iter: &mut RcGrowableSKLIterator<D>, seek_to: &'static str) {
         iter.seek(&Key::from(seek_to).with_timestamp(0));
         assert!(iter.valid());
         assert_eq!(
@@ -1076,7 +1066,7 @@ mod tests {
         );
     }
 
-    fn assert_seek_null<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
+    fn assert_seek_null<D: Dropper>(iter: &mut RcGrowableSKLIterator<D>, seek_to: &'static str) {
         iter.seek(&Key::from(seek_to).with_timestamp(0));
         assert!(!iter.valid());
     }
@@ -1084,7 +1074,7 @@ mod tests {
     #[test]
     fn test_iter_seek() {
         let n = 100;
-        let l = GrowableSKL::new(ARENA_SIZE);
+        let l = RcGrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();

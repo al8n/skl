@@ -25,10 +25,12 @@ crossbeam-epoch = { version = "0.9", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
 kvstructs = { version = "0.0.20", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
+spin = { version = "0.9", default-features = false, features = ["spin_mutex"] }
 
 [dev-dependencies]
 criterion = "0.3"
 tempfile = "3"
+parking_lot = "0.12"
 
 [profile.bench]
 opt-level = 3

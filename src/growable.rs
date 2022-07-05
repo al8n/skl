@@ -1,4 +1,3 @@
-use crate::arena::growable::{encode_value, RcKey, NewNode, RcValue, MAX_NODE_SIZE};
 use super::arena::growable::{ArenaRef, GrowableArena};
 use super::sync::{Arc, AtomicU32, Ordering};
 use super::utils::random_height;
@@ -6,6 +5,7 @@ use super::{
     Dropper, InsertResult, Node as NodeInner, NoopDropper, HEIGHT_INCREASE, MAX_HEIGHT, NODE_ALIGN,
     OFFSET_SIZE,
 };
+use crate::arena::growable::{encode_value, NewNode, RcKey, RcValue, MAX_NODE_SIZE};
 use core::cmp;
 use core::fmt::{Debug, Formatter};
 use core::mem::{self, replace};
@@ -16,9 +16,9 @@ use kvstructs::bytes::Bytes;
 use kvstructs::{KeyExt, ValueExt};
 
 /// Growable lock-free ARENA based skiplist.
-/// 
+///
 /// **Note:** This struct is like Rc, which means you cannot use this struct between threads
-/// - If you want a thread-safe Growable skiplist, see `ArcGrowableSKL` 
+/// - If you want a thread-safe Growable skiplist, see `ArcGrowableSKL`
 /// - If you want a thread-safe with fixed size skiplist, see `FixedSKL`
 #[derive(Debug)]
 #[repr(transparent)]
@@ -553,7 +553,9 @@ pub struct UniRcGrowableSKLIterator<'a, D: Dropper> {
     reversed: bool,
 }
 
-impl<'a, D: Dropper> kvstructs::iterator::Iterator<RcKey, RcValue> for UniRcGrowableSKLIterator<'a, D> {
+impl<'a, D: Dropper> kvstructs::iterator::Iterator<RcKey, RcValue>
+    for UniRcGrowableSKLIterator<'a, D>
+{
     #[inline]
     fn next(&mut self) {
         if !self.reversed {
@@ -747,41 +749,7 @@ mod tests {
     fn test_basic_large_testcases() {
         let l = RcGrowableSKL::new(ARENA_SIZE);
         test_basic_large_testcases_in(l);
-    }
-
-    // #[test]
-    // fn test_concurrent_basic() {
-    //     const n: usize = 1000;
-    //     let l = RcGrowableSKL::new(1 << 20);
-    //     let wg = Arc::new(());
-    //     for i in 0..n {
-    //         let w = wg.clone();
-    //         let l = l.clone();
-    //         std::thread::spawn(move || {
-    //             l.insert(key(i), new_value(i));
-    //             drop(w);
-    //         });
-    //     }
-    //     while Arc::strong_count(&wg) > 1 {}
-    //     assert_eq!(n, l.len());
-    // }
-
-    // #[test]
-    // fn test_concurrent_basic_big_values() {
-    //     const n: usize = 100;
-    //     let l = RcGrowableSKL::new(120 << 20); // 120 MB
-    //     let wg = Arc::new(());
-    //     for i in 0..n {
-    //         let w = wg.clone();
-    //         let l = l.clone();
-    //         std::thread::spawn(move || {
-    //             l.insert(key(i), big_value(i));
-    //             drop(w);
-    //         });
-    //     }
-    //     while Arc::strong_count(&wg) > 1 {}
-    //     assert_eq!(n, l.len());
-    // }
+    } 
 
     fn assert_find_near_not_null<D: Dropper>(
         l: RcGrowableSKL<D>,

@@ -1,16 +1,22 @@
-use core::{alloc::Layout, mem::ManuallyDrop};
+use core::mem::ManuallyDrop;
 
-use crate::{sync::{AtomicU32, Ordering, AtomicU64, AtomicUsize}, MAX_HEIGHT, OFFSET_SIZE, NODE_ALIGN};
+use crate::{
+    sync::{AtomicU32, AtomicU64, AtomicUsize, Ordering},
+    MAX_HEIGHT, NODE_ALIGN, OFFSET_SIZE,
+};
 
-use crossbeam_epoch::{self as epoch, Collector, Atomic, Shared, Owned, Guard};
+use crossbeam_epoch::{self as epoch, Atomic, Collector, Guard, Owned, Shared};
 
 #[cfg(feature = "std")]
 use crossbeam_epoch::default_collector;
-use kvstructs::{KeyExt, ValueExt, raw_pointer::{RawKeyPointer, RawValuePointer}};
+use kvstructs::{
+    raw_pointer::{RawKeyPointer, RawValuePointer},
+    KeyExt, ValueExt,
+};
 
-use super::growable::{MAX_NODE_SIZE, NewNode, encode_value};
+use super::growable::{encode_value, NewNode, MAX_NODE_SIZE};
 
-
+#[derive(Debug)]
 pub(crate) struct Allocator {
     data: Vec<u8>,
     refs: AtomicUsize,
@@ -35,8 +41,6 @@ impl Allocator {
         let cap = other.data.capacity();
         unsafe { core::ptr::copy_nonoverlapping(other.data.as_ptr(), self.data.as_mut_ptr(), cap) }
     }
-
-
 
     /// Attempts to increment the reference count of a node and returns `true` on success.
     ///
@@ -78,11 +82,7 @@ impl Allocator {
     /// Decrements the reference count of a allocator, destroying it if the count becomes zero.
     #[inline]
     unsafe fn decrement(&self, guard: &Guard) {
-        if self
-            .refs
-            .fetch_sub(1, Ordering::Release)
-            == 1
-        {
+        if self.refs.fetch_sub(1, Ordering::Release) == 1 {
             crate::sync::fence(Ordering::Acquire);
             guard.defer_unchecked(move || {
                 core::ptr::drop_in_place(self.data.as_ptr() as *mut u8);
@@ -97,16 +97,12 @@ impl Allocator {
     where
         F: FnOnce() -> Guard,
     {
-        if self
-            .refs
-            .fetch_sub(1, Ordering::Release)
-            == 1
-        {
+        if self.refs.fetch_sub(1, Ordering::Release) == 1 {
             crate::sync::fence(Ordering::Acquire);
             let guard = &pin();
             arena.check_guard(guard);
             guard.defer_unchecked(move || {
-                core::ptr::drop_in_place(self.data.as_ptr() as *mut u8); 
+                core::ptr::drop_in_place(self.data.as_ptr() as *mut u8);
             });
         }
     }
@@ -144,6 +140,7 @@ impl<'a: 'g, 'g> Clone for AllocatorEntry<'a, 'g> {
     }
 }
 
+#[derive(Debug, Copy)]
 pub(crate) struct RefAllocatorEntry<'a> {
     arena: &'a Arena,
     allocator: &'a Allocator,
@@ -161,10 +158,7 @@ impl<'a> RefAllocatorEntry<'a> {
 
     /// Tries to create a new `RefEntry` by incrementing the reference count of
     /// a node.
-    unsafe fn try_acquire(
-        arena: &'a Arena,
-        allocator: &Allocator,
-    ) -> Option<Self> {
+    unsafe fn try_acquire(arena: &'a Arena, allocator: &Allocator) -> Option<Self> {
         if allocator.try_increment() {
             Some(Self {
                 arena,
@@ -191,18 +185,80 @@ impl<'a> Clone for RefAllocatorEntry<'a> {
     }
 }
 
+pub(crate) struct RefKeyEntry<'a> {
+    key: RawKeyPointer,
+    guard: RefAllocatorEntry<'a>,
+}
+
+impl<'a> RefKeyEntry<'a> {
+    /// Releases the reference of the entry, pinning the thread only when
+    /// the reference count of the node becomes 0.
+    pub(crate) fn release_with_pin<F>(self, pin: F)
+    where
+        F: FnOnce() -> Guard,
+    {
+        unsafe { self.guard.release_with_pin(pin) }
+    }
+
+    /// Tries to create a new `RefEntry` by incrementing the reference count of
+    /// a node.
+    unsafe fn try_acquire(
+        key: RawKeyPointer,
+        arena: &'a Arena,
+        allocator: &Allocator,
+    ) -> Option<Self> {
+        if allocator.try_increment() {
+            Some(Self {
+                key,
+                guard: RefAllocatorEntry {
+                    arena,
+                    // We re-bind the lifetime of the node here to that of the skip
+                    // list since we now hold a reference to it.
+                    allocator: &*(allocator as *const _),
+                },
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Clone for RefKeyEntry<'a> {
+    fn clone(&self) -> Self {
+        unsafe {
+            // Incrementing will always succeed since we're already holding a reference to the node.
+            Allocator::try_increment(self.guard.allocator);
+        }
+        Self {
+            key: self.key,
+            guard: self.guard,
+        }
+    }
+}
+
+impl<'a> KeyExt for RefKeyEntry<'a> {
+    fn as_bytes(&self) -> &[u8] {
+        self.key.as_bytes()
+    }
+}
 
 pub struct KeyEntry<'a: 'g, 'g> {
-   key: RawKeyPointer,
-   parent: AllocatorEntry<'a, 'g>,
+    key: RawKeyPointer,
+    parent: AllocatorEntry<'a, 'g>,
 }
 
 impl<'a: 'g, 'g> KeyEntry<'a, 'g> {
     fn new(key: RawKeyPointer, parent: AllocatorEntry<'a, 'g>) -> Self {
-        Self {
-            key,
-            parent,
-        }
+        Self { key, parent }
+    }
+
+    /// Attempts to pin the entry with a reference count, ensuring that it
+    /// remains accessible even after the `Guard` is dropped.
+    ///
+    /// This method may return `None` if the reference count is already 0 and
+    /// the node has been queued for deletion.
+    fn pin(&self) -> Option<RefKeyEntry<'a>> {
+        unsafe { RefKeyEntry::try_acquire(self.key, self.parent.arena, self.parent.allocator) }
     }
 }
 
@@ -212,14 +268,109 @@ impl<'a: 'g, 'g> KeyExt for KeyEntry<'a, 'g> {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct RefValueEntry<'a> {
+    val: RawValuePointer,
+    guard: RefAllocatorEntry<'a>,
+}
+
+impl<'a> RefValueEntry<'a> {
+    /// Releases the reference of the entry, pinning the thread only when
+    /// the reference count of the node becomes 0.
+    pub(crate) fn release_with_pin<F>(self, pin: F)
+    where
+        F: FnOnce() -> Guard,
+    {
+        unsafe { self.guard.release_with_pin(pin) }
+    }
+
+    /// Tries to create a new `RefEntry` by incrementing the reference count of
+    /// a node.
+    unsafe fn try_acquire(
+        val: RawValuePointer,
+        arena: &'a Arena,
+        allocator: &Allocator,
+    ) -> Option<Self> {
+        if allocator.try_increment() {
+            Some(Self {
+                val,
+                guard: RefAllocatorEntry {
+                    arena,
+                    // We re-bind the lifetime of the node here to that of the skip
+                    // list since we now hold a reference to it.
+                    allocator: &*(allocator as *const _),
+                },
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Clone for RefValueEntry<'a> {
+    fn clone(&self) -> Self {
+        unsafe {
+            // Incrementing will always succeed since we're already holding a reference to the node.
+            Allocator::try_increment(self.guard.allocator);
+        }
+        Self {
+            val: self.val,
+            guard: self.guard,
+        }
+    }
+}
+
+impl<'a> RefValueEntry<'a> {
+    #[inline]
+    pub fn set_version(&mut self, version: u64) {
+        self.val.set_version(version)
+    }
+
+    #[inline]
+    pub fn get_version(&self) -> u64 {
+        self.val.get_version()
+    }
+}
+
+impl<'a> ValueExt for RefValueEntry<'a> {
+    fn parse_value(&self) -> &[u8] {
+        self.val.parse_value()
+    }
+
+    fn parse_value_to_bytes(&self) -> kvstructs::bytes::Bytes {
+        self.val.parse_value_to_bytes()
+    }
+
+    fn get_meta(&self) -> u8 {
+        self.val.get_meta()
+    }
+
+    fn get_user_meta(&self) -> u8 {
+        self.val.get_user_meta()
+    }
+
+    fn get_expires_at(&self) -> u64 {
+        self.val.get_expires_at()
+    }
+}
+
 pub struct ValueEntry<'a: 'g, 'g> {
     val: RawValuePointer,
-    parent: AllocatorEntry<'a, 'g>
+    parent: AllocatorEntry<'a, 'g>,
 }
 
 impl<'a: 'g, 'g> ValueEntry<'a, 'g> {
     fn new(val: RawValuePointer, parent: AllocatorEntry<'a, 'g>) -> Self {
         Self { val, parent }
+    }
+
+    /// Attempts to pin the entry with a reference count, ensuring that it
+    /// remains accessible even after the `Guard` is dropped.
+    ///
+    /// This method may return `None` if the reference count is already 0 and
+    /// the node has been queued for deletion.
+    pub(crate) fn pin(&self) -> Option<RefValueEntry<'a>> {
+        unsafe { RefValueEntry::try_acquire(self.val, self.parent.arena, self.parent.allocator) }
     }
 
     #[inline]
@@ -256,15 +407,22 @@ impl<'a: 'g, 'g> ValueExt for ValueEntry<'a, 'g> {
 }
 
 pub(crate) struct Entry<'a: 'g, 'g> {
-    node: *mut NewNode,
+    pub(crate) node: *mut NewNode,
     parent: AllocatorEntry<'a, 'g>,
+}
+
+impl<'a, 'g> Entry<'a, 'g> {
+    pub(crate) fn guard(&'a self) -> &'g Guard {
+        self.parent.guard
+    }
 }
 
 pub(crate) struct Offset<'a: 'g, 'g> {
-    offset: u32,
+    pub(crate) offset: u32,
     parent: AllocatorEntry<'a, 'g>,
 }
 
+#[derive(Debug)]
 pub struct Arena {
     pub(crate) n: AtomicU32,
     allocator: Atomic<Allocator>,
@@ -290,18 +448,9 @@ impl Arena {
     }
 
     #[inline]
-    fn allocate(&self, sz: u32) -> u32 {
+    fn allocate<'a: 'g, 'g>(&'a self, sz: u32, g: &'g Guard) -> u32 {
         let offset = self.n.fetch_add(sz, Ordering::SeqCst) + sz;
-
-        let g = &epoch::pin();
-        let inner = loop {
-            let shared = self.allocator.load_consume(g);
-            // if tag is 1, the current buf is marked remove, we continue to get a valid buf
-            if shared.tag() == 1 {
-                continue;
-            }
-            break shared;
-        };
+        let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
 
         // We are keeping extra bytes in the end so that the checkptr doesn't fail. We apply some
@@ -318,34 +467,54 @@ impl Arena {
             let mut new = Allocator::new(cap + growby);
             new.copy_from(&allocator);
 
-            let new = Owned::new(new);
+            let mut new = Owned::new(new);
 
-            // we actually do not care about the result, if failed, 
+            // we actually do not care about the result, if failed,
             // then other threads will increase the capacity for allocator successfully
-            // match self.allocator.compare_exchange(inner, new.with_tag(0), Ordering::SeqCst, Ordering::Relaxed, &g) {
-            //     Ok(old) => unsafe { g.defer_destroy(old); },
-            //     Err(curr) => {
-            //         // the current thread fail to swap new buf, destroy it immediately.
-            //         unsafe { 
-            //             let ug = epoch::unprotected();
-            //             ug.defer_destroy(curr.new.into_shared(&ug));
-            //         } 
-            //     },
+            // loop {
+            //     match self.allocator.compare_exchange(inner, new.with_tag(0), Ordering::SeqCst, Ordering::Relaxed, &g) {
+            //         Ok(_) => break,
+            //         Err(err) => {
+            //             let curr = err.current;
+            //             let n = err.new;
+            //             unsafe { 
+            //                 if curr.deref().data.capacity() < n.data.capacity() {
+            //                     curr.with_tag(1);
+            //                     new = n;
+            //                     continue;
+            //                 } else {
+            //                     break;
+            //                 } 
+            //             }
+            //             // the current thread fail to swap new buf, destroy it immediately.
+            //             // unsafe {
+            //             //     let ug = epoch::unprotected();
+            //             //     ug.defer_destroy(curr.new.into_shared(&ug));
+            //             // }
+            //         },
+            //     }
             // }
-            let _ = self.allocator.compare_exchange(inner, new.with_tag(0), Ordering::SeqCst, Ordering::Relaxed, g);
+            let _ = self.allocator.compare_exchange(
+                inner,
+                new.with_tag(0),
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+                g,
+            );
         }
 
         offset - sz
     }
 
-    fn put_node(&self, height: usize) -> u32 {
+    fn put_node<'a: 'g, 'g>(&'a self, height: usize, g: &'g Guard) -> u32 {
+        
         // Compute the amount of the tower that will never be used, since the height
         // is less than maxHeight.
         let unused_size = self.unused_size(height);
 
         // Pad the allocation with enough bytes to ensure pointer alignment.
         let l = (MAX_NODE_SIZE - unused_size + NODE_ALIGN) as u32;
-        let n = self.allocate(l);
+        let n = self.allocate(l, g);
 
         // Return the aligned offset.
         let align = NODE_ALIGN as u32;
@@ -354,29 +523,22 @@ impl Arena {
 
     pub(crate) fn put_key<'a: 'g, 'g>(&self, key: kvstructs::KeyRef<'a>, g: &'g Guard) -> u32 {
         self.check_guard(g);
+        
         let key_size = key.len() as u32;
-        let offset = self.allocate(key_size);
-        let mut inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        };
+        let offset = self.allocate(key_size, g);
+        let mut inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref_mut() };
-        allocator.data[offset as usize..(offset + key_size) as usize].copy_from_slice(key.as_slice());
+        allocator.data[offset as usize..(offset + key_size) as usize]
+            .copy_from_slice(key.as_slice());
         offset
     }
 
     pub(crate) fn put_val<'a: 'g, 'g>(&'a self, val: kvstructs::ValueRef<'a>, g: &'g Guard) -> u32 {
         self.check_guard(g);
         let l = val.encoded_size();
-        let offset = self.allocate(l);
-        let mut inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        };
+        let offset = self.allocate(l, g);
+        
+        let mut inner = self.allocator.load(Ordering::SeqCst, g);
         let mut allocator = unsafe { inner.deref_mut() };
         val.encode(allocator.data[offset as usize..].as_mut());
         offset
@@ -399,7 +561,7 @@ impl Arena {
         self.check_guard(g);
         let key = key.as_key_ref();
         let val = val.as_value_ref();
-        let node_offset = self.put_node(height);
+        let node_offset = self.put_node(height, g);
         let key_len = key.len();
         let key_offset = self.put_key(key, g);
         let v_encode_size = val.encoded_size();
@@ -413,44 +575,55 @@ impl Arena {
         node
     }
 
-    pub(crate) fn get_node<'a: 'g, 'g>(&'a self, offset: u32, g: &'g Guard) -> Option<Entry<'a, 'g>> {
+    pub(crate) unsafe fn get_node_unchecked<'a: 'g, 'g>(
+        &'a self,
+        offset: u32,
+        g: &'g Guard,
+    ) -> Entry<'a, 'g> {
+        self.get_node_helper(offset, g)
+    }
+
+    pub(crate) fn get_node<'a: 'g, 'g>(
+        &'a self,
+        offset: u32,
+        g: &'g Guard,
+    ) -> Option<Entry<'a, 'g>> {
         if offset == 0 {
             return None;
         }
+        Some(self.get_node_helper(offset, g))
+    }
+
+    fn get_node_helper<'a: 'g, 'g>(&'a self, offset: u32, g: &'g Guard) -> Entry<'a, 'g> {
         self.check_guard(g);
-        let mut inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        };
+        
+        let mut inner = self.allocator.load(Ordering::SeqCst, g);
 
         let allocator = unsafe { inner.deref_mut() };
         let n = unsafe {
-            
             core::mem::transmute::<*mut u8, *mut NewNode>(
                 allocator.data.as_mut_ptr().add(offset as usize),
             )
         };
-        Some(Entry {
+        Entry {
             node: n,
             parent: AllocatorEntry {
                 arena: self,
                 allocator,
                 guard: g,
             },
-        })
+        }
     }
 
-    pub(crate) fn get_key<'a: 'g, 'g>(&'a self, offset: u32, size: u16, g: &'g Guard) -> KeyEntry<'a, 'g> {
+    pub(crate) fn get_key<'a: 'g, 'g>(
+        &'a self,
+        offset: u32,
+        size: u16,
+        g: &'g Guard,
+    ) -> KeyEntry<'a, 'g> {
         self.check_guard(g);
-        let inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        };
-
+        
+        let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
         let size = size as u32;
         let kp = unsafe {
@@ -467,26 +640,26 @@ impl Arena {
                 allocator,
                 guard: g,
             },
-        } 
+        }
     }
 
-    pub(crate) fn get_val<'a: 'g, 'g>(&'a self, offset: u32, size: u32, g: &'g Guard) -> ValueEntry<'a, 'g> {
+    pub(crate) fn get_val<'a: 'g, 'g>(
+        &'a self,
+        offset: u32,
+        size: u32,
+        g: &'g Guard,
+    ) -> ValueEntry<'a, 'g> {
         self.check_guard(g);
-        let inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        };
-
+        
+        let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
         let vp = unsafe {
             RawValuePointer::new(
                 allocator.data[offset as usize..(offset + size) as usize].as_ptr(),
                 size,
             )
-        }; 
-        
+        };
+
         ValueEntry {
             val: vp,
             parent: AllocatorEntry {
@@ -494,22 +667,21 @@ impl Arena {
                 allocator,
                 guard: g,
             },
-        } 
+        }
     }
 
-    pub(crate) fn get_node_offset<'a: 'g, 'g>(&'a self, node: *const NewNode, g: &'g Guard) -> Option<Offset<'a, 'g>> {
+    pub(crate) fn get_node_offset<'a: 'g, 'g>(
+        &'a self,
+        node: *const NewNode,
+        g: &'g Guard,
+    ) -> Option<Offset<'a, 'g>> {
         if node.is_null() {
             return None;
         }
-        let inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        };
-
+        
+        let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
-
+        
         Some(Offset {
             offset: node as u32 - allocator.data.as_ptr() as u32,
             parent: AllocatorEntry {
@@ -521,15 +693,9 @@ impl Arena {
     }
 
     #[inline]
-    pub(crate) fn cap(&self) -> usize {
-        let g = &epoch::pin();
-        let inner = loop {
-            let curr = self.allocator.load_consume(g);
-            if curr.tag() != 1 {
-                break curr;
-            }
-        }; 
-
+    pub(crate) fn cap<'a: 'g, 'g>(&'a self, g: &'g Guard) -> usize {
+        
+        let inner = self.allocator.load(Ordering::SeqCst, g); 
         let allocator = unsafe { inner.deref() };
         allocator.capacity()
     }
@@ -550,9 +716,9 @@ impl Arena {
 
 /// Helper function to retry an operation until pinning succeeds or `None` is
 /// returned.
-pub(crate) fn try_pin_loop<'a: 'g, 'g, F>(mut f: F) -> Option<RefAllocatorEntry<'a>>
+pub(crate) fn try_pin_value<'a: 'g, 'g, F>(mut f: F) -> Option<RefValueEntry<'a>>
 where
-    F: FnMut() -> Option<AllocatorEntry<'a, 'g>>,
+    F: FnMut() -> Option<ValueEntry<'a, 'g>>,
 {
     loop {
         if let Some(e) = f()?.pin() {
@@ -578,10 +744,10 @@ mod test {
             std::thread::spawn(move || {
                 let g = &epoch::pin();
                 l.new_node(key(i), new_value(i), random_height(), g);
+                l.get_key(i as u32, i as u16, g);
                 drop(w);
             });
         }
         while Arc::strong_count(&wg) > 1 {}
-        
     }
 }

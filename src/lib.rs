@@ -12,11 +12,13 @@ extern crate alloc;
 extern crate std;
 
 mod arena;
+mod epoch;
 mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
 mod growable;
 pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
+pub use crate::epoch::GrowableSKL;
 
 mod sync {
     #[cfg(not(loom))]
@@ -116,7 +118,9 @@ impl<K: kvstructs::KeyExt + Clone, V: kvstructs::ValueExt + Clone> Clone for Ins
 
 impl<K: kvstructs::KeyExt + Copy, V: kvstructs::ValueExt + Copy> Copy for InsertResult<K, V> {}
 
-impl<K: kvstructs::KeyExt + core::fmt::Debug, V: kvstructs::ValueExt + core::fmt::Debug> core::fmt::Debug for InsertResult<K, V> {
+impl<K: kvstructs::KeyExt + core::fmt::Debug, V: kvstructs::ValueExt + core::fmt::Debug>
+    core::fmt::Debug for InsertResult<K, V>
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             InsertResult::Equal(k, v) => f

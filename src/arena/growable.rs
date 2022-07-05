@@ -335,7 +335,7 @@ impl GrowableArena {
         }
         let inner = unsafe { &*self.inner.get() };
         node as u32 - inner.vec.as_ptr() as u32
-    } 
+    }
 
     #[inline]
     pub(crate) fn cap(&self) -> usize {

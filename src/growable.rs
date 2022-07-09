@@ -614,26 +614,13 @@ mod tests {
     use core::ops::Deref;
 
     use super::*;
+    use crate::utils::*;
     use alloc::format;
     use kvstructs::bytes::BufMut;
     use kvstructs::{bytes::Bytes, Key, Value, ValueExt, ValueMut, ValueMutExt};
     use rand::Rng;
 
     const ARENA_SIZE: usize = 10;
-
-    fn key(i: usize) -> Key {
-        Key::from(format!("{:05}", i)).with_timestamp(0)
-    }
-
-    fn big_value(i: usize) -> Value {
-        Value::from(format!("{:01048576}", i))
-    }
-
-    fn new_value(i: usize) -> ValueMut {
-        let mut vm = ValueMut::default();
-        vm.put_slice(format!("{:05}", i).as_bytes());
-        vm
-    }
 
     fn length<D: Dropper>(s: RcGrowableSKL<D>) -> usize {
         let head = s.inner.get_head();
@@ -1112,14 +1099,5 @@ mod tests {
             Bytes::copy_from_slice(iter.value().parse_value()),
             Bytes::from("01990")
         );
-    }
-
-    fn random_key<R: Rng>(rng: &mut R) -> Key {
-        let k = rng.gen::<u32>();
-        let k2 = rng.gen::<u32>();
-        let mut kb = k.to_le_bytes().to_vec();
-        let mut k2b = k2.to_le_bytes().to_vec();
-        kb.append(&mut k2b);
-        Key::from(kb)
     }
 }

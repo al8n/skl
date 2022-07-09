@@ -321,7 +321,7 @@ impl<'a> Clone for RefValueEntry<'a> {
 
 impl<'a> RefValueEntry<'a> {
     #[inline]
-    pub fn set_version(&mut self, version: u64) {
+    pub(crate) fn set_version(&mut self, version: u64) {
         self.val.set_version(version)
     }
 
@@ -373,7 +373,7 @@ impl<'a: 'g, 'g> ValueEntry<'a, 'g> {
     }
 
     #[inline]
-    pub fn set_version(&mut self, version: u64) {
+    pub(crate) fn set_version(&mut self, version: u64) {
         self.val.set_version(version);
     }
 
@@ -470,31 +470,9 @@ impl Arena {
 
             let mut new = Owned::new(new);
 
+            // TODO: some data-race still happen here when removing the outer mutex
             // we actually do not care about the result, if failed,
             // then other threads will increase the capacity for allocator successfully
-            // loop {
-            //     match self.allocator.compare_exchange(inner, new.with_tag(0), Ordering::SeqCst, Ordering::Relaxed, &g) {
-            //         Ok(_) => break,
-            //         Err(err) => {
-            //             let curr = err.current;
-            //             let n = err.new;
-            //             unsafe {
-            //                 if curr.deref().data.capacity() < n.data.capacity() {
-            //                     curr.with_tag(1);
-            //                     new = n;
-            //                     continue;
-            //                 } else {
-            //                     break;
-            //                 }
-            //             }
-            //             // the current thread fail to swap new buf, destroy it immediately.
-            //             // unsafe {
-            //             //     let ug = epoch::unprotected();
-            //             //     ug.defer_destroy(curr.new.into_shared(&ug));
-            //             // }
-            //         },
-            //     }
-            // }
             let _ = self.allocator.compare_exchange(
                 inner,
                 new.with_tag(0),

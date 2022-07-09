@@ -14,11 +14,9 @@ use crate::{
     Dropper, Node, NoopDropper,
 };
 
+// TODO: make this lock-free
 /// Growable thread-safe ARENA based skiplist.
 ///
-/// **Note:** This struct is like Rc, which means you cannot use this struct between threads
-/// - If you want a thread-safe Growable skiplist, see `ArcGrowableSKL`
-/// - If you want a thread-safe with fixed size skiplist, see `FixedSKL`
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct GrowableSKL<D: Dropper> {
@@ -809,6 +807,9 @@ impl Drop for KeyEntry<'_> {
 mod tests {
     use super::*;
     use crate::utils::*;
+    use kvstructs::{bytes::*, *};
+
+    const ARENA_SIZE: usize = 20;
 
     #[test]
     fn test_concurrent_basic() {
@@ -865,5 +866,152 @@ mod tests {
                 drop(w);
             });
         }
+    }
+
+    // test_iter_next tests a basic iteration over all nodes from the beginning.
+    #[test]
+    fn test_iter_next() {
+        let n = 100;
+        let l = GrowableSKL::new(ARENA_SIZE);
+        let mut iter = l.iter();
+        assert!(!iter.valid());
+        iter.seek_to_first();
+        assert!(!iter.valid());
+        for i in (0..n).rev() {
+            l.insert(
+                Key::from(format!("{:05}", i)).with_timestamp(0),
+                new_value(i).freeze(),
+            );
+        }
+        iter.seek_to_first();
+        for i in 0..n {
+            assert!(iter.valid());
+            let v = iter.value();
+            assert_eq!(
+                new_value(i).freeze().as_value_ref(),
+                v.unwrap().as_value_ref()
+            );
+            iter.next();
+        }
+
+        assert!(!iter.valid());
+    }
+
+    // test_iter_prev tests a basic iteration over all nodes from the beginning.
+    #[test]
+    fn test_iter_prev() {
+        let n = 100;
+        let l = GrowableSKL::new(ARENA_SIZE);
+        let mut iter = l.iter();
+        assert!(!iter.valid());
+        iter.seek_to_first();
+        assert!(!iter.valid());
+        for i in 0..n {
+            l.insert(
+                Key::from(format!("{:05}", i)).with_timestamp(0),
+                new_value(i).freeze(),
+            );
+        }
+
+        iter.seek_to_last();
+        for i in (0..n).rev() {
+            assert!(iter.valid(), "{i}");
+            let v = iter.value();
+            assert_eq!(
+                new_value(i).freeze().as_value_ref(),
+                v.unwrap().as_value_ref()
+            );
+            iter.prev();
+        }
+
+        assert!(!iter.valid());
+    }
+
+    fn assert_seek<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
+        iter.seek(&Key::from(seek_to).with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from(seek_to)
+        );
+    }
+
+    fn assert_seek_null<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
+        iter.seek(&Key::from(seek_to).with_timestamp(0));
+        assert!(!iter.valid());
+    }
+
+    #[test]
+    fn test_iter_seek() {
+        let n = 100;
+        let l = GrowableSKL::new(ARENA_SIZE);
+        let mut iter = l.iter();
+        assert!(!iter.valid());
+        iter.seek_to_first();
+        assert!(!iter.valid());
+
+        for i in (0..n).rev() {
+            let v = i * 10 + 1000;
+            l.insert(
+                Key::from(format!("{:05}", v)).with_timestamp(0),
+                new_value(v).freeze(),
+            );
+        }
+
+        iter.seek_to_first();
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01000")
+        );
+
+        iter.seek(&Key::from("01000").with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01000")
+        );
+
+        iter.seek(&Key::from("01005").with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01010")
+        );
+
+        assert_seek(&mut iter, "01010");
+        assert_seek_null(&mut iter, "99999");
+
+        // Try seek for prev
+        iter.seek_for_prev(&Key::from("00").with_timestamp(0));
+        assert!(!iter.valid());
+
+        iter.seek_for_prev(&Key::from("01000").with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01000")
+        );
+
+        iter.seek_for_prev(&Key::from("01005").with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01000")
+        );
+
+        iter.seek_for_prev(&Key::from("01010").with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01010")
+        );
+
+        iter.seek_for_prev(&Key::from("99999").with_timestamp(0));
+        assert!(iter.valid());
+        assert_eq!(
+            Bytes::copy_from_slice(iter.value().unwrap().parse_value()),
+            Bytes::from("01990")
+        );
     }
 }

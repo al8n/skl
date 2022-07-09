@@ -46,7 +46,7 @@ pub struct RcValue {
 
 impl RcValue {
     #[inline]
-    pub fn set_version(&mut self, version: u64) {
+    pub(crate) fn set_version(&mut self, version: u64) {
         self.val.set_version(version)
     }
 
@@ -113,9 +113,6 @@ impl Drop for Inner {
         }
     }
 }
-
-unsafe impl Send for Inner {}
-unsafe impl Sync for Inner {}
 
 #[derive(Debug)]
 pub(crate) struct GrowableArena {

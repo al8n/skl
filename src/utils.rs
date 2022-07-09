@@ -48,3 +48,13 @@ pub(crate) fn new_value(i: usize) -> kvstructs::ValueMut {
     vm.put_slice(format!("{:05}", i).as_bytes());
     vm
 }
+
+#[cfg(test)]
+fn random_key<R: rand::Rng>(rng: &mut R) -> kvstructs::Key {
+    let k = rng.gen::<u32>();
+    let k2 = rng.gen::<u32>();
+    let mut kb = k.to_le_bytes().to_vec();
+    let mut k2b = k2.to_le_bytes().to_vec();
+    kb.append(&mut k2b);
+    kvstructs::Key::from(kb)
+}

@@ -1,21 +1,23 @@
-use kvstructs::ValueExt;
-use kvstructs::bytes::*;
 use criterion::*;
+use kvstructs::bytes::*;
+use kvstructs::ValueExt;
+use parking_lot::Mutex;
 use rand::prelude::*;
+use skl::*;
 use std::collections::*;
 use std::mem;
 use std::sync::atomic::*;
 use std::sync::*;
 use std::thread;
-use skl::*;
-use parking_lot::Mutex;
-
 
 use kvstructs::{Key, Value};
 
-fn growable_skiplist_round(l: &GrowableSKL<NoopDropper>, case: &(Key, bool), exp: &kvstructs::Value) {
+fn growable_skiplist_round(
+    l: &GrowableSKL<NoopDropper>,
+    case: &(Key, bool),
+    exp: &kvstructs::Value,
+) {
     if case.1 {
-        Some(1).or
         if let Some(v) = l.get(&case.0) {
             assert_eq!(v.parse_value(), exp.parse_value());
         }
@@ -24,7 +26,11 @@ fn growable_skiplist_round(l: &GrowableSKL<NoopDropper>, case: &(Key, bool), exp
     }
 }
 
-fn growable_map_round(l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>, case: &(Key, bool), exp: &kvstructs::Value) {
+fn growable_map_round(
+    l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>,
+    case: &(Key, bool),
+    exp: &kvstructs::Value,
+) {
     let mut l = l.lock();
     if case.1 {
         if let Some(v) = l.get(&case.0) {
@@ -35,7 +41,11 @@ fn growable_map_round(l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>, case: &(Key
     }
 }
 
-fn fixed_map_round(l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>, case: &(Key, bool), exp: &kvstructs::Value) {
+fn fixed_map_round(
+    l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>,
+    case: &(Key, bool),
+    exp: &kvstructs::Value,
+) {
     let mut l = l.lock();
     if case.1 {
         if let Some(v) = l.get(&case.0) {
@@ -127,7 +137,11 @@ fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
 fn bench_read_write_fixed_skiplist(c: &mut Criterion) {
     let mut group = c.benchmark_group("fixed_skiplist_read_write");
     for i in 0..=10 {
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, bench_read_write_fixed_skiplist_frac);
+        group.bench_with_input(
+            BenchmarkId::from_parameter(i),
+            &i,
+            bench_read_write_fixed_skiplist_frac,
+        );
     }
     group.finish();
 }
@@ -135,7 +149,11 @@ fn bench_read_write_fixed_skiplist(c: &mut Criterion) {
 fn bench_read_write_growable_skiplist(c: &mut Criterion) {
     let mut group = c.benchmark_group("growable_skiplist_read_write");
     for i in 0..=10 {
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, bench_read_write_growable_skiplist_frac);
+        group.bench_with_input(
+            BenchmarkId::from_parameter(i),
+            &i,
+            bench_read_write_growable_skiplist_frac,
+        );
     }
     group.finish();
 }
@@ -186,7 +204,11 @@ fn bench_read_write_fixed_map_frac(b: &mut Bencher<'_>, frac: &usize) {
 fn bench_read_write_fixed_map(c: &mut Criterion) {
     let mut group = c.benchmark_group("fixed_map_read_write");
     for i in 0..=10 {
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, bench_read_write_fixed_map_frac);
+        group.bench_with_input(
+            BenchmarkId::from_parameter(i),
+            &i,
+            bench_read_write_fixed_map_frac,
+        );
     }
     group.finish();
 }
@@ -224,7 +246,11 @@ fn bench_read_write_growable_map_frac(b: &mut Bencher<'_>, frac: &usize) {
 fn bench_read_write_growable_map(c: &mut Criterion) {
     let mut group = c.benchmark_group("growable_map_read_write");
     for i in 0..=10 {
-        group.bench_with_input(BenchmarkId::from_parameter(i), &i, bench_read_write_growable_map_frac);
+        group.bench_with_input(
+            BenchmarkId::from_parameter(i),
+            &i,
+            bench_read_write_growable_map_frac,
+        );
     }
     group.finish();
 }

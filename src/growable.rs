@@ -1,11 +1,8 @@
 use super::arena::growable::{ArenaRef, GrowableArena};
 use super::sync::{Arc, AtomicU32, Ordering};
 use super::utils::random_height;
-use super::{
-    Dropper, InsertResult, Node as NodeInner, NoopDropper, HEIGHT_INCREASE, MAX_HEIGHT, NODE_ALIGN,
-    OFFSET_SIZE,
-};
-use crate::arena::growable::{encode_value, NewNode, RcKey, RcValue, MAX_NODE_SIZE};
+use super::{Dropper, InsertResult, Node, Node as NodeInner, NoopDropper};
+use crate::arena::growable::{RcKey, RcValue};
 use core::cmp;
 use core::fmt::{Debug, Formatter};
 use core::mem::{self, replace};
@@ -60,7 +57,11 @@ struct Inner<D: Dropper> {
 impl<D: Dropper> Inner<D> {
     #[inline]
     fn new(arena: GrowableArena, dropper: Option<D>) -> Self {
-        let head = arena.new_node(kvstructs::Key::new(), kvstructs::Value::new(), MAX_HEIGHT);
+        let head = arena.new_node(
+            kvstructs::Key::new(),
+            kvstructs::Value::new(),
+            Node::MAX_HEIGHT,
+        );
         let ho = arena.get_node_offset(head);
         Self {
             hot_data: CachePadded::new(HotData::new(1)),
@@ -71,12 +72,12 @@ impl<D: Dropper> Inner<D> {
     }
 
     #[inline]
-    fn get_head(&self) -> *const NewNode {
+    fn get_head(&self) -> *const Node {
         self.arena.get_node(self.head_offset)
     }
 
     #[inline]
-    fn get_next(&self, nd: *const NewNode, height: usize) -> *const NewNode {
+    fn get_next(&self, nd: *const Node, height: usize) -> *const Node {
         unsafe {
             match nd.as_ref() {
                 None => null(),
@@ -91,7 +92,7 @@ impl<D: Dropper> Inner<D> {
     // If less=false, it finds leftmost node such that node.key > key (if allowEqual=false) or
     // node.key >= key (if allowEqual=true).
     // Returns the node found. The bool returned is true if the node has key equal to given key.
-    fn find_near(&self, key: impl KeyExt, less: bool, allow_equal: bool) -> (*const NewNode, bool) {
+    fn find_near(&self, key: impl KeyExt, less: bool, allow_equal: bool) -> (*const Node, bool) {
         let key = key.as_key_ref();
         let mut curr = self.get_head();
         let mut level = (self.get_height() - 1) as usize;
@@ -121,7 +122,7 @@ impl<D: Dropper> Inner<D> {
 
             // Safety: we have checked next is not null
             let next_ref = unsafe { &*next };
-            match key.compare_key(next_ref.get_key(&self.arena)) {
+            match key.compare_key(self.arena.get_key(next_ref.key_offset, next_ref.key_size)) {
                 cmp::Ordering::Less => {
                     // cmp < 0. In other words, curr.key < key < next.
                     if level > 0 {
@@ -191,7 +192,7 @@ impl<D: Dropper> Inner<D> {
             }
             // Safety: we have checked next_node is not null.
             let next_ref = unsafe { &*next_node };
-            let next_key = next_ref.get_key(&self.arena);
+            let next_key = self.arena.get_key(next_ref.key_offset, next_ref.key_size);
             match key.compare_key(next_key) {
                 cmp::Ordering::Less => return (before, next),
                 cmp::Ordering::Equal => return (next, next),
@@ -204,7 +205,7 @@ impl<D: Dropper> Inner<D> {
         }
     }
 
-    fn find_last(&self) -> *const NewNode {
+    fn find_last(&self) -> *const Node {
         let mut n = self.get_head();
         let mut level = self.get_height() - 1;
         loop {
@@ -244,8 +245,8 @@ impl<D: Dropper> Inner<D> {
         // increase the height. Let's defer these actions.
 
         let mut list_height = self.get_height();
-        let mut prev = [0u32; MAX_HEIGHT + 1];
-        let mut next = [0u32; MAX_HEIGHT + 1];
+        let mut prev = [0u32; Node::MAX_HEIGHT + 1];
+        let mut next = [0u32; Node::MAX_HEIGHT + 1];
         prev[list_height as usize] = self.head_offset;
         for i in (0..list_height as usize).rev() {
             // Use higher level to speed up for current level.
@@ -257,7 +258,7 @@ impl<D: Dropper> Inner<D> {
             if prev_i == next_i {
                 let val_offset = self.arena.put_val(val_ref);
                 let val_encode_size = val.encoded_size();
-                let encode_value = encode_value(val_offset, val_encode_size);
+                let encode_value = Node::encode_value(val_offset, val_encode_size);
                 let prev_node = self.arena.get_node(prev_i);
                 // Safety: find_splice_for_level make sure this node ptr is not null
                 let prev_node_ref = unsafe { &*prev_node };
@@ -329,7 +330,7 @@ impl<D: Dropper> Inner<D> {
                             assert_eq!(i, 0, "Equality can happen only on base level: {}", i);
                             let value_offset = self.arena.put_val(val_ref);
                             let encode_value_size = val_ref.encoded_size();
-                            let encode_value = encode_value(value_offset, encode_value_size);
+                            let encode_value = Node::encode_value(value_offset, encode_value_size);
                             let prev_node = self.arena.get_node(prev_i);
                             // Safety: prev_node is not null, we checked it in find_splice_for_level
                             let prev_node_ref = unsafe { &mut *prev_node };
@@ -471,7 +472,7 @@ impl<D: Dropper> RcGrowableSKL<D> {
 #[derive(Copy, Clone, Debug)]
 pub struct RcGrowableSKLIterator<'a, D: Dropper> {
     skl: &'a RcGrowableSKL<D>,
-    curr: *const NewNode,
+    curr: *const Node,
 }
 
 impl<'a, D: Dropper> RcGrowableSKLIterator<'a, D> {
@@ -645,20 +646,20 @@ mod tests {
         ctr
     }
 
-    #[test]
-    fn test_insert() {
-        let l = RcGrowableSKL::new(ARENA_SIZE);
-        let k1 = Key::from("key1".as_bytes().to_vec()).with_timestamp(0);
-        let v1 = new_value(42).freeze();
-        let v1c = new_value(42).freeze();
-        let ir = l.insert(k1.clone(), v1);
-        // assert!(matches!(ir, InsertResult::Success));
-        // let ir1 = l.insert(k1.clone(), v1c);
-        // assert!(matches!(ir1, InsertResult::Equal(..)));
-        // let v2 = new_value(52).freeze();
-        // let ir2 = l.insert(k1.clone(), v2);
-        // assert!(matches!(ir2, InsertResult::Update(..)));
-    }
+    // #[test]
+    // fn test_insert() {
+    //     let l = RcGrowableSKL::new(ARENA_SIZE);
+    //     let k1 = Key::from("key1".as_bytes().to_vec()).with_timestamp(0);
+    //     let v1 = new_value(42).freeze();
+    //     let v1c = new_value(42).freeze();
+    //     let ir = l.insert(k1.clone(), v1);
+    //     // assert!(matches!(ir, InsertResult::Success));
+    //     // let ir1 = l.insert(k1.clone(), v1c);
+    //     // assert!(matches!(ir1, InsertResult::Equal(..)));
+    //     // let v2 = new_value(52).freeze();
+    //     // let ir2 = l.insert(k1.clone(), v2);
+    //     // assert!(matches!(ir2, InsertResult::Update(..)));
+    // }
 
     #[test]
     fn test_basic() {
@@ -749,7 +750,7 @@ mod tests {
     fn test_basic_large_testcases() {
         let l = RcGrowableSKL::new(ARENA_SIZE);
         test_basic_large_testcases_in(l);
-    } 
+    }
 
     fn assert_find_near_not_null<D: Dropper>(
         l: RcGrowableSKL<D>,
@@ -762,7 +763,7 @@ mod tests {
         let (n, eq) = l.inner.find_near(fk.as_slice(), less, allow_equal);
         unsafe {
             let n = &*n;
-            let key = n.get_key(&l.inner.arena);
+            let key = l.inner.arena.get_key(n.key_offset, n.key_size);
             assert!(key.same_key(&ek));
         }
         assert_eq!(is_eq, eq);

@@ -17,8 +17,8 @@ mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
 mod growable;
+pub use crate::epoch::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
 pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
-pub use crate::epoch::GrowableSKL;
 
 mod sync {
     #[cfg(not(loom))]
@@ -29,50 +29,85 @@ mod sync {
     #[cfg(all(loom, test))]
     pub(crate) use loom::sync::{atomic::*, Arc};
 }
+use sync::{AtomicU64, Ordering};
 
 mod utils;
 
 use core::mem;
-use kvstructs::{bytes::Bytes, Key, Value};
-
-const MAX_HEIGHT: usize = 20;
-const HEIGHT_INCREASE: u32 = u32::MAX / 3;
-
-/// MAX_NODE_SIZE is the memory footprint of a node of maximum height.
-const MAX_NODE_SIZE: usize = mem::size_of::<Node>();
-const OFFSET_SIZE: usize = mem::size_of::<u32>();
-
-/// Always align nodes on 64-bit boundaries, even on 32-bit architectures,
-/// so that the node.value field is 64-bit aligned. This is necessary because
-/// node.getValueOffset uses atomic.LoadUint64, which expects its input
-/// pointer to be 64-bit aligned.
-const NODE_ALIGN: usize = mem::size_of::<u64>() - 1;
+use kvstructs::{bytes::Bytes, Key, KeyExt, Value};
 
 #[derive(Debug)]
 #[repr(C)]
 pub(crate) struct Node {
-    pub(crate) key: Key,
+    // Multiple parts of the value are encoded as a single uint64 so that it
+    // can be atomically loaded and stored:
+    //   value offset: uint32 (bits 0-31)
+    //   value size  : uint16 (bits 32-63)
+    pub(crate) val: AtomicU64,
 
-    pub(crate) value: Bytes,
+    // A byte slice is 24 bytes. We are trying to save space here.
+    pub(crate) key_offset: u32, // Immutable. No need to lock to access key.
+    pub(crate) key_size: u16,   // Immutable. No need to lock to access key.
 
-    /// height of the tower
-    /// Immutable. No need to lock to height.
+    // Height of the tower.
     pub(crate) height: u16,
 
-    /// Most nodes do not need to use the full height of the tower, since the
-    /// probability of each successive level decreases exponentially. Because
-    /// these elements are never accessed, they do not need to be allocated.
-    /// Therefore, when a node is allocated in the arena, its memory footprint
-    /// is deliberately truncated to not include unneeded tower elements.
-    ///
-    /// All accesses to elements should use CAS operations, with no need to lock.
-    pub(crate) tower: [sync::AtomicU32; MAX_HEIGHT],
+    // Most nodes do not need to use the full height of the tower, since the
+    // probability of each successive level decreases exponentially. Because
+    // these elements are never accessed, they do not need to be allocated.
+    // Therefore, when a node is allocated in the arena, its memory footprint
+    // is deliberately truncated to not include unneeded tower elements.
+    //
+    // All accesses to elements should use CAS operations, with no need to lock.
+    pub(crate) tower: [crate::sync::AtomicU32; Self::MAX_HEIGHT],
 }
 
 impl Node {
+    /// Always align nodes on 64-bit boundaries, even on 32-bit architectures,
+    /// so that the node.value field is 64-bit aligned. This is necessary because
+    /// node.getValueOffset uses atomic.LoadUint64, which expects its input
+    /// pointer to be 64-bit aligned.
+    const NODE_ALIGN: usize = mem::size_of::<u64>() - 1;
+
+    /// MAX_NODE_SIZE is the memory footprint of a node of maximum height.
+    const MAX_NODE_SIZE: usize = mem::size_of::<Self>();
+
+    const MAX_HEIGHT: usize = 20;
+
+    const OFFSET_SIZE: usize = mem::size_of::<u32>();
+
+    const HEIGHT_INCREASE: u32 = u32::MAX / 3;
+
     #[inline]
-    pub(crate) fn get_next_offset(&self, h: usize) -> u32 {
-        self.tower[h].load(sync::Ordering::SeqCst)
+    fn set_val(&self, vo: u64) {
+        self.val.store(vo, Ordering::SeqCst)
+    }
+
+    /// (val_offset, val_size)
+    fn get_value_offset(&self) -> (u32, u32) {
+        Node::decode_value(self.val.load(Ordering::SeqCst))
+    }
+
+    fn cas_next_offset(&self, height: usize, old: u32, new: u32) -> bool {
+        self.tower[height]
+            .compare_exchange(old, new, Ordering::SeqCst, Ordering::Relaxed)
+            .is_ok()
+    }
+
+    #[inline]
+    fn get_next_offset(&self, height: usize) -> u32 {
+        self.tower[height].load(Ordering::SeqCst)
+    }
+
+    #[inline]
+    fn encode_value(val_offset: u32, val_size: u32) -> u64 {
+        ((val_size as u64) << 32) | (val_offset as u64)
+    }
+
+    /// (val_offset, val_size)
+    #[inline]
+    fn decode_value(value: u64) -> (u32, u32) {
+        (value as u32, (value >> 32) as u32)
     }
 }
 

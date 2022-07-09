@@ -1,21 +1,20 @@
 use core::{cmp, mem::ManuallyDrop, ptr::null};
 
-use crossbeam_epoch::{self as epoch};
+use crossbeam_epoch::{self as epoch, Guard};
 use crossbeam_utils::CachePadded;
-use epoch::Guard;
 use kvstructs::{KeyExt, ValueExt};
 
 use crate::{
-    arena::{
-        epoch::{try_pin_value, Arena, Entry, RefValueEntry, ValueEntry as RawValueEntry},
-        growable::{encode_value, NewNode},
+    arena::epoch::{
+        try_pin_value, Arena, Entry, KeyEntry as RawKeyEntry, RefKeyEntry, RefValueEntry,
+        ValueEntry as RawValueEntry,
     },
     sync::{Arc, AtomicU32, Ordering},
     utils::random_height,
-    Dropper, NoopDropper, MAX_HEIGHT,
+    Dropper, Node, NoopDropper,
 };
 
-/// Growable lock-free ARENA based skiplist.
+/// Growable thread-safe ARENA based skiplist.
 ///
 /// **Note:** This struct is like Rc, which means you cannot use this struct between threads
 /// - If you want a thread-safe Growable skiplist, see `ArcGrowableSKL`
@@ -59,12 +58,11 @@ struct Inner<D: Dropper> {
 
 impl<D: Dropper> Inner<D> {
     #[inline]
-    fn new(arena: Arena, dropper: Option<D>) -> Self {
-        let g = &epoch::pin();
+    fn new<'g>(arena: Arena, dropper: Option<D>, g: &'g Guard) -> Self {
         let head = arena.new_node(
             kvstructs::Key::new(),
             kvstructs::Value::new(),
-            MAX_HEIGHT,
+            Node::MAX_HEIGHT,
             g,
         );
         let ho = arena.get_node_offset(head, g).unwrap().offset;
@@ -85,7 +83,7 @@ impl<D: Dropper> Inner<D> {
     #[inline]
     fn get_next<'a: 'g, 'g>(
         &'a self,
-        nd: *mut NewNode,
+        nd: *mut Node,
         height: usize,
         g: &'g Guard,
     ) -> Option<Entry<'a, 'g>> {
@@ -281,8 +279,8 @@ impl<D: Dropper> Inner<D> {
         // increase the height. Let's defer these actions.
 
         let mut list_height = self.get_height();
-        let mut prev = [0u32; MAX_HEIGHT + 1];
-        let mut next = [0u32; MAX_HEIGHT + 1];
+        let mut prev = [0u32; Node::MAX_HEIGHT + 1];
+        let mut next = [0u32; Node::MAX_HEIGHT + 1];
         prev[list_height as usize] = self.head_offset;
         for i in (0..list_height as usize).rev() {
             // Use higher level to speed up for current level.
@@ -294,7 +292,7 @@ impl<D: Dropper> Inner<D> {
             if prev_i == next_i {
                 let val_offset = self.arena.put_val(val_ref, g);
                 let val_encode_size = val.encoded_size();
-                let encode_value = encode_value(val_offset, val_encode_size);
+                let encode_value = Node::encode_value(val_offset, val_encode_size);
                 let prev_node = unsafe { self.arena.get_node_unchecked(prev_i, g) };
                 // Safety: find_splice_for_level make sure this node ptr is not null
                 let prev_node_ref = unsafe { &*prev_node.node };
@@ -364,7 +362,7 @@ impl<D: Dropper> Inner<D> {
                                     let value_offset = self.arena.put_val(val_ref, g);
                                     let encode_value_size = val_ref.encoded_size();
                                     let encode_value =
-                                        encode_value(value_offset, encode_value_size);
+                                        Node::encode_value(value_offset, encode_value_size);
                                     let prev_node =
                                         unsafe { self.arena.get_node_unchecked(prev_i, g) };
                                     // Safety: prev_node is not null, we checked it in find_splice_for_level
@@ -468,8 +466,12 @@ impl<D: Dropper> GrowableSKL<D> {
 impl<D: Dropper> GrowableSKL<D> {
     fn new_in(arena: Arena, dropper: Option<D>) -> Self {
         Self {
-            inner: Arc::new(spin::Mutex::new(Inner::new(arena, dropper))),
+            inner: Arc::new(spin::Mutex::new(Inner::new(arena, dropper, &epoch::pin()))),
         }
+    }
+
+    fn guard(&self) -> Guard {
+        epoch::pin()
     }
 
     /// Inserts the key-value pair.
@@ -486,19 +488,21 @@ impl<D: Dropper> GrowableSKL<D> {
         let key = key.as_key_ref();
         let inner = self.inner.lock();
         match inner.get(key, g) {
-            Some(ent) => ent.pin().map(|ent| ValueEntry::new(unsafe { core::mem::transmute(ent) })),
+            Some(ent) => ent
+                .pin()
+                .map(|ent| ValueEntry::new(unsafe { core::mem::transmute(ent) })),
             None => None,
         }
     }
 
-    // /// Returns a skiplist iterator.
-    // #[inline]
-    // fn iter(&self) -> GrowableSKLIterator<'_, D> {
-    //     GrowableSKLIterator {
-    //         skl: self,
-    //         curr: null(),
-    //     }
-    // }
+    /// Returns a skiplist iterator.
+    #[inline]
+    fn iter(&self) -> GrowableSKLIterator<'_, D> {
+        GrowableSKLIterator {
+            skl: self,
+            curr: null(),
+        }
+    }
 
     /// Returns if the Skiplist is empty
     #[inline]
@@ -527,6 +531,207 @@ impl<D: Dropper> GrowableSKL<D> {
     #[inline]
     pub fn cap(&self) -> usize {
         self.inner.lock().cap(&epoch::pin())
+    }
+}
+
+/// GrowableSKLIterator is an iterator over skiplist object. For new objects, you just
+/// need to initialize GrowableSKLIterator.list.
+#[derive(Copy, Clone, Debug)]
+pub struct GrowableSKLIterator<'a, D: Dropper> {
+    skl: &'a GrowableSKL<D>,
+    curr: *const Node,
+}
+
+impl<'a, D: Dropper> GrowableSKLIterator<'a, D> {
+    /// Key returns the key at the current position.
+    #[inline]
+    pub fn key(&self) -> Option<KeyEntry<'a>> {
+        let g = self.skl.guard();
+        let curr = unsafe { &*self.curr };
+        self.skl
+            .inner
+            .lock()
+            .arena
+            .get_key(curr.key_offset, curr.key_size, &g)
+            .pin()
+            .map(|ent| KeyEntry::new(unsafe { core::mem::transmute(ent) }))
+    }
+
+    /// Value returns value.
+    #[inline]
+    pub fn value(&self) -> Option<ValueEntry> {
+        let g = self.skl.guard();
+        let curr = unsafe { &*self.curr };
+        let (value_offset, value_size) = curr.get_value_offset();
+        self.skl
+            .inner
+            .lock()
+            .arena
+            .get_val(value_offset, value_size, &g)
+            .pin()
+            .map(|ent| ValueEntry::new(unsafe { core::mem::transmute(ent) }))
+    }
+
+    /// next advances to the next position.
+    #[inline]
+    pub fn next(&mut self) {
+        assert!(self.valid());
+        let g = self.skl.guard();
+        self.curr = self
+            .skl
+            .inner
+            .lock()
+            .get_next(self.curr as *mut _, 0, &g)
+            .map(|ptr| ptr.node as *const _)
+            .unwrap_or(null());
+    }
+
+    /// Prev advances to the previous position.
+    #[inline]
+    pub fn prev(&mut self) {
+        assert!(self.valid());
+        let g = self.skl.guard();
+        match self.key() {
+            Some(key) => {
+                let inner = self.skl.inner.lock();
+                let (prev, _) = inner.find_near(key, true, false, &g);
+                self.curr = prev.map(|ent| ent.node as *const _).unwrap_or(null());
+                // find <. No equality allowed.
+            }
+            None => self.curr = null(),
+        }
+    }
+
+    /// Seek advances to the first entry with a key >= target.
+    #[inline]
+    pub fn seek<K: KeyExt>(&mut self, target: K) {
+        let g = self.skl.guard();
+        let inner = self.skl.inner.lock();
+        let (tgt, _) = inner.find_near(target.as_bytes(), false, true, &g); // find >=
+        self.curr = match tgt {
+            Some(ent) => ent.node,
+            None => null(),
+        };
+    }
+
+    /// seek_for_prev finds an entry with key <= target.
+    #[inline]
+    pub fn seek_for_prev<K: KeyExt>(&mut self, target: K) {
+        let g = self.skl.guard();
+        let inner = self.skl.inner.lock();
+        let (tgt, _) = inner.find_near(target.as_bytes(), true, true, &g); // find <=
+        self.curr = match tgt {
+            Some(ent) => ent.node,
+            None => null(),
+        };
+    }
+
+    /// seek_to_first seeks position at the first entry in list.
+    /// Final state of iterator is Valid() iff list is not empty.
+    #[inline]
+    pub fn seek_to_first(&mut self) {
+        // find <=
+        let inner = self.skl.inner.lock();
+        let g = self.skl.guard();
+        self.curr = inner
+            .get_next(inner.get_head(&g).node, 0, &g)
+            .map(|ent| ent.node as *const _)
+            .unwrap_or(null());
+    }
+
+    /// seek_to_last seeks position at the last entry in list.
+    /// Final state of iterator is Valid() iff list is not empty.
+    #[inline]
+    pub fn seek_to_last(&mut self) {
+        let inner = self.skl.inner.lock();
+        let g = self.skl.guard();
+        let tgt = inner.find_last(&g);
+        self.curr = match tgt {
+            Some(ent) => ent.node,
+            None => null(),
+        };
+    }
+
+    /// valid returns true iff the iterator is positioned at a valid node.
+    #[inline]
+    pub fn valid(&self) -> bool {
+        !self.curr.is_null()
+    }
+}
+
+/// UniIterator is a unidirectional memtable iterator. It is a thin wrapper around
+/// Iterator. We like to keep Iterator as before, because it is more powerful and
+/// we might support bidirectional iterators in the future.
+#[derive(Copy, Clone, Debug)]
+pub struct UniGrowableSKLIterator<'a, D: Dropper> {
+    iter: GrowableSKLIterator<'a, D>,
+    reversed: bool,
+}
+
+impl<'a, D: Dropper> kvstructs::iterator::Iterator<KeyEntry<'a>, ValueEntry<'a>>
+    for UniGrowableSKLIterator<'a, D>
+{
+    #[inline]
+    fn next(&mut self) {
+        if !self.reversed {
+            self.iter.next()
+        } else {
+            self.iter.prev()
+        }
+    }
+
+    #[inline]
+    fn rewind(&mut self) {
+        if !self.reversed {
+            self.iter.seek_to_first()
+        } else {
+            self.iter.seek_to_last()
+        }
+    }
+
+    #[inline]
+    fn seek<Q: KeyExt>(&mut self, key: Q) {
+        if !self.reversed {
+            self.iter.seek(key)
+        } else {
+            self.iter.seek_for_prev(key)
+        }
+    }
+
+    #[inline]
+    fn entry(&self) -> Option<(KeyEntry<'a>, ValueEntry<'a>)> {
+        match self.iter.valid() {
+            true => match (self.iter.key(), self.iter.value()) {
+                (Some(key), Some(value)) => {
+                    Some(unsafe { (core::mem::transmute(key), core::mem::transmute(value)) })
+                }
+                _ => None,
+            },
+            false => None,
+        }
+    }
+
+    /// Key returns the key at the current position.
+    #[inline]
+    fn key(&self) -> Option<KeyEntry<'a>> {
+        match self.valid() {
+            true => self.iter.key(),
+            false => None,
+        }
+    }
+
+    /// Value returns value.
+    #[inline]
+    fn val(&self) -> Option<ValueEntry<'a>> {
+        match self.valid() {
+            true => unsafe { core::mem::transmute(self.iter.value()) },
+            false => None,
+        }
+    }
+
+    #[inline]
+    fn valid(&self) -> bool {
+        !self.iter.curr.is_null()
     }
 }
 
@@ -573,6 +778,33 @@ impl Drop for ValueEntry<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct KeyEntry<'a> {
+    inner: ManuallyDrop<RefKeyEntry<'a>>,
+}
+
+impl<'a> KeyEntry<'a> {
+    fn new(inner: RefKeyEntry<'a>) -> Self {
+        Self {
+            inner: ManuallyDrop::new(inner),
+        }
+    }
+}
+
+impl<'a> KeyExt for KeyEntry<'a> {
+    fn as_bytes(&self) -> &[u8] {
+        self.inner.as_bytes()
+    }
+}
+
+impl Drop for KeyEntry<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::into_inner(core::ptr::read(&self.inner)).release_with_pin(epoch::pin);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -596,10 +828,14 @@ mod tests {
             let w = wg.clone();
             let l = l.clone();
             std::thread::spawn(move || {
-                assert_eq!(l.get(key(i)).unwrap().as_value_ref(), new_value(i).as_value_ref(), "broken: {i}");
+                assert_eq!(
+                    l.get(key(i)).unwrap().as_value_ref(),
+                    new_value(i).as_value_ref(),
+                    "broken: {i}"
+                );
                 drop(w);
             });
-        } 
+        }
     }
 
     #[test]
@@ -621,9 +857,13 @@ mod tests {
             let w = wg.clone();
             let l = l.clone();
             std::thread::spawn(move || {
-                assert_eq!(l.get(key(i)).unwrap().as_value_ref(), new_value(i).as_value_ref(), "broken: {i}");
+                assert_eq!(
+                    l.get(key(i)).unwrap().as_value_ref(),
+                    new_value(i).as_value_ref(),
+                    "broken: {i}"
+                );
                 drop(w);
             });
-        } 
+        }
     }
 }

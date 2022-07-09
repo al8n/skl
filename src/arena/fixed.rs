@@ -1,19 +1,95 @@
-use crate::sync::{Arc, AtomicU32, Ordering};
-use crate::{Node, MAX_HEIGHT, MAX_NODE_SIZE, NODE_ALIGN, OFFSET_SIZE};
+use crate::{
+    sync::{Arc, AtomicU32, AtomicU64, Ordering},
+    Node,
+};
 use alloc::{vec, vec::Vec};
-use core::fmt::{Debug, Formatter};
 use core::mem::{self, ManuallyDrop};
 use core::ptr::{null, null_mut, slice_from_raw_parts, write, write_bytes, NonNull};
-use kvstructs::bytes::Bytes;
+use core::{
+    fmt::{Debug, Formatter},
+    ops::Add,
+};
 use kvstructs::Key;
+use kvstructs::{
+    bytes::Bytes,
+    raw_pointer::{RawKeyPointer, RawValuePointer},
+    KeyExt, KeyRef, ValueExt, ValueRef,
+};
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub(crate) struct ArenaRef {
+    refs: Arc<NonNull<u8>>,
+    cap: usize,
+}
+
+impl Drop for ArenaRef {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.refs) == 1 {
+            unsafe {
+                let _ = alloc::vec::Vec::from_raw_parts(self.refs.as_ptr(), self.cap, self.cap);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ArcKey {
+    key: RawKeyPointer,
+    refs: ArenaRef,
+}
+
+impl KeyExt for ArcKey {
+    fn as_bytes(&self) -> &[u8] {
+        self.key.as_bytes()
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ArcValue {
+    val: RawValuePointer,
+    refs: ArenaRef,
+}
+
+impl ArcValue {
+    #[inline]
+    pub(crate) fn set_version(&mut self, version: u64) {
+        self.val.set_version(version)
+    }
+
+    #[inline]
+    pub fn get_version(&self) -> u64 {
+        self.val.get_version()
+    }
+}
+
+impl ValueExt for ArcValue {
+    fn parse_value(&self) -> &[u8] {
+        self.val.parse_value()
+    }
+
+    fn parse_value_to_bytes(&self) -> Bytes {
+        self.val.parse_value_to_bytes()
+    }
+
+    fn get_meta(&self) -> u8 {
+        self.val.get_meta()
+    }
+
+    fn get_user_meta(&self) -> u8 {
+        self.val.get_user_meta()
+    }
+
+    fn get_expires_at(&self) -> u64 {
+        self.val.get_expires_at()
+    }
+}
 
 /// FixedArena should be lock-free
 pub(crate) struct FixedArena {
     pub(crate) cap: usize,
     pub(crate) n: AtomicU32,
     buf: NonNull<u8>,
-    head_offset: u32,
-    head: NonNull<Node>,
+    refs: Arc<NonNull<u8>>,
 }
 
 impl FixedArena {
@@ -22,148 +98,151 @@ impl FixedArena {
         let mut buf = Vec::<u8>::with_capacity(n);
         let start_ptr = buf.as_mut_ptr();
         mem::forget(buf);
-
-        let mut this = Self {
+        let buf_ptr = unsafe { NonNull::new_unchecked(start_ptr) };
+        Self {
             // Don't store data at position 0 in order to reserve offset=0 as a kind
             // of nil pointer.
             cap: n,
             n: AtomicU32::new(1),
-            buf: unsafe { NonNull::new_unchecked(start_ptr) },
-            head_offset: 0,
-            head: NonNull::dangling(),
-        };
-        let (head_offset, head_ptr) = this.allocate_head();
-        this.head_offset = head_offset;
-        this.head = head_ptr;
-        this
+            buf: buf_ptr,
+            refs: Arc::new(buf_ptr),
+        }
+    }
+
+    pub(crate) fn incr(&self) -> ArenaRef {
+        ArenaRef {
+            refs: self.refs.clone(),
+            cap: self.cap,
+        }
     }
 
     #[inline]
     fn allocate(&self, sz: u32) -> u32 {
-        let offset = self.n.fetch_add(sz, Ordering::SeqCst);
+        let offset = self.n.fetch_add(sz, Ordering::SeqCst) + sz;
         assert!(
-            offset + sz <= self.cap as u32,
-            "SkipList: ARENA does not have enough space"
+            (offset as usize) <= self.cap,
+            "FixedArena: ARENA does not have enough space"
         );
-        let ptr_offset = (offset as usize + NODE_ALIGN) & !NODE_ALIGN;
-        ptr_offset as u32
+        offset - sz
     }
 
-    #[inline]
-    fn allocate_head(&self) -> (u32, NonNull<Node>) {
-        let no = self.allocate_node(Key::new(), Bytes::new(), MAX_HEIGHT - 1);
-        let head_ptr = self.get_node_mut::<Node>(no);
-        unsafe { (no, NonNull::new_unchecked(head_ptr)) }
+    fn put_node(&self, height: usize) -> u32 {
+        // Compute the amount of the tower that will never be used, since the height
+        // is less than maxHeight.
+        let unused_size = self.unused_size(height);
+
+        // Pad the allocation with enough bytes to ensure pointer alignment.
+        let l = (Node::MAX_NODE_SIZE - unused_size + Node::NODE_ALIGN) as u32;
+        let n = self.allocate(l);
+
+        // Return the aligned offset.
+        let align = Node::NODE_ALIGN as u32;
+        (n + align) & (!align)
     }
 
-    /// allocate and init node and return the node offset.
-    #[inline]
-    pub(crate) fn allocate_node(&self, key: Key, val: Bytes, height: usize) -> u32 {
-        let sz = self.pad_allocate(height);
+    pub(crate) fn put_key<'a>(&self, key: kvstructs::KeyRef<'a>) -> u32 {
+        let key_size = key.len() as u32;
+        let offset = self.allocate(key_size);
 
-        let node_offset = self.allocate(sz as u32);
-
-        self.allocate_node_helper(key, val, height, node_offset)
-    }
-
-    #[inline(always)]
-    fn allocate_node_helper(&self, key: Key, val: Bytes, height: usize, offset: u32) -> u32 {
         unsafe {
-            let node_ptr: *mut Node = self.get_node_mut(offset);
-            let node = &mut *node_ptr;
-            write(&mut node.key, key);
-            write(&mut node.value, val);
-            node.height = height as u16;
-            write_bytes(node.tower.as_mut_ptr(), 0, height + 1);
+            let inner = self.buf.as_ptr();
+            core::ptr::copy_nonoverlapping(
+                key.as_ptr(),
+                inner.add(offset as usize),
+                key_size as usize,
+            );
         }
+        offset
+    }
 
+    pub(crate) fn put_val<'a>(&self, val: kvstructs::ValueRef<'a>) -> u32 {
+        let l = val.encoded_size();
+        let offset = self.allocate(l);
+        let buf = unsafe {
+            let ptr = self.buf.as_ptr();
+            &mut *core::ptr::slice_from_raw_parts_mut(ptr.add(offset as usize), l as usize)
+        };
+        val.encode(buf);
         offset
     }
 
     /// Compute the amount of the tower that will never be used, since the height
-    /// is less than MAX_HEIGHT.
+    /// is less than Node::MAX_HEIGHT.
     #[inline(always)]
     fn unused_size(&self, height: usize) -> usize {
-        (MAX_HEIGHT - height) * OFFSET_SIZE
+        (Node::MAX_HEIGHT - height) * Node::OFFSET_SIZE
     }
 
-    /// Pad the allocation with enough bytes to ensure pointer alignment.
-    #[inline(always)]
-    fn pad_allocate(&self, height: usize) -> usize {
-        MAX_NODE_SIZE + NODE_ALIGN - self.unused_size(height)
+    pub(crate) fn new_node(
+        &self,
+        key: impl KeyExt,
+        val: impl ValueExt,
+        height: usize,
+    ) -> *mut Node {
+        let key = key.as_key_ref();
+        let val = val.as_value_ref();
+        let node_offset = self.put_node(height);
+        let key_len = key.len();
+        let key_offset = self.put_key(key);
+        let v_encode_size = val.encoded_size();
+        let val = Node::encode_value(self.put_val(val), v_encode_size);
+
+        let node = unsafe { &mut *self.get_node(node_offset) };
+        node.key_offset = key_offset;
+        node.key_size = key_len as u16;
+        node.height = height as u16;
+        node.val = AtomicU64::new(val);
+        node
     }
 
-    /// get_node returns a pointer to the node located at offset. If the offset is
-    /// zero, then the nil node pointer is returned.
-    #[inline]
-    pub(crate) fn get_node_ptr<T>(&self, offset: u32) -> *const T {
+    pub(crate) fn get_node(&self, offset: u32) -> *mut Node {
         if offset == 0 {
-            null()
-        } else {
-            unsafe { self.as_ptr().add(offset as usize) as _ }
+            return core::ptr::null_mut();
+        }
+
+        unsafe {
+            core::mem::transmute::<*mut u8, *mut Node>(self.buf.as_ptr().add(offset as usize))
         }
     }
 
-    /// get_node_mut returns a pointer to the node located at offset. If the offset is
-    /// zero, then the nil node pointer is returned.
-    #[inline]
-    pub(crate) fn get_node_mut<T>(&self, offset: u32) -> *mut T {
-        if offset == 0 {
-            null_mut()
-        } else {
-            unsafe { self.as_ptr_mut().add(offset as usize) as _ }
+    pub(crate) fn get_key(&self, offset: u32, size: u16) -> ArcKey {
+        // Safety: the underlying ptr will never be freed until the Arena is dropped.
+        ArcKey {
+            key: unsafe {
+                RawKeyPointer::new(
+                    core::ptr::slice_from_raw_parts(
+                        self.buf.as_ptr().add(offset as usize),
+                        size as usize,
+                    ) as *const _,
+                    size as u32,
+                )
+            },
+            refs: self.incr(),
         }
     }
 
-    /// get_node_offset returns the offset of node in the arena. If the node pointer is
-    /// nil, then the zero offset is returned.
-    #[inline]
-    pub(crate) fn get_node_offset(&self, nd: *const Node) -> u32 {
-        // we must make sure the address of node in the arena
-        let nd_addr = nd as usize;
-        let start_addr = self.as_ptr() as usize;
-        let addr_range = start_addr + 1..start_addr + self.cap();
-
-        if addr_range.contains(&nd_addr) {
-            (nd_addr - start_addr) as u32
-        } else {
-            0
+    pub(crate) fn get_val<'a>(&'a self, offset: u32, size: u32) -> ArcValue {
+        // Safety: the underlying ptr will never be freed until the Arena is dropped.
+        ArcValue {
+            val: unsafe {
+                RawValuePointer::new(
+                    core::ptr::slice_from_raw_parts(
+                        self.buf.as_ptr().add(offset as usize),
+                        size as usize,
+                    ) as *const _,
+                    size,
+                )
+            },
+            refs: self.incr(),
         }
     }
 
-    #[inline]
-    fn get_head_offset(&self) -> u32 {
-        self.head_offset
-    }
-
-    #[inline]
-    pub(crate) fn get_head(&self) -> &Node {
-        unsafe { self.head.as_ref() }
-    }
-
-    #[inline]
-    pub(crate) fn get_head_ptr(&self) -> *const Node {
-        unsafe { self.head.as_ref() }
-    }
-
-    #[inline]
-    pub(crate) fn get_head_mut(&self) -> *mut Node {
-        self.head.as_ptr()
-    }
-
-    #[inline]
-    pub(crate) fn is_head(&self, other: *const Node) -> bool {
-        (self.head.as_ptr() as *const Node) == other
-    }
-
-    #[inline]
-    fn as_ptr_mut(&self) -> *mut u8 {
-        self.buf.as_ptr()
-    }
-
-    #[inline]
-    fn as_ptr(&self) -> *const u8 {
-        self.buf.as_ptr()
+    pub(crate) fn get_node_offset(&self, node: *const Node) -> u32 {
+        if node.is_null() {
+            return 0;
+        }
+        let ptr = unsafe { self.buf.as_ptr() as u32 };
+        node as u32 - ptr
     }
 
     #[inline]
@@ -173,7 +252,7 @@ impl FixedArena {
 
     #[inline]
     pub(crate) fn len(&self) -> usize {
-        self.n.load(Ordering::Relaxed) as usize
+        self.n.load(Ordering::SeqCst) as usize
     }
 }
 
@@ -196,10 +275,12 @@ impl Debug for FixedArena {
 
 impl Drop for FixedArena {
     fn drop(&mut self) {
-        unsafe {
-            let ptr = self.buf.as_ptr();
-            let cap = self.cap;
-            Vec::from_raw_parts(ptr, 0, cap);
+        if Arc::strong_count(&self.refs) == 1 {
+            unsafe {
+                let ptr = self.buf.as_ptr();
+                let cap = self.cap;
+                alloc::vec::Vec::from_raw_parts(ptr, 0, cap);
+            }
         }
     }
 }

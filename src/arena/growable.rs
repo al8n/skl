@@ -1,6 +1,5 @@
 use crate::sync::{AtomicU32, Ordering};
-
-use crate::{Node as NodeInner, MAX_HEIGHT, NODE_ALIGN, OFFSET_SIZE};
+use crate::Node;
 use alloc::rc::Rc;
 use alloc::{vec, vec::Vec};
 use core::cell::UnsafeCell;
@@ -12,8 +11,6 @@ use core::sync::atomic::AtomicU64;
 use kvstructs::bytes::Bytes;
 use kvstructs::raw_pointer::{RawKeyPointer, RawValuePointer};
 use kvstructs::{KeyExt, ValueExt};
-
-pub(crate) const MAX_NODE_SIZE: usize = mem::size_of::<NewNode>();
 
 #[derive(Debug, Clone)]
 pub(crate) struct ArenaRef {
@@ -82,63 +79,6 @@ impl ValueExt for RcValue {
 }
 
 #[derive(Debug)]
-pub(crate) struct Node {
-    inner: NonNull<NodeInner>,
-    arena_ref: ArenaRef,
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub(crate) struct NewNode {
-    // Multiple parts of the value are encoded as a single uint64 so that it
-    // can be atomically loaded and stored:
-    //   value offset: uint32 (bits 0-31)
-    //   value size  : uint16 (bits 32-63)
-    pub(crate) val: AtomicU64,
-
-    // A byte slice is 24 bytes. We are trying to save space here.
-    pub(crate) key_offset: u32, // Immutable. No need to lock to access key.
-    pub(crate) key_size: u16,   // Immutable. No need to lock to access key.
-
-    // Height of the tower.
-    pub(crate) height: u16,
-
-    // Most nodes do not need to use the full height of the tower, since the
-    // probability of each successive level decreases exponentially. Because
-    // these elements are never accessed, they do not need to be allocated.
-    // Therefore, when a node is allocated in the arena, its memory footprint
-    // is deliberately truncated to not include unneeded tower elements.
-    //
-    // All accesses to elements should use CAS operations, with no need to lock.
-    pub(crate) tower: [crate::sync::AtomicU32; MAX_HEIGHT],
-}
-
-impl NewNode {
-    pub(crate) fn get_key(&self, arena: &GrowableArena) -> impl KeyExt {
-        arena.get_key(self.key_offset, self.key_size)
-    }
-
-    pub(crate) fn set_val(&self, vo: u64) {
-        self.val.store(vo, Ordering::SeqCst)
-    }
-
-    /// (val_offset, val_size)
-    pub(crate) fn get_value_offset(&self) -> (u32, u32) {
-        decode_value(self.val.load(Ordering::SeqCst))
-    }
-
-    pub(crate) fn cas_next_offset(&self, height: usize, old: u32, new: u32) -> bool {
-        self.tower[height]
-            .compare_exchange(old, new, Ordering::SeqCst, Ordering::Relaxed)
-            .is_ok()
-    }
-
-    pub(crate) fn get_next_offset(&self, height: usize) -> u32 {
-        self.tower[height].load(Ordering::SeqCst)
-    }
-}
-
-#[derive(Debug)]
 struct Inner {
     vec: ManuallyDrop<Vec<u8>>,
     refs: Rc<NonNull<u8>>,
@@ -189,7 +129,7 @@ impl GrowableArena {
         Self {
             // Don't store data at position 0 in order to reserve offset=0 as a kind
             // of nil pointer.
-            inner: UnsafeCell::new(Inner::new(n.max(MAX_NODE_SIZE))),
+            inner: UnsafeCell::new(Inner::new(n.max(Node::MAX_NODE_SIZE))),
             n: AtomicU32::new(1),
         }
     }
@@ -219,7 +159,7 @@ impl GrowableArena {
         // checkptr tries to verify that the node of size MaxNodeInnerSize resides on a single heap
         // allocation which causes this error: checkptr:converted pointer straddles multiple allocations
         let cap = inner.vec.capacity();
-        if offset as usize > cap - MAX_NODE_SIZE {
+        if offset as usize > cap - Node::MAX_NODE_SIZE {
             let growby = cap.min(1 << 30).max(sz as usize);
             let mut new = Inner::new(cap + growby);
             new.copy_from(inner);
@@ -235,11 +175,11 @@ impl GrowableArena {
         let unused_size = self.unused_size(height);
 
         // Pad the allocation with enough bytes to ensure pointer alignment.
-        let l = (MAX_NODE_SIZE - unused_size + NODE_ALIGN) as u32;
+        let l = (Node::MAX_NODE_SIZE - unused_size + Node::NODE_ALIGN) as u32;
         let n = self.allocate(l);
 
         // Return the aligned offset.
-        let align = NODE_ALIGN as u32;
+        let align = Node::NODE_ALIGN as u32;
         (n + align) & (!align)
     }
 
@@ -261,10 +201,10 @@ impl GrowableArena {
     }
 
     /// Compute the amount of the tower that will never be used, since the height
-    /// is less than MAX_HEIGHT.
+    /// is less than Node::MAX_HEIGHT.
     #[inline(always)]
     fn unused_size(&self, height: usize) -> usize {
-        (MAX_HEIGHT - height) * OFFSET_SIZE
+        (Node::MAX_HEIGHT - height) * Node::OFFSET_SIZE
     }
 
     pub(crate) fn new_node(
@@ -272,14 +212,14 @@ impl GrowableArena {
         key: impl KeyExt,
         val: impl ValueExt,
         height: usize,
-    ) -> *mut NewNode {
+    ) -> *mut Node {
         let key = key.as_key_ref();
         let val = val.as_value_ref();
         let node_offset = self.put_node(height);
         let key_len = key.len();
         let key_offset = self.put_key(key);
         let v_encode_size = val.encoded_size();
-        let val = encode_value(self.put_val(val), v_encode_size);
+        let val = Node::encode_value(self.put_val(val), v_encode_size);
 
         let node = unsafe { &mut *self.get_node(node_offset) };
         node.key_offset = key_offset;
@@ -289,16 +229,14 @@ impl GrowableArena {
         node
     }
 
-    pub(crate) fn get_node(&self, offset: u32) -> *mut NewNode {
+    pub(crate) fn get_node(&self, offset: u32) -> *mut Node {
         if offset == 0 {
             return core::ptr::null_mut();
         }
         let inner = unsafe { &mut *self.inner.get() };
 
         unsafe {
-            core::mem::transmute::<*mut u8, *mut NewNode>(
-                inner.vec.as_mut_ptr().add(offset as usize),
-            )
+            core::mem::transmute::<*mut u8, *mut Node>(inner.vec.as_mut_ptr().add(offset as usize))
         }
     }
 
@@ -329,7 +267,7 @@ impl GrowableArena {
         }
     }
 
-    pub(crate) fn get_node_offset(&self, node: *const NewNode) -> u32 {
+    pub(crate) fn get_node_offset(&self, node: *const Node) -> u32 {
         if node.is_null() {
             return 0;
         }
@@ -347,15 +285,4 @@ impl GrowableArena {
     pub(crate) fn len(&self) -> usize {
         self.n.load(Ordering::SeqCst) as usize
     }
-}
-
-#[inline]
-pub(crate) fn encode_value(val_offset: u32, val_size: u32) -> u64 {
-    ((val_size as u64) << 32) | (val_offset as u64)
-}
-
-/// (val_offset, val_size)
-#[inline]
-pub(crate) fn decode_value(value: u64) -> (u32, u32) {
-    (value as u32, (value >> 32) as u32)
 }

@@ -2,7 +2,7 @@ use core::mem::ManuallyDrop;
 
 use crate::{
     sync::{AtomicU32, AtomicU64, AtomicUsize, Ordering},
-    MAX_HEIGHT, NODE_ALIGN, OFFSET_SIZE,
+    Node,
 };
 
 use crossbeam_epoch::{self as epoch, Atomic, Collector, Guard, Owned, Shared};
@@ -13,8 +13,6 @@ use kvstructs::{
     raw_pointer::{RawKeyPointer, RawValuePointer},
     KeyExt, ValueExt,
 };
-
-use super::growable::{encode_value, NewNode, MAX_NODE_SIZE};
 
 #[derive(Debug)]
 pub(crate) struct Allocator {
@@ -185,6 +183,7 @@ impl<'a> Clone for RefAllocatorEntry<'a> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct RefKeyEntry<'a> {
     key: RawKeyPointer,
     guard: RefAllocatorEntry<'a>,
@@ -257,7 +256,7 @@ impl<'a: 'g, 'g> KeyEntry<'a, 'g> {
     ///
     /// This method may return `None` if the reference count is already 0 and
     /// the node has been queued for deletion.
-    fn pin(&self) -> Option<RefKeyEntry<'a>> {
+    pub(crate) fn pin(&self) -> Option<RefKeyEntry<'a>> {
         unsafe { RefKeyEntry::try_acquire(self.key, self.parent.arena, self.parent.allocator) }
     }
 }
@@ -407,7 +406,7 @@ impl<'a: 'g, 'g> ValueExt for ValueEntry<'a, 'g> {
 }
 
 pub(crate) struct Entry<'a: 'g, 'g> {
-    pub(crate) node: *mut NewNode,
+    pub(crate) node: *mut Node,
     parent: AllocatorEntry<'a, 'g>,
 }
 
@@ -435,7 +434,9 @@ impl Arena {
         Self {
             collector: default_collector().clone(),
             n: AtomicU32::new(1),
-            allocator: Atomic::new(Allocator::new(size.max(NODE_ALIGN + MAX_NODE_SIZE))),
+            allocator: Atomic::new(Allocator::new(
+                size.max(Node::NODE_ALIGN + Node::MAX_NODE_SIZE),
+            )),
         }
     }
 
@@ -459,7 +460,7 @@ impl Arena {
         // checkptr tries to verify that the node of size MaxNodeInnerSize resides on a single heap
         // allocation which causes this error: checkptr:converted pointer straddles multiple allocations
         let cap = allocator.capacity();
-        if offset as usize > cap - MAX_NODE_SIZE {
+        if offset as usize > cap - Node::MAX_NODE_SIZE {
             // reallocate happens, mark inner need to be removed.
             inner.with_tag(1);
 
@@ -477,14 +478,14 @@ impl Arena {
             //         Err(err) => {
             //             let curr = err.current;
             //             let n = err.new;
-            //             unsafe { 
+            //             unsafe {
             //                 if curr.deref().data.capacity() < n.data.capacity() {
             //                     curr.with_tag(1);
             //                     new = n;
             //                     continue;
             //                 } else {
             //                     break;
-            //                 } 
+            //                 }
             //             }
             //             // the current thread fail to swap new buf, destroy it immediately.
             //             // unsafe {
@@ -507,23 +508,22 @@ impl Arena {
     }
 
     fn put_node<'a: 'g, 'g>(&'a self, height: usize, g: &'g Guard) -> u32 {
-        
         // Compute the amount of the tower that will never be used, since the height
         // is less than maxHeight.
         let unused_size = self.unused_size(height);
 
         // Pad the allocation with enough bytes to ensure pointer alignment.
-        let l = (MAX_NODE_SIZE - unused_size + NODE_ALIGN) as u32;
+        let l = (Node::MAX_NODE_SIZE - unused_size + Node::NODE_ALIGN) as u32;
         let n = self.allocate(l, g);
 
         // Return the aligned offset.
-        let align = NODE_ALIGN as u32;
+        let align = Node::NODE_ALIGN as u32;
         (n + align) & (!align)
     }
 
     pub(crate) fn put_key<'a: 'g, 'g>(&self, key: kvstructs::KeyRef<'a>, g: &'g Guard) -> u32 {
         self.check_guard(g);
-        
+
         let key_size = key.len() as u32;
         let offset = self.allocate(key_size, g);
         let mut inner = self.allocator.load(Ordering::SeqCst, g);
@@ -537,7 +537,7 @@ impl Arena {
         self.check_guard(g);
         let l = val.encoded_size();
         let offset = self.allocate(l, g);
-        
+
         let mut inner = self.allocator.load(Ordering::SeqCst, g);
         let mut allocator = unsafe { inner.deref_mut() };
         val.encode(allocator.data[offset as usize..].as_mut());
@@ -545,10 +545,10 @@ impl Arena {
     }
 
     /// Compute the amount of the tower that will never be used, since the height
-    /// is less than MAX_HEIGHT.
+    /// is less than Node::MAX_HEIGHT.
     #[inline(always)]
     fn unused_size(&self, height: usize) -> usize {
-        (MAX_HEIGHT - height) * OFFSET_SIZE
+        (Node::MAX_HEIGHT - height) * Node::OFFSET_SIZE
     }
 
     pub(crate) fn new_node<'a: 'g, 'g>(
@@ -557,7 +557,7 @@ impl Arena {
         val: impl ValueExt,
         height: usize,
         g: &'g Guard,
-    ) -> *mut NewNode {
+    ) -> *mut Node {
         self.check_guard(g);
         let key = key.as_key_ref();
         let val = val.as_value_ref();
@@ -565,7 +565,7 @@ impl Arena {
         let key_len = key.len();
         let key_offset = self.put_key(key, g);
         let v_encode_size = val.encoded_size();
-        let val = encode_value(self.put_val(val, g), v_encode_size);
+        let val = Node::encode_value(self.put_val(val, g), v_encode_size);
 
         let node = unsafe { &mut *self.get_node(node_offset, g).unwrap().node };
         node.key_offset = key_offset;
@@ -596,12 +596,12 @@ impl Arena {
 
     fn get_node_helper<'a: 'g, 'g>(&'a self, offset: u32, g: &'g Guard) -> Entry<'a, 'g> {
         self.check_guard(g);
-        
+
         let mut inner = self.allocator.load(Ordering::SeqCst, g);
 
         let allocator = unsafe { inner.deref_mut() };
         let n = unsafe {
-            core::mem::transmute::<*mut u8, *mut NewNode>(
+            core::mem::transmute::<*mut u8, *mut Node>(
                 allocator.data.as_mut_ptr().add(offset as usize),
             )
         };
@@ -622,7 +622,7 @@ impl Arena {
         g: &'g Guard,
     ) -> KeyEntry<'a, 'g> {
         self.check_guard(g);
-        
+
         let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
         let size = size as u32;
@@ -650,7 +650,7 @@ impl Arena {
         g: &'g Guard,
     ) -> ValueEntry<'a, 'g> {
         self.check_guard(g);
-        
+
         let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
         let vp = unsafe {
@@ -672,16 +672,16 @@ impl Arena {
 
     pub(crate) fn get_node_offset<'a: 'g, 'g>(
         &'a self,
-        node: *const NewNode,
+        node: *const Node,
         g: &'g Guard,
     ) -> Option<Offset<'a, 'g>> {
         if node.is_null() {
             return None;
         }
-        
+
         let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
-        
+
         Some(Offset {
             offset: node as u32 - allocator.data.as_ptr() as u32,
             parent: AllocatorEntry {
@@ -694,8 +694,7 @@ impl Arena {
 
     #[inline]
     pub(crate) fn cap<'a: 'g, 'g>(&'a self, g: &'g Guard) -> usize {
-        
-        let inner = self.allocator.load(Ordering::SeqCst, g); 
+        let inner = self.allocator.load(Ordering::SeqCst, g);
         let allocator = unsafe { inner.deref() };
         allocator.capacity()
     }

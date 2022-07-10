@@ -1,5 +1,3 @@
-use crate::arena::fixed::{ArcKey, ArcValue};
-
 use super::{
     arena::fixed::FixedArena,
     sync::{Arc, AtomicU32, Ordering},
@@ -342,7 +340,7 @@ impl<D: Dropper> Inner<D> {
         }
     }
 
-    fn get(&self, key: impl KeyExt) -> Option<ArcValue> {
+    fn get(&self, key: impl KeyExt) -> Option<ValueRef> {
         let key = key.as_key_ref();
         let (n, _) = self.find_near(key, false, true); // findGreaterOrEqual.
         if n.is_null() {
@@ -430,7 +428,7 @@ impl<D: Dropper> FixedSKL<D> {
 
     /// Gets the value associated with the key. It returns a valid value if it finds equal or earlier
     /// version of the same key.
-    pub fn get(&self, key: impl KeyExt) -> Option<ArcValue> {
+    pub fn get(&self, key: impl KeyExt) -> Option<ValueRef> {
         self.inner.get(key)
     }
 
@@ -473,7 +471,7 @@ pub struct FixedSKLIterator<'a, D: Dropper> {
 impl<'a, D: Dropper> FixedSKLIterator<'a, D> {
     /// Key returns the key at the current position.
     #[inline]
-    pub fn key(&self) -> ArcKey {
+    pub fn key<'b: 'a>(&'a self) -> KeyRef<'b> {
         unsafe {
             let curr = &*self.curr;
             self.skl.inner.arena.get_key(curr.key_offset, curr.key_size)
@@ -482,7 +480,7 @@ impl<'a, D: Dropper> FixedSKLIterator<'a, D> {
 
     /// Value returns value.
     #[inline]
-    pub fn value(&self) -> ArcValue {
+    pub fn value<'b: 'a>(&'a self) -> ValueRef<'b> {
         let curr = unsafe { &*self.curr };
         let (value_offset, value_size) = curr.get_value_offset();
         self.skl.inner.arena.get_val(value_offset, value_size)
@@ -549,7 +547,7 @@ pub struct UniFixedSKLIterator<'a, D: Dropper> {
     reversed: bool,
 }
 
-impl<'a, D: Dropper> kvstructs::iterator::Iterator<ArcKey, ArcValue>
+impl<'a, D: Dropper> kvstructs::iterator::Iterator<KeyRef<'a>, ValueRef<'a>>
     for UniFixedSKLIterator<'a, D>
 {
     #[inline]
@@ -580,7 +578,7 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator<ArcKey, ArcValue>
     }
 
     #[inline]
-    fn entry(&self) -> Option<(ArcKey, ArcValue)> {
+    fn entry(&self) -> Option<(KeyRef<'a>, ValueRef<'a>)> {
         self.iter
             .valid()
             .then(|| (self.iter.key(), self.iter.value()))
@@ -588,13 +586,13 @@ impl<'a, D: Dropper> kvstructs::iterator::Iterator<ArcKey, ArcValue>
 
     /// Key returns the key at the current position.
     #[inline]
-    fn key(&self) -> Option<ArcKey> {
+    fn key(&self) -> Option<KeyRef<'a>> {
         self.valid().then(|| self.iter.key())
     }
 
     /// Value returns value.
     #[inline]
-    fn val(&self) -> Option<ArcValue> {
+    fn val(&self) -> Option<ValueRef<'a>> {
         self.valid().then(|| self.iter.value())
     }
 

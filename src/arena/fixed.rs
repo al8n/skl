@@ -19,74 +19,6 @@ use kvstructs::{
     KeyExt, KeyRef, ValueExt, ValueRef,
 };
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub(crate) struct ArenaRef {
-    refs: Arc<NonNull<u8>>,
-    cap: usize,
-}
-
-impl Drop for ArenaRef {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.refs) == 1 {
-            unsafe {
-                let _ = alloc::vec::Vec::from_raw_parts(self.refs.as_ptr(), self.cap, self.cap);
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ArcKey {
-    key: RawKeyPointer,
-    refs: ArenaRef,
-}
-
-impl KeyExt for ArcKey {
-    fn as_bytes(&self) -> &[u8] {
-        self.key.as_bytes()
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ArcValue {
-    val: RawValuePointer,
-    refs: ArenaRef,
-}
-
-impl ArcValue {
-    #[inline]
-    pub(crate) fn set_version(&mut self, version: u64) {
-        self.val.set_version(version)
-    }
-
-    #[inline]
-    pub fn get_version(&self) -> u64 {
-        self.val.get_version()
-    }
-}
-
-impl ValueExt for ArcValue {
-    fn parse_value(&self) -> &[u8] {
-        self.val.parse_value()
-    }
-
-    fn parse_value_to_bytes(&self) -> Bytes {
-        self.val.parse_value_to_bytes()
-    }
-
-    fn get_meta(&self) -> u8 {
-        self.val.get_meta()
-    }
-
-    fn get_user_meta(&self) -> u8 {
-        self.val.get_user_meta()
-    }
-
-    fn get_expires_at(&self) -> u64 {
-        self.val.get_expires_at()
-    }
-}
-
 #[derive(Debug)]
 struct Inner {
     vec: ManuallyDrop<Vec<u8>>,
@@ -140,14 +72,6 @@ impl FixedArena {
             // of nil pointer.
             inner: UnsafeCell::new(Inner::new(n.max(Node::MAX_NODE_SIZE))),
             n: AtomicU32::new(1),
-        }
-    }
-
-    pub(crate) fn incr(&self) -> ArenaRef {
-        let inner = unsafe { &*self.inner.get() };
-        ArenaRef {
-            refs: inner.refs.clone(),
-            cap: inner.vec.capacity(),
         }
     }
 
@@ -234,32 +158,28 @@ impl FixedArena {
         }
     }
 
-    pub(crate) fn get_key(&self, offset: u32, size: u16) -> ArcKey {
+    pub(crate) fn get_key<'a, 'b: 'a>(&'a self, offset: u32, size: u16) -> KeyRef<'b> {
         let inner = unsafe { &*self.inner.get() };
         let size = size as u32;
         // Safety: the underlying ptr will never be freed until the Arena is dropped.
-        ArcKey {
-            key: unsafe {
+        unsafe {
+            core::mem::transmute(
                 RawKeyPointer::new(
                     inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
                     size,
-                )
-            },
-            refs: self.incr(),
+                ).as_key_ref()
+            ) 
         }
     }
 
-    pub(crate) fn get_val<'a>(&'a self, offset: u32, size: u32) -> ArcValue {
+    pub(crate) fn get_val<'a, 'b: 'a>(&'a self, offset: u32, size: u32) -> ValueRef<'b> {
         let inner = unsafe { &*self.inner.get() };
         // Safety: the underlying ptr will never be freed until the Arena is dropped.
-        ArcValue {
-            val: unsafe {
-                RawValuePointer::new(
-                    inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
-                    size,
-                )
-            },
-            refs: self.incr(),
+        unsafe {
+            core::mem::transmute(RawValuePointer::new(
+                inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
+                size,
+            ).as_value_ref())
         }
     }
 

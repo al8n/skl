@@ -84,7 +84,7 @@ fn bench_read_write_growable_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
     let frac = *frac;
     let value = Value::from(Bytes::from_static(b"00123"));
     // let comp = FixedLengthSuffixComparator::new(8);
-    let list = GrowableSKL::new(10);
+    let list = GrowableSKL::new(512 << 20);
     let l = list.clone();
     let stop = Arc::new(AtomicBool::new(false));
     let s = stop.clone();
@@ -375,13 +375,14 @@ fn bench_write_growable_skiplist(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_read_write_fixed_map,
-    bench_read_write_growable_map,
     bench_read_write_fixed_skiplist,
-    bench_read_write_growable_skiplist,
     bench_write_fixed_map,
     bench_write_growable_map,
     bench_write_fixed_skiplist,
-    bench_write_growable_skiplist
+    bench_write_growable_skiplist,
+    bench_read_write_growable_skiplist,
+    bench_read_write_fixed_map,
+    bench_read_write_growable_map,
+    
 );
 criterion_main!(benches);

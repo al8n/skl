@@ -383,6 +383,5 @@ criterion_group!(
     bench_read_write_growable_skiplist,
     bench_read_write_fixed_map,
     bench_read_write_growable_map,
-    
 );
 criterion_main!(benches);

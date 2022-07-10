@@ -167,8 +167,9 @@ impl FixedArena {
                 RawKeyPointer::new(
                     inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
                     size,
-                ).as_key_ref()
-            ) 
+                )
+                .as_key_ref(),
+            )
         }
     }
 
@@ -176,10 +177,13 @@ impl FixedArena {
         let inner = unsafe { &*self.inner.get() };
         // Safety: the underlying ptr will never be freed until the Arena is dropped.
         unsafe {
-            core::mem::transmute(RawValuePointer::new(
-                inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
-                size,
-            ).as_value_ref())
+            core::mem::transmute(
+                RawValuePointer::new(
+                    inner.vec[offset as usize..(offset + size) as usize].as_ptr(),
+                    size,
+                )
+                .as_value_ref(),
+            )
         }
     }
 

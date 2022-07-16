@@ -464,7 +464,11 @@ impl<D: Dropper> GrowableSKL<D> {
 impl<D: Dropper> GrowableSKL<D> {
     fn new_in(arena: Arena, dropper: Option<D>) -> Self {
         Self {
-            inner: Arc::new(parking_lot::Mutex::new(Inner::new(arena, dropper, &epoch::pin()))),
+            inner: Arc::new(parking_lot::Mutex::new(Inner::new(
+                arena,
+                dropper,
+                &epoch::pin(),
+            ))),
         }
     }
 

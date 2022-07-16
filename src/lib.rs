@@ -1,5 +1,5 @@
 //! A thread-safe skiplist implementation for writing memery table, SST table or something else.
-//! skl-rs is a pure Rust implementation for https://github.com/dgraph-io/badger/tree/master/skl 
+//! skl-rs is a pure Rust implementation for https://github.com/dgraph-io/badger/tree/master/skl
 //!
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

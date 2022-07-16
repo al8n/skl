@@ -29,6 +29,7 @@ fn main() {
             drop(w);
         });
     }
+    drop(l);
 
     const N2: usize = 100;
     let l = FixedSKL::new(120 << 20);
@@ -56,4 +57,5 @@ fn main() {
             drop(w);
         });
     }
+    drop(l);
 }

@@ -25,6 +25,7 @@ fn main() {
                 new_value(i).as_value_ref(),
                 "broken: {i}"
             );
+            drop(l);
             drop(w);
         });
     }
@@ -51,6 +52,7 @@ fn main() {
                 big_value(i).as_value_ref(),
                 "broken: {i}"
             );
+            drop(l);
             drop(w);
         });
     }

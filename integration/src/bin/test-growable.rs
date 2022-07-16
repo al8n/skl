@@ -24,7 +24,7 @@ fn main() {
         let l = l.clone();
         l.insert(key(i), big_value(i));
     }
-    
+
     assert_eq!(N2, l.len());
     for i in 0..N2 {
         let l = l.clone();

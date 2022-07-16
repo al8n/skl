@@ -16,8 +16,11 @@ mod arena;
 mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
+mod epoch;
+pub use crate::epoch::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
+
 mod growable;
-pub use crate::growable::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
+pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
 
 mod sync {
     #[cfg(not(loom))]

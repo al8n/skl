@@ -16,7 +16,7 @@ harness = false
 [features]
 default = ["std"]
 alloc = []
-std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-epoch/default"]
+std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-epoch/default", "spin/spin_mutex"]
 inline_more = []
 js = ["getrandom/js"]
 
@@ -29,6 +29,7 @@ crossbeam-utils = { version = "0.8", default-features = false }
 getrandom = { version = "0.2", optional = true }
 kvstructs = { version = "0.0.23", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
+spin = { version = "0.9", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = "0.3"

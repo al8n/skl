@@ -25,6 +25,8 @@ English | [简体中文][zh-cn-url]
 </div>
 
 ## Installation
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fal8n%2Fskl-rs.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fal8n%2Fskl-rs?ref=badge_shield)
+
 ```toml
 [dependencies]
 skl = "0.2"

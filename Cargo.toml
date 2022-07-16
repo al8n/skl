@@ -1,11 +1,11 @@
 [package]
 name = "skl"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
 description = "A lock-free thread-safe concurrent ARENA based skiplist implementation."
 keywords = ["skiplist", "lock-free", "memtable", "concurrency", "arena"]
-categories = ["data-structure", "concurrency"]
+categories = ["database", "data-structures", "concurrency"]
 license = "MIT/Apache-2.0"
 
 [[bench]]

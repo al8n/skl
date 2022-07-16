@@ -25,7 +25,7 @@ env:
   CARGO_TERM_COLOR: always
 #  RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
-  rust_nightly: nightly-2022-06-27
+  nightly: nightly-2022-06-27
 
 defaults:
   run:
@@ -95,39 +95,6 @@ jobs:
         run: rustup update $nightly && rustup default $nightly
       - name: Test
         run: . ci/test-stable.sh test
- 
-  # Run tests on some extra platforms
-  cross:
-    name: cross
-    strategy:
-      matrix:
-        target:
-          - aarch64-linux-android
-          - i686-linux-android
-          - x86_64-linux-android
-          - i686-pc-windows-gnu
-          - x86_64-pc-windows-gnu 
-          - wasm32-unknown-unknown
-          - i686-unknown-linux-gnu
-          - powerpc64-unknown-linux-gnu
-          - mips64-unknown-linux-gnuabi64
-          - riscv64gc-unknown-linux-gnu
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install Rust
-        run: rustup update stable && rustup default stable
-      - name: cross build --target ${{ matrix.target }}
-        run: |
-          cargo install cross
-          cross build --target ${{ matrix.target }}
-        if: matrix.target != 'wasm32-unknown-unknown'
-      # WASM support
-      - name: cargo build --target ${{ matrix.target }}
-        run: |
-          rustup target add ${{ matrix.target }}
-          cargo build --features js --target ${{ matrix.target }}
-        if: matrix.target == 'wasm32-unknown-unknown'
 
   # Sanitizers
   sanitizer:

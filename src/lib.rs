@@ -1,4 +1,5 @@
-//! A template for creating Rust open-source repo on GitHub
+//! A thread-safe skiplist implementation for writing memery table, SST table or something else.
+//! skl-rs is a pure Rust implementation for https://github.com/dgraph-io/badger/tree/master/skl 
 //!
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -12,11 +13,13 @@ extern crate alloc;
 extern crate std;
 
 mod arena;
+#[cfg(feature = "std")]
 mod epoch;
 mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
 mod growable;
+#[cfg(feature = "std")]
 pub use crate::epoch::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
 pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
 

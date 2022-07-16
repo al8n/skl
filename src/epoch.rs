@@ -20,7 +20,7 @@ use crate::{
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct GrowableSKL<D: Dropper> {
-    inner: Arc<spin::Mutex<Inner<D>>>,
+    inner: Arc<parking_lot::Mutex<Inner<D>>>,
 }
 
 impl<D: Dropper> Clone for GrowableSKL<D> {
@@ -464,7 +464,7 @@ impl<D: Dropper> GrowableSKL<D> {
 impl<D: Dropper> GrowableSKL<D> {
     fn new_in(arena: Arena, dropper: Option<D>) -> Self {
         Self {
-            inner: Arc::new(spin::Mutex::new(Inner::new(arena, dropper, &epoch::pin()))),
+            inner: Arc::new(parking_lot::Mutex::new(Inner::new(arena, dropper, &epoch::pin()))),
         }
     }
 

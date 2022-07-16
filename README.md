@@ -26,7 +26,6 @@ English | [简体中文][zh-cn-url]
 
 ## TODO (help wanted)
 - [ ] code review (I am a real newbie for writing lock-free data structure in Rust, really want someone can help me to do code review for me.) [issue #2](https://github.com/al8n/skl-rs/issues/2)
-- [ ] make crossbeam-epoch based skiplist lock-free [issue #1](https://github.com/al8n/skl-rs/issues/1)
 - [ ] make the crate test cases pass `cargo miri`
 
 Thanks in advance for your helps!
@@ -41,7 +40,7 @@ See [LICENSE-APACHE](LICENSE-APACHE), [LICENSE-MIT](LICENSE-MIT) for details.
 Copyright (c) 2022 Al Liu.
 
 [Github-url]: https://github.com/al8n/skl-rs/
-[CI-url]: https://github.com/al8n/template/actions/workflows/template.yml
+[CI-url]: https://github.com/al8n/skl-rs/actions/workflows/ci.yml
 [doc-url]: https://docs.rs/skl-rs
 [crates-url]: https://crates.io/crates/skl-rs
 [codecov-url]: https://app.codecov.io/gh/al8n/skl-rs/

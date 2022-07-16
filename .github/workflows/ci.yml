@@ -52,6 +52,21 @@ jobs:
     - name: Apply clippy lints
       run: cargo clippy --all-features
 
+  # This represents the minimum Rust version supported by
+  # Bytes. Updating this should be done in a dedicated PR.
+  #
+  # Tests are not run as tests may require newer versions of
+  # rust.
+  minrust:
+    name: minrust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        run: rustup update 1.62.0 && rustup default 1.62.0
+      - name: Check
+        run: . ci/test-stable.sh check
+
   # Stable
   stable:
     name: stable

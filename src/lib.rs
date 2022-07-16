@@ -13,15 +13,11 @@ extern crate alloc;
 extern crate std;
 
 mod arena;
-#[cfg(feature = "std")]
-mod epoch;
 mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
 mod growable;
-#[cfg(feature = "std")]
-pub use crate::epoch::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
-pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
+pub use crate::growable::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
 
 mod sync {
     #[cfg(not(loom))]

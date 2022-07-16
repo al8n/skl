@@ -12,35 +12,6 @@ use std::thread;
 
 use kvstructs::{Key, Value};
 
-fn growable_skiplist_round(
-    l: &GrowableSKL<NoopDropper>,
-    case: &(Key, bool),
-    exp: &kvstructs::Value,
-) {
-    if case.1 {
-        if let Some(v) = l.get(&case.0) {
-            assert_eq!(v.parse_value(), exp.parse_value());
-        }
-    } else {
-        l.insert(case.0.clone(), exp.clone());
-    }
-}
-
-fn growable_map_round(
-    l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>,
-    case: &(Key, bool),
-    exp: &kvstructs::Value,
-) {
-    let mut l = l.lock();
-    if case.1 {
-        if let Some(v) = l.get(&case.0) {
-            assert_eq!(v.parse_value(), exp.parse_value());
-        }
-    } else {
-        l.insert(case.0.clone(), exp.clone());
-    }
-}
-
 fn fixed_map_round(
     l: Arc<Mutex<HashMap<Key, kvstructs::Value>>>,
     case: &(Key, bool),
@@ -80,33 +51,6 @@ fn random_key(rng: &mut ThreadRng) -> Key {
     Key::from(key.freeze())
 }
 
-fn bench_read_write_growable_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
-    let frac = *frac;
-    let value = Value::from(Bytes::from_static(b"00123"));
-    // let comp = FixedLengthSuffixComparator::new(8);
-    let list = GrowableSKL::new(512 << 20);
-    let l = list.clone();
-    let stop = Arc::new(AtomicBool::new(false));
-    let s = stop.clone();
-    let v = value.clone();
-    let j = thread::spawn(move || {
-        let mut rng = rand::thread_rng();
-        while !s.load(Ordering::SeqCst) {
-            let key = random_key(&mut rng);
-            let case = (key, frac > rng.gen_range(0..11));
-            growable_skiplist_round(&l, &case, &v);
-        }
-    });
-    let mut rng = rand::thread_rng();
-    b.iter_batched_ref(
-        || (random_key(&mut rng), frac > rng.gen_range(0..11)),
-        |case| growable_skiplist_round(&list, case, &value),
-        BatchSize::SmallInput,
-    );
-    stop.store(true, Ordering::SeqCst);
-    j.join().unwrap();
-}
-
 fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
     let frac = *frac;
     let value = Value::from(Bytes::from_static(b"00123"));
@@ -141,18 +85,6 @@ fn bench_read_write_fixed_skiplist(c: &mut Criterion) {
             BenchmarkId::from_parameter(i),
             &i,
             bench_read_write_fixed_skiplist_frac,
-        );
-    }
-    group.finish();
-}
-
-fn bench_read_write_growable_skiplist(c: &mut Criterion) {
-    let mut group = c.benchmark_group("growable_skiplist_read_write");
-    for i in 0..=10 {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(i),
-            &i,
-            bench_read_write_growable_skiplist_frac,
         );
     }
     group.finish();
@@ -213,48 +145,6 @@ fn bench_read_write_fixed_map(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_read_write_growable_map_frac(b: &mut Bencher<'_>, frac: &usize) {
-    let frac = *frac;
-    let value = Bytes::from_static(b"00123");
-    let map = Arc::new(Mutex::new(HashMap::with_capacity(10)));
-    let m = map.clone();
-    let stop = Arc::new(AtomicBool::new(false));
-    let s = stop.clone();
-
-    let v = value.clone();
-    let h = thread::spawn(move || {
-        let mut rng = rand::thread_rng();
-        while !s.load(Ordering::SeqCst) {
-            let f = rng.gen_range(0..11);
-            let case = (random_key(&mut rng), f < frac);
-            map_round(&m, &case, &v);
-        }
-    });
-    let mut rng = rand::thread_rng();
-    b.iter_batched_ref(
-        || {
-            let f = rng.gen_range(0..11);
-            (random_key(&mut rng), f < frac)
-        },
-        |case| map_round(&map, case, &value),
-        BatchSize::SmallInput,
-    );
-    stop.store(true, Ordering::SeqCst);
-    h.join().unwrap();
-}
-
-fn bench_read_write_growable_map(c: &mut Criterion) {
-    let mut group = c.benchmark_group("growable_map_read_write");
-    for i in 0..=10 {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(i),
-            &i,
-            bench_read_write_growable_map_frac,
-        );
-    }
-    group.finish();
-}
-
 fn bench_write_fixed_map(c: &mut Criterion) {
     let list = Arc::new(Mutex::new(HashMap::with_capacity(512 << 21)));
     let value = Value::from(Bytes::from_static(b"00123"));
@@ -273,37 +163,6 @@ fn bench_write_fixed_map(c: &mut Criterion) {
     });
     let mut rng = rand::thread_rng();
     c.bench_function("fixed_map_write", |b| {
-        b.iter_batched(
-            || random_key(&mut rng),
-            |key| {
-                let mut list = list.lock();
-                list.insert(key, value.clone());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    stop.store(true, Ordering::SeqCst);
-    j.join().unwrap();
-}
-
-fn bench_write_growable_map(c: &mut Criterion) {
-    let list = Arc::new(Mutex::new(HashMap::with_capacity(10)));
-    let value = Value::from(Bytes::from_static(b"00123"));
-    let l = list.clone();
-    let stop = Arc::new(AtomicBool::new(false));
-    let s = stop.clone();
-    let v = value.clone();
-    let j = thread::spawn(move || {
-        let l = l.clone();
-        let mut rng = rand::thread_rng();
-        while !s.load(Ordering::SeqCst) {
-            let l = l.clone();
-            let case = (random_key(&mut rng), false);
-            growable_map_round(l, &case, &v);
-        }
-    });
-    let mut rng = rand::thread_rng();
-    c.bench_function("growable_map_write", |b| {
         b.iter_batched(
             || random_key(&mut rng),
             |key| {
@@ -345,43 +204,11 @@ fn bench_write_fixed_skiplist(c: &mut Criterion) {
     j.join().unwrap();
 }
 
-fn bench_write_growable_skiplist(c: &mut Criterion) {
-    let list = GrowableSKL::new(10);
-    let value = Value::from(Bytes::from_static(b"00123"));
-    let l = list.clone();
-    let stop = Arc::new(AtomicBool::new(false));
-    let s = stop.clone();
-    let v = value.clone();
-    let j = thread::spawn(move || {
-        let mut rng = rand::thread_rng();
-        while !s.load(Ordering::SeqCst) {
-            let case = (random_key(&mut rng), false);
-            growable_skiplist_round(&l, &case, &v);
-        }
-    });
-    let mut rng = rand::thread_rng();
-    c.bench_function("growable_skiplist_write", |b| {
-        b.iter_batched(
-            || random_key(&mut rng),
-            |key| {
-                list.insert(key, value.clone());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    stop.store(true, Ordering::SeqCst);
-    j.join().unwrap();
-}
-
 criterion_group!(
     benches,
     bench_read_write_fixed_skiplist,
     bench_write_fixed_map,
-    bench_write_growable_map,
     bench_write_fixed_skiplist,
-    bench_write_growable_skiplist,
-    bench_read_write_growable_skiplist,
     bench_read_write_fixed_map,
-    bench_read_write_growable_map,
 );
 criterion_main!(benches);

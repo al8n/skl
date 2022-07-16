@@ -1,20 +1,20 @@
 [package]
 name = "skl"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
-description = "A placeholder"
+description = "A lock-free thread-safe concurrent ARENA based skiplist implementation."
 license = "MIT/Apache-2.0"
 
 [[bench]]
-path = "benches/foo.rs"
-name = "foo"
+path = "benches/bench.rs"
+name = "bench"
 harness = false
 
 [features]
 default = ["std"]
 alloc = []
-std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-epoch/default", "parking_lot"]
+std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more", "crossbeam-epoch/default"]
 inline_more = []
 js = ["getrandom/js"]
 
@@ -25,10 +25,8 @@ loom = "0.5.6"
 crossbeam-epoch = { version = "0.9", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
 getrandom = { version = "0.2", optional = true }
-parking_lot = { version = "0.12", optional = true }
 kvstructs = { version = "0.0.23", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-spin = { version = "0.9", default-features = false, features = ["spin_mutex"] }
 
 [dev-dependencies]
 criterion = "0.3"

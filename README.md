@@ -16,7 +16,7 @@
 [<img alt="license-apache" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge&logo=Apache" height="22">][license-apache-url]
 [<img alt="license-mit" src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge&fontColor=white&logoColor=f5c076&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMzZweCIgdmlld0JveD0iMCAwIDI0IDI0IiB3aWR0aD0iMzZweCIgZmlsbD0iI2Y1YzA3NiI+PHBhdGggZD0iTTAgMGgyNHYyNEgwVjB6IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTEwLjA4IDEwLjg2Yy4wNS0uMzMuMTYtLjYyLjMtLjg3cy4zNC0uNDYuNTktLjYyYy4yNC0uMTUuNTQtLjIyLjkxLS4yMy4yMy4wMS40NC4wNS42My4xMy4yLjA5LjM4LjIxLjUyLjM2cy4yNS4zMy4zNC41My4xMy40Mi4xNC42NGgxLjc5Yy0uMDItLjQ3LS4xMS0uOS0uMjgtMS4yOXMtLjQtLjczLS43LTEuMDEtLjY2LS41LTEuMDgtLjY2LS44OC0uMjMtMS4zOS0uMjNjLS42NSAwLTEuMjIuMTEtMS43LjM0cy0uODguNTMtMS4yLjkyLS41Ni44NC0uNzEgMS4zNlM4IDExLjI5IDggMTEuODd2LjI3YzAgLjU4LjA4IDEuMTIuMjMgMS42NHMuMzkuOTcuNzEgMS4zNS43Mi42OSAxLjIuOTFjLjQ4LjIyIDEuMDUuMzQgMS43LjM0LjQ3IDAgLjkxLS4wOCAxLjMyLS4yM3MuNzctLjM2IDEuMDgtLjYzLjU2LS41OC43NC0uOTQuMjktLjc0LjMtMS4xNWgtMS43OWMtLjAxLjIxLS4wNi40LS4xNS41OHMtLjIxLjMzLS4zNi40Ni0uMzIuMjMtLjUyLjNjLS4xOS4wNy0uMzkuMDktLjYuMS0uMzYtLjAxLS42Ni0uMDgtLjg5LS4yMy0uMjUtLjE2LS40NS0uMzctLjU5LS42MnMtLjI1LS41NS0uMy0uODgtLjA4LS42Ny0uMDgtMXYtLjI3YzAtLjM1LjAzLS42OC4wOC0xLjAxek0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQxIDAtOC0zLjU5LTgtOHMzLjU5LTggOC04IDggMy41OSA4IDgtMy41OSA4LTggOHoiLz48L3N2Zz4=" height="22">][license-mit-url]
 
-A thread-safe skiplist implementation for writing memery table, SST table or something else.
+A lock-free thread-safe skiplist implementation (no_std) for writing memery table, SST table or something else.
 skl-rs is a pure Rust implementation for https://github.com/dgraph-io/badger/tree/master/skl
 
 
@@ -24,8 +24,45 @@ English | [简体中文][zh-cn-url]
 
 </div>
 
+## Installation
+```toml
+[dependencies]
+skl = "0.2"
+```
+
+## Example
+```rust
+use skl::FixedSKL;
+
+fn main() {
+    const N: usize = 1000;
+    let l = FixedSKL::new(1 << 20);
+    let wg = Arc::new(());
+    for i in 0..N {
+        let w = wg.clone();
+        let l = l.clone();
+        std::thread::spawn(move || {
+            l.insert(key(i), new_value(i));
+            drop(w);
+        });
+    }
+    while Arc::strong_count(&wg) > 1 {}
+    for i in 0..N {
+        let w = wg.clone();
+        let l = l.clone();
+        std::thread::spawn(move || {
+            assert_eq!(
+                l.get(key(i)).unwrap().as_value_ref(),
+                new_value(i).as_value_ref(),
+                "broken: {i}"
+            );
+            drop(w);
+        });
+    }
+}
+```
+
 ## TODO (help wanted)
-- [ ] code review (I am a real newbie for writing lock-free data structure in Rust, really want someone can help me to do code review for me.) [issue #2](https://github.com/al8n/skl-rs/issues/2)
 - [ ] make the crate test cases pass `cargo miri`
 
 Thanks in advance for your helps!

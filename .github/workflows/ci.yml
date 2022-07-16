@@ -23,9 +23,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-#  RUSTFLAGS: -Dwarnings
+  RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
   nightly: nightly-2022-06-27
+  stable: stable
 
 defaults:
   run:
@@ -109,6 +110,60 @@ jobs:
       - name: ASAN / LSAN / TSAN
         run: . ci/sanitizer.sh
 
+  # valgrind
+  valgrind:
+    name: valgrind
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust ${{ env.stable }}
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: ${{ env.stable }}
+            override: true
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y valgrind
+      # Compile tests
+      - name: cargo build test-fixed
+        run: cargo build --bin test-fixed
+        working-directory: integration
+
+      # Run with valgrind
+      - name: Run valgrind test-fixed
+        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-fixed
+
+      # Compile tests
+      - name: cargo build test-epoch
+        run: cargo build --bin test-epoch
+        working-directory: integration
+
+      # Run with valgrind
+      - name: Run valgrind test-epoch
+        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-epoch
+
+  # TODO: fix miri tests
+  # miri:
+  #   name: miri
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Install Rust ${{ env.rust_nightly }}
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: ${{ env.rust_nightly }}
+  #         components: miri
+  #         override: true
+  #     - uses: Swatinem/rust-cache@v1
+  #     - name: miri
+  #       run: cargo miri test --all-features --lib
+  #       env:
+  #         MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tag-raw-pointers
+  #         PROPTEST_CASES: 10
+
   tarpaulin:
     name: cargo tarpaulin
     runs-on: ubuntu-latest
@@ -116,7 +171,9 @@ jobs:
       - rustfmt
       - clippy
       - stable
-      - sanitizer 
+      - nightly
+      - sanitizer
+      - valgrind
     steps:
       - uses: actions/checkout@v3
       - name: Install latest nightly
@@ -144,21 +201,4 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: file
 
-  # TODO: fix miri tests
-  # miri:
-  #   name: miri
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Install Rust ${{ env.rust_nightly }}
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: ${{ env.rust_nightly }}
-  #         components: miri
-  #         override: true
-  #     - uses: Swatinem/rust-cache@v1
-  #     - name: miri
-  #       run: cargo miri test --all-features --lib
-  #       env:
-  #         MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tag-raw-pointers
-  #         PROPTEST_CASES: 10
+  

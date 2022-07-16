@@ -450,7 +450,13 @@ impl<D: Dropper> FixedSKL<D> {
     /// Returns the length
     #[inline]
     pub fn len(&self) -> usize {
-        self.inner.arena.len()
+        let mut x = self.inner.get_next(self.inner.get_head(), 0);
+        let mut count = 0;
+        while !x.is_null() {
+            count += 1;
+            x = self.inner.get_next(x, 0);
+        }
+        count
     }
 
     /// Returns the skiplist's capacity
@@ -624,21 +630,6 @@ mod tests {
         ctr
     }
 
-    // #[test]
-    // fn test_insert() {
-    //     let l = FixedSKL::new(ARENA_SIZE);
-    //     let k1 = Key::from("key1".as_bytes().to_vec()).with_timestamp(0);
-    //     let v1 = new_value(42).freeze();
-    //     let v1c = new_value(42).freeze();
-    //     let ir = l.insert(k1.clone(), v1);
-    //     assert!(matches!(ir, InsertResult::Success));
-    //     let ir1 = l.insert(k1.clone(), v1c);
-    //     assert!(matches!(ir1, InsertResult::Equal(..)));
-    //     let v2 = new_value(52).freeze();
-    //     let ir2 = l.insert(k1.clone(), v2);
-    //     assert!(matches!(ir2, InsertResult::Update(..)));
-    // }
-
     #[test]
     fn test_basic() {
         let l = FixedSKL::new(ARENA_SIZE);
@@ -727,6 +718,63 @@ mod tests {
     fn test_basic_large_testcases() {
         let l = FixedSKL::new(ARENA_SIZE);
         test_basic_large_testcases_in(l);
+    }
+
+    #[test]
+    fn test_concurrent_basic() {
+        const n: usize = 1000;
+        let l = FixedSKL::new(ARENA_SIZE);
+        let wg = Arc::new(());
+        for i in 0..n {
+            let w = wg.clone();
+            let l = l.clone();
+            std::thread::spawn(move || {
+                l.insert(key(i), new_value(i));
+                drop(w);
+            });
+        }
+        while Arc::strong_count(&wg) > 1 {}
+        for i in 0..n {
+            let w = wg.clone();
+            let l = l.clone();
+            std::thread::spawn(move || {
+                assert_eq!(
+                    l.get(key(i)).unwrap().as_value_ref(),
+                    new_value(i).as_value_ref(),
+                    "broken: {i}"
+                );
+                drop(w);
+            });
+        }
+    }
+
+    #[test]
+    fn test_concurrent_basic_big_values() {
+        const n: usize = 100;
+        let l = FixedSKL::new(120 << 20);
+        let wg = Arc::new(());
+        for i in 0..n {
+            let w = wg.clone();
+            let l = l.clone();
+            std::thread::spawn(move || {
+                l.insert(key(i), big_value(i));
+                drop(w);
+            });
+        }
+        while Arc::strong_count(&wg) > 1 {}
+        assert_eq!(n, l.len());
+        for i in 0..n {
+            let w = wg.clone();
+            let l = l.clone();
+            std::thread::spawn(move || {
+                assert_eq!(
+                    l.get(key(i)).unwrap().as_value_ref(),
+                    big_value(i).as_value_ref(),
+                    "broken: {i}"
+                );
+                drop(w);
+            });
+        }
     }
 
     fn assert_find_near_not_null<D: Dropper>(

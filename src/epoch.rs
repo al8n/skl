@@ -864,7 +864,7 @@ mod tests {
             std::thread::spawn(move || {
                 assert_eq!(
                     l.get(key(i)).unwrap().as_value_ref(),
-                    new_value(i).as_value_ref(),
+                    big_value(i).as_value_ref(),
                     "broken: {i}"
                 );
                 drop(w);

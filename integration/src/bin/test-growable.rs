@@ -1,7 +1,6 @@
 use integration::{big_value, key, new_value};
 use kvstructs::ValueExt;
 use skl::GrowableSKL;
-use std::sync::Arc;
 
 fn main() {
     const N: usize = 1000;

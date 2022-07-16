@@ -30,6 +30,24 @@ English | [简体中文][zh-cn-url]
 skl = "0.2"
 ```
 
+## Support Platforms
+| targets                       |   status  |
+|:-----------------------------:|:---------:|
+| aarch64-linux-android         |  &#9989;  |
+| aarch64-unknown-linux-gnu     |  &#9989;  |
+| aarch64-unknown-linux-musl    |  &#9989;  |
+| i686-pc-windows-gnu           |  &#9989;  |
+| i686-linux-android            |  &#9989;  |
+| i686-unknown-linux-gnu        |  &#9989;  |
+| mips64-unknown-linux-gnuabi64 |  &#9989;  |
+| powerpc64-unknown-linux-gnu   |  &#9989;  |
+| riscv64gc-unknown-linux-gnu   |  &#9989;  |
+| wasm32-unknown-unknown        |  &#9989;  |
+| wasm32-unknown-emscripten     |  &#9989;  |
+| x86_64-unknown-linux-gnu      |  &#9989;  |
+| x86_64-pc-windows-gnu         |  &#9989;  |
+| x86_64-linux-android          |  &#9989;  |
+
 ## Example
 ```rust
 use skl::FixedSKL;

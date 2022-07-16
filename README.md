@@ -25,6 +25,8 @@ English | [简体中文][zh-cn-url]
 </div>
 
 ## Installation
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fal8n%2Fskl-rs.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fal8n%2Fskl-rs?ref=badge_shield)
+
 ```toml
 [dependencies]
 skl = "0.2"
@@ -104,3 +106,6 @@ Copyright (c) 2022 Al Liu.
 [license-apache-url]: https://opensource.org/licenses/Apache-2.0
 [license-mit-url]: https://opensource.org/licenses/MIT
 [zh-cn-url]: https://github.com/al8n/skl-rs/tree/main/README-zh_CN.md
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fal8n%2Fskl-rs.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fal8n%2Fskl-rs?ref=badge_large)

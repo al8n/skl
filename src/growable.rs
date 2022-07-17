@@ -18,11 +18,11 @@ use kvstructs::{KeyExt, ValueExt};
 /// - If you want a thread-safe with fixed size skiplist, see `FixedSKL`
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct RcGrowableSKL<D: Dropper> {
+pub struct GrowableSKL<D: Dropper> {
     inner: Arc<Inner<D>>,
 }
 
-impl<D: Dropper> Clone for RcGrowableSKL<D> {
+impl<D: Dropper> Clone for GrowableSKL<D> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -386,7 +386,7 @@ impl<D: Dropper> Drop for Inner<D> {
     }
 }
 
-impl RcGrowableSKL<NoopDropper> {
+impl GrowableSKL<NoopDropper> {
     /// Create a new skiplist according to the given capacity
     ///
     /// **Note:** The capacity stands for how many memory allocated,
@@ -396,7 +396,7 @@ impl RcGrowableSKL<NoopDropper> {
     }
 }
 
-impl<D: Dropper> RcGrowableSKL<D> {
+impl<D: Dropper> GrowableSKL<D> {
     /// Create a new skiplist according to the given capacity and [`Dropper`]
     ///
     /// **Note:** The capacity stands for how many memory allocated,
@@ -413,7 +413,7 @@ impl<D: Dropper> RcGrowableSKL<D> {
     }
 }
 
-impl<D: Dropper> RcGrowableSKL<D> {
+impl<D: Dropper> GrowableSKL<D> {
     fn new_in(arena: GrowableArena, dropper: Option<D>) -> Self {
         Self {
             inner: Arc::new(Inner::new(arena, dropper)),
@@ -433,8 +433,8 @@ impl<D: Dropper> RcGrowableSKL<D> {
 
     /// Returns a skiplist iterator.
     #[inline]
-    fn iter(&self) -> RcGrowableSKLIterator<'_, D> {
-        RcGrowableSKLIterator {
+    fn iter(&self) -> GrowableSKLIterator<'_, D> {
+        GrowableSKLIterator {
             skl: self,
             curr: null(),
         }
@@ -466,15 +466,15 @@ impl<D: Dropper> RcGrowableSKL<D> {
     }
 }
 
-/// RcGrowableSKLIterator is an iterator over skiplist object. For new objects, you just
-/// need to initialize RcGrowableSKLIterator.list.
+/// GrowableSKLIterator is an iterator over skiplist object. For new objects, you just
+/// need to initialize GrowableSKLIterator.list.
 #[derive(Copy, Clone, Debug)]
-pub struct RcGrowableSKLIterator<'a, D: Dropper> {
-    skl: &'a RcGrowableSKL<D>,
+pub struct GrowableSKLIterator<'a, D: Dropper> {
+    skl: &'a GrowableSKL<D>,
     curr: *const Node,
 }
 
-impl<'a, D: Dropper> RcGrowableSKLIterator<'a, D> {
+impl<'a, D: Dropper> GrowableSKLIterator<'a, D> {
     /// Key returns the key at the current position.
     #[inline]
     pub fn key(&self) -> RcKey {
@@ -548,13 +548,13 @@ impl<'a, D: Dropper> RcGrowableSKLIterator<'a, D> {
 /// Iterator. We like to keep Iterator as before, because it is more powerful and
 /// we might support bidirectional iterators in the future.
 #[derive(Copy, Clone, Debug)]
-pub struct UniRcGrowableSKLIterator<'a, D: Dropper> {
-    iter: RcGrowableSKLIterator<'a, D>,
+pub struct UniGrowableSKLIterator<'a, D: Dropper> {
+    iter: GrowableSKLIterator<'a, D>,
     reversed: bool,
 }
 
 impl<'a, D: Dropper> kvstructs::iterator::Iterator<RcKey, RcValue>
-    for UniRcGrowableSKLIterator<'a, D>
+    for UniGrowableSKLIterator<'a, D>
 {
     #[inline]
     fn next(&mut self) {
@@ -621,7 +621,7 @@ mod tests {
 
     const ARENA_SIZE: usize = 10;
 
-    fn length<D: Dropper>(s: RcGrowableSKL<D>) -> usize {
+    fn length<D: Dropper>(s: GrowableSKL<D>) -> usize {
         let head = s.inner.get_head();
         let mut x = s.inner.get_next(head, 0);
         let mut ctr = 0;
@@ -634,7 +634,7 @@ mod tests {
 
     // #[test]
     // fn test_insert() {
-    //     let l = RcGrowableSKL::new(ARENA_SIZE);
+    //     let l = GrowableSKL::new(ARENA_SIZE);
     //     let k1 = Key::from("key1".as_bytes().to_vec()).with_timestamp(0);
     //     let v1 = new_value(42).freeze();
     //     let v1c = new_value(42).freeze();
@@ -649,7 +649,7 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let l = RcGrowableSKL::new(200);
+        let l = GrowableSKL::new(200);
         let mut v1 = new_value(42);
         let mut v2 = new_value(52);
         let mut v3 = new_value(62);
@@ -717,7 +717,7 @@ mod tests {
         assert_eq!(v.get_meta(), 60);
     }
 
-    fn test_basic_large_testcases_in<D: Dropper>(l: RcGrowableSKL<D>) {
+    fn test_basic_large_testcases_in<D: Dropper>(l: GrowableSKL<D>) {
         let n = 1000;
 
         for i in 0..n {
@@ -734,12 +734,12 @@ mod tests {
 
     #[test]
     fn test_basic_large_testcases() {
-        let l = RcGrowableSKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         test_basic_large_testcases_in(l);
     }
 
     fn assert_find_near_not_null<D: Dropper>(
-        l: RcGrowableSKL<D>,
+        l: GrowableSKL<D>,
         less: bool,
         allow_equal: bool,
         fk: Key,
@@ -756,7 +756,7 @@ mod tests {
     }
 
     fn assert_find_near_null<D: Dropper>(
-        l: RcGrowableSKL<D>,
+        l: GrowableSKL<D>,
         less: bool,
         allow_equal: bool,
         fk: Key,
@@ -768,7 +768,7 @@ mod tests {
 
     #[test]
     fn test_find_near() {
-        let l = RcGrowableSKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         for i in 0..1000 {
             let k = Key::from(format!("{:05}", i * 10 + 5)).with_timestamp(0);
             l.insert(k, new_value(i).freeze());
@@ -963,7 +963,7 @@ mod tests {
     #[test]
     fn test_iter_next() {
         let n = 100;
-        let l = RcGrowableSKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();
@@ -989,7 +989,7 @@ mod tests {
     #[test]
     fn test_iter_prev() {
         let n = 100;
-        let l = RcGrowableSKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();
@@ -1012,7 +1012,7 @@ mod tests {
         assert!(!iter.valid());
     }
 
-    fn assert_seek<D: Dropper>(iter: &mut RcGrowableSKLIterator<D>, seek_to: &'static str) {
+    fn assert_seek<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
         iter.seek(&Key::from(seek_to).with_timestamp(0));
         assert!(iter.valid());
         assert_eq!(
@@ -1021,7 +1021,7 @@ mod tests {
         );
     }
 
-    fn assert_seek_null<D: Dropper>(iter: &mut RcGrowableSKLIterator<D>, seek_to: &'static str) {
+    fn assert_seek_null<D: Dropper>(iter: &mut GrowableSKLIterator<D>, seek_to: &'static str) {
         iter.seek(&Key::from(seek_to).with_timestamp(0));
         assert!(!iter.valid());
     }
@@ -1029,7 +1029,7 @@ mod tests {
     #[test]
     fn test_iter_seek() {
         let n = 100;
-        let l = RcGrowableSKL::new(ARENA_SIZE);
+        let l = GrowableSKL::new(ARENA_SIZE);
         let mut iter = l.iter();
         assert!(!iter.valid());
         iter.seek_to_first();

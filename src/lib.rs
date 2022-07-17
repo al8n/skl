@@ -16,11 +16,11 @@ mod arena;
 mod fixed;
 pub use crate::fixed::{FixedSKL, FixedSKLIterator, UniFixedSKLIterator};
 
-mod epoch;
-pub use crate::epoch::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
-
 mod growable;
-pub use crate::growable::{RcGrowableSKL, RcGrowableSKLIterator, UniRcGrowableSKLIterator};
+pub use crate::growable::{GrowableSKL, GrowableSKLIterator, UniGrowableSKLIterator};
+
+/// re-export kvstructs crate
+pub use kvstructs;
 
 mod sync {
     #[cfg(not(loom))]

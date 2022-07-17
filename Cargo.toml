@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
 description = "A lock-free thread-safe concurrent ARENA based skiplist implementation."

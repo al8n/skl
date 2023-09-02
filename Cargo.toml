@@ -1,9 +1,11 @@
 [package]
 name = "skl"
-version = "0.2.4"
+version = "0.3.1"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
-description = "A lock-free thread-safe concurrent ARENA based skiplist implementation."
+description = "A lock-free thread-safe concurrent ARENA based skiplist implementation which helps develop MVCC memtable for LSM-Tree. Inspired by Dgraph's badger https://github.com/dgraph-io/badger/tree/main/skl."
+documentation = "https://docs.rs/skl"
+homepage = "https://github.com/al8n/skl-rs"
 keywords = ["skiplist", "lock-free", "memtable", "concurrency", "arena"]
 categories = ["database", "data-structures", "concurrency", "no-std"]
 license = "MIT/Apache-2.0"
@@ -13,24 +15,29 @@ path = "benches/bench.rs"
 name = "bench"
 harness = false
 
+[[test]]
+path = "tests/loom.rs"
+name = "loom"
+
 [features]
 default = ["std"]
 alloc = []
-std = ["kvstructs/std", "rand/std", "rand/std_rng", "inline_more"]
+std = ["bytes/std", "rand/std", "rand/std_rng", "inline_more"]
 inline_more = []
 js = ["getrandom/js"]
 
 [target.'cfg(loom)'.dependencies]
-loom = "0.5.6"
+loom = "0.7"
 
 [dependencies]
+bytes = { version = "1.4", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
 getrandom = { version = "0.2", optional = true }
-kvstructs = { version = "0.0.23", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
+viewit = "0.1.5"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5"
 tempfile = "3"
 parking_lot = "0.12"
 
@@ -43,8 +50,6 @@ incremental = false
 debug-assertions = false
 overflow-checks = false
 rpath = false
-
-
 
 [package.metadata.docs.rs]
 all-features = true

@@ -25,7 +25,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
-  nightly: nightly-2022-06-27
+  nightly: nightly
   stable: stable
 
 defaults:
@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
-        run: rustup update 1.62.0 && rustup default 1.62.0
+        run: rustup update 1.72.0 && rustup default 1.72.0
       - name: Check
         run: . ci/test-stable.sh check
 
@@ -86,7 +86,7 @@ jobs:
       - name: Test
         run: . ci/test-stable.sh test
 
- # Nightly
+  # Nightly
   nightly:
     name: nightly
     runs-on: ubuntu-latest
@@ -112,7 +112,7 @@ jobs:
           - x86_64-pc-windows-gnu
           - i686-unknown-linux-gnu
           - powerpc64-unknown-linux-gnu
-          - mips64-unknown-linux-gnuabi64
+          # - mips64-unknown-linux-gnuabi64
           - riscv64gc-unknown-linux-gnu
           - wasm32-unknown-unknown
           - wasm32-unknown-emscripten
@@ -132,6 +132,11 @@ jobs:
           rustup target add ${{ matrix.target }}
           cargo build --features js --target ${{ matrix.target }}
         if: matrix.target == 'wasm32-unknown-unknown'
+      # - name: cargo build --target ${{ matrix.target }}
+      #   run: |
+      #     rustup target add ${{ matrix.target }}
+      #     cargo +nightly build --no-default-features --features alloc --target ${{ matrix.target }} -Z build-std=core,alloc
+      #   if: matrix.target == 'mips64-unknown-linux-gnuabi64'
 
   # Sanitizers
   sanitizer:
@@ -172,37 +177,27 @@ jobs:
       - name: Run valgrind test-fixed
         run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-fixed
         working-directory: integration
+ 
+  miri:
+    name: miri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Miri
+        run: ci/miri.sh
 
-      # Compile tests
-      - name: cargo build test-growable
-        run: cargo build --bin test-growable
-        working-directory: integration
-
-      # Run with valgrind
-      - name: Run valgrind test-growable
-        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-growable
-        working-directory: integration
-
-  # TODO: fix miri tests
-  # miri:
-  #   name: miri
+  # Loom
+  # loom:
+  #   name: loom
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Install Rust ${{ env.rust_nightly }}
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: ${{ env.rust_nightly }}
-  #         components: miri
-  #         override: true
-  #     - uses: Swatinem/rust-cache@v1
-  #     - name: miri
-  #       run: cargo miri test --all-features --lib
-  #       env:
-  #         MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tag-raw-pointers
-  #         PROPTEST_CASES: 10
+  #     - uses: actions/checkout@v3
+  #     - name: Install Rust
+  #       run: rustup update $nightly && rustup default $nightly
+  #     - name: Loom tests
+  #       run: RUSTFLAGS="--cfg loom -Dwarnings" cargo test --test loom
 
-  tarpaulin:
+  coverage:
     name: cargo tarpaulin
     runs-on: ubuntu-latest
     needs: 
@@ -212,6 +207,8 @@ jobs:
       - nightly
       - sanitizer
       - valgrind
+      - miri
+      - minrust
     steps:
       - uses: actions/checkout@v3
       - name: Install latest nightly
@@ -219,24 +216,27 @@ jobs:
         with:
           toolchain: nightly
           override: true
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v1
-      - uses: actions/cache@v2
+      - uses: actions-rs/install@v0.1
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - uses: actions-rs/tarpaulin@v0.1
-      - name: Run cargo tarpaulin
-        run: cargo tarpaulin --all-features --run-types Tests,Doctests --out Xml
-
+          crate: cargo-tarpaulin
+          version: latest
+      - name: Cache ~/.cargo
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo
+          key: ${{ runner.os }}-coverage-dotcargo
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-coverage-cargo-build-target
+      - name: Run tarpaulin
+        uses: actions-rs/cargo@v1
+        with:
+          command: tarpaulin
+          args: --run-types Tests,Doctests --workspace --out Xml
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1.0.2
+        uses: codecov/codecov-action@v3.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: file
-
-  
+          fail_ci_if_error: true

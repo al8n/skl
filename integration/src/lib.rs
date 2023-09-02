@@ -1,15 +1,20 @@
-pub fn key(i: usize) -> kvstructs::Key {
-    kvstructs::Key::from(format!("{:05}", i)).with_timestamp(0)
+use skl::*;
+
+/// Only used for testing
+pub fn key(i: usize) -> Key {
+  Key::from(format!("{:05}", i))
 }
 
-pub fn big_value(i: usize) -> kvstructs::Value {
-    kvstructs::Value::from(format!("{:01048576}", i))
+/// Only used for testing
+pub fn big_value(i: usize) -> Value {
+  Value::from(format!("{:01048576}", i))
 }
 
-pub fn new_value(i: usize) -> kvstructs::ValueMut {
-    use kvstructs::bytes::BufMut;
+/// Only used for testing
+pub fn new_value(i: usize) -> Value {
+  use bytes::{BufMut, BytesMut};
 
-    let mut vm = kvstructs::ValueMut::default();
-    vm.put_slice(format!("{:05}", i).as_bytes());
-    vm
+  let mut vm = BytesMut::default();
+  vm.put_slice(format!("{:05}", i).as_bytes());
+  Value::from(vm.freeze())
 }

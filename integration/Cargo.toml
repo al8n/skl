@@ -9,4 +9,3 @@ edition = "2021"
 
 [dependencies]
 skl = { path = "../"}
-kvstructs = "0.0.23"

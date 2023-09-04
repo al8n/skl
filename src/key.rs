@@ -294,19 +294,23 @@ impl<'a> PartialEq<Key> for KeyRef<'a> {
 
 impl<'a> PartialOrd<KeyRef<'a>> for Key {
   fn partial_cmp(&self, other: &KeyRef<'a>) -> Option<core::cmp::Ordering> {
-    Some(self
-      .data
-      .as_ref()
-      .cmp(other.data)
-      .then_with(|| self.expires_at.cmp(&other.expires_at))) 
+    Some(
+      self
+        .data
+        .as_ref()
+        .cmp(other.data)
+        .then_with(|| self.expires_at.cmp(&other.expires_at)),
+    )
   }
 }
 
 impl<'a> PartialOrd<Key> for KeyRef<'a> {
   fn partial_cmp(&self, other: &Key) -> Option<core::cmp::Ordering> {
-    Some(self
-      .data
-      .cmp(&other.data)
-      .then_with(|| self.expires_at.cmp(&other.expires_at)))
+    Some(
+      self
+        .data
+        .cmp(&other.data)
+        .then_with(|| self.expires_at.cmp(&other.expires_at)),
+    )
   }
 }

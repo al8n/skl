@@ -3,7 +3,7 @@ name = "skl"
 version = "0.4.0"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
-description = "A lock-free thread-safe concurrent ARENA based skiplist implementation which helps develop MVCC memtable for LSM-Tree. Inspired by Dgraph's badger https://github.com/dgraph-io/badger/tree/main/skl."
+description = "A lock-free thread-safe concurrent ARENA based (heap backend or memory map backend) skiplist implementation which helps develop MVCC memtable for LSM-Tree."
 documentation = "https://docs.rs/skl"
 homepage = "https://github.com/al8n/skl-rs"
 keywords = ["skiplist", "lock-free", "memtable", "concurrency", "arena"]
@@ -15,35 +15,48 @@ path = "benches/bench.rs"
 name = "bench"
 harness = false
 
-[[test]]
-path = "tests/loom.rs"
-name = "loom"
+[[example]]
+name = "heap"
+path = "examples/heap.rs"
+
+[[example]]
+name = "mmap"
+path = "examples/mmap.rs"
+required-features = ["memmap"]
+
+[[example]]
+name = "mmap-anon"
+path = "examples/mmap_anon.rs"
+required-features = ["memmap"]
 
 [features]
 default = ["std"]
 alloc = []
-mmap = ["memmapix", "fs4", "std"]
-std = ["bytes/std", "rand/std", "rand/std_rng", "inline_more"]
-inline_more = []
-js = ["getrandom/js"]
+memmap = ["memmap2", "fs4", "std"]
+std = ["rand/default"]
 
 [target.'cfg(loom)'.dependencies]
 loom = "0.7"
 
-[dependencies]
-bytes = { version = "1.5", default-features = false }
-crossbeam-utils = { version = "0.8", default-features = false }
-fs4 = { version = "0.6", optional = true }
-getrandom = { version = "0.2", optional = true }
-memmapix = { version = "0.7", optional = true }
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-viewit = "0.1.5"
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rand = { version = "0.8", default-features = false }
+
+[dependencies]
+crossbeam-utils = { version = "0.8", default-features = false }
+
+fs4 = { version = "0.8", optional = true }
+memmap2 = { version = "0.9", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
 tempfile = "3"
 parking_lot = "0.12"
 paste = "1"
+wg = { version = "0.9", default-features = false, features = ["std"] }
 
 [profile.bench]
 opt-level = 3
@@ -58,3 +71,6 @@ rpath = false
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+members = ["integration"]

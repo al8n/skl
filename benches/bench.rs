@@ -1,54 +1,48 @@
-use bytes::{BufMut, Bytes, BytesMut};
 use criterion::*;
 use parking_lot::Mutex;
 use rand::prelude::*;
 use skl::*;
 use std::{
   collections::*,
-  mem,
   sync::{atomic::*, *},
   thread,
 };
 
-fn fixed_map_round(l: Arc<Mutex<HashMap<Key, Value>>>, case: &(Key, bool), exp: &Value) {
+fn fixed_map_round(
+  l: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
+  case: &(Vec<u8>, bool),
+  exp: &Vec<u8>,
+) {
   let mut l = l.lock();
   if case.1 {
     if let Some(v) = l.get(&case.0) {
-      assert_eq!(v.value(), exp.value());
+      assert_eq!(v, exp);
     }
   } else {
     l.insert(case.0.clone(), exp.clone());
   }
 }
 
-fn fixed_skiplist_round(l: &SkipMap, case: &(Key, bool), exp: &Value) {
+fn fixed_skiplist_round(l: &SkipMap, case: &(Vec<u8>, bool), exp: &Vec<u8>) {
   if case.1 {
-    if let Some(v) = l.get(case.0.as_key_ref()) {
-      assert_eq!(v.value(), exp.value());
+    if let Some(v) = l.get(0, &case.0) {
+      assert_eq!(v.value(), exp);
     }
   } else {
-    l.insert(case.0.clone(), exp.clone());
+    l.insert(0, &case.0, exp).unwrap();
   }
 }
 
-fn append_ts(key: &mut BytesMut, ts: u64) {
-  key.put_u64(ts);
-}
-
-fn random_key(rng: &mut ThreadRng) -> Key {
-  let mut key = BytesMut::with_capacity(16);
-  unsafe {
-    rng.fill_bytes(mem::transmute(&mut key.chunk_mut()[..8]));
-    key.advance_mut(8);
-  }
-  append_ts(&mut key, 0);
-  Key::from(key.freeze())
+fn random_key(rng: &mut ThreadRng) -> Vec<u8> {
+  let mut key = vec![0; 16];
+  rng.fill_bytes(&mut key);
+  key
 }
 
 fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
   let frac = *frac;
-  let value = Value::from(Bytes::from_static(b"00123"));
-  let list = Arc::new(SkipMap::new(512 << 20));
+  let value = b"00123".to_vec();
+  let list = Arc::new(SkipMap::new(512 << 20).unwrap());
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));
   let s = stop.clone();
@@ -83,7 +77,7 @@ fn bench_read_write_fixed_skiplist(c: &mut Criterion) {
   group.finish();
 }
 
-fn map_round(m: &Mutex<HashMap<Key, Bytes>>, case: &(Key, bool), exp: &Bytes) {
+fn map_round(m: &Mutex<HashMap<Vec<u8>, Vec<u8>>>, case: &(Vec<u8>, bool), exp: &Vec<u8>) {
   if case.1 {
     let rm = m.lock();
     let value = rm.get(&case.0);
@@ -98,7 +92,7 @@ fn map_round(m: &Mutex<HashMap<Key, Bytes>>, case: &(Key, bool), exp: &Bytes) {
 
 fn bench_read_write_fixed_map_frac(b: &mut Bencher<'_>, frac: &usize) {
   let frac = *frac;
-  let value = Bytes::from_static(b"00123");
+  let value = b"00123".to_vec();
   let map = Arc::new(Mutex::new(HashMap::with_capacity(512 << 10)));
   let m = map.clone();
   let stop = Arc::new(AtomicBool::new(false));
@@ -140,7 +134,7 @@ fn bench_read_write_fixed_map(c: &mut Criterion) {
 
 fn bench_write_fixed_map(c: &mut Criterion) {
   let list = Arc::new(Mutex::new(HashMap::with_capacity(512 << 21)));
-  let value = Value::from(Bytes::from_static(b"00123"));
+  let value = b"00123".to_vec();
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));
   let s = stop.clone();
@@ -170,9 +164,9 @@ fn bench_write_fixed_map(c: &mut Criterion) {
 }
 
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
-  let list = Arc::new(SkipMap::new(512 << 21));
-  let value = Value::from(Bytes::from_static(b"00123"));
-  let l = list.clone();
+  let list = Arc::new(SkipMap::new(512 << 21).unwrap());
+  let value = b"00123".to_vec();
+  let l = Arc::clone(&list);
   let stop = Arc::new(AtomicBool::new(false));
   let s = stop.clone();
   let v = value.clone();
@@ -188,7 +182,7 @@ fn bench_write_fixed_skiplist(c: &mut Criterion) {
     b.iter_batched(
       || random_key(&mut rng),
       |key| {
-        list.insert(key, value.clone());
+        list.insert(0, &key, &value).unwrap();
       },
       BatchSize::SmallInput,
     )

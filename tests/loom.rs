@@ -10,7 +10,7 @@ use loom::{sync::Arc, thread};
 /// Only used for testing
 #[cfg(loom)]
 fn key(i: usize) -> Key {
-  Key::from(format!("{:05}", i)).with_ttl(0)
+  Key::from(format!("{:05}", i)).with_version(0)
 }
 
 /// Only used for testing

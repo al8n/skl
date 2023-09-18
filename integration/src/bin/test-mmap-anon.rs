@@ -5,7 +5,7 @@ use std::sync::Arc;
 fn main() {
   {
     const N: usize = 1000;
-    let l = Arc::new(SkipMap::mmap_anon(1 << 20));
+    let l = Arc::new(SkipMap::mmap_anon(1 << 20).unwrap());
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -30,7 +30,7 @@ fn main() {
 
   {
     const N2: usize = 100;
-    let l = Arc::new(SkipMap::mmap_anon(120 << 20));
+    let l = Arc::new(SkipMap::mmap_anon(120 << 20).unwrap());
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {

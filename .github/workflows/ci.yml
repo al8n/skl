@@ -169,8 +169,14 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y valgrind
       # Compile tests
-      - name: cargo build test-fixed
-        run: cargo build --bin test-fixed
+      - name: cargo build test-vec
+        run: cargo build --bin test-vec
+        working-directory: integration
+      - name: cargo build test-mmap
+        run: cargo build --bin test-mmap
+        working-directory: integration
+      - name: cargo build test-mmap-anon
+        run: cargo build --bin test-mmap-anon
         working-directory: integration
 
       # Run with valgrind
@@ -243,7 +249,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: tarpaulin
-          args: --run-types Tests,Doctests --workspace --out Xml
+          args: --all-features --run-types tests --run-types doctests --workspace --out xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.1
         with:

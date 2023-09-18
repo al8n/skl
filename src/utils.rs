@@ -3,7 +3,7 @@ use crate::{key::Key, value::Value};
 /// Only used for testing
 
 pub fn key(i: usize) -> Key {
-  Key::from(format!("{:05}", i)).with_ttl(0)
+  Key::from(format!("{:05}", i)).with_version(0)
 }
 
 /// Only used for testing

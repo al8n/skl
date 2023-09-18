@@ -485,7 +485,7 @@ impl SkipMap {
     let next_key = self
       .arena
       .get_key(n_ref.key_offset, n_ref.key_size, n_ref.timestamped());
-    let timestamp = next_key.ttl();
+    let timestamp = next_key.version();
     if key.ne(&next_key) {
       return None;
     }

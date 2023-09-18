@@ -6,7 +6,7 @@ use core::{
 };
 
 use crate::{
-  skl::Node,
+  map::Node,
   sync::{AtomicU32, AtomicUsize, Ordering},
 };
 
@@ -182,6 +182,7 @@ impl Shared {
       SharedBackend::Vec(vec) => &vec.as_slice()[..end],
       #[cfg(feature = "mmap")]
       SharedBackend::Mmap { buf: mmap, .. } => unsafe { &(&**mmap)[..end] },
+      #[cfg(feature = "mmap")]
       SharedBackend::AnonymousMmap(mmap) => &mmap[..end],
     }
   }
@@ -191,6 +192,7 @@ impl Shared {
       SharedBackend::Vec(vec) => vec.as_mut_ptr(),
       #[cfg(feature = "mmap")]
       SharedBackend::Mmap { buf: mmap, .. } => unsafe { (**mmap).as_mut_ptr() },
+      #[cfg(feature = "mmap")]
       SharedBackend::AnonymousMmap(mmap) => mmap.as_mut_ptr(),
     }
   }

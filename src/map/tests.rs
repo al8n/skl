@@ -33,7 +33,7 @@ fn test_basic_runner(l: Arc<SkipMap>) {
   l.insert(Key::from("key1".as_bytes().to_vec()), v1);
 
   v2.set_meta(56);
-  l.insert(Key::from("key2".as_bytes()).with_ttl(2), v2);
+  l.insert(Key::from("key2".as_bytes()).with_version(2), v2);
   v3.set_meta(57);
   l.insert(Key::from("key3".as_bytes()), v3);
 
@@ -49,16 +49,20 @@ fn test_basic_runner(l: Arc<SkipMap>) {
   assert_eq!(v.meta(), 57);
 
   v4.set_meta(12);
-  l.insert(Key::from("key3".as_bytes()).with_ttl(1), v4);
+  l.insert(Key::from("key3".as_bytes()).with_version(1), v4);
 
-  let v = l.get(KeyRef::from("key3".as_bytes()).with_ttl(1)).unwrap();
+  let v = l
+    .get(KeyRef::from("key3".as_bytes()).with_version(1))
+    .unwrap();
   assert_eq!(v.value(), "00072".as_bytes().to_vec());
   assert_eq!(v.meta(), 12);
 
   v5.set_meta(60);
-  l.insert(Key::from("key4".as_bytes()).with_ttl(1), v5.clone());
+  l.insert(Key::from("key4".as_bytes()).with_version(1), v5.clone());
 
-  let v = l.get(KeyRef::from("key4".as_bytes()).with_ttl(1)).unwrap();
+  let v = l
+    .get(KeyRef::from("key4".as_bytes()).with_version(1))
+    .unwrap();
   assert_eq!(v.value(), v5.value());
   assert_eq!(v.meta(), 60);
 }
@@ -70,12 +74,14 @@ fn test_basic() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn test_basic_mmap() {
   let l = Arc::new(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
   test_basic_runner(l);
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn test_basic_mmap_anon() {
   let l = Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
   test_basic_runner(l);
@@ -103,12 +109,14 @@ fn test_basic_large_testcases() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn test_basic_large_testcases_mmap() {
   let l = Arc::new(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
   test_basic_large_testcases_in(l);
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn test_basic_large_testcases_mmap_anon() {
   let l = Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
   test_basic_large_testcases_in(l);
@@ -120,6 +128,7 @@ fn test_concurrent_basic() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_mmap() {
   test_concurrent_basic_runner(Arc::new(
     SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
@@ -127,6 +136,7 @@ fn test_concurrent_basic_mmap() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_mmap_anon() {
   test_concurrent_basic_runner(Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap()));
 }

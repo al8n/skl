@@ -1,6 +1,4 @@
-//! A thread-safe skiplist implementation for writing memery table, SST table or something else.
-//! skl-rs is a pure Rust implementation for https://github.com/dgraph-io/badger/tree/master/skl
-//!
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
@@ -11,8 +9,8 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod skl;
-pub use crate::skl::{SkipMap, SkipMapIterator, UniSkipMapIterator};
+mod map;
+pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
 
 mod value;
 pub use value::*;

@@ -9,7 +9,10 @@ pub(crate) const TIMESTAMP_SIZE: usize = core::mem::size_of::<u64>();
 )]
 #[derive(Debug, Copy, Clone)]
 pub struct KeyRef<'a> {
-  #[viewit(getter(const, rename = "ttl"), setter(const, rename = "with_ttl"))]
+  #[viewit(
+    getter(const, rename = "version"),
+    setter(const, rename = "with_version")
+  )]
   expires_at: u64,
   #[viewit(getter(const), setter(skip))]
   data: &'a [u8],
@@ -91,7 +94,10 @@ impl<'a> From<&'a str> for KeyRef<'a> {
 #[viewit::viewit(vis_all = "", setters(vis_all = "pub"), getters(vis_all = "pub"))]
 #[derive(Debug, Clone)]
 pub struct Key {
-  #[viewit(getter(const, rename = "ttl"), setter(const, rename = "with_ttl"))]
+  #[viewit(
+    getter(const, rename = "version"),
+    setter(const, rename = "with_version")
+  )]
   expires_at: u64,
   #[viewit(getter(const, style = "ref"), setter(skip))]
   data: Bytes,

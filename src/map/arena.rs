@@ -65,8 +65,8 @@ impl Arena {
   }
 
   pub(super) fn put_key(&self, key: KeyRef<'_>) -> (u32, bool) {
-    let ttl = key.ttl();
-    if ttl == 0 {
+    let version = key.version();
+    if version == 0 {
       let key_size = key.len();
       let offset = self.allocate(key_size as u32);
       unsafe {
@@ -83,7 +83,7 @@ impl Arena {
       unsafe {
         let buf = slice::from_raw_parts_mut(self.get_data_ptr_mut(offset as usize), key_size);
         buf[..key_size - TIMESTAMP_SIZE].copy_from_slice(key.as_ref());
-        buf[key_size - TIMESTAMP_SIZE..].copy_from_slice(&ttl.to_be_bytes());
+        buf[key_size - TIMESTAMP_SIZE..].copy_from_slice(&version.to_be_bytes());
       }
       (offset, true)
     }

@@ -21,7 +21,7 @@ fn fixed_map_round(l: Arc<Mutex<HashMap<Key, Value>>>, case: &(Key, bool), exp: 
   }
 }
 
-fn fixed_skiplist_round(l: &Skiplist, case: &(Key, bool), exp: &Value) {
+fn fixed_skiplist_round(l: &SkipMap, case: &(Key, bool), exp: &Value) {
   if case.1 {
     if let Some(v) = l.get(case.0.as_key_ref()) {
       assert_eq!(v.value(), exp.value());
@@ -48,7 +48,7 @@ fn random_key(rng: &mut ThreadRng) -> Key {
 fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
   let frac = *frac;
   let value = Value::from(Bytes::from_static(b"00123"));
-  let list = Arc::new(Skiplist::new(512 << 20));
+  let list = Arc::new(SkipMap::new(512 << 20));
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));
   let s = stop.clone();
@@ -170,7 +170,7 @@ fn bench_write_fixed_map(c: &mut Criterion) {
 }
 
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
-  let list = Arc::new(Skiplist::new(512 << 21));
+  let list = Arc::new(SkipMap::new(512 << 21));
   let value = Value::from(Bytes::from_static(b"00123"));
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));

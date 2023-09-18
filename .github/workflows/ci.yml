@@ -174,9 +174,18 @@ jobs:
         working-directory: integration
 
       # Run with valgrind
-      - name: Run valgrind test-fixed
-        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-fixed
+      - name: Run valgrind test-vec
+        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-vec
         working-directory: integration
+
+      - name: Run valgrind test-mmap
+        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-mmap
+        working-directory: integration
+
+      - name: Run valgrind test-mmap-anon
+        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-mmap-anon
+        working-directory: integration
+      
  
   miri:
     name: miri

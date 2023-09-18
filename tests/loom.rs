@@ -29,7 +29,7 @@ fn new_value(i: usize) -> Value {
 fn concurrent_write() {
   loom::model(|| {
     const N: usize = 2;
-    let l = Arc::new(Skiplist::new(ARENA_SIZE));
+    let l = Arc::new(SkipMap::new(ARENA_SIZE));
     let wg = Arc::new(());
     for i in 0..N {
       let w = wg.clone();
@@ -56,7 +56,7 @@ fn concurrent_write() {
 fn concurrent_read() {
   loom::model(|| {
     const N: usize = 2;
-    let l = Arc::new(Skiplist::new(ARENA_SIZE));
+    let l = Arc::new(SkipMap::new(ARENA_SIZE));
     let wg = Arc::new(());
     for i in 0..N {
       l.insert(key(i), new_value(i));

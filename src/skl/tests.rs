@@ -5,7 +5,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 
 const ARENA_SIZE: usize = 1 << 20;
 
-fn length(s: Arc<Skiplist>) -> usize {
+fn length(s: Arc<SkipMap>) -> usize {
   let head = s.get_head();
   let mut x = s.get_next(head.0, head.1, 0);
   let mut ctr = 0;
@@ -16,9 +16,7 @@ fn length(s: Arc<Skiplist>) -> usize {
   ctr
 }
 
-#[test]
-fn test_basic() {
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
+fn test_basic_runner(l: Arc<SkipMap>) {
   let mut v1 = new_value(42);
   let mut v2 = new_value(52);
   let mut v3 = new_value(62);
@@ -65,7 +63,25 @@ fn test_basic() {
   assert_eq!(v.meta(), 60);
 }
 
-fn test_basic_large_testcases_in(l: Arc<Skiplist>) {
+#[test]
+fn test_basic() {
+  let l = Arc::new(SkipMap::new(ARENA_SIZE));
+  test_basic_runner(l);
+}
+
+#[test]
+fn test_basic_mmap() {
+  let l = Arc::new(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+  test_basic_runner(l);
+}
+
+#[test]
+fn test_basic_mmap_anon() {
+  let l = Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  test_basic_runner(l);
+}
+
+fn test_basic_large_testcases_in(l: Arc<SkipMap>) {
   let n = 1000;
 
   for i in 0..n {
@@ -82,18 +98,45 @@ fn test_basic_large_testcases_in(l: Arc<Skiplist>) {
 
 #[test]
 fn test_basic_large_testcases() {
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
+  let l = Arc::new(SkipMap::new(ARENA_SIZE));
+  test_basic_large_testcases_in(l);
+}
+
+#[test]
+fn test_basic_large_testcases_mmap() {
+  let l = Arc::new(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+  test_basic_large_testcases_in(l);
+}
+
+#[test]
+fn test_basic_large_testcases_mmap_anon() {
+  let l = Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
   test_basic_large_testcases_in(l);
 }
 
 #[test]
 fn test_concurrent_basic() {
+  test_concurrent_basic_runner(Arc::new(SkipMap::new(ARENA_SIZE)));
+}
+
+#[test]
+fn test_concurrent_basic_mmap() {
+  test_concurrent_basic_runner(Arc::new(
+    SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
+  ));
+}
+
+#[test]
+fn test_concurrent_basic_mmap_anon() {
+  test_concurrent_basic_runner(Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap()));
+}
+
+fn test_concurrent_basic_runner(l: Arc<SkipMap>) {
   #[cfg(miri)]
   const N: usize = 100;
   #[cfg(not(miri))]
   const N: usize = 1000;
 
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();
@@ -121,11 +164,29 @@ fn test_concurrent_basic() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_values() {
+  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::new(120 << 20)));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_concurrent_basic_big_values_mmap() {
+  test_concurrent_basic_big_values_runner(Arc::new(
+    SkipMap::mmap(120 << 20, tempfile::tempfile().unwrap(), true).unwrap(),
+  ));
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn test_concurrent_basic_big_values_mmap_anon() {
+  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::mmap_anon(120 << 20).unwrap()));
+}
+
+fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
   #[cfg(miri)]
   const N: usize = 10;
   #[cfg(not(miri))]
   const N: usize = 100;
-  let l = Arc::new(Skiplist::new(120 << 20));
+
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
@@ -148,7 +209,7 @@ fn test_concurrent_basic_big_values() {
 }
 
 fn assert_find_near_not_null(
-  l: Arc<Skiplist>,
+  l: Arc<SkipMap>,
   less: bool,
   allow_equal: bool,
   fk: Key,
@@ -164,7 +225,7 @@ fn assert_find_near_not_null(
   assert_eq!(is_eq, eq);
 }
 
-fn assert_find_near_null(l: Arc<Skiplist>, less: bool, allow_equal: bool, fk: Key) {
+fn assert_find_near_null(l: Arc<SkipMap>, less: bool, allow_equal: bool, fk: Key) {
   let (n, _, eq) = l.find_near(fk.as_key_ref(), less, allow_equal);
   assert!(n.is_null());
   assert!(!eq);
@@ -172,7 +233,7 @@ fn assert_find_near_null(l: Arc<Skiplist>, less: bool, allow_equal: bool, fk: Ke
 
 #[test]
 fn test_find_near() {
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
+  let l = Arc::new(SkipMap::new(ARENA_SIZE));
   for i in 0..1000 {
     let k = Key::from(format!("{:05}", i * 10 + 5));
     l.insert(k, new_value(i));
@@ -357,7 +418,7 @@ fn test_find_near() {
 #[test]
 fn test_iter_next() {
   let n = 100;
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
+  let l = Arc::new(SkipMap::new(ARENA_SIZE));
   let mut iter = l.iter();
   assert!(!iter.valid());
   iter.seek_to_first();
@@ -380,7 +441,7 @@ fn test_iter_next() {
 #[test]
 fn test_iter_prev() {
   let n = 100;
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
+  let l = Arc::new(SkipMap::new(ARENA_SIZE));
   let mut iter = l.iter();
   assert!(!iter.valid());
   iter.seek_to_first();
@@ -400,13 +461,13 @@ fn test_iter_prev() {
   assert!(!iter.valid());
 }
 
-fn assert_seek(iter: &mut SkiplistIterator, seek_to: &'static str) {
+fn assert_seek(iter: &mut SkipMapIterator, seek_to: &'static str) {
   iter.seek(KeyRef::from(seek_to));
   assert!(iter.valid());
   assert_eq!(iter.value().value(), Bytes::from(seek_to));
 }
 
-fn assert_seek_null(iter: &mut SkiplistIterator, seek_to: &'static str) {
+fn assert_seek_null(iter: &mut SkipMapIterator, seek_to: &'static str) {
   iter.seek(KeyRef::from(seek_to));
   assert!(!iter.valid());
 }
@@ -414,7 +475,7 @@ fn assert_seek_null(iter: &mut SkiplistIterator, seek_to: &'static str) {
 #[test]
 fn test_iter_seek() {
   let n = 100;
-  let l = Arc::new(Skiplist::new(ARENA_SIZE));
+  let l = Arc::new(SkipMap::new(ARENA_SIZE));
   let mut iter = l.iter();
   assert!(!iter.valid());
   iter.seek_to_first();

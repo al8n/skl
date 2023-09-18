@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
 description = "A lock-free thread-safe concurrent ARENA based skiplist implementation which helps develop MVCC memtable for LSM-Tree. Inspired by Dgraph's badger https://github.com/dgraph-io/badger/tree/main/skl."
@@ -22,6 +22,7 @@ name = "loom"
 [features]
 default = ["std"]
 alloc = []
+mmap = ["memmapix", "fs4", "std"]
 std = ["bytes/std", "rand/std", "rand/std_rng", "inline_more"]
 inline_more = []
 js = ["getrandom/js"]
@@ -30,9 +31,11 @@ js = ["getrandom/js"]
 loom = "0.7"
 
 [dependencies]
-bytes = { version = "1.4", default-features = false }
+bytes = { version = "1.5", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
+fs4 = { version = "0.6", optional = true }
 getrandom = { version = "0.2", optional = true }
+memmapix = { version = "0.7", optional = true }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 viewit = "0.1.5"
 
@@ -40,6 +43,7 @@ viewit = "0.1.5"
 criterion = "0.5"
 tempfile = "3"
 parking_lot = "0.12"
+paste = "1"
 
 [profile.bench]
 opt-level = 3

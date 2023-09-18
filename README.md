@@ -29,12 +29,12 @@ skl = "0.3"
 ## Example
 
 ```rust
-use skl::Skiplist;
+use skl::SkipMap;
 use std::sync::Arc;
 
 fn main() {
     const N: usize = 1000;
-    let l = Arc::new(Skiplist::new(1 << 20));
+    let l = Arc::new(SkipMap::new(1 << 20));
     let wg = Arc::new(());
     for i in 0..N {
         let w = wg.clone();
@@ -97,6 +97,13 @@ fn main() {
 
 - [x] make the crate test cases pass `cargo miri`
 - [ ] make the crate test cases pass `cargo loom`
+- [ ] Implement
+  - [ ] `std::iter::Iterator`
+  - [ ] `get_or_insert`
+  - [ ] `remove`
+  - [ ] `contains`
+  - [ ] change signature from `insert(k, v)` => `insert(k, v) -> Option<ValueRef>`
+  - [ ] mmap backend (currently is vector backend)
 
 #### License
 

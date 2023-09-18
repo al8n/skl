@@ -1,126 +1,18 @@
 use super::Node;
 use crate::{
   key::{KeyRef, TIMESTAMP_SIZE},
-  sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, AtomicUsize, Ordering},
+  sync::{AtomicMut, AtomicPtr, AtomicU64, Ordering},
   value::ValueRef,
 };
-use ::alloc::{alloc, boxed::Box};
+use ::alloc::boxed::Box;
 use core::{
   mem,
-  ops::{Index, IndexMut},
   ptr::{self, NonNull},
   slice,
 };
 
-#[derive(Debug)]
-struct AlignedVec {
-  ptr: ptr::NonNull<u8>,
-  cap: usize,
-  len: usize,
-}
-
-impl Drop for AlignedVec {
-  #[inline]
-  fn drop(&mut self) {
-    if self.cap != 0 {
-      unsafe {
-        alloc::dealloc(self.ptr.as_ptr(), self.layout());
-      }
-    }
-  }
-}
-
-impl AlignedVec {
-  const ALIGNMENT: usize = core::mem::align_of::<Node>();
-
-  const MAX_CAPACITY: usize = isize::MAX as usize - (Self::ALIGNMENT - 1);
-
-  #[inline]
-  fn new(capacity: usize) -> Self {
-    assert!(
-      capacity <= Self::MAX_CAPACITY,
-      "`capacity` cannot exceed isize::MAX - {}",
-      Self::ALIGNMENT - 1
-    );
-    let ptr = unsafe {
-      let layout = alloc::Layout::from_size_align_unchecked(capacity, Self::ALIGNMENT);
-      let ptr = alloc::alloc(layout);
-      if ptr.is_null() {
-        alloc::handle_alloc_error(layout);
-      }
-      ptr::NonNull::new_unchecked(ptr)
-    };
-
-    unsafe {
-      core::ptr::write_bytes(ptr.as_ptr(), 0, capacity);
-    }
-    Self {
-      ptr,
-      cap: capacity,
-      len: capacity,
-    }
-  }
-
-  #[inline]
-  fn layout(&self) -> alloc::Layout {
-    unsafe { alloc::Layout::from_size_align_unchecked(self.cap, Self::ALIGNMENT) }
-  }
-
-  #[inline]
-  fn as_mut_ptr(&mut self) -> *mut u8 {
-    self.ptr.as_ptr()
-  }
-
-  #[inline]
-  const fn as_slice(&self) -> &[u8] {
-    unsafe { slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
-  }
-
-  #[inline]
-  fn as_mut_slice(&mut self) -> &mut [u8] {
-    unsafe { slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
-  }
-}
-
-impl<I: slice::SliceIndex<[u8]>> Index<I> for AlignedVec {
-  type Output = <I as slice::SliceIndex<[u8]>>::Output;
-
-  #[inline]
-  fn index(&self, index: I) -> &Self::Output {
-    &self.as_slice()[index]
-  }
-}
-
-impl<I: slice::SliceIndex<[u8]>> IndexMut<I> for AlignedVec {
-  #[inline]
-  fn index_mut(&mut self, index: I) -> &mut Self::Output {
-    &mut self.as_mut_slice()[index]
-  }
-}
-
-#[derive(Debug)]
-#[repr(C)]
-struct Shared {
-  n: AtomicU32,
-  vec: AlignedVec,
-  refs: AtomicUsize,
-}
-
-impl Shared {
-  fn new(cap: usize) -> Self {
-    let vec = AlignedVec::new(cap);
-    Self {
-      vec,
-      refs: AtomicUsize::new(1),
-      // Don't store data at position 0 in order to reserve offset=0 as a kind
-      // of nil pointer.
-      n: AtomicU32::new(1),
-    }
-  }
-}
-
-unsafe impl Send for Shared {}
-unsafe impl Sync for Shared {}
+mod shared;
+use shared::Shared;
 
 /// Arena should be lock-free
 pub(super) struct Arena {
@@ -132,20 +24,44 @@ pub(super) struct Arena {
 impl core::fmt::Debug for Arena {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let inner = self.inner();
-    inner.vec.as_slice()[..inner.n.load(Ordering::Acquire) as usize].fmt(f)
+    inner.as_slice().fmt(f)
   }
 }
 
 impl Arena {
   #[inline]
-  pub(super) fn new(n: usize) -> Self {
-    let mut inner = Shared::new(n.max(Node::MAX_NODE_SIZE));
-    let data_ptr = unsafe { NonNull::new_unchecked(inner.vec.as_mut_ptr()) };
+  pub(super) fn new_vec(n: usize) -> Self {
+    let mut inner = Shared::new_vec(n.max(Node::MAX_NODE_SIZE));
+    let data_ptr = unsafe { NonNull::new_unchecked(inner.as_mut_ptr()) };
     Self {
-      cap: inner.vec.cap,
+      cap: inner.cap(),
       inner: AtomicPtr::new(Box::into_raw(Box::new(inner)) as _),
       data_ptr,
     }
+  }
+
+  #[cfg(feature = "mmap")]
+  #[inline]
+  pub(super) fn new_mmap(n: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
+    let mut inner = Shared::new_mmaped(n.max(Node::MAX_NODE_SIZE), file, lock)?;
+    let data_ptr = unsafe { NonNull::new_unchecked(inner.as_mut_ptr()) };
+    Ok(Self {
+      cap: inner.cap(),
+      inner: AtomicPtr::new(Box::into_raw(Box::new(inner)) as _),
+      data_ptr,
+    })
+  }
+
+  #[cfg(feature = "mmap")]
+  #[inline]
+  pub(super) fn new_anonymous_mmap(n: usize) -> std::io::Result<Self> {
+    let mut inner = Shared::new_mmaped_anon(n.max(Node::MAX_NODE_SIZE))?;
+    let data_ptr = unsafe { NonNull::new_unchecked(inner.as_mut_ptr()) };
+    Ok(Self {
+      cap: inner.cap(),
+      inner: AtomicPtr::new(Box::into_raw(Box::new(inner)) as _),
+      data_ptr,
+    })
   }
 
   pub(super) fn put_key(&self, key: KeyRef<'_>) -> (u32, bool) {

@@ -12,7 +12,7 @@ extern crate alloc;
 extern crate std;
 
 mod skl;
-pub use crate::skl::{Skiplist, SkiplistIterator, UniSkiplistIterator};
+pub use crate::skl::{SkipMap, SkipMapIterator, UniSkipMapIterator};
 
 mod value;
 pub use value::*;

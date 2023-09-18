@@ -99,14 +99,14 @@ impl Node {
 
 /// Fixed size lock-free ARENA based skiplist.
 #[derive(Debug)]
-pub struct Skiplist {
+pub struct SkipMap {
   // Current height. 1 <= height <= kMaxHeight. CAS.
   height: CachePadded<AtomicU32>,
   head_offset: u32,
   arena: Arena,
 }
 
-impl Skiplist {
+impl SkipMap {
   #[inline]
   fn get_head(&self) -> (*const Node, u32) {
     let (ptr, offset) = self.arena.get_node(self.head_offset);
@@ -276,13 +276,29 @@ impl Skiplist {
   }
 }
 
-impl Skiplist {
+impl SkipMap {
   /// Create a new skiplist according to the given capacity
   ///
   /// **Note:** The capacity stands for how many memory allocated,
   /// it does not mean the skiplist can store `cap` entries.
+  ///
+  ///
+  ///
+  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
+  ///
+  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///   Even if we are working with raw pointers with `Box::into_raw`,
+  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///   especially if you're frequently accessing or modifying it.
+  ///
+  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
+  ///   If you require very large contiguous memory regions, `mmap` might be more suitable because
+  ///   it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
   pub fn new(cap: usize) -> Self {
-    let arena = Arena::new(cap);
+    let arena = Arena::new_vec(cap);
     let (head, _) = arena.new_node(
       Key::new().as_key_ref(),
       Value::new().as_value_ref(),
@@ -294,6 +310,61 @@ impl Skiplist {
       arena,
       head_offset: ho,
     }
+  }
+
+  /// Create a new skipmap according to the given capacity, and mmaped to a file.
+  ///
+  /// **Note:** The capacity stands for how many memory mmaped,
+  /// it does not mean the skipmap can store `cap` entries.
+  ///
+  /// `lock`: whether to lock the underlying file or not
+  #[cfg(feature = "mmap")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
+    let arena = Arena::new_mmap(cap, file, lock)?;
+    let (head, _) = arena.new_node(
+      Key::new().as_key_ref(),
+      Value::new().as_value_ref(),
+      Node::MAX_HEIGHT,
+    );
+    let ho = arena.get_node_offset(head);
+    Ok(Self {
+      height: CachePadded::new(AtomicU32::new(1)),
+      arena,
+      head_offset: ho,
+    })
+  }
+
+  /// Create a new skipmap according to the given capacity, and mmap anon.
+  ///
+  /// **What the difference between this method and [`SkipMap::new`]?**
+  ///
+  /// 1. This method will use mmap anonymous to require memory from the OS directly.
+  ///   If you require very large contiguous memory regions, this method might be more suitable because
+  ///   it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///   Even if we are working with raw pointers with `Box::into_raw`,
+  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///   especially if you're frequently accessing or modifying it.
+  ///
+  /// [`SkipMap::new`]: #method.new
+  #[cfg(feature = "mmap")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
+    let arena = Arena::new_anonymous_mmap(cap)?;
+    let (head, _) = arena.new_node(
+      Key::new().as_key_ref(),
+      Value::new().as_value_ref(),
+      Node::MAX_HEIGHT,
+    );
+    let ho = arena.get_node_offset(head);
+    Ok(Self {
+      height: CachePadded::new(AtomicU32::new(1)),
+      arena,
+      head_offset: ho,
+    })
   }
 
   /// Inserts the key-value pair.
@@ -426,15 +497,15 @@ impl Skiplist {
 
   /// Returns a skiplist iterator.
   #[inline]
-  pub fn iter(&self) -> SkiplistIterator<'_> {
-    SkiplistIterator {
+  pub fn iter(&self) -> SkipMapIterator<'_> {
+    SkipMapIterator {
       skl: self,
       curr: ptr::null(),
       curr_tower_offset: 0,
     }
   }
 
-  /// Returns if the Skiplist is empty
+  /// Returns if the SkipMap is empty
   #[inline]
   pub fn is_empty(&self) -> bool {
     self.find_last().is_null()
@@ -460,16 +531,16 @@ impl Skiplist {
   }
 }
 
-/// SkiplistIterator is an iterator over skiplist object. For new objects, you just
-/// need to initialize SkiplistIterator.list.
+/// SkipMapIterator is an iterator over skiplist object. For new objects, you just
+/// need to initialize SkipMapIterator.list.
 #[derive(Copy, Clone, Debug)]
-pub struct SkiplistIterator<'a> {
-  skl: &'a Skiplist,
+pub struct SkipMapIterator<'a> {
+  skl: &'a SkipMap,
   curr: *const Node,
   curr_tower_offset: u32,
 }
 
-impl<'a> SkiplistIterator<'a> {
+impl<'a> SkipMapIterator<'a> {
   /// Key returns the key at the current position.
   #[inline]
   pub fn key<'b: 'a>(&'a self) -> KeyRef<'b> {
@@ -550,12 +621,12 @@ impl<'a> SkiplistIterator<'a> {
 /// Iterator. We like to keep Iterator as before, because it is more powerful and
 /// we might support bidirectional iterators in the future.
 #[derive(Copy, Clone, Debug)]
-pub struct UniSkiplistIterator<'a> {
-  iter: SkiplistIterator<'a>,
+pub struct UniSkipMapIterator<'a> {
+  iter: SkipMapIterator<'a>,
   reversed: bool,
 }
 
-impl<'a> UniSkiplistIterator<'a> {
+impl<'a> UniSkipMapIterator<'a> {
   #[inline]
   pub fn next(&mut self) {
     if !self.reversed {

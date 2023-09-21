@@ -1,17 +1,21 @@
-use core::{borrow::Borrow, cmp};
+use core::cmp;
 
 use crossbeam_utils::CachePadded;
 
 use crate::{
   error::Error,
   sync::{AtomicU32, Ordering},
-  Comparator, Key, KeyRef, Value, ValueRef, NODE_ALIGNMENT_FACTOR,
+  Comparator, Key, KeyRef, Value, ValueRef, NODE_ALIGNMENT_FACTOR, key::AsKeyRef, value::AsValueRef,
 };
 
 mod arena;
 use arena::Arena;
 mod node;
 use node::Node;
+
+#[cfg(test)]
+mod tests;
+
 
 use self::node::NodePtr;
 
@@ -169,11 +173,11 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   where
     K::Trailer: 'b,
     V::Trailer: 'b,
-    Q: Ord + ?Sized + Borrow<KeyRef<'b, K>>,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
   {
     unsafe {
       self
-        .find_splice(key.borrow(), &mut Default::default(), true)
+        .find_splice(key.as_key_ref(), &mut Default::default(), true)
         .0
     }
   }
@@ -183,10 +187,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   where
     K::Trailer: 'b,
     V::Trailer: 'b,
-    Q: Ord + ?Sized + Borrow<KeyRef<'b, K>>,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
   {
-    let key = key.borrow();
-    let (n, _) = unsafe { self.find_near(key.borrow(), false, true) }; // findGreaterOrEqual.
+    let key = key.as_key_ref();
+    let (n, _) = unsafe { self.find_near(&key, false, true) }; // findGreaterOrEqual.
     if n.is_null() {
       return None;
     }
@@ -223,15 +227,15 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   where
     K::Trailer: 'b,
     V::Trailer: 'b,
-    Q: Ord + ?Sized + Borrow<KeyRef<'b, K>>,
-    R: Borrow<ValueRef<'a, V>> + ?Sized,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+    R: AsValueRef<Value = V> + ?Sized,
   {
-    let key = key.borrow();
-    let val = value.borrow();
+    let key = key.as_key_ref();
+    let val = value.as_value_ref();
     let ins = &mut Default::default();
 
     unsafe {
-      let (_, curr) = self.find_splice(key.borrow(), ins, true);
+      let (_, curr) = self.find_splice(key, ins, true);
       if let Some(curr) = curr {
         return Ok(Some({
           let nd = curr.as_ptr();
@@ -254,12 +258,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   where
     K::Trailer: 'a,
     V::Trailer: 'a,
-    Q: Ord + ?Sized + Borrow<KeyRef<'a, K>>,
-    R: Borrow<ValueRef<'a, V>> + ?Sized,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+    R: AsValueRef<Value = V> + ?Sized,
   {
-    // let mut x = std::collections::BTreeMap::new();
-    // x.get(key)
-    self.insert_in(key.borrow(), value.borrow(), &mut Inserter::default())
+    self.insert_in(key.as_key_ref(), value.as_value_ref(), &mut Inserter::default())
   }
 }
 
@@ -274,8 +276,8 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     unsafe {
       // Link all head/tail levels together.
       for i in 0..MAX_HEIGHT {
-        let head_link = arena.tower(head.offset as usize, i);
-        let tail_link = arena.tower(tail.offset as usize, i);
+        let head_link = arena.tower::<K::Trailer, V::Trailer>(head.offset as usize, i);
+        let tail_link = arena.tower::<K::Trailer, V::Trailer>(tail.offset as usize, i);
         head_link.next_offset.store(tail.offset, Ordering::Relaxed);
         tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
       }
@@ -322,8 +324,8 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
 
   fn insert_in(
     &self,
-    key: &KeyRef<K>,
-    value: &ValueRef<V>,
+    key: KeyRef<K>,
+    value: ValueRef<V>,
     ins: &mut Inserter<K, V>,
   ) -> Result<(), Error> {
     // Safety: a fresh new Inserter, so safe here
@@ -339,7 +341,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       std::thread::yield_now();
     }
 
-    let (nd, height) = self.new_node(key, value)?;
+    let (nd, height) = self.new_node(&key, &value)?;
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -376,7 +378,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
         loop {
           self
             .arena
-            .write_tower(nd.offset as usize, i, prev.offset, next.offset);
+            .write_tower::<K::Trailer, V::Trailer>(nd.offset as usize, i, prev.offset, next.offset);
 
           // Check whether next has an updated link to prev. If it does not,
           // that can mean one of two things:
@@ -396,7 +398,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
             if prev_next_offset == next.offset {
               // Ok, case #1 is true, so help the other thread along by
               // updating the next node's prev link.
-              let link = self.arena.tower(next.offset as usize, i);
+              let link = self.arena.tower::<K::Trailer, V::Trailer>(next.offset as usize, i);
               let _ = link.prev_offset.compare_exchange(
                 next_prev_offset,
                 prev.offset,
@@ -406,7 +408,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
             }
           }
 
-          let prev_link = self.arena.tower(prev.offset as usize, i);
+          let prev_link = self.arena.tower::<K::Trailer, V::Trailer>(prev.offset as usize, i);
 
           match prev_link.next_offset.compare_exchange_weak(
             next.offset,
@@ -425,7 +427,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
                 std::thread::yield_now();
               }
 
-              let next_link = self.arena.tower(next.offset as usize, i);
+              let next_link = self.arena.tower::<K::Trailer, V::Trailer>(next.offset as usize, i);
               let _ = next_link.prev_offset.compare_exchange(
                 prev.offset,
                 nd.offset,
@@ -439,7 +441,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
-              let fr = self.find_splice_for_level(key, i, prev);
+              let fr = self.find_splice_for_level(&key, i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");
@@ -595,7 +597,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
   unsafe fn find_splice(
     &self,
-    key: &KeyRef<K>,
+    key: KeyRef<K>,
     ins: &mut Inserter<K, V>,
     returned_when_found: bool,
   ) -> (bool, Option<NodePtr<K::Trailer, V::Trailer>>) {
@@ -641,7 +643,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     let mut lvl = level;
     let mut found = false;
     while lvl > 0 {
-      let mut fr = self.find_splice_for_level(key, level - 1, prev);
+      let mut fr = self.find_splice_for_level(&key, level - 1, prev);
       if fr.splice.next.ptr.is_null() {
         fr.splice.next = self.tail;
       }
@@ -725,7 +727,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
-  unsafe fn key_is_after_node(&self, nd: NodePtr<K::Trailer, V::Trailer>, key: &KeyRef<K>) -> bool {
+  unsafe fn key_is_after_node(&self, nd: NodePtr<K::Trailer, V::Trailer>, key: KeyRef<K>) -> bool {
     let nd = &*nd.ptr;
     let nd_key = self
       .arena

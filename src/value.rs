@@ -1,4 +1,7 @@
-use crate::Trailer;
+use crate::ValueTrailer;
+
+/// The value type used in [badger](https://github.com/dgraph-io/badger).
+pub mod badger;
 
 /// Gives the users the ability to define their own value type, rather than just slice.
 ///
@@ -93,7 +96,7 @@ use crate::Trailer;
 ///     ```
 pub trait Value {
   /// Extra information should be added for the value provided by end-users.
-  type Trailer: Trailer;
+  type Trailer: ValueTrailer;
 
   #[doc(hidden)]
   const _TRAILER_CHECV: () = {

@@ -28,7 +28,6 @@ inline_more = []
 js = ["getrandom/js"]
 
 # foreign crate supports
-bytes = ["dep:bytes"]
 smallvec = ["dep:smallvec"]
 smol_str = ["dep:smol_str"]
 
@@ -39,7 +38,7 @@ loom = "0.7"
 crossbeam-utils = { version = "0.8", default-features = false }
 thiserror = "1"
 
-bytes = { version = "1.5", default-features = false, optional = true }
+bytes = { version = "1.5", default-features = false }
 smallvec = { version = "1.11", default-features = false, optional = true }
 smol_str = { version = "0.2", default-features = false, optional = true }
 

@@ -1,4 +1,7 @@
-use crate::Trailer;
+use crate::KeyTrailer;
+
+/// Implement [badger's](https://github.com/dgraph-io/badger) key type
+pub mod badger;
 
 /// Gives the users the ability to define their own key type, rather than just slice.
 ///
@@ -93,7 +96,7 @@ use crate::Trailer;
 ///     ```
 pub trait Key {
   /// Extra information should be added for the key provided by end-users.
-  type Trailer: Trailer;
+  type Trailer: KeyTrailer;
 
   /// Returns the bytes of the key without the trailer.
   fn as_bytes(&self) -> &[u8];

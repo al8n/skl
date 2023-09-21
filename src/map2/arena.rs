@@ -1,7 +1,7 @@
 use crate::{
   error::Error,
   sync::{AtomicMut, AtomicPtr, Ordering},
-  Key, Trailer, Value,
+  Key, KeyTrailer, ValueTrailer, Value,
 };
 use ::alloc::boxed::Box;
 use core::{
@@ -33,8 +33,8 @@ impl core::fmt::Debug for Arena {
     // The ptr is always non-null, we only deallocate it when the arena is dropped.
     let data = unsafe { slice::from_raw_parts(self.data_ptr.as_ptr(), allocated) };
     f.debug_struct("Arena")
-      .field("cap", &self.cap)
-      .field("allocated", &allocated)
+      // .field("cap", &self.cap)
+      // .field("allocated", &allocated)
       .field("data", &data)
       .finish()
   }
@@ -56,7 +56,7 @@ impl Arena {
 
 impl Arena {
   #[inline]
-  const fn min_cap<K: Trailer, V: Trailer>() -> usize {
+  const fn min_cap<K: KeyTrailer, V: ValueTrailer>() -> usize {
     (Node::<K, V>::MAX_NODE_SIZE * 2) as usize
   }
 
@@ -110,7 +110,7 @@ impl Arena {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = size as u64 + align as u64 - 1;
 
-    let new_size = self.n.fetch_add(padded, Ordering::AcqRel);
+    let new_size = self.n.fetch_add(padded, Ordering::AcqRel) + padded;
 
     if new_size + overflow as u64 > self.cap as u64 {
       return Err(Error::Full);
@@ -185,22 +185,22 @@ impl Arena {
   /// ## Safety:
   /// - The caller must make sure that `offset` must be less than the capacity of the arena and larger than 0.
   #[inline]
-  pub(super) unsafe fn tower<'a>(&self, offset: usize, height: usize) -> &'a Link {
-    let ptr = self.get_pointer(offset + height * mem::size_of::<Link>());
+  pub(super) unsafe fn tower<'a, KT: KeyTrailer, VT: ValueTrailer>(&self, offset: usize, height: usize) -> &'a Link {
+    let ptr = self.get_pointer(offset + mem::size_of::<Node<KT, VT>>() + height * mem::size_of::<Link>());
     &*ptr.cast()
   }
 
   /// ## Safety:
   /// - The caller must make sure that `offset` must be less than the capacity of the arena and larger than 0.
   #[inline]
-  pub(super) unsafe fn write_tower<'a>(
+  pub(super) unsafe fn write_tower<'a, KT: KeyTrailer, VT: ValueTrailer>(
     &self,
     offset: usize,
     height: usize,
     prev_offset: u32,
     next_offset: u32,
   ) -> &'a Link {
-    let tower_offset = offset + height * mem::size_of::<Link>();
+    let tower_offset = offset + mem::size_of::<Node<KT, VT>>() + height * mem::size_of::<Link>();
     let ptr = self.get_pointer_mut(tower_offset);
     let field_size = mem::size_of::<u32>();
     slice::from_raw_parts_mut(ptr, field_size).copy_from_slice(&next_offset.to_ne_bytes());

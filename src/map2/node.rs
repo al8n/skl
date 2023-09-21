@@ -2,7 +2,7 @@ use core::{mem, ptr};
 
 use crate::{
   sync::{AtomicU32, Ordering},
-  Error, Key, KeyRef, Trailer, Value, ValueRef, NODE_ALIGNMENT_FACTOR,
+  Error, Key, KeyRef, KeyTrailer, ValueTrailer, ValueRef, NODE_ALIGNMENT_FACTOR, Value,
 };
 
 use super::{arena::Arena, MAX_HEIGHT};
@@ -94,7 +94,7 @@ pub(super) struct Node<KT, VT> {
                               // pub(super) tower: [Link; Self::MAX_HEIGHT],
 }
 
-impl<K: Trailer, V: Trailer> Node<K, V> {
+impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
   // pub(super) const ALIGNMENT: usize = NODE_ALIGNMENT_FACTOR - 1;
   pub(super) const SIZE: usize = core::mem::size_of::<Self>();
 
@@ -140,6 +140,8 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
     let key_trailer_size = mem::size_of::<K>() as u32;
     let value_trailer_size = mem::size_of::<V>() as u32;
 
+    let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
+
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
     let unused_size = (MAX_HEIGHT as u32 - height) * (core::mem::size_of::<Link>() as u32);
@@ -147,7 +149,7 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
 
     let (node_offset, alloc_size) = arena.alloc(
       node_size + key_size as u32 + value_size as u32 + key_trailer_size + value_trailer_size,
-      NODE_ALIGNMENT_FACTOR as u32,
+      align as u32,
       unused_size,
     )?;
 
@@ -171,27 +173,30 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
   pub(super) fn new_empty_node_ptr(arena: &Arena, height: u32) -> Result<NodePtr<K, V>, Error> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let unused_size = (MAX_HEIGHT as u32 - height) * (core::mem::size_of::<Link>() as u32);
+    let unused_size = (MAX_HEIGHT as u32 - height) * (mem::size_of::<Link>() as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
-
     let key_trailer_size = Self::key_trailer_size();
     let value_trailer_size = Self::value_trailer_size();
+    let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
     let (node_offset, alloc_size) = arena.alloc(
       node_size + key_trailer_size as u32 + value_trailer_size as u32,
-      NODE_ALIGNMENT_FACTOR as u32,
+      align as u32,
       unused_size,
     )?;
+
     // Safety: we have check the offset is valid
     unsafe {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<K, V>);
-      core::ptr::write_bytes(&mut node.key_trailer, 0, key_trailer_size);
-      core::ptr::write_bytes(&mut node.value_trailer, 0, value_trailer_size);
+      // ptr::write_bytes(&mut node.key_trailer, 0, key_trailer_size);
+      // ptr::write_bytes(&mut node.value_trailer, 0, value_trailer_size);
       node.key_offset = 0;
       node.key_size = 0;
       node.value_size = 0;
       node.alloc_size = alloc_size;
+      let tower_ptr: *mut Link = arena.get_pointer_mut(node_offset as usize).cast();
+      ptr::write_bytes(tower_ptr, 0, MAX_HEIGHT);
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -207,7 +212,7 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
   }
 }
 
-impl<K: Trailer, V: Trailer> Node<K, V> {
+impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
@@ -250,7 +255,7 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
   pub(super) unsafe fn next_offset(&self, arena: &Arena, offset: u32, h: usize) -> u32 {
     arena
-      .tower(offset as usize, h)
+      .tower::<K, V>(offset as usize, h)
       .next_offset
       .load(Ordering::Acquire)
   }
@@ -261,7 +266,7 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
   pub(super) unsafe fn prev_offset(&self, arena: &Arena, offset: u32, h: usize) -> u32 {
     arena
-      .tower(offset as usize, h)
+      .tower::<K, V>(offset as usize, h)
       .prev_offset
       .load(Ordering::Acquire)
   }

@@ -14,9 +14,16 @@ mod error;
 pub use error::Error;
 
 mod value;
-pub use value::*;
+pub use value::{Value, ValueRef};
 mod key;
-pub use key::*;
+pub use key::{Key, KeyRef};
+
+/// Key and Value types used by [badger](https://github.com/dgraph-io/badger)
+pub mod badger {
+  pub use super::value::badger::*;
+  pub use super::key::badger::*;
+}
+
 // mod map;
 // pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
 mod map2;
@@ -48,16 +55,29 @@ impl Comparator for () {
 /// This is forced to guarantee we must make sure there is no read unalignment pointer happen,
 /// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
 ///
-/// See [`Key`](crate::Key) and [`Value`](crate::Value) for more details.
-pub trait Trailer: Copy + Sized + Ord {}
+/// See [`Key`](crate::Key) for more details.
+pub trait KeyTrailer: Copy + Sized + Ord {}
 
-/// The only way to implement [`Trailer`](crate::Trailer) for a type,
-/// so that we can assert the alignment and memory size at compile time
-#[macro_export]
+/// A marker trait, which gives the key-value database developers the ability to add extra information
+/// to the key or value provided by the end-users. The only way to implement this trait is
+///
+/// **NB:**
+///
+/// The alignment of the type implements this trait must be a multiple of `4`,
+/// typically a `u32`, `u64`, `u128` and etc.
+/// This is forced to guarantee we must make sure there is no read unalignment pointer happen,
+/// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
+///
+/// See [`Value`](crate::Value) for more details.
+pub trait ValueTrailer: Copy + Sized {}
+
+
 macro_rules! trailer {
   ($($ty:ty), +$(,)?) => {
     $(
-      impl Trailer for $ty {}
+      impl KeyTrailer for $ty {}
+
+      impl ValueTrailer for $ty {}
     )*
   };
 }

@@ -151,16 +151,16 @@ impl Arena {
     slice::from_raw_parts_mut(ptr, size)
   }
 
-  /// ## Safety:
-  /// - The caller must make sure that `ptr` must be less than the end bound of the arena.
-  #[inline]
-  pub(super) unsafe fn get_pointer_offset(&self, ptr: *const u8) -> usize {
-    if ptr.is_null() {
-      return 0;
-    }
+  // /// ## Safety:
+  // /// - The caller must make sure that `ptr` must be less than the end bound of the arena.
+  // #[inline]
+  // pub(super) unsafe fn get_pointer_offset(&self, ptr: *const u8) -> usize {
+  //   if ptr.is_null() {
+  //     return 0;
+  //   }
 
-    ptr.offset_from(self.data_ptr.as_ptr()) as usize
-  }
+  //   ptr.offset_from(self.data_ptr.as_ptr()) as usize
+  // }
 
   /// ## Safety:
   /// - The caller must make sure that `offset` must be less than the capacity of the arena.
@@ -207,21 +207,6 @@ impl Arena {
     slice::from_raw_parts_mut(ptr.add(field_size), field_size)
       .copy_from_slice(&prev_offset.to_ne_bytes());
     &*ptr.cast()
-  }
-
-  #[inline]
-  fn inner(&self) -> &Shared {
-    // Safety:
-    // The ptr is always valid, because this ptr is only deallocated when the arena is dropped.
-    unsafe { &*(self.inner.load(Ordering::Acquire) as *const Shared) }
-  }
-
-  #[allow(clippy::mut_from_ref)]
-  #[inline]
-  fn inner_mut(&self) -> &mut Shared {
-    // Safety:
-    // The ptr is always valid, because this ptr is only deallocated when the arena is dropped.
-    unsafe { &mut *(self.inner.load(Ordering::Acquire) as *mut Shared) }
   }
 }
 

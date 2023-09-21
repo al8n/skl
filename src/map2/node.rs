@@ -13,15 +13,15 @@ pub(super) struct Link {
   pub(super) prev_offset: AtomicU32,
 }
 
-impl Link {
-  #[inline]
-  pub(super) const fn new(next_offset: u32, prev_offset: u32) -> Self {
-    Self {
-      next_offset: AtomicU32::new(next_offset),
-      prev_offset: AtomicU32::new(prev_offset),
-    }
-  }
-}
+// impl Link {
+//   #[inline]
+//   pub(super) const fn new(next_offset: u32, prev_offset: u32) -> Self {
+//     Self {
+//       next_offset: AtomicU32::new(next_offset),
+//       prev_offset: AtomicU32::new(prev_offset),
+//     }
+//   }
+// }
 
 pub(super) struct NodePtr<K, V> {
   pub(super) ptr: *const Node<K, V>,
@@ -95,19 +95,19 @@ pub(super) struct Node<KT, VT> {
 }
 
 impl<K: Trailer, V: Trailer> Node<K, V> {
-  pub(super) const ALIGNMENT: usize = NODE_ALIGNMENT_FACTOR - 1;
+  // pub(super) const ALIGNMENT: usize = NODE_ALIGNMENT_FACTOR - 1;
   pub(super) const SIZE: usize = core::mem::size_of::<Self>();
 
   pub(super) const MAX_NODE_SIZE: u64 =
     (Self::SIZE + MAX_HEIGHT * core::mem::size_of::<Link>()) as u64;
 
-  /// Returns the maximum space needed for a node with the specified
-  /// key and value sizes. This could overflow a `u32`, which is why a uint64
-  /// is used here. If a key/value overflows a `u32`, it should not be added to
-  /// the skiplist.
-  pub(super) const fn max_node_size(key_size: u32, value_size: u32) -> u64 {
-    Self::MAX_NODE_SIZE + key_size as u64 + value_size as u64 + Self::ALIGNMENT as u64
-  }
+  // /// Returns the maximum space needed for a node with the specified
+  // /// key and value sizes. This could overflow a `u32`, which is why a uint64
+  // /// is used here. If a key/value overflows a `u32`, it should not be added to
+  // /// the skiplist.
+  // pub(super) const fn max_node_size(key_size: u32, value_size: u32) -> u64 {
+  //   Self::MAX_NODE_SIZE + key_size as u64 + value_size as u64 + Self::ALIGNMENT as u64
+  // }
 
   pub(super) fn new_node_ptr<KK, VV>(
     arena: &Arena,
@@ -166,6 +166,44 @@ impl<K: Trailer, V: Trailer> Node<K, V> {
       node.get_value_mut(arena).copy_from_slice(value.as_bytes());
       Ok(NodePtr::new(ptr, node_offset))
     }
+  }
+
+  pub(super) fn new_empty_node_ptr(arena: &Arena, height: u32) -> Result<NodePtr<K, V>, Error> {
+    // Compute the amount of the tower that will never be used, since the height
+    // is less than maxHeight.
+    let unused_size = (MAX_HEIGHT as u32 - height) * (core::mem::size_of::<Link>() as u32);
+    let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
+
+    let key_trailer_size = Self::key_trailer_size();
+    let value_trailer_size = Self::value_trailer_size();
+    let (node_offset, alloc_size) = arena.alloc(
+      node_size + key_trailer_size as u32 + value_trailer_size as u32,
+      NODE_ALIGNMENT_FACTOR as u32,
+      unused_size,
+    )?;
+    // Safety: we have check the offset is valid
+    unsafe {
+      let ptr = arena.get_pointer_mut(node_offset as usize);
+      // Safety: the node is well aligned
+      let node = &mut *(ptr as *mut Node<K, V>);
+      core::ptr::write_bytes(&mut node.key_trailer, 0, key_trailer_size);
+      core::ptr::write_bytes(&mut node.value_trailer, 0, value_trailer_size);
+      node.key_offset = 0;
+      node.key_size = 0;
+      node.value_size = 0;
+      node.alloc_size = alloc_size;
+      Ok(NodePtr::new(ptr, node_offset))
+    }
+  }
+
+  #[inline]
+  const fn key_trailer_size() -> usize {
+    mem::size_of::<K>()
+  }
+
+  #[inline]
+  const fn value_trailer_size() -> usize {
+    mem::size_of::<V>()
   }
 }
 

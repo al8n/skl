@@ -3,6 +3,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
+#![allow(clippy::type_complexity, clippy::mut_from_ref)]
 
 extern crate alloc;
 
@@ -19,6 +20,7 @@ pub use key::*;
 // mod map;
 // pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
 mod map2;
+pub use map2::*;
 
 const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
 

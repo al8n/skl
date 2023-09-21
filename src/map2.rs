@@ -1,7 +1,4 @@
-use core::{
-  borrow::{Borrow, BorrowMut},
-  cmp, ptr,
-};
+use core::{borrow::Borrow, cmp};
 
 use crossbeam_utils::CachePadded;
 
@@ -84,15 +81,88 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   }
 }
 
+#[inline]
+const fn alignment_assertion<K: Key, V: Value>() {
+  assert!(((core::mem::align_of::<K::Trailer>() % NODE_ALIGNMENT_FACTOR) == 0) || (core::mem::size_of::<K::Trailer>() == 0), "Invalid Trailer type of key, the alignment of the types implement Trailer trait must be a multiple of 4 or (ZST) zero sized type.");
+  assert!(((core::mem::align_of::<V::Trailer>() % NODE_ALIGNMENT_FACTOR) == 0) || (core::mem::size_of::<V::Trailer>() == 0), "Invalid Trailer type of value, the alignment of the types implement Trailer trait must be a multiple of 4 or (ZST) zero sized type.");
+}
+
 impl<K: Key, V: Value> SkipMap<K, V> {
-  pub fn new(cap: usize) -> Self {
-    assert!(((core::mem::align_of::<K::Trailer>() % NODE_ALIGNMENT_FACTOR) == 0) || (core::mem::size_of::<K::Trailer>() == 0), "Invalid Trailer type of key, the alignment of the types implement Trailer trait must be a multiple of 4 or (ZST) zero sized type.");
-    assert!(((core::mem::align_of::<V::Trailer>() % NODE_ALIGNMENT_FACTOR) == 0) || (core::mem::size_of::<V::Trailer>() == 0), "Invalid Trailer type of value, the alignment of the types implement Trailer trait must be a multiple of 4 or (ZST) zero sized type.");
-    todo!()
+  /// Create a new skiplist according to the given capacity
+  ///
+  /// **Note:** The capacity stands for how many memory allocated,
+  /// it does not mean the skiplist can store `cap` entries.
+  ///
+  ///
+  ///
+  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
+  ///
+  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///   Even if we are working with raw pointers with `Box::into_raw`,
+  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///   especially if you're frequently accessing or modifying it.
+  ///
+  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
+  ///   If you require very large contiguous memory regions, `mmap` might be more suitable because
+  ///   it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
+  pub fn new(cap: usize) -> Result<Self, Error> {
+    let arena = Arena::new_vec::<K, V>(cap);
+    Self::new_in(arena, ())
+  }
+
+  /// Create a new skipmap according to the given capacity, and mmaped to a file.
+  ///
+  /// **Note:** The capacity stands for how many memory mmaped,
+  /// it does not mean the skipmap can store `cap` entries.
+  ///
+  /// `lock`: whether to lock the underlying file or not
+  #[cfg(feature = "mmap")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
+    let arena = Arena::new_mmap::<K, V>(cap, file, lock)?;
+    Self::new_in(arena, ()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+  }
+
+  /// Create a new skipmap according to the given capacity, and mmap anon.
+  ///
+  /// **What the difference between this method and [`SkipMap::new`]?**
+  ///
+  /// 1. This method will use mmap anonymous to require memory from the OS directly.
+  ///   If you require very large contiguous memory regions, this method might be more suitable because
+  ///   it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///   Even if we are working with raw pointers with `Box::into_raw`,
+  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///   especially if you're frequently accessing or modifying it.
+  ///
+  /// [`SkipMap::new`]: #method.new
+  #[cfg(feature = "mmap")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
+    let arena = Arena::new_anonymous_mmap::<K, V>(cap)?;
+    Self::new_in(arena, ()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 }
 
 impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
+  /// Set comparator for the skipmap.
+  pub fn with_comparator<NC: Comparator>(this: SkipMap<K, V, NC>, cmp: C) -> Self {
+    Self {
+      arena: this.arena,
+      head: this.head,
+      tail: this.tail,
+      height: this.height,
+      #[cfg(test)]
+      testing: this.testing,
+      cmp,
+    }
+  }
+
   /// Returns true if the key exists in the map.
   #[inline]
   pub fn contains_key<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> bool
@@ -194,6 +264,34 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
 }
 
 impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
+  fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
+    alignment_assertion::<K, V>();
+    let head = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena, MAX_HEIGHT as u32)?;
+    let tail = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena, MAX_HEIGHT as u32)?;
+
+    // Safety:
+    // We will always allocate enough space for the head node and the tail node.
+    unsafe {
+      // Link all head/tail levels together.
+      for i in 0..MAX_HEIGHT {
+        let head_link = arena.tower(head.offset as usize, i);
+        let tail_link = arena.tower(tail.offset as usize, i);
+        head_link.next_offset.store(tail.offset, Ordering::Relaxed);
+        tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
+      }
+    }
+
+    Ok(Self {
+      arena,
+      head,
+      tail,
+      height: CachePadded::new(AtomicU32::new(1)),
+      #[cfg(test)]
+      testing: false,
+      cmp,
+    })
+  }
+
   #[cfg(feature = "std")]
   #[inline]
   fn random_height() -> u32 {
@@ -688,6 +786,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   }
 }
 
+/// A helper struct for caching splice information
 pub struct Inserter<'a, K: Key, V: Value> {
   spl: [Splice<K, V>; MAX_HEIGHT],
   height: u32,

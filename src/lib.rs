@@ -2,20 +2,72 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 
 extern crate alloc;
 
 #[cfg(feature = "std")]
 extern crate std;
 
-mod map;
-pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
+mod error;
+pub use error::Error;
 
 mod value;
 pub use value::*;
 mod key;
 pub use key::*;
+// mod map;
+// pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
+mod map2;
+
+const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
+
+/// Comparator is used for users to define their own key comparison logic.
+/// e.g. some key-value database developers may want to alpabetically comparation
+pub trait Comparator {
+  /// Compares two byte slices.
+  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering;
+}
+
+impl Comparator for () {
+  #[inline]
+  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
+    a.cmp(b)
+  }
+}
+
+/// A marker trait, which gives the key-value database developers the ability to add extra information
+/// to the key or value provided by the end-users. The only way to implement this trait is
+///
+/// **NB:**
+///
+/// The alignment of the type implements this trait must be a multiple of `4`,
+/// typically a `u32`, `u64`, `u128` and etc.
+/// This is forced to guarantee we must make sure there is no read unalignment pointer happen,
+/// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
+///
+/// See [`Key`](crate::Key) and [`Value`](crate::Value) for more details.
+pub trait Trailer: Copy + Sized + Ord {}
+
+/// The only way to implement [`Trailer`](crate::Trailer) for a type,
+/// so that we can assert the alignment and memory size at compile time
+#[macro_export]
+macro_rules! trailer {
+  ($($ty:ty), +$(,)?) => {
+    $(
+      impl Trailer for $ty {}
+    )*
+  };
+}
+
+trailer!((), u32, u64, u128);
+
+#[test]
+fn test_() {
+  let x = core::mem::align_of::<()>();
+  println!("{x}");
+  assert!((core::mem::align_of::<()>() % NODE_ALIGNMENT_FACTOR) == 0)
+}
 
 /// Re-export bytes crate
 pub use bytes;
@@ -50,5 +102,5 @@ mod sync {
   }
 }
 
-#[cfg(test)]
-mod utils;
+// #[cfg(test)]
+// mod utils;

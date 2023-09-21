@@ -1,12 +1,9 @@
-use core::{cmp, ops::RangeBounds};
+use super::{
+  sync::{AtomicU32, Ordering},
+  *,
+};
 
 use crossbeam_utils::CachePadded;
-
-use super::{
-  arena::Arena,
-  sync::{AtomicU32, Ordering},
-  Comparator, MAX_HEIGHT, PROBABILITIES,
-};
 
 mod node;
 use node::{Node, NodePtr};
@@ -20,9 +17,6 @@ pub use iterator::*;
 #[cfg(all(test, not(loom)))]
 mod tests;
 
-#[cfg(all(test, loom))]
-mod loom;
-
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration. Keys and values are immutable once added to the skipmap and
 /// deletion is not supported. Instead, higher-level code is expected to add new
@@ -30,7 +24,7 @@ mod loom;
 /// is up to the user to process these shadow entries and tombstones
 /// appropriately during retrieval.
 #[derive(Debug)]
-pub struct SkipMap<C = ()> {
+pub struct SkipSet<C = ()> {
   arena: Arena,
   head: NodePtr,
   tail: NodePtr,
@@ -47,12 +41,12 @@ pub struct SkipMap<C = ()> {
   cmp: C,
 }
 
-// Safety: SkipMap is Sync and Send
-unsafe impl<C: Comparator> Send for SkipMap<C> {}
-unsafe impl<C: Comparator> Sync for SkipMap<C> {}
+// Safety: SkipSet is Sync and Send
+unsafe impl<C: Comparator> Send for SkipSet<C> {}
+unsafe impl<C: Comparator> Sync for SkipSet<C> {}
 
 // --------------------------------Public Methods--------------------------------
-impl<C> SkipMap<C> {
+impl<C> SkipSet<C> {
   /// Returns the height of the highest tower within any of the nodes that
   /// have ever been allocated as part of this skiplist.
   #[inline]
@@ -91,7 +85,7 @@ impl<C> SkipMap<C> {
   }
 }
 
-impl SkipMap {
+impl SkipSet {
   /// Create a new skipmap according to the given capacity
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -99,7 +93,7 @@ impl SkipMap {
   ///
   ///
   ///
-  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
+  /// **What the difference between this method and [`SkipSet::mmap_anon`]?**
   ///
   /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
   ///   Even if we are working with raw pointers with `Box::into_raw`,
@@ -107,11 +101,11 @@ impl SkipMap {
   ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///   especially if you're frequently accessing or modifying it.
   ///
-  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
+  /// 2. Where as [`SkipSet::mmap_anon`] will use mmap anonymous to require memory from the OS.
   ///   If you require very large contiguous memory regions, `mmap` might be more suitable because
   ///   it's more direct in requesting large chunks of memory from the OS.
   ///
-  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
+  /// [`SkipSet::mmap_anon`]: #method.mmap_anon
   pub fn new(cap: usize) -> Result<Self, Error> {
     let arena = Arena::new_vec::<{ Node::MAX_NODE_SIZE }>(cap);
     Self::new_in(arena, ())
@@ -132,19 +126,19 @@ impl SkipMap {
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
   ///
-  /// **What the difference between this method and [`SkipMap::new`]?**
+  /// **What the difference between this method and [`SkipSet::new`]?**
   ///
   /// 1. This method will use mmap anonymous to require memory from the OS directly.
   ///   If you require very large contiguous memory regions, this method might be more suitable because
   ///   it's more direct in requesting large chunks of memory from the OS.
   ///
-  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  /// 2. Where as [`SkipSet::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
   ///   Even if we are working with raw pointers with `Box::into_raw`,
   ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
   ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///   especially if you're frequently accessing or modifying it.
   ///
-  /// [`SkipMap::new`]: #method.new
+  /// [`SkipSet::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
@@ -153,10 +147,10 @@ impl SkipMap {
   }
 }
 
-impl<C> SkipMap<C> {
+impl<C> SkipSet<C> {
   /// Set comparator for the skipmap.
-  pub fn with_comparator<NC: Comparator>(self, cmp: NC) -> SkipMap<NC> {
-    SkipMap {
+  pub fn with_comparator<NC: Comparator>(self, cmp: NC) -> SkipSet<NC> {
+    SkipSet {
       arena: self.arena,
       head: self.head,
       tail: self.tail,
@@ -192,7 +186,7 @@ impl<C> SkipMap<C> {
   }
 }
 
-impl<C: Comparator> SkipMap<C> {
+impl<C: Comparator> SkipSet<C> {
   /// Returns true if the key exists in the map.
   #[inline]
   pub fn contains_key<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> bool {
@@ -217,7 +211,6 @@ impl<C: Comparator> SkipMap<C> {
       Some(EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
-        value: node.get_value(&self.arena),
       })
     }
   }
@@ -239,7 +232,6 @@ impl<C: Comparator> SkipMap<C> {
           return Some(EntryRef {
             key: node.get_key(&self.arena),
             version: node.version,
-            value: node.get_value(&self.arena),
           });
         }
         nd = self.get_prev(nd, 0);
@@ -254,7 +246,6 @@ impl<C: Comparator> SkipMap<C> {
       EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
-        value: node.get_value(&self.arena),
       }
     })
   }
@@ -272,7 +263,6 @@ impl<C: Comparator> SkipMap<C> {
       EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
-        value: node.get_value(&self.arena),
       }
     })
   }
@@ -290,7 +280,6 @@ impl<C: Comparator> SkipMap<C> {
       EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
-        value: node.get_value(&self.arena),
       }
     })
   }
@@ -308,7 +297,6 @@ impl<C: Comparator> SkipMap<C> {
       EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
-        value: node.get_value(&self.arena),
       }
     })
   }
@@ -326,7 +314,6 @@ impl<C: Comparator> SkipMap<C> {
       EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
-        value: node.get_value(&self.arena),
       }
     })
   }
@@ -348,7 +335,6 @@ impl<C: Comparator> SkipMap<C> {
     &'a self,
     version: u64,
     key: &'b [u8],
-    value: &'b [u8],
   ) -> Result<Option<EntryRef<'a>>, Error> {
     let ins = &mut Default::default();
 
@@ -360,11 +346,10 @@ impl<C: Comparator> SkipMap<C> {
           EntryRef {
             key: nd.get_key(&self.arena),
             version: nd.version,
-            value: nd.get_value(&self.arena),
           }
         }));
       }
-      self.insert_in(version, key, value, ins).map(|_| None)
+      self.insert_in(version, key, ins).map(|_| None)
     }
   }
 
@@ -376,34 +361,29 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - Returns `Error::Duplicated`, if the key already exists.
   /// - Returns `Error::Full`, if there isn't enough room in the arena.
-  pub fn insert<'a, 'b: 'a>(
-    &'a self,
-    version: u64,
-    key: &'b [u8],
-    value: &'b [u8],
-  ) -> Result<(), Error> {
-    self.insert_in(version, key, value, &mut Inserter::default())
+  pub fn insert<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Result<(), Error> {
+    self.insert_in(version, key, &mut Inserter::default())
   }
 
   /// Returns a new `Iterator`. Note that it is
   /// safe for an iterator to be copied by value.
   #[inline]
-  pub const fn iter(&self, version: u64) -> iterator::MapIterator<C> {
-    iterator::MapIterator::new(version, self)
+  pub const fn iter(&self, version: u64) -> iterator::SetIterator<C> {
+    iterator::SetIterator::new(version, self)
   }
 
   /// Returns a `Iterator` that within the range.
   #[inline]
-  pub fn range<'a, 'b: 'a, R>(&'a self, version: u64, range: R) -> iterator::MapRange<'a, C, R>
+  pub fn range<'a, 'b: 'a, R>(&'a self, version: u64, range: R) -> iterator::SetRange<'a, C, R>
   where
     R: RangeBounds<[u8]> + 'b,
   {
-    iterator::MapIterator::range(version, self, range)
+    iterator::SetIterator::range(version, self, range)
   }
 }
 
 // --------------------------------Crate Level Methods--------------------------------
-impl<C: Comparator> SkipMap<C> {
+impl<C: Comparator> SkipSet<C> {
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
@@ -433,7 +413,7 @@ impl<C: Comparator> SkipMap<C> {
 }
 
 // --------------------------------Private Methods--------------------------------
-impl<C> SkipMap<C> {
+impl<C> SkipSet<C> {
   fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
@@ -463,9 +443,9 @@ impl<C> SkipMap<C> {
   }
 
   #[allow(clippy::type_complexity)]
-  fn new_node(&self, key: &[u8], version: u64, value: &[u8]) -> Result<(NodePtr, u32), Error> {
+  fn new_node(&self, key: &[u8], version: u64) -> Result<(NodePtr, u32), Error> {
     let height = Self::random_height();
-    let nd = Node::new_node_ptr(&self.arena, height, key, version, value)?;
+    let nd = Node::new_node_ptr(&self.arena, height, key, version)?;
 
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
@@ -513,7 +493,7 @@ impl<C> SkipMap<C> {
   }
 }
 
-impl<C: Comparator> SkipMap<C> {
+impl<C: Comparator> SkipSet<C> {
   fn get_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let mut lvl = (self.height() - 1) as usize;
 
@@ -594,13 +574,7 @@ impl<C: Comparator> SkipMap<C> {
     Some(nd)
   }
 
-  fn insert_in(
-    &self,
-    version: u64,
-    key: &[u8],
-    value: &[u8],
-    ins: &mut Inserter,
-  ) -> Result<(), Error> {
+  fn insert_in(&self, version: u64, key: &[u8], ins: &mut Inserter) -> Result<(), Error> {
     // Safety: a fresh new Inserter, so safe here
     if unsafe { self.find_splice(version, key, ins, false).0 } {
       return Err(Error::Duplicated);
@@ -614,7 +588,7 @@ impl<C: Comparator> SkipMap<C> {
       std::thread::yield_now();
     }
 
-    let (nd, height) = self.new_node(key, version, value)?;
+    let (nd, height) = self.new_node(key, version)?;
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.

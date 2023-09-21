@@ -1,16 +1,12 @@
-use skl::{Key, SkipMap, Value};
+use skl::SkipMap;
 use std::sync::Arc;
 
-pub fn key(i: usize) -> Key {
-  Key::from(format!("{:05}", i))
+pub fn key(i: usize) -> Vec<u8> {
+  format!("{:05}", i).into_bytes()
 }
 
-pub fn new_value(i: usize) -> Value {
-  use bytes::{BufMut, BytesMut};
-
-  let mut vm = BytesMut::default();
-  vm.put_slice(format!("{:05}", i).as_bytes());
-  Value::from(vm.freeze())
+pub fn new_value(i: usize) -> Vec<u8> {
+  format!("{:05}", i).into_bytes()
 }
 
 fn main() {
@@ -21,7 +17,7 @@ fn main() {
     let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
-      l.insert(key(i), new_value(i));
+      l.insert(0, &key(i), &new_value(i)).unwrap();
       drop(w);
     });
   }
@@ -30,11 +26,8 @@ fn main() {
     let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
-      assert_eq!(
-        l.get(key(i).as_key_ref()).unwrap(),
-        new_value(i).as_value_ref(),
-        "broken: {i}"
-      );
+      let k = key(i);
+      assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
       drop(w);
     });
   }

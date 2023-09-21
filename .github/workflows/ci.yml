@@ -20,6 +20,7 @@ on:
       - "LICENSE-*"
       - "**.md"
       - "**.txt"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -130,7 +131,7 @@ jobs:
       - name: cargo build --target ${{ matrix.target }}
         run: |
           rustup target add ${{ matrix.target }}
-          cargo build --features js --target ${{ matrix.target }}
+          cargo build --target ${{ matrix.target }}
         if: matrix.target == 'wasm32-unknown-unknown'
       # - name: cargo build --target ${{ matrix.target }}
       #   run: |
@@ -149,7 +150,7 @@ jobs:
       - name: Install rust-src
         run: rustup component add rust-src
       - name: ASAN / LSAN / TSAN
-        run: . ci/sanitizer.sh
+        run: ci/sanitizer.sh
 
   # valgrind
   valgrind:
@@ -169,27 +170,20 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y valgrind
       # Compile tests
-      - name: cargo build test-vec
-        run: cargo build --bin test-vec
+      - name: build & valgrind (vec backend)
+        run: |
+          cargo build --bin test-vec --target-dir .
+          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./debug/test-vec
         working-directory: integration
-      - name: cargo build test-mmap
-        run: cargo build --bin test-mmap
+      - name: build & valgrind (mmap backend)
+        run: |
+          cargo build --bin test-mmap --target-dir .
+          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./debug/test-mmap 
         working-directory: integration
-      - name: cargo build test-mmap-anon
-        run: cargo build --bin test-mmap-anon
-        working-directory: integration
-
-      # Run with valgrind
-      - name: Run valgrind test-vec
-        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-vec
-        working-directory: integration
-
-      - name: Run valgrind test-mmap
-        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-mmap
-        working-directory: integration
-
-      - name: Run valgrind test-mmap-anon
-        run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-mmap-anon
+      - name: build & valgrind (mmap-anon backend)
+        run: |
+          cargo build --bin test-mmap-anon --target-dir .
+          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./debug/test-mmap-anon 
         working-directory: integration
       
  
@@ -201,16 +195,15 @@ jobs:
       - name: Miri
         run: ci/miri.sh
 
-  # Loom
   # loom:
   #   name: loom
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v3
+  #     - uses: actions/checkout@v4
   #     - name: Install Rust
   #       run: rustup update $nightly && rustup default $nightly
   #     - name: Loom tests
-  #       run: RUSTFLAGS="--cfg loom -Dwarnings" cargo test --test loom
+  #       run: RUSTFLAGS="--cfg loom -Dwarnings" cargo test --lib
 
   coverage:
     name: cargo tarpaulin

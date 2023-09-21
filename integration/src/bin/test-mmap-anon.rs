@@ -9,7 +9,7 @@ fn main() {
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(key(i), new_value(i));
+        l.insert(0, &key(i), &new_value(i)).unwrap();
         drop(l);
       });
     }
@@ -17,11 +17,8 @@ fn main() {
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        assert_eq!(
-          l.get(key(i).as_key_ref()).unwrap(),
-          new_value(i).as_value_ref(),
-          "broken: {i}"
-        );
+        let k = key(i);
+        assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
         drop(l);
       });
     }
@@ -34,7 +31,7 @@ fn main() {
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(key(i), big_value(i));
+        l.insert(0, &key(i), &big_value(i)).unwrap();
       });
     }
     while Arc::strong_count(&l) > 1 {}
@@ -42,11 +39,8 @@ fn main() {
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
-        assert_eq!(
-          l.get(key(i).as_key_ref()).unwrap(),
-          big_value(i).as_value_ref(),
-          "broken: {i}"
-        );
+        let k = key(i);
+        assert_eq!(l.get(0, &k).unwrap().value(), big_value(i), "broken: {i}");
       });
     }
     while Arc::strong_count(&l) > 1 {}

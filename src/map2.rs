@@ -276,8 +276,8 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     unsafe {
       // Link all head/tail levels together.
       for i in 0..MAX_HEIGHT {
-        let head_link = arena.tower::<K::Trailer, V::Trailer>(head.offset as usize, i);
-        let tail_link = arena.tower::<K::Trailer, V::Trailer>(tail.offset as usize, i);
+        let head_link = head.tower(&arena, i);
+        let tail_link = tail.tower(&arena, i);
         head_link.next_offset.store(tail.offset, Ordering::Relaxed);
         tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
       }
@@ -342,7 +342,6 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     }
 
     let (nd, height) = self.new_node(&key, &value)?;
-
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -376,10 +375,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       // 3. CAS nextPrevOffset to repoint from prev to nd.
       unsafe {
         loop {
-          self
-            .arena
-            .write_tower::<K::Trailer, V::Trailer>(nd.offset as usize, i, prev.offset, next.offset);
-
+          let prev_offset = prev.offset;
+          let next_offset = next.offset;
+          nd.write_tower(&self.arena, i, prev_offset, next_offset);
+ 
           // Check whether next has an updated link to prev. If it does not,
           // that can mean one of two things:
           //   1. The thread that added the next node hasn't yet had a chance
@@ -387,36 +386,36 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
           //   2. Another thread has added a new node between prev and next.
           //
           // Safety: we already check next is not null
-          let next_prev_offset = next.as_ptr().prev_offset(&self.arena, nd.offset, i);
-          if next_prev_offset != prev.offset {
+          let next_prev_offset = next.prev_offset(&self.arena, i);
+          if next_prev_offset != prev_offset {
             // Determine whether #1 or #2 is true by checking whether prev
             // is still pointing to next. As long as the atomic operations
             // have at least acquire/release semantics (no need for
             // sequential consistency), this works, as it is equivalent to
             // the "publication safety" pattern.
-            let prev_next_offset = prev.as_ptr().next_offset(&self.arena, prev.offset, i);
-            if prev_next_offset == next.offset {
+            let prev_next_offset = prev.next_offset(&self.arena, i);
+            if prev_next_offset == next_offset {
               // Ok, case #1 is true, so help the other thread along by
               // updating the next node's prev link.
-              let link = self.arena.tower::<K::Trailer, V::Trailer>(next.offset as usize, i);
+              let link = next.tower(&self.arena, i);
               let _ = link.prev_offset.compare_exchange(
                 next_prev_offset,
-                prev.offset,
-                Ordering::AcqRel,
+                prev_offset,
+                Ordering::SeqCst,
                 Ordering::Acquire,
               );
             }
           }
 
-          let prev_link = self.arena.tower::<K::Trailer, V::Trailer>(prev.offset as usize, i);
-
+          let prev_link = prev.tower(&self.arena, i);
           match prev_link.next_offset.compare_exchange_weak(
             next.offset,
             nd.offset,
-            Ordering::AcqRel,
+            Ordering::SeqCst,
             Ordering::Acquire,
           ) {
             Ok(_) => {
+              
               // Managed to insert nd between prev and next, so update the next
               // node's prev link and go to the next level.
               #[cfg(all(test, feature = "std"))]
@@ -427,13 +426,14 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
                 std::thread::yield_now();
               }
 
-              let next_link = self.arena.tower::<K::Trailer, V::Trailer>(next.offset as usize, i);
+              let next_link = next.tower(&self.arena, i);
               let _ = next_link.prev_offset.compare_exchange(
-                prev.offset,
+                prev_offset,
                 nd.offset,
-                Ordering::AcqRel,
+                Ordering::SeqCst,
                 Ordering::Acquire,
               );
+              
               break;
             }
             Err(_) => {
@@ -615,20 +615,20 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       // Our cached height is equal to the list height.
       while level < list_height as usize {
         let spl = &ins.spl[level];
-        if self.get_next(spl.prev, level).offset != spl.next.offset {
+        if self.get_next(spl.prev, level).ptr != spl.next.ptr {
           level += 1;
           // One or more nodes have been inserted between the splice at this
           // level.
           continue;
         }
 
-        if spl.prev.offset != self.head.offset && !self.key_is_after_node(spl.prev, key) {
+        if spl.prev.ptr != self.head.ptr && !self.key_is_after_node(spl.prev, key) {
           // Key lies before splice.
           level = list_height as usize;
           break;
         }
 
-        if spl.next.offset != self.tail.offset && !self.key_is_after_node(spl.next, key) {
+        if spl.next.ptr != self.tail.ptr && !self.key_is_after_node(spl.next, key) {
           // Key lies after splice.
           level = list_height as usize;
           break;
@@ -640,11 +640,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       }
     }
 
-    let mut lvl = level;
     let mut found = false;
-    while lvl > 0 {
-      let mut fr = self.find_splice_for_level(&key, level - 1, prev);
-      if fr.splice.next.ptr.is_null() {
+    for lvl in (0..level).rev() {
+      let mut fr = self.find_splice_for_level(&key, lvl, prev);
+      if fr.splice.next.is_null() {
         fr.splice.next = self.tail;
       }
       found = fr.found;
@@ -652,7 +651,6 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
         return (found, fr.curr);
       }
       ins.spl[lvl] = fr.splice;
-      lvl -= 1;
     }
 
     (found, None)
@@ -672,7 +670,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     loop {
       // Assume prev.key < key.
       let next = self.get_next(prev, level);
-      if next.offset == self.tail.offset {
+      if next.ptr == self.tail.ptr {
         // Tail node, so done.
         return FindResult {
           splice: Splice { prev, next },
@@ -682,7 +680,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       }
 
       // offset is not zero, so we can safely dereference the next node ptr.
-      let next_node = &*next.ptr;
+      let next_node = next.as_ptr();
 
       let (key_offset, key_size) = (next_node.key_offset, next_node.key_size);
       let next_key = self.arena.get_bytes(key_offset as usize, key_size as usize);
@@ -754,18 +752,16 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   #[inline]
   unsafe fn get_prev(
     &self,
-    nd: *const Node<K::Trailer, V::Trailer>,
-    offset: u32,
+    nd: NodePtr<K::Trailer, V::Trailer>,
     height: usize,
   ) -> NodePtr<K, V> {
-    match nd.as_ref() {
-      None => NodePtr::NULL,
-      Some(nd) => {
-        let offset = nd.prev_offset(&self.arena, offset, height);
-        let ptr = self.arena.get_pointer(offset as usize);
-        NodePtr::new(ptr, offset)
-      }
+    if nd.is_null() {
+      return NodePtr::NULL;
     }
+
+    let offset = nd.prev_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
   }
 
   /// ## Safety
@@ -777,14 +773,12 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     nptr: NodePtr<K::Trailer, V::Trailer>,
     height: usize,
   ) -> NodePtr<K::Trailer, V::Trailer> {
-    match nptr.ptr.as_ref() {
-      None => NodePtr::NULL,
-      Some(nd) => {
-        let offset = nd.next_offset(&self.arena, nptr.offset, height);
-        let ptr = self.arena.get_pointer(offset as usize);
-        NodePtr::new(ptr, offset)
-      }
+    if nptr.is_null() {
+      return NodePtr::NULL;
     }
+    let offset = nptr.next_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
   }
 }
 

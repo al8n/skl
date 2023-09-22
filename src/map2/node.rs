@@ -7,21 +7,42 @@ use crate::{
 
 use super::{arena::Arena, MAX_HEIGHT};
 
+#[derive(Debug)]
 #[repr(C)]
 pub(super) struct Link {
   pub(super) next_offset: AtomicU32,
   pub(super) prev_offset: AtomicU32,
 }
 
-// impl Link {
-//   #[inline]
-//   pub(super) const fn new(next_offset: u32, prev_offset: u32) -> Self {
-//     Self {
-//       next_offset: AtomicU32::new(next_offset),
-//       prev_offset: AtomicU32::new(prev_offset),
-//     }
-//   }
-// }
+impl Link {
+  #[inline]
+  pub(super) const fn new(next_offset: u32, prev_offset: u32) -> Self {
+    Self {
+      next_offset: AtomicU32::new(next_offset),
+      prev_offset: AtomicU32::new(prev_offset),
+    }
+  }
+}
+
+pub(super) struct NodePtrWithTower<'a, K, V> {
+  ptr: NodePtr<K, V>,
+  towers: &'a [Link],
+}
+
+impl<'a, K, V> core::fmt::Debug for NodePtrWithTower<'a, K, V> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let node = unsafe { self.ptr.as_ptr() };
+    f.debug_struct("Node")
+      .field("node_offset", &self.ptr.offset)
+      .field("key_offset", &node.key_offset)
+      .field("key_size", &node.key_size)
+      .field("value_size", &node.value_size)
+      .field("alloc_size", &node.alloc_size)
+      .field("towers_len", &self.towers.len())
+      .field("towers", &self.towers)
+      .finish()
+  }
+}
 
 pub(super) struct NodePtr<K, V> {
   pub(super) ptr: *const Node<K, V>,
@@ -70,6 +91,69 @@ impl<K, V> NodePtr<K, V> {
   pub(super) unsafe fn as_ptr(&self) -> &Node<K, V> {
     &*self.ptr.cast()
   }
+
+  #[inline]
+  pub(super) unsafe fn tower(&self, arena: &Arena, idx: usize) -> &Link {
+    let tower_ptr_offset = self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
+    let tower_ptr = arena.get_pointer(tower_ptr_offset);
+    &*tower_ptr.cast()
+  }
+
+  #[inline]
+  pub(super) unsafe fn write_tower(
+    &self,
+    arena: &Arena,
+    idx: usize,
+    prev_offset: u32,
+    next_offset: u32,
+  ) {
+    let tower_ptr_offset = self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
+    let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
+    *tower_ptr = Link::new(next_offset, prev_offset);
+  }
+
+  #[inline]
+  pub(super) fn towers(&self) -> &[Link] {
+    // Safety: the pointer must be valid
+    unsafe {
+      let node = self.as_ptr();
+      let tower_len = if node.key_offset == 0 {
+        MAX_HEIGHT
+      } else {
+        node.height as usize
+      };
+      core::slice::from_raw_parts(self.ptr.add(self.offset as usize + mem::size_of::<Node<K, V>>()).cast(), tower_len)
+    }
+  }
+
+  #[inline]
+  pub(super) fn with_towers(&self) -> NodePtrWithTower<K, V> {
+    NodePtrWithTower {
+      ptr: *self,
+      towers: self.towers(),
+    }
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
+  pub(super) unsafe fn next_offset(&self, arena: &Arena, idx: usize) -> u32 {
+    self.tower(arena, idx)
+      .next_offset
+      .load(Ordering::Acquire)
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
+  pub(super) unsafe fn prev_offset(&self, arena: &Arena, idx: usize) -> u32 {
+    self
+      .tower(arena, idx)
+      .prev_offset
+      .load(Ordering::Acquire)
+  }
 }
 
 #[derive(Debug)]
@@ -79,7 +163,8 @@ pub(super) struct Node<KT, VT> {
   pub(super) value_trailer: VT,
   // A byte slice is 24 bytes. We are trying to save space here.
   pub(super) key_offset: u32, // Immutable. No need to lock to access key.
-  pub(super) key_size: u32,   // Immutable. No need to lock to access key.
+  pub(super) key_size: u16,   // Immutable. No need to lock to access key.
+  pub(super) height: u16,
 
   pub(super) value_size: u32, // Immutable. No need to lock to access value.
   pub(super) alloc_size: u32, // Immutable. No need to lock to access
@@ -137,18 +222,18 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       panic!("combined key and value size is too large");
     }
 
-    let key_trailer_size = mem::size_of::<K>() as u32;
-    let value_trailer_size = mem::size_of::<V>() as u32;
+    let key_trailer_size = Self::key_trailer_size() as u32;
+    let value_trailer_size = Self::value_trailer_size() as u32;
 
     let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
 
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let unused_size = (MAX_HEIGHT as u32 - height) * (core::mem::size_of::<Link>() as u32);
+    let unused_size = (MAX_HEIGHT as u32 - height) * (mem::size_of::<Link>() as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
     let (node_offset, alloc_size) = arena.alloc(
-      node_size + key_size as u32 + value_size as u32 + key_trailer_size + value_trailer_size,
+      node_size + key_size as u32 + value_size as u32,
       align as u32,
       unused_size,
     )?;
@@ -161,7 +246,8 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       node.key_trailer = *key.trailer();
       node.value_trailer = *value.trailer();
       node.key_offset = node_offset + node_size + key_trailer_size + value_trailer_size;
-      node.key_size = key_size as u32;
+      node.key_size = key_size as u16;
+      node.height = height as u16;
       node.value_size = value_size as u32;
       node.alloc_size = alloc_size;
       node.get_key_mut(arena).copy_from_slice(key.as_bytes());
@@ -179,7 +265,7 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
     let value_trailer_size = Self::value_trailer_size();
     let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
     let (node_offset, alloc_size) = arena.alloc(
-      node_size + key_trailer_size as u32 + value_trailer_size as u32,
+      node_size,
       align as u32,
       unused_size,
     )?;
@@ -189,14 +275,13 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<K, V>);
-      // ptr::write_bytes(&mut node.key_trailer, 0, key_trailer_size);
-      // ptr::write_bytes(&mut node.value_trailer, 0, value_trailer_size);
+      ptr::write_bytes(&mut node.key_trailer, 0, key_trailer_size);
+      ptr::write_bytes(&mut node.value_trailer, 0, value_trailer_size);
       node.key_offset = 0;
       node.key_size = 0;
       node.value_size = 0;
+      node.height = MAX_HEIGHT as u16;
       node.alloc_size = alloc_size;
-      let tower_ptr: *mut Link = arena.get_pointer_mut(node_offset as usize).cast();
-      ptr::write_bytes(tower_ptr, 0, MAX_HEIGHT);
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -247,27 +332,5 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       self.key_offset as usize + self.key_size as usize,
       self.value_size as usize,
     )
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  pub(super) unsafe fn next_offset(&self, arena: &Arena, offset: u32, h: usize) -> u32 {
-    arena
-      .tower::<K, V>(offset as usize, h)
-      .next_offset
-      .load(Ordering::Acquire)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  pub(super) unsafe fn prev_offset(&self, arena: &Arena, offset: u32, h: usize) -> u32 {
-    arena
-      .tower::<K, V>(offset as usize, h)
-      .prev_offset
-      .load(Ordering::Acquire)
   }
 }

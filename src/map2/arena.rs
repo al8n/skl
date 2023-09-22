@@ -4,8 +4,7 @@ use crate::{
   Key, KeyTrailer, ValueTrailer, Value,
 };
 use ::alloc::boxed::Box;
-use core::{
-  mem,
+use core::{ 
   ptr::{self, NonNull},
   slice,
   sync::atomic::AtomicU64,
@@ -13,7 +12,7 @@ use core::{
 
 use crossbeam_utils::CachePadded;
 
-use super::node::{Link, Node};
+use super::node::Node;
 
 mod shared;
 use shared::Shared;
@@ -33,8 +32,8 @@ impl core::fmt::Debug for Arena {
     // The ptr is always non-null, we only deallocate it when the arena is dropped.
     let data = unsafe { slice::from_raw_parts(self.data_ptr.as_ptr(), allocated) };
     f.debug_struct("Arena")
-      // .field("cap", &self.cap)
-      // .field("allocated", &allocated)
+      .field("cap", &self.cap)
+      .field("allocated", &allocated)
       .field("data", &data)
       .finish()
   }
@@ -180,33 +179,6 @@ impl Arena {
       return ptr::null_mut();
     }
     self.data_ptr.as_ptr().add(offset)
-  }
-
-  /// ## Safety:
-  /// - The caller must make sure that `offset` must be less than the capacity of the arena and larger than 0.
-  #[inline]
-  pub(super) unsafe fn tower<'a, KT: KeyTrailer, VT: ValueTrailer>(&self, offset: usize, height: usize) -> &'a Link {
-    let ptr = self.get_pointer(offset + mem::size_of::<Node<KT, VT>>() + height * mem::size_of::<Link>());
-    &*ptr.cast()
-  }
-
-  /// ## Safety:
-  /// - The caller must make sure that `offset` must be less than the capacity of the arena and larger than 0.
-  #[inline]
-  pub(super) unsafe fn write_tower<'a, KT: KeyTrailer, VT: ValueTrailer>(
-    &self,
-    offset: usize,
-    height: usize,
-    prev_offset: u32,
-    next_offset: u32,
-  ) -> &'a Link {
-    let tower_offset = offset + mem::size_of::<Node<KT, VT>>() + height * mem::size_of::<Link>();
-    let ptr = self.get_pointer_mut(tower_offset);
-    let field_size = mem::size_of::<u32>();
-    slice::from_raw_parts_mut(ptr, field_size).copy_from_slice(&next_offset.to_ne_bytes());
-    slice::from_raw_parts_mut(ptr.add(field_size), field_size)
-      .copy_from_slice(&prev_offset.to_ne_bytes());
-    &*ptr.cast()
   }
 }
 

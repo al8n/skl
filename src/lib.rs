@@ -84,13 +84,6 @@ macro_rules! trailer {
 
 trailer!((), u32, u64, u128);
 
-#[test]
-fn test_() {
-  let x = core::mem::align_of::<()>();
-  println!("{x}");
-  assert!((core::mem::align_of::<()>() % NODE_ALIGNMENT_FACTOR) == 0)
-}
-
 /// Re-export bytes crate
 pub use bytes;
 

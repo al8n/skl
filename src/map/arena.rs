@@ -1,258 +1,184 @@
-use super::Node;
 use crate::{
-  key::{KeyRef, TIMESTAMP_SIZE},
-  sync::{AtomicMut, AtomicPtr, AtomicU64, Ordering},
-  value::ValueRef,
+  error::Error,
+  sync::{AtomicMut, AtomicPtr, Ordering},
+  Key, KeyTrailer, Value, ValueTrailer,
 };
 use ::alloc::boxed::Box;
 use core::{
-  mem,
   ptr::{self, NonNull},
   slice,
+  sync::atomic::AtomicU64,
 };
+
+use crossbeam_utils::CachePadded;
+
+use super::node::Node;
 
 mod shared;
 use shared::Shared;
 
 /// Arena should be lock-free
-pub(super) struct Arena {
+pub struct Arena {
   data_ptr: NonNull<u8>,
+  n: CachePadded<AtomicU64>,
   inner: AtomicPtr<()>,
   cap: usize,
 }
 
 impl core::fmt::Debug for Arena {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    let inner = self.inner();
-    inner.as_slice().fmt(f)
+    let allocated = self.size();
+    // Safety:
+    // The ptr is always non-null, we only deallocate it when the arena is dropped.
+    let data = unsafe { slice::from_raw_parts(self.data_ptr.as_ptr(), allocated) };
+    f.debug_struct("Arena")
+      .field("cap", &self.cap)
+      .field("allocated", &allocated)
+      .field("data", &data)
+      .finish()
   }
 }
 
 impl Arena {
+  /// Returns the number of bytes allocated by the arena.
   #[inline]
-  pub(super) fn new_vec(n: usize) -> Self {
-    let mut inner = Shared::new_vec(n.max(Node::MAX_NODE_SIZE));
-    let data_ptr = unsafe { NonNull::new_unchecked(inner.as_mut_ptr()) };
-    Self {
-      cap: inner.cap(),
-      inner: AtomicPtr::new(Box::into_raw(Box::new(inner)) as _),
-      data_ptr,
-    }
+  pub fn size(&self) -> usize {
+    self.n.load(Ordering::Acquire) as usize
   }
 
-  #[cfg(feature = "mmap")]
+  /// Returns the capacity of the arena.
   #[inline]
-  pub(super) fn new_mmap(n: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
-    let mut inner = Shared::new_mmaped(n.max(Node::MAX_NODE_SIZE), file, lock)?;
-    let data_ptr = unsafe { NonNull::new_unchecked(inner.as_mut_ptr()) };
-    Ok(Self {
-      cap: inner.cap(),
-      inner: AtomicPtr::new(Box::into_raw(Box::new(inner)) as _),
-      data_ptr,
-    })
-  }
-
-  #[cfg(feature = "mmap")]
-  #[inline]
-  pub(super) fn new_anonymous_mmap(n: usize) -> std::io::Result<Self> {
-    let mut inner = Shared::new_mmaped_anon(n.max(Node::MAX_NODE_SIZE))?;
-    let data_ptr = unsafe { NonNull::new_unchecked(inner.as_mut_ptr()) };
-    Ok(Self {
-      cap: inner.cap(),
-      inner: AtomicPtr::new(Box::into_raw(Box::new(inner)) as _),
-      data_ptr,
-    })
-  }
-
-  pub(super) fn put_key(&self, key: KeyRef<'_>) -> (u32, bool) {
-    let version = key.version();
-    if version == 0 {
-      let key_size = key.len();
-      let offset = self.allocate(key_size as u32);
-      unsafe {
-        core::ptr::copy_nonoverlapping(
-          key.as_ref().as_ptr(),
-          self.get_data_ptr_mut(offset as usize),
-          key_size,
-        );
-      }
-      (offset, false)
-    } else {
-      let key_size = TIMESTAMP_SIZE + key.len();
-      let offset = self.allocate(key_size as u32);
-      unsafe {
-        let buf = slice::from_raw_parts_mut(self.get_data_ptr_mut(offset as usize), key_size);
-        buf[..key_size - TIMESTAMP_SIZE].copy_from_slice(key.as_ref());
-        buf[key_size - TIMESTAMP_SIZE..].copy_from_slice(&version.to_be_bytes());
-      }
-      (offset, true)
-    }
-  }
-
-  pub(super) fn put_val(&self, val: ValueRef<'_>) -> u32 {
-    let l = val.encoded_size();
-    let offset = self.allocate(l as u32);
-    let buf = unsafe { slice::from_raw_parts_mut(self.get_data_ptr_mut(offset as usize), l) };
-    val.encode(buf);
-    offset
-  }
-
-  pub(super) fn new_node(
-    &self,
-    key: KeyRef<'_>,
-    val: ValueRef<'_>,
-    height: usize,
-  ) -> (*mut Node, u32) {
-    let node_offset = self.put_node(height);
-
-    let key_len = key.len();
-    let (key_offset, timestamped) = self.put_key(key);
-    let v_encode_size = val.encoded_size() as u32;
-    let val = Node::encode_value(self.put_val(val), v_encode_size);
-
-    let (node, offset) = unsafe {
-      let (node_ptr, offset) = self.get_node(node_offset);
-      (&mut *node_ptr, offset)
-    };
-    node.key_offset = key_offset;
-    node.key_size = key_len as u16;
-    node.height = height as u8;
-    node.timestamped = timestamped as u8;
-    node.val = AtomicU64::new(val);
-    (node, offset)
-  }
-
-  pub(super) fn get_node(&self, offset: u32) -> (*mut Node, u32) {
-    if offset == 0 || offset >= self.cap as u32 {
-      return (ptr::null_mut(), 0);
-    }
-    (
-      self.get_data_ptr_mut(offset as usize).cast(),
-      offset + Node::TOWER_OFFSET as u32,
-    )
-  }
-
-  pub(super) fn get_key<'a, 'b: 'a>(
-    &'a self,
-    offset: u32,
-    size: u16,
-    timestamped: bool,
-  ) -> KeyRef<'b> {
-    let size = size as usize;
-    let ptr = self.get_data_ptr(offset as usize);
-    // Safety: the underlying ptr will never be freed until the Arena is dropped.
-    unsafe {
-      KeyRef {
-        expires_at: if timestamped {
-          u64::from_be_bytes(
-            slice::from_raw_parts(ptr.add(size), TIMESTAMP_SIZE)
-              .try_into()
-              .unwrap(),
-          )
-        } else {
-          0
-        },
-        data: slice::from_raw_parts(ptr, size),
-      }
-    }
-  }
-
-  pub(super) fn get_val<'a, 'b: 'a>(&'a self, offset: u32, size: u32) -> ValueRef<'b> {
-    let ptr = self.get_data_ptr(offset as usize);
-    // Safety: the underlying ptr will never be freed until the Arena is dropped.
-    unsafe { ValueRef::decode(slice::from_raw_parts(ptr, size as usize)) }
-  }
-
-  pub(super) fn get_node_offset(&self, node: *const Node) -> u32 {
-    if node.is_null() {
-      return 0;
-    }
-    (node as usize - self.data_ptr.as_ptr() as usize) as u32
-  }
-
-  #[inline]
-  pub(super) const fn cap(&self) -> usize {
+  pub const fn capacity(&self) -> usize {
     self.cap
   }
-
-  #[inline]
-  pub(super) fn tower<'a>(&self, offset: usize, height: usize) -> &'a crate::sync::AtomicU32 {
-    unsafe {
-      let ptr = self.get_data_ptr(offset + height * mem::size_of::<crate::sync::AtomicU32>());
-      &*ptr.cast()
-    }
-  }
 }
 
 impl Arena {
   #[inline]
-  fn allocate(&self, sz: u32) -> u32 {
-    let offset = self.inner().n.fetch_add(sz, Ordering::SeqCst) + sz;
-    assert!(
-      (offset as usize) <= self.cap,
-      "Arena: ARENA does not have enough space"
-    );
-    offset - sz
+  const fn min_cap<K: KeyTrailer, V: ValueTrailer>() -> usize {
+    (Node::<K, V>::MAX_NODE_SIZE * 2) as usize
   }
 
-  /// Compute the amount of the tower that will never be used, since the height
-  /// is less than Node::MAX_HEIGHT.
-  #[inline(always)]
-  fn unused_size(&self, height: usize) -> usize {
-    (Node::MAX_HEIGHT - height) * Node::OFFSET_SIZE
+  #[inline]
+  pub(super) fn new_vec<K: Key, V: Value>(n: usize) -> Self {
+    Self::new(Shared::new_vec(
+      n.max(Self::min_cap::<K::Trailer, V::Trailer>()),
+    ))
   }
 
-  fn put_node(&self, height: usize) -> u32 {
-    // Compute the amount of the tower that will never be used, since the height
-    // is less than maxHeight.
-    let unused_size = self.unused_size(height);
+  #[cfg(feature = "mmap")]
+  #[inline]
+  pub(super) fn new_mmap<K: Key, V: Value>(
+    n: usize,
+    file: std::fs::File,
+    lock: bool,
+  ) -> std::io::Result<Self> {
+    Shared::new_mmaped(n.max(Self::min_cap::<K::Trailer, V::Trailer>()), file, lock).map(Self::new)
+  }
 
-    // Pad the allocation with enough bytes to ensure pointer alignment.
-    let l = (Node::MAX_NODE_SIZE - unused_size + Node::NODE_ALIGN) as u32;
-    let n = self.allocate(l);
+  #[cfg(feature = "mmap")]
+  #[inline]
+  pub(super) fn new_anonymous_mmap<K: Key, V: Value>(n: usize) -> std::io::Result<Self> {
+    Shared::new_mmaped_anon(n.max(Self::min_cap::<K::Trailer, V::Trailer>())).map(Self::new)
+  }
+
+  #[inline]
+  fn new(mut shared: Shared) -> Self {
+    // Safety:
+    // The ptr is always non-null, we just initialized it.
+    // And this ptr is only deallocated when the arena is dropped.
+    let data_ptr = unsafe { NonNull::new_unchecked(shared.as_mut_ptr()) };
+    Self {
+      cap: shared.cap(),
+      inner: AtomicPtr::new(Box::into_raw(Box::new(shared)) as _),
+      data_ptr,
+      // Don't store data at position 0 in order to reserve offset=0 as a kind
+      // of nil pointer.
+      n: CachePadded::new(AtomicU64::new(1)),
+    }
+  }
+
+  #[inline]
+  pub(super) fn alloc(&self, size: u32, align: u32, overflow: u32) -> Result<(u32, u32), Error> {
+    // Verify that the arena isn't already full.
+    let orig_size = self.n.load(Ordering::Acquire);
+    if orig_size > self.cap as u64 {
+      return Err(Error::Full);
+    }
+
+    // Pad the allocation with enough bytes to ensure the requested alignment.
+    let padded = size as u64 + align as u64 - 1;
+
+    let new_size = self.n.fetch_add(padded, Ordering::AcqRel) + padded;
+
+    if new_size + overflow as u64 > self.cap as u64 {
+      return Err(Error::Full);
+    }
 
     // Return the aligned offset.
-    (n + Node::NODE_ALIGN as u32) & !(Node::NODE_ALIGN as u32)
+    let offset = (new_size as u32 - size) & !(align - 1);
+
+    Ok((offset, padded as u32))
   }
 
+  /// ## Safety:
+  /// - The caller must make sure that `offset` must be less than the capacity of the arena.
+  /// - The caller must make sure that `size` must be less than the capacity of the arena.
+  /// - The caller must make sure that `offset + size` must be less than the capacity of the arena.
   #[inline]
-  fn inner(&self) -> &Shared {
-    unsafe { &*(self.inner.load(Ordering::Acquire) as *const Shared) }
+  pub(super) unsafe fn get_bytes(&self, offset: usize, size: usize) -> &[u8] {
+    if offset == 0 {
+      return &[];
+    }
+
+    let ptr = self.get_pointer(offset);
+    slice::from_raw_parts(ptr, size)
   }
 
+  /// ## Safety:
+  /// - The caller must make sure that `offset` must be less than the capacity of the arena.
+  /// - The caller must make sure that `size` must be less than the capacity of the arena.
+  /// - The caller must make sure that `offset + size` must be less than the capacity of the arena.
   #[allow(clippy::mut_from_ref)]
   #[inline]
-  fn inner_mut(&self) -> &mut Shared {
-    unsafe { &mut *(self.inner.load(Ordering::Acquire) as *mut Shared) }
-  }
-
-  #[inline]
-  fn get_data_ptr(&self, offset: usize) -> *const u8 {
-    unsafe { self.data_ptr.as_ptr().add(offset) }
-  }
-
-  #[inline]
-  fn get_data_ptr_mut(&self, offset: usize) -> *mut u8 {
-    unsafe { self.data_ptr.as_ptr().add(offset) }
-  }
-}
-
-unsafe impl Send for Arena {}
-unsafe impl Sync for Arena {}
-
-impl Clone for Arena {
-  fn clone(&self) -> Self {
-    let inner = self.inner_mut();
-    let old_size = inner.refs.fetch_add(1, Ordering::Relaxed);
-    if old_size > usize::MAX >> 1 {
-      abort();
+  pub(super) unsafe fn get_bytes_mut(&self, offset: usize, size: usize) -> &mut [u8] {
+    if offset == 0 {
+      return &mut [];
     }
 
-    Self {
-      cap: self.cap,
-      inner: AtomicPtr::new(inner as *mut Shared as _),
-      data_ptr: self.data_ptr,
+    let ptr = self.get_pointer_mut(offset);
+    slice::from_raw_parts_mut(ptr, size)
+  }
+
+  // /// ## Safety:
+  // /// - The caller must make sure that `ptr` must be less than the end bound of the arena.
+  // #[inline]
+  // pub(super) unsafe fn get_pointer_offset(&self, ptr: *const u8) -> usize {
+  //   if ptr.is_null() {
+  //     return 0;
+  //   }
+
+  //   ptr.offset_from(self.data_ptr.as_ptr()) as usize
+  // }
+
+  /// ## Safety:
+  /// - The caller must make sure that `offset` must be less than the capacity of the arena.
+  #[inline]
+  pub(super) unsafe fn get_pointer(&self, offset: usize) -> *const u8 {
+    if offset == 0 {
+      return ptr::null();
     }
+    self.data_ptr.as_ptr().add(offset)
+  }
+
+  /// ## Safety:
+  /// - The caller must make sure that `offset` must be less than the capacity of the arena.
+  #[inline]
+  pub(super) unsafe fn get_pointer_mut(&self, offset: usize) -> *mut u8 {
+    if offset == 0 {
+      return ptr::null_mut();
+    }
+    self.data_ptr.as_ptr().add(offset)
   }
 }
 
@@ -288,29 +214,12 @@ impl Drop for Arena {
         // instead.
         (*shared).refs.load(Ordering::Acquire);
         // Drop the data
-        drop(Box::from_raw(shared));
+        let mut shared = Box::from_raw(shared);
+
+        // Relaxed is enough here as we're in a drop, no one else can
+        // access this memory anymore.
+        shared.unmount(self.n.load(Ordering::Relaxed) as usize);
       });
     }
-  }
-}
-
-#[inline(never)]
-#[cold]
-fn abort() -> ! {
-  #[cfg(feature = "std")]
-  {
-    std::process::abort();
-  }
-
-  #[cfg(not(feature = "std"))]
-  {
-    struct Abort;
-    impl Drop for Abort {
-      fn drop(&mut self) {
-        panic!();
-      }
-    }
-    let _a = Abort;
-    panic!("abort");
   }
 }

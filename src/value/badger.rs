@@ -84,7 +84,7 @@ impl BadgerValueTrailer {
   }
 }
 
-/// 
+///
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BadgerValue {
   trailer: BadgerValueTrailer,

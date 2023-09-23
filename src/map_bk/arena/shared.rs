@@ -5,7 +5,10 @@ use core::{
   ptr, slice,
 };
 
-use crate::sync::AtomicUsize;
+use crate::{
+  map::Node,
+  sync::{AtomicU32, AtomicUsize, Ordering},
+};
 
 #[derive(Debug)]
 struct AlignedVec {
@@ -26,7 +29,7 @@ impl Drop for AlignedVec {
 }
 
 impl AlignedVec {
-  const ALIGNMENT: usize = 4;
+  const ALIGNMENT: usize = core::mem::align_of::<Node>();
 
   const MAX_CAPACITY: usize = isize::MAX as usize - (Self::ALIGNMENT - 1);
 
@@ -106,6 +109,7 @@ enum SharedBackend {
 }
 
 pub(super) struct Shared {
+  pub(super) n: AtomicU32,
   pub(super) refs: AtomicUsize,
   cap: usize,
   backend: SharedBackend,
@@ -118,6 +122,9 @@ impl Shared {
       cap: vec.cap,
       backend: SharedBackend::Vec(vec),
       refs: AtomicUsize::new(1),
+      // Don't store data at position 0 in order to reserve offset=0 as a kind
+      // of nil pointer.
+      n: AtomicU32::new(1),
     }
   }
 
@@ -134,14 +141,19 @@ impl Shared {
         memmapix::MmapOptions::new()
           .len(cap)
           .map_mut(&file)
-          .map(|mmap| Self {
-            cap,
-            backend: SharedBackend::Mmap {
-              buf: Box::into_raw(Box::new(mmap)),
-              file,
-              lock,
-            },
-            refs: AtomicUsize::new(1),
+          .map(|mmap| {
+            Self {
+              cap,
+              backend: SharedBackend::Mmap {
+                buf: Box::into_raw(Box::new(mmap)),
+                file,
+                lock,
+              },
+              refs: AtomicUsize::new(1),
+              // Don't store data at position 0 in order to reserve offset=0 as a kind
+              // of nil pointer.
+              n: AtomicU32::new(1),
+            }
           })
       })
     }
@@ -152,11 +164,27 @@ impl Shared {
     memmapix::MmapOptions::new()
       .len(cap)
       .map_anon()
-      .map(|mmap| Self {
-        cap,
-        backend: SharedBackend::AnonymousMmap(mmap),
-        refs: AtomicUsize::new(1),
+      .map(|mmap| {
+        Self {
+          cap,
+          backend: SharedBackend::AnonymousMmap(mmap),
+          refs: AtomicUsize::new(1),
+          // Don't store data at position 0 in order to reserve offset=0 as a kind
+          // of nil pointer.
+          n: AtomicU32::new(1),
+        }
       })
+  }
+
+  pub(super) fn as_slice(&self) -> &[u8] {
+    let end = self.n.load(Ordering::Acquire) as usize;
+    match &self.backend {
+      SharedBackend::Vec(vec) => &vec.as_slice()[..end],
+      #[cfg(feature = "mmap")]
+      SharedBackend::Mmap { buf: mmap, .. } => unsafe { &(&**mmap)[..end] },
+      #[cfg(feature = "mmap")]
+      SharedBackend::AnonymousMmap(mmap) => &mmap[..end],
+    }
   }
 
   pub(super) fn as_mut_ptr(&mut self) -> *mut u8 {
@@ -173,12 +201,10 @@ impl Shared {
   pub(super) const fn cap(&self) -> usize {
     self.cap
   }
+}
 
-  /// Only works on mmap with a file backend, unmounts the memory mapped file and truncates it to the specified size.
-  ///
-  /// ## Safety:
-  /// - This method must be invoked in the drop impl of `Arena`.
-  pub(super) unsafe fn unmount(&mut self, size: usize) {
+impl Drop for Shared {
+  fn drop(&mut self) {
     #[cfg(feature = "mmap")]
     if let SharedBackend::Mmap { buf, file, lock } = &self.backend {
       use fs4::FileExt;
@@ -187,19 +213,22 @@ impl Shared {
       // to report them would be through panicking which is highly discouraged
       // in Drop impls, c.f. https://github.com/rust-lang/lang-team/issues/97
 
-      {
-        let mmap = &**buf;
-        let _ = mmap.flush();
-      }
+      unsafe {
+        {
+          let mmap = &**buf;
+          let _ = mmap.flush();
+        }
 
-      // we must trigger the drop of the mmap before truncating the file
-      drop(Box::from_raw(*buf));
+        // we must trigger the drop of the mmap before truncating the file
+        drop(Box::from_raw(*buf));
 
-      // relaxed ordering is enough here as we're in a drop, no one else can
-      // access this memory anymore.
-      let _ = file.set_len(size as u64);
-      if *lock {
-        let _ = file.unlock();
+        // relaxed ordering is enough here as we're in a drop, no one else can
+        // access this memory anymore.
+        let size = self.n.load(Ordering::Relaxed);
+        let _ = file.set_len(size as u64);
+        if *lock {
+          let _ = file.unlock();
+        }
       }
     }
   }

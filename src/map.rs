@@ -1,282 +1,115 @@
-use super::{
-  key::{Key, KeyRef},
-  sync::{AtomicU32, AtomicU64, Ordering},
-  value::{Value, ValueRef},
-};
-use core::{cmp, mem, ptr};
+use core::cmp;
+
 use crossbeam_utils::CachePadded;
+
+use crate::{
+  error::Error,
+  key::AsKeyRef,
+  sync::{AtomicU32, Ordering},
+  value::AsValueRef,
+  Comparator, Key, KeyRef, Value, ValueRef, NODE_ALIGNMENT_FACTOR,
+};
 
 mod arena;
 use arena::Arena;
+mod node;
+use node::Node;
 
+#[cfg(test)]
+mod tests;
+
+use self::node::NodePtr;
+
+const MAX_HEIGHT: usize = 20;
+
+/// Precompute the skiplist probabilities so that only a single random number
+/// needs to be generated and so that the optimal pvalue can be used (inverse
+/// of Euler's number).
+const PROBABILITIES: [u32; MAX_HEIGHT] = {
+  const P: f64 = 1.0 / core::f64::consts::E;
+
+  let mut probabilities = [0; MAX_HEIGHT];
+  let mut p = 1f64;
+
+  let mut i = 0;
+  while i < MAX_HEIGHT {
+    probabilities[i] = ((u32::MAX as f64) * p) as u32;
+    p *= P;
+    i += 1;
+  }
+
+  probabilities
+};
+
+/// A fast, cocnurrent map implementation based on skiplist that supports forward
+/// and backward iteration. Keys and values are immutable once added to the skipmap and
+/// deletion is not supported. Instead, higher-level code is expected to add new
+/// entries that shadow existing entries and perform deletion via tombstones. It
+/// is up to the user to process these shadow entries and tombstones
+/// appropriately during retrieval.
 #[derive(Debug)]
-#[repr(C, align(8))]
-pub(crate) struct Node {
-  // Multiple parts of the value are encoded as a single uint64 so that it
-  // can be atomically loaded and stored:
-  //   value offset: uint32 (bits 0-31)
-  //   value size  : uint16 (bits 32-63)
-  pub(crate) val: AtomicU64,
-
-  // A byte slice is 24 bytes. We are trying to save space here.
-  pub(crate) key_offset: u32, // Immutable. No need to lock to access key.
-  pub(crate) key_size: u16,   // Immutable. No need to lock to access key.
-
-  // Height of the tower.
-  pub(crate) height: u8,
-  // Mark the key is timestamped or not, 0 means not timestamped, 1 means timestamped.
-  pub(crate) timestamped: u8,
-  // Most nodes do not need to use the full height of the tower, since the
-  // probability of each successive level decreases exponentially. Because
-  // these elements are never accessed, they do not need to be allocated.
-  // Therefore, when a node is allocated in the arena, its memory footprint
-  // is deliberately truncated to not include unneeded tower elements.
-  //
-  // All accesses to elements should use CAS operations, with no need to lock.
-  // pub(crate) tower: [crate::sync::AtomicU32; Self::MAX_HEIGHT],
-}
-
-impl Node {
-  /// Always align nodes on 64-bit boundaries, even on 32-bit architectures,
-  /// so that the node.value field is 64-bit aligned. This is necessary because
-  /// node.getValueOffset uses atomic.LoadUint64, which expects its input
-  /// pointer to be 64-bit aligned.
-  const NODE_ALIGN: usize = mem::size_of::<u64>() - 1;
-
-  /// MAX_NODE_SIZE is the memory footprint of a node of maximum height.
-  const MAX_NODE_SIZE: usize =
-    mem::size_of::<Self>() + Self::MAX_HEIGHT * mem::size_of::<crate::sync::AtomicU32>();
-
-  const MAX_HEIGHT: usize = 20;
-
-  const OFFSET_SIZE: usize = mem::size_of::<u32>();
-
-  const HEIGHT_INCREASE: u32 = u32::MAX / 3;
-
-  const TOWER_OFFSET: usize = mem::size_of::<AtomicU64>()
-    + mem::size_of::<u32>()
-    + mem::size_of::<u16>()
-    + mem::size_of::<u8>()
-    + mem::size_of::<u8>();
-
-  #[inline]
-  fn set_val(&self, vo: u64) {
-    self.val.store(vo, Ordering::Release)
-  }
-
-  /// (val_offset, val_size)
-  #[inline]
-  fn get_value_offset(&self) -> (u32, u32) {
-    Node::decode_value(self.val.load(Ordering::Acquire))
-  }
-
-  #[inline]
-  fn get_next_offset(&self, arena: &Arena, offset: u32, height: usize) -> u32 {
-    arena.tower(offset as usize, height).load(Ordering::Acquire)
-  }
-
-  #[inline]
-  fn encode_value(val_offset: u32, val_size: u32) -> u64 {
-    ((val_size as u64) << 32) | (val_offset as u64)
-  }
-
-  /// (val_offset, val_size)
-  #[inline]
-  fn decode_value(value: u64) -> (u32, u32) {
-    (value as u32, (value >> 32) as u32)
-  }
-
-  #[inline]
-  fn key<'a, 'b>(&'a self, arena: &'a Arena) -> KeyRef<'b> {
-    arena.get_key(self.key_offset, self.key_size, self.timestamped == 1)
-  }
-
-  #[inline]
-  const fn timestamped(&self) -> bool {
-    self.timestamped == 1
-  }
-}
-
-/// Fixed size lock-free ARENA based skiplist.
-#[derive(Debug)]
-pub struct SkipMap {
-  // Current height. 1 <= height <= kMaxHeight. CAS.
-  height: CachePadded<AtomicU32>,
-  head_offset: u32,
+pub struct SkipMap<K: Key, V: Value, C: Comparator = ()> {
   arena: Arena,
+  head: NodePtr<K::Trailer, V::Trailer>,
+  tail: NodePtr<K::Trailer, V::Trailer>,
+
+  /// Current height. 1 <= height <= kMaxHeight. CAS.
+  height: CachePadded<AtomicU32>,
+  len: CachePadded<AtomicU32>,
+
+  /// If set to true by tests, then extra delays are added to make it easier to
+  /// detect unusual race conditions.
+  #[cfg(test)]
+  testing: bool,
+
+  cmp: C,
 }
 
-impl SkipMap {
+// Safety: SkipMap is Sync and Send
+unsafe impl<K: Key, V: Value, C: Comparator> Send for SkipMap<K, V, C> {}
+unsafe impl<K: Key, V: Value, C: Comparator> Sync for SkipMap<K, V, C> {}
+
+// --------------------------------Public Methods--------------------------------
+impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
+  /// Returns the height of the highest tower within any of the nodes that
+  /// have ever been allocated as part of this skiplist.
   #[inline]
-  fn get_head(&self) -> (*const Node, u32) {
-    let (ptr, offset) = self.arena.get_node(self.head_offset);
-    (ptr, offset)
+  pub fn height(&self) -> u32 {
+    self.height.load(Ordering::Acquire)
   }
 
+  /// Returns the arena backing this skipmap.
   #[inline]
-  fn get_next(&self, nd: *const Node, offset: u32, height: usize) -> (*const Node, u32) {
-    unsafe {
-      match nd.as_ref() {
-        None => (ptr::null(), 0),
-        Some(nd) => {
-          let (ptr, offset) = self
-            .arena
-            .get_node(nd.get_next_offset(&self.arena, offset, height));
-          (ptr, offset)
-        }
-      }
-    }
+  pub fn arena(&self) -> &Arena {
+    &self.arena
   }
 
-  // findNear finds the node near to key.
-  // If less=true, it finds rightmost node such that node.key < key (if allowEqual=false) or
-  // node.key <= key (if allowEqual=true).
-  // If less=false, it finds leftmost node such that node.key > key (if allowEqual=false) or
-  // node.key >= key (if allowEqual=true).
-  // Returns the node found. The bool returned is true if the node has key equal to given key.
-  fn find_near(&self, key: KeyRef<'_>, less: bool, allow_equal: bool) -> (*const Node, u32, bool) {
-    let (mut curr, mut curr_offset) = self.get_head();
-    let mut level = (self.get_height() - 1) as usize;
-    loop {
-      // Assume curr.key < key.
-      let (next, next_offset) = self.get_next(curr, curr_offset, level);
-
-      if next.is_null() {
-        // curr.key < key < END OF LIST
-        if level > 0 {
-          // Can descend further to iterate closer to the end.
-          level -= 1;
-          continue;
-        }
-
-        // Level=0. Cannot descend further. Let's return something that makes sense.
-        if !less {
-          return (ptr::null(), 0, false);
-        }
-
-        // Try to return curr. Make sure it is not a curr node.
-        let (head, _) = self.get_head();
-        if curr == head {
-          return (ptr::null(), 0, false);
-        }
-        return (curr, curr_offset, false);
-      }
-
-      // Safety: we have checked next is not null
-      let next_key = unsafe { (*next).key(&self.arena) };
-      match key.cmp(&next_key) {
-        cmp::Ordering::Less => {
-          // cmp < 0. In other words, curr.key < key < next.
-          if level > 0 {
-            level -= 1;
-            continue;
-          }
-
-          // At base level. Need to return something.
-          if !less {
-            return (next, next_offset, false);
-          }
-
-          // Try to return curr. Make sure it is not a head node.
-          let (head, _) = self.get_head();
-          if curr == head {
-            return (ptr::null(), 0, false);
-          }
-
-          return (curr, curr_offset, false);
-        }
-        cmp::Ordering::Equal => {
-          // curr.key < key == next.key.
-          if allow_equal {
-            return (next, next_offset, true);
-          }
-
-          if !less {
-            // We want >, so go to base level to grab the next bigger node.
-            let (rt, rt_offset) = self.get_next(next, next_offset, 0);
-            return (rt, rt_offset, false);
-          }
-
-          // We want <. If not base level, we should go closer in the next level.
-          if level > 0 {
-            level -= 1;
-            continue;
-          }
-
-          // On base level. Return curr.
-          let (head, _) = self.get_head();
-          if curr == head {
-            return (ptr::null(), 0, false);
-          }
-          return (curr, curr_offset, false);
-        }
-        cmp::Ordering::Greater => {
-          // curr.key < next.key < key. We can continue to move right.
-          curr = next;
-          curr_offset = next_offset;
-          continue;
-        }
-      }
-    }
-  }
-
-  /// findSpliceForLevel returns (outBefore, outAfter) with outBefore.key <= key <= outAfter.key.
-  /// The input "before" tells us where to start looking.
-  /// If we found a node with the same key, then we return outBefore = outAfter.
-  /// Otherwise, outBefore.key < key < outAfter.key.
-  fn find_splice_for_level(&self, key: KeyRef<'_>, mut before: u32, level: usize) -> (u32, u32) {
-    unsafe {
-      loop {
-        // Assume before.key < key.
-        let (before_node, before_node_offset) = self.arena.get_node(before);
-        let next = (*before_node).get_next_offset(&self.arena, before_node_offset, level);
-        let (next_node, _) = self.arena.get_node(next);
-        if next_node.is_null() {
-          return (before, next);
-        }
-        // Safety: we have checked next_node is not null.
-        let next_key = (*next_node).key(&self.arena);
-        match key.cmp(&next_key) {
-          cmp::Ordering::Less => return (before, next),
-          cmp::Ordering::Equal => return (next, next),
-          cmp::Ordering::Greater => {
-            // Keep moving right on this level.
-            before = next;
-            continue;
-          }
-        }
-      }
-    }
-  }
-
-  fn find_last(&self) -> *const Node {
-    let (mut n, mut n_offset) = self.get_head();
-    let mut level = self.get_height() - 1;
-    loop {
-      let (next, next_offset) = self.get_next(n, n_offset, level as usize);
-      if !next.is_null() {
-        n = next;
-        n_offset = next_offset;
-        continue;
-      }
-      if level == 0 {
-        let (head, _) = self.get_head();
-        if n == head {
-          return ptr::null();
-        }
-        return n;
-      }
-      level -= 1;
-    }
-  }
-
+  /// Returns the number of bytes that have allocated from the arena.
   #[inline]
-  fn get_height(&self) -> u32 {
-    self.height.load(Ordering::SeqCst)
+  pub fn size(&self) -> usize {
+    self.arena.size()
+  }
+
+  /// Returns the number of entries in the skipmap.
+  #[inline]
+  pub fn len(&self) -> usize {
+    self.len.load(Ordering::Acquire) as usize
+  }
+
+  /// Returns true if the skipmap is empty.
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
   }
 }
 
-impl SkipMap {
+#[inline]
+const fn alignment_assertion<K: Key, V: Value>() {
+  assert!(((core::mem::align_of::<K::Trailer>() % NODE_ALIGNMENT_FACTOR) == 0) || (core::mem::size_of::<K::Trailer>() == 0), "Invalid Trailer type of key, the alignment of the types implement Trailer trait must be a multiple of 4 or (ZST) zero sized type.");
+  assert!(((core::mem::align_of::<V::Trailer>() % NODE_ALIGNMENT_FACTOR) == 0) || (core::mem::size_of::<V::Trailer>() == 0), "Invalid Trailer type of value, the alignment of the types implement Trailer trait must be a multiple of 4 or (ZST) zero sized type.");
+}
+
+impl<K: Key, V: Value> SkipMap<K, V> {
   /// Create a new skiplist according to the given capacity
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -297,19 +130,9 @@ impl SkipMap {
   ///   it's more direct in requesting large chunks of memory from the OS.
   ///
   /// [`SkipMap::mmap_anon`]: #method.mmap_anon
-  pub fn new(cap: usize) -> Self {
-    let arena = Arena::new_vec(cap);
-    let (head, _) = arena.new_node(
-      Key::new().as_key_ref(),
-      Value::new().as_value_ref(),
-      Node::MAX_HEIGHT,
-    );
-    let ho = arena.get_node_offset(head);
-    Self {
-      height: CachePadded::new(AtomicU32::new(1)),
-      arena,
-      head_offset: ho,
-    }
+  pub fn new(cap: usize) -> Result<Self, Error> {
+    let arena = Arena::new_vec::<K, V>(cap);
+    Self::new_in(arena, ())
   }
 
   /// Create a new skipmap according to the given capacity, and mmaped to a file.
@@ -321,18 +144,8 @@ impl SkipMap {
   #[cfg(feature = "mmap")]
   #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
   pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
-    let arena = Arena::new_mmap(cap, file, lock)?;
-    let (head, _) = arena.new_node(
-      Key::new().as_key_ref(),
-      Value::new().as_value_ref(),
-      Node::MAX_HEIGHT,
-    );
-    let ho = arena.get_node_offset(head);
-    Ok(Self {
-      height: CachePadded::new(AtomicU32::new(1)),
-      arena,
-      head_offset: ho,
-    })
+    let arena = Arena::new_mmap::<K, V>(cap, file, lock)?;
+    Self::new_in(arena, ()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
@@ -353,358 +166,643 @@ impl SkipMap {
   #[cfg(feature = "mmap")]
   #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
   pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
-    let arena = Arena::new_anonymous_mmap(cap)?;
-    let (head, _) = arena.new_node(
-      Key::new().as_key_ref(),
-      Value::new().as_value_ref(),
-      Node::MAX_HEIGHT,
-    );
-    let ho = arena.get_node_offset(head);
-    Ok(Self {
-      height: CachePadded::new(AtomicU32::new(1)),
-      arena,
-      head_offset: ho,
+    let arena = Arena::new_anonymous_mmap::<K, V>(cap)?;
+    Self::new_in(arena, ()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+  }
+}
+
+impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
+  /// Set comparator for the skipmap.
+  pub fn with_comparator<NC: Comparator>(this: SkipMap<K, V, NC>, cmp: C) -> Self {
+    Self {
+      arena: this.arena,
+      head: this.head,
+      tail: this.tail,
+      height: this.height,
+      #[cfg(test)]
+      testing: this.testing,
+      cmp,
+      len: this.len,
+    }
+  }
+
+  /// Returns true if the key exists in the map.
+  #[inline]
+  pub fn contains_key<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> bool
+  where
+    K::Trailer: 'b,
+    V::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+  {
+    self.get(key).is_some()
+  }
+
+  /// Returns the value of the first entry in the map.
+  pub fn first(&self) -> Option<ValueRef<V>> {
+    // Safety: head node was definitely allocated by self.arena
+    let nd = unsafe { self.get_next(self.head, 0) };
+    if nd.is_null() || nd.ptr == self.tail.ptr {
+      return None;
+    }
+
+    // Safety: we already check the not is not null, and the node is allocated by self.arena
+    unsafe {
+      let node = nd.as_ptr();
+      Some(ValueRef::new(
+        node.get_value(&self.arena),
+        node.value_trailer,
+      ))
+    }
+  }
+
+  /// Returns the value of the last entry in the map.
+  pub fn last(&self) -> Option<ValueRef<V>> {
+    // Safety: tail node was definitely allocated by self.arena
+    let nd = unsafe { self.get_prev(self.tail, 0) };
+    if nd.is_null() || nd.ptr == self.head.ptr {
+      return None;
+    }
+
+    // Safety: we already check the not is not null, and the node is allocated by self.arena
+    unsafe {
+      let node = nd.as_ptr();
+      Some(ValueRef::new(
+        node.get_value(&self.arena),
+        node.value_trailer,
+      ))
+    }
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  pub fn get<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> Option<ValueRef<'b, V>>
+  where
+    K::Trailer: 'b,
+    V::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+  {
+    let key = key.as_key_ref();
+    self.get_in(key).map(|ptr| unsafe {
+      let node = ptr.as_ptr();
+
+      ValueRef::new(node.get_value(&self.arena), node.value_trailer)
     })
   }
 
-  /// Inserts the key-value pair.
-  pub fn insert(&self, key: Key, val: Value) {
-    let key_ref = key.as_key_ref();
-    let val_ref = val.as_value_ref();
+  /// Gets or inserts a new entry.
+  ///
+  /// # Success
+  ///
+  /// - Returns `Ok(Some(&[u8]))` if the key exists.
+  /// - Returns `Ok(None)` if the key does not exist, and successfully inserts the key and value.
+  ///
+  /// As a low-level crate, users are expected to handle the error cases themselves.
+  ///
+  /// # Errors
+  ///
+  /// - Returns `Err(Error::Duplicated)`, if the key already exists.
+  /// - Returns `Err(Error::Full)`, if there isn't enough room in the arena.
+  pub fn get_or_insert<'a: 'b, 'b, Q, R>(
+    &'b self,
+    key: &'a Q,
+    value: &'a R,
+  ) -> Result<Option<ValueRef<'b, V>>, Error>
+  where
+    K::Trailer: 'b,
+    V::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+    R: AsValueRef<Value = V> + ?Sized,
+  {
+    let key = key.as_key_ref();
+    let val = value.as_value_ref();
+    let ins = &mut Default::default();
 
-    // Since we allow overwrite, we may not need to create a new node. We might not even need to
-    // increase the height. Let's defer these actions.
+    unsafe {
+      let (_, curr) = self.find_splice(key, ins, true);
+      if let Some(curr) = curr {
+        return Ok(Some({
+          let nd = curr.as_ptr();
+          ValueRef::new(nd.get_value(&self.arena), nd.value_trailer)
+        }));
+      }
+      self.insert_in(key, val, ins).map(|_| None)
+    }
+  }
 
-    let mut list_height = self.get_height();
-    let mut prev = [0u32; Node::MAX_HEIGHT + 1];
-    let mut next = [0u32; Node::MAX_HEIGHT + 1];
-    prev[list_height as usize] = self.head_offset;
-    for i in (0..list_height as usize).rev() {
-      // Use higher level to speed up for current level.
-      let (prev_i, next_i) = self.find_splice_for_level(key_ref, prev[i + 1], i);
-      prev[i] = prev_i;
-      next[i] = next_i;
-      // we found a node has the same key with `key`
-      // hence we only update the value
-      if prev_i == next_i {
-        let val_offset = self.arena.put_val(val_ref);
-        let val_encode_size = val.encoded_size() as u32;
-        let encode_value = Node::encode_value(val_offset, val_encode_size);
-        let (prev_node, _) = self.arena.get_node(prev_i);
-        unsafe { (*prev_node).set_val(encode_value) };
-        return;
+  /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
+  ///
+  /// As a low-level crate, users are expected to handle the error cases themselves.
+  ///
+  /// # Errors
+  ///
+  /// - Returns `Error::Duplicated`, if the key already exists.
+  /// - Returns `Error::Full`, if there isn't enough room in the arena.
+  pub fn insert<'a, Q, R>(&'a self, key: &'a Q, value: &'a R) -> Result<(), Error>
+  where
+    K::Trailer: 'a,
+    V::Trailer: 'a,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+    R: AsValueRef<Value = V> + ?Sized,
+  {
+    self.insert_in(
+      key.as_key_ref(),
+      value.as_value_ref(),
+      &mut Inserter::default(),
+    )
+  }
+}
+
+impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
+  fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
+    alignment_assertion::<K, V>();
+    let head = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena)?;
+    let tail = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena)?;
+
+    // Safety:
+    // We will always allocate enough space for the head node and the tail node.
+    unsafe {
+      // Link all head/tail levels together.
+      for i in 0..MAX_HEIGHT {
+        let head_link = head.tower(&arena, i);
+        let tail_link = tail.tower(&arena, i);
+        head_link.next_offset.store(tail.offset, Ordering::Relaxed);
+        tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
       }
     }
 
-    // We do need to create a new node.
-    let height = random_height();
-    let (curr, curr_offset) = self.arena.new_node(key_ref, val_ref, height);
+    Ok(Self {
+      arena,
+      head,
+      tail,
+      height: CachePadded::new(AtomicU32::new(1)),
+      #[cfg(test)]
+      testing: false,
+      cmp,
+      len: CachePadded::new(AtomicU32::new(0)),
+    })
+  }
 
-    // Try to increase s.height via CAS.
-    list_height = self.get_height();
-    while height as u32 > list_height {
-      match self.height.compare_exchange(
-        list_height,
-        height as u32,
-        Ordering::SeqCst,
-        Ordering::SeqCst,
-      ) {
-        // Successfully increased skiplist.height.
-        Ok(_) => break,
-        Err(_) => list_height = self.get_height(),
-      }
+  #[cfg(feature = "std")]
+  #[inline]
+  fn random_height() -> u32 {
+    use rand::{thread_rng, Rng};
+    let mut rng = thread_rng();
+    let rnd: u32 = rng.gen();
+    let mut h = 1;
+
+    while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+      h += 1;
+    }
+    h as u32
+  }
+
+  #[cfg(not(feature = "std"))]
+  #[inline]
+  fn random_height() -> u32 {
+    use rand::{rngs::OsRng, Rng, RngCore};
+
+    let rnd: u32 = OsRng.gen();
+    let mut h = 1;
+
+    while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+      h += 1;
+    }
+    h as u32
+  }
+
+  fn insert_in(
+    &self,
+    key: KeyRef<K>,
+    value: ValueRef<V>,
+    ins: &mut Inserter<K, V>,
+  ) -> Result<(), Error> {
+    // Safety: a fresh new Inserter, so safe here
+    if unsafe { self.find_splice(key, ins, false).0 } {
+      return Err(Error::Duplicated);
     }
 
-    // We always insert from the base level and up. After you add a node in base level, we cannot
-    // create a node in the level above because it would have discovered the node in the base level.
-    for i in 0..height {
-      loop {
-        if self.arena.get_node(prev[i]).0.is_null() {
-          assert!(i > 1); // This cannot happen in base level.
-                          // We haven't computed prev, next for this level because height exceeds old listHeight.
-                          // For these levels, we expect the lists to be sparse, so we can just search from head.
-          let (prev_i, next_i) = self.find_splice_for_level(key_ref, self.head_offset, i);
-          prev[i] = prev_i;
-          next[i] = next_i;
+    #[cfg(all(test, feature = "std"))]
+    if self.testing {
+      // Add delay to make it easier to test race between this thread
+      // and another thread that sees the intermediate state between
+      // finding the splice and using it.
+      std::thread::yield_now();
+    }
 
-          // Someone adds the exact same key before we are able to do so. This can only happen on
-          // the base level. But we know we are not on the base level.
-          assert!(prev_i != next_i);
+    let (nd, height) = self.new_node(&key, &value)?;
+    // We always insert from the base level and up. After you add a node in base
+    // level, we cannot create a node in the level above because it would have
+    // discovered the node in the base level.
+    let mut invalid_date_splice = false;
+
+    for i in 0..(height as usize) {
+      let mut prev = ins.spl[i].prev;
+      let mut next = ins.spl[i].next;
+
+      if prev.is_null() {
+        // New node increased the height of the skiplist, so assume that the
+        // new level has not yet been populated.
+        if !next.is_null() {
+          panic!("next is expected to be nil, since prev is nil");
         }
 
-        self
-          .arena
-          .tower(curr_offset as usize, i)
-          .store(next[i], Ordering::Relaxed);
-        let (_, parent_offset) = self.arena.get_node(prev[i]);
-        match self
-          .arena
-          .tower(parent_offset as usize, i)
-          .compare_exchange(
-            next[i],
-            self.arena.get_node_offset(curr),
+        prev = self.head;
+        next = self.tail;
+      }
+
+      // +----------------+     +------------+     +----------------+
+      // |      prev      |     |     nd     |     |      next      |
+      // | prevNextOffset |---->|            |     |                |
+      // |                |<----| prevOffset |     |                |
+      // |                |     | nextOffset |---->|                |
+      // |                |     |            |<----| nextPrevOffset |
+      // +----------------+     +------------+     +----------------+
+      //
+      // 1. Initialize prevOffset and nextOffset to point to prev and next.
+      // 2. CAS prevNextOffset to repoint from next to nd.
+      // 3. CAS nextPrevOffset to repoint from prev to nd.
+      unsafe {
+        loop {
+          let prev_offset = prev.offset;
+          let next_offset = next.offset;
+          nd.write_tower(&self.arena, i, prev_offset, next_offset);
+
+          // Check whether next has an updated link to prev. If it does not,
+          // that can mean one of two things:
+          //   1. The thread that added the next node hasn't yet had a chance
+          //      to add the prev link (but will shortly).
+          //   2. Another thread has added a new node between prev and next.
+          //
+          // Safety: we already check next is not null
+          let next_prev_offset = next.prev_offset(&self.arena, i);
+          if next_prev_offset != prev_offset {
+            // Determine whether #1 or #2 is true by checking whether prev
+            // is still pointing to next. As long as the atomic operations
+            // have at least acquire/release semantics (no need for
+            // sequential consistency), this works, as it is equivalent to
+            // the "publication safety" pattern.
+            let prev_next_offset = prev.next_offset(&self.arena, i);
+            if prev_next_offset == next_offset {
+              // Ok, case #1 is true, so help the other thread along by
+              // updating the next node's prev link.
+              let link = next.tower(&self.arena, i);
+              let _ = link.prev_offset.compare_exchange(
+                next_prev_offset,
+                prev_offset,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+              );
+            }
+          }
+
+          let prev_link = prev.tower(&self.arena, i);
+          match prev_link.next_offset.compare_exchange_weak(
+            next.offset,
+            nd.offset,
             Ordering::SeqCst,
-            Ordering::SeqCst,
+            Ordering::Acquire,
           ) {
-          // Managed to insert curr between prev[i] and next[i]. Go to the next level.
-          Ok(_) => break,
-          Err(_) => {
-            // CAS failed. We need to recompute prev and next.
-            // It is unlikely to be helpful to try to use a different level as we redo the search,
-            // because it is unlikely that lots of nodes are inserted between prev[i] and next[i].
-            let (prev_i, next_i) = self.find_splice_for_level(key_ref, prev[i], i);
-            prev[i] = prev_i;
-            next[i] = next_i;
-            if prev_i == next_i {
-              assert_eq!(i, 0, "Equality can happen only on base level: {}", i);
-              let value_offset = self.arena.put_val(val_ref);
-              let encode_value_size = val_ref.encoded_size() as u32;
-              let encode_value = Node::encode_value(value_offset, encode_value_size);
-              let (prev_node, _) = self.arena.get_node(prev_i);
-              // Safety: prev_node is not null, we checked it in find_splice_for_level
-              let prev_node_ref = unsafe { &mut *prev_node };
-              prev_node_ref.set_val(encode_value);
-              return;
+            Ok(_) => {
+              // Managed to insert nd between prev and next, so update the next
+              // node's prev link and go to the next level.
+              #[cfg(all(test, feature = "std"))]
+              if self.testing {
+                // Add delay to make it easier to test race between this thread
+                // and another thread that sees the intermediate state between
+                // setting next and setting prev.
+                std::thread::yield_now();
+              }
+
+              let next_link = next.tower(&self.arena, i);
+              let _ = next_link.prev_offset.compare_exchange(
+                prev_offset,
+                nd.offset,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+              );
+
+              break;
+            }
+            Err(_) => {
+              // CAS failed. We need to recompute prev and next. It is unlikely to
+              // be helpful to try to use a different level as we redo the search,
+              // because it is unlikely that lots of nodes are inserted between prev
+              // and next.
+              let fr = self.find_splice_for_level(&key, i, prev);
+              if fr.found {
+                if i != 0 {
+                  panic!("how can another thread have inserted a node at a non-base level?");
+                }
+
+                return Err(Error::Duplicated);
+              }
+
+              invalid_date_splice = true;
+              prev = fr.splice.prev;
+              next = fr.splice.next;
             }
           }
         }
       }
     }
+
+    // If we had to recompute the splice for a level, invalidate the entire
+    // cached splice.
+    if invalid_date_splice {
+      ins.height = 0;
+    } else {
+      // The splice was valid. We inserted a node between spl[i].prev and
+      // spl[i].next. Optimistically update spl[i].prev for use in a subsequent
+      // call to add.
+      for i in 0..(height as usize) {
+        ins.spl[i].prev = nd;
+      }
+    }
+    self.len.fetch_add(1, Ordering::AcqRel);
+    Ok(())
   }
 
-  /// Gets the value associated with the key. It returns a valid value if it finds equal or earlier
-  /// version of the same key.
-  pub fn get(&self, key: KeyRef) -> Option<ValueRef> {
-    let (n, _, _) = self.find_near(key, false, true); // findGreaterOrEqual.
-    if n.is_null() {
-      return None;
+  #[allow(clippy::type_complexity)]
+  fn new_node(
+    &self,
+    key: &KeyRef<K>,
+    value: &ValueRef<V>,
+  ) -> Result<(NodePtr<K::Trailer, V::Trailer>, u32), Error> {
+    let height = Self::random_height();
+    let nd = Node::new_node_ptr(&self.arena, height, key, value)?;
+
+    // Try to increase self.height via CAS.
+    let mut list_height = self.height();
+    while height > list_height {
+      match self.height.compare_exchange_weak(
+        list_height,
+        height,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        // Successfully increased skiplist.height.
+        Ok(_) => break,
+        Err(h) => list_height = h,
+      }
+    }
+    Ok((nd, height))
+  }
+
+  fn get_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let mut lvl = (self.height() - 1) as usize;
+
+    let mut prev = self.head;
+    loop {
+      let fr = unsafe { self.find_splice_for_level(&key, lvl, prev) };
+      if fr.found {
+        return fr.curr;
+      }
+      if lvl == 0 {
+        break;
+      }
+
+      prev = fr.splice.prev;
+      lvl -= 1;
     }
 
-    // Safety: we already checked n is not null.
-    let n_ref = unsafe { &*n };
-    let next_key = self
+    None
+  }
+
+  /// ## Safety:
+  /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
+  unsafe fn find_splice(
+    &self,
+    key: KeyRef<K>,
+    ins: &mut Inserter<K, V>,
+    returned_when_found: bool,
+  ) -> (bool, Option<NodePtr<K::Trailer, V::Trailer>>) {
+    let list_height = self.height();
+    let mut level = 0;
+
+    let mut prev = self.head;
+    if ins.height < list_height {
+      // Our cached height is less than the list height, which means there were
+      // inserts that increased the height of the list. Recompute the splice from
+      // scratch.
+      ins.height = list_height;
+      level = ins.height as usize;
+    } else {
+      // Our cached height is equal to the list height.
+      while level < list_height as usize {
+        let spl = &ins.spl[level];
+        if self.get_next(spl.prev, level).ptr != spl.next.ptr {
+          level += 1;
+          // One or more nodes have been inserted between the splice at this
+          // level.
+          continue;
+        }
+
+        if spl.prev.ptr != self.head.ptr && !self.key_is_after_node(spl.prev, key) {
+          // Key lies before splice.
+          level = list_height as usize;
+          break;
+        }
+
+        if spl.next.ptr != self.tail.ptr && !self.key_is_after_node(spl.next, key) {
+          // Key lies after splice.
+          level = list_height as usize;
+          break;
+        }
+
+        // The splice brackets the key!
+        prev = spl.prev;
+        break;
+      }
+    }
+
+    let mut found = false;
+    for lvl in (0..level).rev() {
+      let mut fr = self.find_splice_for_level(&key, lvl, prev);
+      if fr.splice.next.is_null() {
+        fr.splice.next = self.tail;
+      }
+      found = fr.found;
+      if found && returned_when_found {
+        return (found, fr.curr);
+      }
+      ins.spl[lvl] = fr.splice;
+    }
+
+    (found, None)
+  }
+
+  /// ## Safety
+  /// - `level` is less than `MAX_HEIGHT`.
+  /// - `start` must be allocated by self's arena.
+  unsafe fn find_splice_for_level(
+    &self,
+    key: &KeyRef<K>,
+    level: usize,
+    start: NodePtr<K::Trailer, V::Trailer>,
+  ) -> FindResult<K, V> {
+    let mut prev = start;
+
+    loop {
+      // Assume prev.key < key.
+      let next = self.get_next(prev, level);
+      if next.ptr == self.tail.ptr {
+        // Tail node, so done.
+        return FindResult {
+          splice: Splice { prev, next },
+          found: false,
+          curr: None,
+        };
+      }
+
+      // offset is not zero, so we can safely dereference the next node ptr.
+      let next_node = next.as_ptr();
+
+      let (key_offset, key_size) = (next_node.key_offset, next_node.key_size);
+      let next_key = self.arena.get_bytes(key_offset as usize, key_size as usize);
+
+      match self.cmp.compare(key.as_bytes(), next_key) {
+        // We are done for this level, since prev.key < key < next.key.
+        cmp::Ordering::Less => {
+          return FindResult {
+            splice: Splice { prev, next },
+            found: false,
+            curr: None,
+          };
+        }
+        // Keep moving right on this level.
+        cmp::Ordering::Greater => prev = next,
+        cmp::Ordering::Equal => {
+          // User-key equality.
+          let trailer = key.trailer();
+
+          if trailer.eq(&next_node.key_trailer) {
+            // Internal key equality.
+            return FindResult {
+              splice: Splice { prev, next },
+              found: true,
+              curr: Some(next),
+            };
+          }
+
+          if trailer.gt(&next_node.key_trailer) {
+            // We are done for this level, since prev.key < key < next.key.
+            return FindResult {
+              splice: Splice { prev, next },
+              found: false,
+              curr: None,
+            };
+          }
+
+          // Keep moving right on this level.
+          prev = next;
+        }
+      }
+    }
+  }
+
+  /// ## Safety
+  /// - The caller must ensure that the node is allocated by the arena.
+  /// - The caller must ensure that the node is not null.
+  unsafe fn key_is_after_node(&self, nd: NodePtr<K::Trailer, V::Trailer>, key: KeyRef<K>) -> bool {
+    let nd = &*nd.ptr;
+    let nd_key = self
       .arena
-      .get_key(n_ref.key_offset, n_ref.key_size, n_ref.timestamped());
-    let timestamp = next_key.version();
-    if key.ne(&next_key) {
-      return None;
-    }
-    let (value_offset, value_size) = n_ref.get_value_offset();
-    let mut vs = self.arena.get_val(value_offset, value_size);
-    vs.version = timestamp;
-    Some(vs)
-  }
+      .get_bytes(nd.key_offset as usize, nd.key_size as usize);
 
-  /// Returns a skiplist iterator.
-  #[inline]
-  pub fn iter(&self) -> SkipMapIterator<'_> {
-    SkipMapIterator {
-      skl: self,
-      curr: ptr::null(),
-      curr_tower_offset: 0,
+    match self.cmp.compare(nd_key, key.as_bytes()) {
+      cmp::Ordering::Less => true,
+      cmp::Ordering::Greater => false,
+      cmp::Ordering::Equal => {
+        // User-key equality.
+        let key_trailer = key.trailer();
+        if nd.key_trailer.eq(key_trailer) {
+          // Trailer equality.
+          return false;
+        }
+        nd.key_trailer.le(key_trailer)
+      }
     }
   }
 
-  /// Returns if the SkipMap is empty
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  pub fn is_empty(&self) -> bool {
-    self.find_last().is_null()
-  }
-
-  /// Returns the length
-  #[inline]
-  pub fn len(&self) -> usize {
-    let (head, head_offset) = self.get_head();
-    let (mut x, mut x_offset) = self.get_next(head, head_offset, 0);
-    let mut count = 0;
-    while !x.is_null() {
-      count += 1;
-      (x, x_offset) = self.get_next(x, x_offset, 0);
+  unsafe fn get_prev(
+    &self,
+    nd: NodePtr<K::Trailer, V::Trailer>,
+    height: usize,
+  ) -> NodePtr<K::Trailer, V::Trailer> {
+    if nd.is_null() {
+      return NodePtr::NULL;
     }
-    count
+
+    let offset = nd.prev_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
   }
 
-  /// Returns the skiplist's capacity
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  pub fn cap(&self) -> usize {
-    self.arena.cap()
+  unsafe fn get_next(
+    &self,
+    nptr: NodePtr<K::Trailer, V::Trailer>,
+    height: usize,
+  ) -> NodePtr<K::Trailer, V::Trailer> {
+    if nptr.is_null() {
+      return NodePtr::NULL;
+    }
+    let offset = nptr.next_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
   }
 }
 
-/// SkipMapIterator is an iterator over skiplist object. For new objects, you just
-/// need to initialize SkipMapIterator.list.
-#[derive(Copy, Clone, Debug)]
-pub struct SkipMapIterator<'a> {
-  skl: &'a SkipMap,
-  curr: *const Node,
-  curr_tower_offset: u32,
+/// A helper struct for caching splice information
+pub struct Inserter<'a, K: Key, V: Value> {
+  spl: [Splice<K, V>; MAX_HEIGHT],
+  height: u32,
+  _m: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a> SkipMapIterator<'a> {
-  /// Key returns the key at the current position.
+impl<'a, K: Key, V: Value> Default for Inserter<'a, K, V> {
   #[inline]
-  pub fn key<'b: 'a>(&'a self) -> KeyRef<'b> {
-    unsafe {
-      let curr = &*self.curr;
-      self
-        .skl
-        .arena
-        .get_key(curr.key_offset, curr.key_size, curr.timestamped())
+  fn default() -> Self {
+    Self {
+      spl: [Splice::default(); MAX_HEIGHT],
+      height: 0,
+      _m: core::marker::PhantomData,
     }
-  }
-
-  /// Value returns value.
-  #[inline]
-  pub fn value<'b: 'a>(&'a self) -> ValueRef<'b> {
-    let curr = unsafe { &*self.curr };
-    let (value_offset, value_size) = curr.get_value_offset();
-    self.skl.arena.get_val(value_offset, value_size)
-  }
-
-  /// next advances to the next position.
-  #[inline]
-  pub fn next(&mut self) {
-    assert!(self.valid());
-    (self.curr, self.curr_tower_offset) = self.skl.get_next(self.curr, self.curr_tower_offset, 0);
-  }
-
-  /// Prev advances to the previous position.
-  #[inline]
-  pub fn prev(&mut self) {
-    assert!(self.valid());
-    let (prev, prev_offset, _) = self.skl.find_near(self.key(), true, false);
-    self.curr = prev; // find <. No equality allowed.
-    self.curr_tower_offset = prev_offset;
-  }
-
-  /// Seek advances to the first entry with a key >= target.
-  #[inline]
-  pub fn seek(&mut self, target: KeyRef) {
-    let (tgt, tgt_offset, _) = self.skl.find_near(target, false, true); // find >=
-    self.curr = tgt;
-    self.curr_tower_offset = tgt_offset;
-  }
-
-  /// seek_for_prev finds an entry with key <= target.
-  #[inline]
-  pub fn seek_for_prev(&mut self, target: KeyRef<'_>) {
-    let (tgt, tgt_offset, _) = self.skl.find_near(target, true, true); // find <=
-    self.curr = tgt;
-    self.curr_tower_offset = tgt_offset;
-  }
-
-  /// seek_to_first seeks position at the first entry in list.
-  /// Final state of iterator is Valid() iff list is not empty.
-  #[inline]
-  pub fn seek_to_first(&mut self) {
-    // find <=
-    let (head, head_offset) = self.skl.get_head();
-    (self.curr, self.curr_tower_offset) = self.skl.get_next(head, head_offset, 0);
-  }
-
-  /// seek_to_last seeks position at the last entry in list.
-  /// Final state of iterator is Valid() iff list is not empty.
-  #[inline]
-  pub fn seek_to_last(&mut self) {
-    let tgt = self.skl.find_last();
-    self.curr = tgt;
-  }
-
-  /// valid returns true iff the iterator is positioned at a valid node.
-  #[inline]
-  pub fn valid(&self) -> bool {
-    !self.curr.is_null()
   }
 }
 
-/// UniIterator is a unidirectional memtable iterator. It is a thin wrapper around
-/// Iterator. We like to keep Iterator as before, because it is more powerful and
-/// we might support bidirectional iterators in the future.
-#[derive(Copy, Clone, Debug)]
-pub struct UniSkipMapIterator<'a> {
-  iter: SkipMapIterator<'a>,
-  reversed: bool,
+struct Splice<K: Key, V: Value> {
+  prev: NodePtr<K::Trailer, V::Trailer>,
+  next: NodePtr<K::Trailer, V::Trailer>,
 }
 
-impl<'a> UniSkipMapIterator<'a> {
+impl<K: Key, V: Value> Default for Splice<K, V> {
   #[inline]
-  pub fn next(&mut self) {
-    if !self.reversed {
-      self.iter.next()
-    } else {
-      self.iter.prev()
+  fn default() -> Self {
+    Self {
+      prev: NodePtr::NULL,
+      next: NodePtr::NULL,
     }
-  }
-
-  #[inline]
-  pub fn rewind(&mut self) {
-    if !self.reversed {
-      self.iter.seek_to_first()
-    } else {
-      self.iter.seek_to_last()
-    }
-  }
-
-  #[inline]
-  pub fn seek(&mut self, key: KeyRef<'_>) {
-    if !self.reversed {
-      self.iter.seek(key)
-    } else {
-      self.iter.seek_for_prev(key)
-    }
-  }
-
-  #[inline]
-  pub fn entry(&self) -> Option<(KeyRef<'a>, ValueRef<'a>)> {
-    self
-      .iter
-      .valid()
-      .then(|| (self.iter.key(), self.iter.value()))
-  }
-
-  /// Key returns the key at the current position.
-  #[inline]
-  pub fn key(&self) -> Option<KeyRef<'a>> {
-    self.valid().then(|| self.iter.key())
-  }
-
-  /// Value returns value.
-  #[inline]
-  pub fn val(&self) -> Option<ValueRef<'a>> {
-    self.valid().then(|| self.iter.value())
-  }
-
-  #[inline]
-  pub fn valid(&self) -> bool {
-    !self.iter.curr.is_null()
   }
 }
 
-#[cfg(test)]
-mod tests;
-
-#[cfg(feature = "std")]
-#[inline]
-pub(crate) fn random_height() -> usize {
-  use rand::{thread_rng, Rng};
-  let mut rng = thread_rng();
-  for h in 1..(Node::MAX_HEIGHT - 1) {
-    if !rng.gen_ratio(Node::HEIGHT_INCREASE, u32::MAX) {
-      return h;
-    }
+impl<K: Key, V: Value> Clone for Splice<K, V> {
+  #[inline]
+  fn clone(&self) -> Self {
+    *self
   }
-  Node::MAX_HEIGHT - 1
 }
 
-#[cfg(not(feature = "std"))]
-#[inline]
-pub(crate) fn random_height() -> usize {
-  use rand::{rngs::OsRng, Rng, RngCore};
+impl<K: Key, V: Value> Copy for Splice<K, V> {}
 
-  for h in 1..(Node::MAX_HEIGHT - 1) {
-    if !OsRng.gen_ratio(Node::HEIGHT_INCREASE, u32::MAX) {
-      return h;
-    }
-  }
-  Node::MAX_HEIGHT - 1
+struct FindResult<K: Key, V: Value> {
+  found: bool,
+  splice: Splice<K, V>,
+  curr: Option<NodePtr<K::Trailer, V::Trailer>>,
 }

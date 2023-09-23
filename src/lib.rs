@@ -20,14 +20,13 @@ pub use key::{Key, KeyRef};
 
 /// Key and Value types used by [badger](https://github.com/dgraph-io/badger)
 pub mod badger {
-  pub use super::value::badger::*;
-  pub use super::key::badger::*;
+  pub use super::{key::badger::*, value::badger::*};
 }
 
 // mod map;
 // pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
-mod map2;
-pub use map2::*;
+mod map;
+pub use map::*;
 
 const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
 
@@ -56,7 +55,7 @@ impl Comparator for () {
 /// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
 ///
 /// See [`Key`](crate::Key) for more details.
-pub trait KeyTrailer: core::fmt::Debug + Copy + Sized + Ord {}
+pub trait KeyTrailer: Copy + Sized + Ord {}
 
 /// A marker trait, which gives the key-value database developers the ability to add extra information
 /// to the key or value provided by the end-users. The only way to implement this trait is
@@ -70,7 +69,6 @@ pub trait KeyTrailer: core::fmt::Debug + Copy + Sized + Ord {}
 ///
 /// See [`Value`](crate::Value) for more details.
 pub trait ValueTrailer: Copy + Sized {}
-
 
 macro_rules! trailer {
   ($($ty:ty), +$(,)?) => {

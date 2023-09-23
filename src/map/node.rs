@@ -2,7 +2,7 @@ use core::{mem, ptr};
 
 use crate::{
   sync::{AtomicU32, Ordering},
-  Error, Key, KeyRef, KeyTrailer, ValueTrailer, ValueRef, NODE_ALIGNMENT_FACTOR, Value,
+  Error, Key, KeyRef, KeyTrailer, Value, ValueRef, ValueTrailer, NODE_ALIGNMENT_FACTOR,
 };
 
 use super::{arena::Arena, MAX_HEIGHT};
@@ -94,7 +94,8 @@ impl<K, V> NodePtr<K, V> {
 
   #[inline]
   pub(super) unsafe fn tower(&self, arena: &Arena, idx: usize) -> &Link {
-    let tower_ptr_offset = self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
+    let tower_ptr_offset =
+      self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
     let tower_ptr = arena.get_pointer(tower_ptr_offset);
     &*tower_ptr.cast()
   }
@@ -107,7 +108,8 @@ impl<K, V> NodePtr<K, V> {
     prev_offset: u32,
     next_offset: u32,
   ) {
-    let tower_ptr_offset = self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
+    let tower_ptr_offset =
+      self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
     let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
     *tower_ptr = Link::new(next_offset, prev_offset);
   }
@@ -122,7 +124,13 @@ impl<K, V> NodePtr<K, V> {
       } else {
         node.height as usize
       };
-      core::slice::from_raw_parts(self.ptr.add(self.offset as usize + mem::size_of::<Node<K, V>>()).cast(), tower_len)
+      core::slice::from_raw_parts(
+        self
+          .ptr
+          .add(self.offset as usize + mem::size_of::<Node<K, V>>())
+          .cast(),
+        tower_len,
+      )
     }
   }
 
@@ -139,9 +147,7 @@ impl<K, V> NodePtr<K, V> {
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
   pub(super) unsafe fn next_offset(&self, arena: &Arena, idx: usize) -> u32 {
-    self.tower(arena, idx)
-      .next_offset
-      .load(Ordering::Acquire)
+    self.tower(arena, idx).next_offset.load(Ordering::Acquire)
   }
 
   /// ## Safety
@@ -149,10 +155,7 @@ impl<K, V> NodePtr<K, V> {
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
   pub(super) unsafe fn prev_offset(&self, arena: &Arena, idx: usize) -> u32 {
-    self
-      .tower(arena, idx)
-      .prev_offset
-      .load(Ordering::Acquire)
+    self.tower(arena, idx).prev_offset.load(Ordering::Acquire)
   }
 }
 
@@ -173,7 +176,6 @@ pub(super) struct Node<KT, VT> {
   pub(super) value_size: u32,
   // Immutable. No need to lock to access
   pub(super) alloc_size: u32,
-
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will
@@ -235,7 +237,9 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       panic!("combined key and value size is too large");
     }
 
-    let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
+    let align = mem::align_of::<K>()
+      .max(mem::align_of::<V>())
+      .max(NODE_ALIGNMENT_FACTOR);
 
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
@@ -261,7 +265,7 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       node.value_size = value_size as u32;
       node.alloc_size = alloc_size;
       node.get_key_mut(arena).copy_from_slice(key.as_bytes());
-      node.get_value_mut(arena).copy_from_slice(value.as_bytes()); 
+      node.get_value_mut(arena).copy_from_slice(value.as_bytes());
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -271,12 +275,11 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
     // is less than maxHeight.
     let key_trailer_size = Self::key_trailer_size();
     let value_trailer_size = Self::value_trailer_size();
-    let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
-    let (node_offset, alloc_size) = arena.alloc(
-      Node::<K, V>::MAX_NODE_SIZE as u32,
-      align as u32,
-      0,
-    )?;
+    let align = mem::align_of::<K>()
+      .max(mem::align_of::<V>())
+      .max(NODE_ALIGNMENT_FACTOR);
+    let (node_offset, alloc_size) =
+      arena.alloc(Node::<K, V>::MAX_NODE_SIZE as u32, align as u32, 0)?;
 
     // Safety: we have check the offset is valid
     unsafe {

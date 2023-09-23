@@ -14,6 +14,8 @@ mod arena;
 use arena::Arena;
 mod node;
 use node::Node;
+mod iterator;
+pub use iterator::*;
 
 #[cfg(test)]
 mod tests;

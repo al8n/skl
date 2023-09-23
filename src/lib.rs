@@ -56,7 +56,7 @@ impl Comparator for () {
 /// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
 ///
 /// See [`Key`](crate::Key) for more details.
-pub trait KeyTrailer: Copy + Sized + Ord {}
+pub trait KeyTrailer: core::fmt::Debug + Copy + Sized + Ord {}
 
 /// A marker trait, which gives the key-value database developers the ability to add extra information
 /// to the key or value provided by the end-users. The only way to implement this trait is

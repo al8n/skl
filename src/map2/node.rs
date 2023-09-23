@@ -162,21 +162,34 @@ pub(super) struct Node<KT, VT> {
   pub(super) key_trailer: KT,
   pub(super) value_trailer: VT,
   // A byte slice is 24 bytes. We are trying to save space here.
-  pub(super) key_offset: u32, // Immutable. No need to lock to access key.
-  pub(super) key_size: u16,   // Immutable. No need to lock to access key.
+
+  // Immutable. No need to lock to access key.
+  pub(super) key_offset: u32,
+  // Immutable. No need to lock to access key.
+  pub(super) key_size: u16,
   pub(super) height: u16,
 
-  pub(super) value_size: u32, // Immutable. No need to lock to access value.
-  pub(super) alloc_size: u32, // Immutable. No need to lock to access
+  // Immutable. No need to lock to access value.
+  pub(super) value_size: u32,
+  // Immutable. No need to lock to access
+  pub(super) alloc_size: u32,
 
-                              // Most nodes do not need to use the full height of the tower, since the
-                              // probability of each successive level decreases exponentially. Because
-                              // these elements are never accessed, they do not need to be allocated.
-                              // Therefore, when a node is allocated in the arena, its memory footprint
-                              // is deliberately truncated to not include unneeded tower elements.
-                              //
-                              // All accesses to elements should use CAS operations, with no need to lock.
-                              // pub(super) tower: [Link; Self::MAX_HEIGHT],
+  // ** DO NOT REMOVE BELOW COMMENT**
+  // The below field will be attached after the node, have to comment out
+  // this field, because each node will not use the full height, the code will
+  // not allocate the full size of the tower,
+  //  `cargo miri` will report error when we try to access
+  // the memory belongs to the "prev node", but we know they are not belongs to
+  // the "prev node".
+  //
+  // Most nodes do not need to use the full height of the tower, since the
+  // probability of each successive level decreases exponentially. Because
+  // these elements are never accessed, they do not need to be allocated.
+  // Therefore, when a node is allocated in the arena, its memory footprint
+  // is deliberately truncated to not include unneeded tower elements.
+  //
+  // All accesses to elements should use CAS operations, with no need to lock.
+  // pub(super) tower: [Link; Self::MAX_HEIGHT],
 }
 
 impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
@@ -222,9 +235,6 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       panic!("combined key and value size is too large");
     }
 
-    let key_trailer_size = Self::key_trailer_size() as u32;
-    let value_trailer_size = Self::value_trailer_size() as u32;
-
     let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
 
     // Compute the amount of the tower that will never be used, since the height
@@ -245,29 +255,27 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       let node = &mut *(ptr as *mut Node<K, V>);
       node.key_trailer = *key.trailer();
       node.value_trailer = *value.trailer();
-      node.key_offset = node_offset + node_size + key_trailer_size + value_trailer_size;
+      node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
       node.height = height as u16;
       node.value_size = value_size as u32;
       node.alloc_size = alloc_size;
       node.get_key_mut(arena).copy_from_slice(key.as_bytes());
-      node.get_value_mut(arena).copy_from_slice(value.as_bytes());
+      node.get_value_mut(arena).copy_from_slice(value.as_bytes()); 
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
 
-  pub(super) fn new_empty_node_ptr(arena: &Arena, height: u32) -> Result<NodePtr<K, V>, Error> {
+  pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<K, V>, Error> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let unused_size = (MAX_HEIGHT as u32 - height) * (mem::size_of::<Link>() as u32);
-    let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
     let key_trailer_size = Self::key_trailer_size();
     let value_trailer_size = Self::value_trailer_size();
     let align = mem::align_of::<K>().max(mem::align_of::<V>()).max(NODE_ALIGNMENT_FACTOR);
     let (node_offset, alloc_size) = arena.alloc(
-      node_size,
+      Node::<K, V>::MAX_NODE_SIZE as u32,
       align as u32,
-      unused_size,
+      0,
     )?;
 
     // Safety: we have check the offset is valid

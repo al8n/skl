@@ -63,6 +63,10 @@ pub struct SkipMap<K: Key, V: Value, C: Comparator = ()> {
   cmp: C,
 }
 
+// Safety: SkipMap is Sync and Send
+unsafe impl<K: Key, V: Value, C: Comparator> Send for SkipMap<K, V, C> {}
+unsafe impl<K: Key, V: Value, C: Comparator> Sync for SkipMap<K, V, C> {}
+
 // --------------------------------Public Methods--------------------------------
 impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   /// Returns the height of the highest tower within any of the nodes that
@@ -190,20 +194,13 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     Q: Ord + ?Sized + AsKeyRef<Key = K>,
   {
     let key = key.as_key_ref();
-    let (n, _) = unsafe { self.find_near(&key, false, true) }; // findGreaterOrEqual.
-    if n.is_null() {
-      return None;
-    }
-
-    // Safety: we already checked n is not null.
-    unsafe {
-      let nd = n.as_ptr();
-      let next_key = nd.get_key(&self.arena);
-      if key.as_bytes().ne(next_key) {
-        return None;
+    self.get_in(key).map(|ptr| {
+      unsafe {
+        let node = ptr.as_ptr();
+        
+        ValueRef::new(node.get_value(&self.arena), node.value_trailer)
       }
-      Some(ValueRef::new(nd.get_value(&self.arena), nd.value_trailer))
-    }
+    })
   }
 
   /// Gets or inserts a new entry.
@@ -268,8 +265,8 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
 impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
     alignment_assertion::<K, V>();
-    let head = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena, MAX_HEIGHT as u32)?;
-    let tail = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena, MAX_HEIGHT as u32)?;
+    let head = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena)?;
+    let tail = Node::<K::Trailer, V::Trailer>::new_empty_node_ptr(&arena)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -500,98 +497,27 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     Ok((nd, height))
   }
 
-  // findNear finds the node near to key.
-  // If less=true, it finds rightmost node such that node.key < key (if allowEqual=false) or
-  // node.key <= key (if allowEqual=true).
-  // If less=false, it finds leftmost node such that node.key > key (if allowEqual=false) or
-  // node.key >= key (if allowEqual=true).
-  // Returns the node found. The bool returned is true if the node has key equal to given key.
-  unsafe fn find_near(
-    &self,
-    key: &KeyRef<K>,
-    less: bool,
-    allow_equal: bool,
-  ) -> (NodePtr<K::Trailer, V::Trailer>, bool) {
-    let mut curr = self.head;
-    let mut level = (self.height() - 1) as usize;
+  fn get_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let mut lvl = (self.height() - 1) as usize;
+
+    let mut prev = self.head;
     loop {
-      // Assume curr.key < key.
-      let next = self.get_next(curr, level);
-
-      if next.is_null() {
-        // curr.key < key < END OF LIST
-        if level > 0 {
-          // Can descend further to iterate closer to the end.
-          level -= 1;
-          continue;
-        }
-
-        // Level=0. Cannot descend further. Let's return something that makes sense.
-        if !less {
-          return (NodePtr::NULL, false);
-        }
-
-        // Try to return curr. Make sure it is not a curr node.
-        if curr.offset == self.head.offset {
-          return (NodePtr::NULL, false);
-        }
-        return (curr, false);
+      let fr = unsafe {
+        self.find_splice_for_level(&key, lvl, prev)
+      };
+      if fr.found {
+        return fr.curr;
+      }
+      if lvl == 0 {
+        break;
       }
 
-      // Safety: we have checked next is not null
-      let next_key = next.as_ptr().get_key(&self.arena);
-      match self.cmp.compare(key.as_bytes(), next_key) {
-        cmp::Ordering::Less => {
-          // cmp < 0. In other words, curr.key < key < next.
-          if level > 0 {
-            level -= 1;
-            continue;
-          }
-
-          // At base level. Need to return something.
-          if !less {
-            return (next, false);
-          }
-
-          // Try to return curr. Make sure it is not a head node.
-          if curr.offset == self.head.offset {
-            return (NodePtr::NULL, false);
-          }
-
-          return (curr, false);
-        }
-        cmp::Ordering::Equal => {
-          // curr.key < key == next.key.
-          if allow_equal {
-            return (next, true);
-          }
-
-          if !less {
-            // We want >, so go to base level to grab the next bigger node.
-            let rt = self.get_next(next, 0);
-            return (rt, false);
-          }
-
-          // We want <. If not base level, we should go closer in the next level.
-          if level > 0 {
-            level -= 1;
-            continue;
-          }
-
-          // On base level. Return curr.
-          if curr.offset == self.head.offset {
-            return (NodePtr::NULL, false);
-          }
-          return (curr, false);
-        }
-        cmp::Ordering::Greater => {
-          // curr.key < next.key < key. We can continue to move right.
-          curr = next;
-          continue;
-        }
-      }
+      prev = fr.splice.prev;
+      lvl -= 1;
     }
-  }
+
+    None
+  } 
 
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
@@ -700,7 +626,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
           // User-key equality.
           let trailer = key.trailer();
 
-          if next_node.key_trailer.eq(trailer) {
+          if trailer.eq(&next_node.key_trailer) {
             // Internal key equality.
             return FindResult {
               splice: Splice { prev, next },
@@ -717,6 +643,9 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
               curr: None,
             };
           }
+
+          // Keep moving right on this level.
+          prev = next;
         }
       }
     }

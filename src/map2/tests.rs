@@ -49,7 +49,6 @@ fn test_basic_runner(l: Arc<SkipMap<BadgerKey, BadgerValue>>) {
   // Try inserting values.
   v1.set_meta(55);
   l.insert(&BadgerKey::from("key1".as_bytes().to_vec()), &v1).unwrap();
-
   v2.set_meta(56);
   l.insert(&BadgerKey::from("key2".as_bytes()).with_version(2), &v2).unwrap();
   v3.set_meta(57);
@@ -57,36 +56,35 @@ fn test_basic_runner(l: Arc<SkipMap<BadgerKey, BadgerValue>>) {
 
   assert!(l.get(&BadgerKey::from("key".as_bytes())).is_none());
 
-  // let key = BadgerKey::from("key1".as_bytes());
-  // let v = l.get(&key).unwrap();
-  // assert_eq!(v.as_bytes(), "00042".as_bytes());
-  // assert_eq!(v.trailer().meta(), 55);
-  // assert!(l.get(&BadgerKey::from("key2".as_bytes())).is_none());
-  //
-  // let key = BadgerKey::from("key3".as_bytes());
-  // let v = l.get(&key).unwrap();
-  // assert_eq!(v.as_bytes(), "00062".as_bytes());
-  // assert_eq!(v.trailer().meta(), 57);
-  //
+  let key = BadgerKey::from("key1".as_bytes());
+  let v = l.get(&key).unwrap();
+  assert_eq!(v.as_bytes(), "00042".as_bytes());
+  assert_eq!(v.trailer().meta(), 55);
+  assert!(l.get(&BadgerKey::from("key2".as_bytes())).is_none());
+  
+  let key = BadgerKey::from("key3".as_bytes());
+  let v = l.get(&key).unwrap();
+  assert_eq!(v.as_bytes(), "00062".as_bytes());
+  assert_eq!(v.trailer().meta(), 57);
+  
   v4.set_meta(12);
   l.insert(&BadgerKey::from("key3".as_bytes()).with_version(1), &v4).unwrap();
-  //
-  // let key = BadgerKey::from("key3".as_bytes()).with_version(1);
-  // let v = l
-  //   .get(&key)
-  //   .unwrap();
-  // assert_eq!(v.as_bytes(), "00072".as_bytes());
-  // assert_eq!(v.trailer().meta(), 12);
-  //
+  let key = BadgerKey::from("key3".as_bytes()).with_version(1);
+  let v = l
+    .get(&key)
+    .unwrap();
+  assert_eq!(v.as_bytes(), "00072".as_bytes());
+  assert_eq!(v.trailer().meta(), 12);
+  
   v5.set_meta(60);
   l.insert(&BadgerKey::from("key4".as_bytes()).with_version(1), &v5.clone()).unwrap();
-  //
-  // let key = BadgerKey::from("key4".as_bytes()).with_version(1);
-  // let v = l
-  //   .get(&key)
-  //   .unwrap();
-  // assert_eq!(v.as_bytes(), v5.as_bytes());
-  // assert_eq!(v.trailer().meta(), 60);
+  
+  let key = BadgerKey::from("key4".as_bytes()).with_version(1);
+  let v = l
+    .get(&key)
+    .unwrap();
+  assert_eq!(v.as_bytes(), v5.as_bytes());
+  assert_eq!(v.trailer().meta(), 60);
 }
 
 #[test]

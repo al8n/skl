@@ -2,10 +2,13 @@ use core::{mem, ptr};
 
 use crate::{
   sync::{AtomicU32, Ordering},
-  Error, Key, KeyRef, KeyTrailer, Value, ValueRef, ValueTrailer, NODE_ALIGNMENT_FACTOR,
+  Key, KeyRef, KeyTrailer, Value, ValueRef, ValueTrailer, NODE_ALIGNMENT_FACTOR,
 };
 
-use super::{arena::Arena, MAX_HEIGHT};
+use super::{
+  arena::{Arena, ArenaError},
+  MAX_HEIGHT,
+};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -21,26 +24,6 @@ impl Link {
       next_offset: AtomicU32::new(next_offset),
       prev_offset: AtomicU32::new(prev_offset),
     }
-  }
-}
-
-pub(super) struct NodePtrWithTower<'a, K, V> {
-  ptr: NodePtr<K, V>,
-  towers: &'a [Link],
-}
-
-impl<'a, K, V> core::fmt::Debug for NodePtrWithTower<'a, K, V> {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    let node = unsafe { self.ptr.as_ptr() };
-    f.debug_struct("Node")
-      .field("node_offset", &self.ptr.offset)
-      .field("key_offset", &node.key_offset)
-      .field("key_size", &node.key_size)
-      .field("value_size", &node.value_size)
-      .field("alloc_size", &node.alloc_size)
-      .field("towers_len", &self.towers.len())
-      .field("towers", &self.towers)
-      .finish()
   }
 }
 
@@ -112,34 +95,6 @@ impl<K, V> NodePtr<K, V> {
       self.offset as usize + mem::size_of::<Node<K, V>>() + idx * mem::size_of::<Link>();
     let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
     *tower_ptr = Link::new(next_offset, prev_offset);
-  }
-
-  #[inline]
-  pub(super) fn towers(&self) -> &[Link] {
-    // Safety: the pointer must be valid
-    unsafe {
-      let node = self.as_ptr();
-      let tower_len = if node.key_offset == 0 {
-        MAX_HEIGHT
-      } else {
-        node.height as usize
-      };
-      core::slice::from_raw_parts(
-        self
-          .ptr
-          .add(self.offset as usize + mem::size_of::<Node<K, V>>())
-          .cast(),
-        tower_len,
-      )
-    }
-  }
-
-  #[inline]
-  pub(super) fn with_towers(&self) -> NodePtrWithTower<K, V> {
-    NodePtrWithTower {
-      ptr: *self,
-      towers: self.towers(),
-    }
   }
 
   /// ## Safety
@@ -214,7 +169,7 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
     height: u32,
     key: &KeyRef<KK>,
     value: &ValueRef<VV>,
-  ) -> Result<NodePtr<K, V>, Error>
+  ) -> Result<NodePtr<K, V>, ArenaError>
   where
     KK: Key<Trailer = K>,
     VV: Value<Trailer = V>,
@@ -270,7 +225,7 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
     }
   }
 
-  pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<K, V>, Error> {
+  pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<K, V>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
     let key_trailer_size = Self::key_trailer_size();

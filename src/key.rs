@@ -282,17 +282,24 @@ impl<'a, K: Key> KeyRef<'a, K> {
     self.trailer
   }
 
-  /// Returns the encoded size of the key.
+  /// Returns the encoded size of the key part.
   #[inline]
-  pub fn encoded_size(&self) -> usize {
+  pub(crate) fn encoded_size(&self) -> usize {
     self.data.len()
   }
+}
 
-  /// Encodes the key into the given buffer. The buffer must be at least `self.encoded_size()` bytes.
-  pub fn encode(&self, buf: &mut [u8]) {
-    let key = self.as_bytes();
-    let key_len = key.len();
-    buf[..key_len].copy_from_slice(key);
+impl<'a, K: Key> Key for KeyRef<'a, K> {
+  type Trailer = K::Trailer;
+
+  #[inline]
+  fn as_bytes(&self) -> &[u8] {
+    self.data
+  }
+
+  #[inline]
+  fn trailer(&self) -> &Self::Trailer {
+    self.trailer
   }
 }
 

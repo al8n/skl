@@ -10,24 +10,26 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod error;
-pub use error::Error;
-
-mod value;
-pub use value::{Value, ValueRef};
-mod key;
-pub use key::{Key, KeyRef};
-
-/// Key and Value types used by [badger](https://github.com/dgraph-io/badger)
+mod arena;
+/// key and value types used by [badger](https://github.com/dgraph-io/badger)
 pub mod badger {
   pub use super::{key::badger::*, value::badger::*};
 }
+mod key;
+/// A map implementation based on skiplist
+pub mod map;
+mod node;
+/// A set implementation based on skiplist
+pub mod set;
+mod value;
 
-// mod map;
-// pub use crate::map::{SkipMap, SkipMapIterator, UniSkipMapIterator};
-mod map;
-pub use map::*;
+pub use arena::{Arena, ArenaError};
+pub use key::{Key, KeyRef};
+pub use map::{MapIterator, SkipMap};
+pub use set::{SetIterator, SkipSet};
+pub use value::{Value, ValueRef};
 
+const MAX_HEIGHT: usize = 20;
 const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
 
 /// Comparator is used for users to define their own key comparison logic.

@@ -2,27 +2,22 @@ use core::cmp;
 
 use crossbeam_utils::CachePadded;
 
-use crate::{
-  error::Error,
+use super::{
+  arena::Arena,
   key::AsKeyRef,
+  node::{Node, NodePtr},
   sync::{AtomicU32, Ordering},
   value::AsValueRef,
-  Comparator, Key, KeyRef, Value, ValueRef, NODE_ALIGNMENT_FACTOR,
+  Comparator, Key, KeyRef, Value, ValueRef, MAX_HEIGHT, NODE_ALIGNMENT_FACTOR,
 };
 
-mod arena;
-use arena::Arena;
-mod node;
-use node::Node;
+mod error;
+pub use error::Error;
 mod iterator;
 pub use iterator::*;
 
 #[cfg(test)]
 mod tests;
-
-use self::node::NodePtr;
-
-const MAX_HEIGHT: usize = 20;
 
 /// Precompute the skiplist probabilities so that only a single random number
 /// needs to be generated and so that the optimal pvalue can be used (inverse
@@ -112,7 +107,7 @@ const fn alignment_assertion<K: Key, V: Value>() {
 }
 
 impl<K: Key, V: Value> SkipMap<K, V> {
-  /// Create a new skiplist according to the given capacity
+  /// Create a new skipmap according to the given capacity
   ///
   /// **Note:** The capacity stands for how many memory allocated,
   /// it does not mean the skiplist can store `cap` entries.
@@ -190,10 +185,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
 
   /// Returns true if the key exists in the map.
   #[inline]
-  pub fn contains_key<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> bool
+  pub fn contains_key<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> bool
   where
-    K::Trailer: 'b,
-    V::Trailer: 'b,
+    K::Trailer: 'a,
+    V::Trailer: 'a,
     Q: Ord + ?Sized + AsKeyRef<Key = K>,
   {
     self.get(key).is_some()
@@ -236,10 +231,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   }
 
   /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> Option<ValueRef<'b, V>>
+  pub fn get<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<ValueRef<'a, V>>
   where
-    K::Trailer: 'b,
-    V::Trailer: 'b,
+    K::Trailer: 'a,
+    V::Trailer: 'a,
     Q: Ord + ?Sized + AsKeyRef<Key = K>,
   {
     let key = key.as_key_ref();
@@ -263,14 +258,14 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   ///
   /// - Returns `Err(Error::Duplicated)`, if the key already exists.
   /// - Returns `Err(Error::Full)`, if there isn't enough room in the arena.
-  pub fn get_or_insert<'a: 'b, 'b, Q, R>(
-    &'b self,
-    key: &'a Q,
-    value: &'a R,
-  ) -> Result<Option<ValueRef<'b, V>>, Error>
+  pub fn get_or_insert<'a, 'b: 'a, Q, R>(
+    &'a self,
+    key: &'b Q,
+    value: &'b R,
+  ) -> Result<Option<ValueRef<'a, V>>, Error>
   where
-    K::Trailer: 'b,
-    V::Trailer: 'b,
+    K::Trailer: 'a,
+    V::Trailer: 'a,
     Q: Ord + ?Sized + AsKeyRef<Key = K>,
     R: AsValueRef<Value = V> + ?Sized,
   {
@@ -298,10 +293,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   ///
   /// - Returns `Error::Duplicated`, if the key already exists.
   /// - Returns `Error::Full`, if there isn't enough room in the arena.
-  pub fn insert<'a, Q, R>(&'a self, key: &'a Q, value: &'a R) -> Result<(), Error>
+  pub fn insert<'a, 'b: 'a, Q, R>(&'a self, key: &'b Q, value: &'b R) -> Result<(), Error>
   where
-    K::Trailer: 'a,
-    V::Trailer: 'a,
+    K::Trailer: 'b,
+    V::Trailer: 'b,
     Q: Ord + ?Sized + AsKeyRef<Key = K>,
     R: AsValueRef<Value = V> + ?Sized,
   {
@@ -310,6 +305,51 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       value.as_value_ref(),
       &mut Inserter::default(),
     )
+  }
+
+  /// Returns a new `Iterator`. Note that it is
+  /// safe for an iterator to be copied by value.
+  #[inline]
+  pub const fn iter(&self) -> iterator::MapIterator<K, V, K, K, C> {
+    iterator::MapIterator::new(self)
+  }
+
+  /// Returns a new `Iterator` that with the lower and upper bounds.
+  #[inline]
+  pub const fn iter_bounded<'a, L, U>(
+    &'a self,
+    lower: L,
+    upper: U,
+  ) -> iterator::MapIterator<'a, K, V, L, U, C>
+  where
+    L: Key<Trailer = K::Trailer> + 'a,
+    U: Key<Trailer = K::Trailer> + 'a,
+  {
+    iterator::MapIterator::bounded(self, lower, upper)
+  }
+
+  /// Returns a new `Iterator` that with the lower bound.
+  #[inline]
+  pub const fn iter_bound_lower<'a, L>(
+    &'a self,
+    lower: L,
+  ) -> iterator::MapIterator<'a, K, V, L, K, C>
+  where
+    L: Key<Trailer = K::Trailer> + 'a,
+  {
+    iterator::MapIterator::bound_lower(self, lower)
+  }
+
+  /// Returns a new `Iterator` that with the upper bound.
+  #[inline]
+  pub const fn iter_bound_upper<'a, U>(
+    &'a self,
+    upper: U,
+  ) -> iterator::MapIterator<'a, K, V, K, U, C>
+  where
+    U: Key<Trailer = K::Trailer> + 'a,
+  {
+    iterator::MapIterator::bound_upper(self, upper)
   }
 }
 

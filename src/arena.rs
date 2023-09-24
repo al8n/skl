@@ -1,5 +1,4 @@
 use crate::{
-  error::Error,
   sync::{AtomicMut, AtomicPtr, Ordering},
   Key, KeyTrailer, Value, ValueTrailer,
 };
@@ -16,6 +15,19 @@ use super::node::Node;
 
 mod shared;
 use shared::Shared;
+
+/// An error indicating that the arena is full
+#[derive(Debug)]
+pub struct ArenaError;
+
+impl core::fmt::Display for ArenaError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    write!(f, "allocation failed because arena is full")
+  }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ArenaError {}
 
 /// Arena should be lock-free
 pub struct Arena {
@@ -99,11 +111,16 @@ impl Arena {
   }
 
   #[inline]
-  pub(super) fn alloc(&self, size: u32, align: u32, overflow: u32) -> Result<(u32, u32), Error> {
+  pub(super) fn alloc(
+    &self,
+    size: u32,
+    align: u32,
+    overflow: u32,
+  ) -> Result<(u32, u32), ArenaError> {
     // Verify that the arena isn't already full.
     let orig_size = self.n.load(Ordering::Acquire);
     if orig_size > self.cap as u64 {
-      return Err(Error::Full);
+      return Err(ArenaError);
     }
 
     // Pad the allocation with enough bytes to ensure the requested alignment.
@@ -112,7 +129,7 @@ impl Arena {
     let new_size = self.n.fetch_add(padded, Ordering::AcqRel) + padded;
 
     if new_size + overflow as u64 > self.cap as u64 {
-      return Err(Error::Full);
+      return Err(ArenaError);
     }
 
     // Return the aligned offset.

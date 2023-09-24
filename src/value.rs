@@ -12,7 +12,7 @@ pub mod badger;
 ///
 /// This trait gives the value-value database developers the ability to add extra information
 /// to the value provided by the end-users by associated type [`ValueTrailer`](crate::ValueTrailer).
-/// 
+///
 /// # Example
 ///
 /// 1. The `Value` of [dgraph's badger](https://github.com/dgraph-io/badger) can be implemented by using this trait as:

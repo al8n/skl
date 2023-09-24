@@ -54,13 +54,13 @@ impl AlignedVec {
       ptr,
       cap: capacity,
       len: capacity,
-      align
+      align,
     }
   }
 
   #[inline]
   const fn max_capacity(align: usize) -> usize {
-    isize::MAX as usize - (align - 1) 
+    isize::MAX as usize - (align - 1)
   }
 
   #[inline]

@@ -4,9 +4,10 @@ use crate::{
 };
 use alloc::{boxed::Box, sync::Arc};
 use core::{
+  mem,
   ptr::{self, NonNull},
   slice,
-  sync::atomic::AtomicU64, mem,
+  sync::atomic::AtomicU64,
 };
 
 use crossbeam_utils::CachePadded;
@@ -77,7 +78,9 @@ impl Arena {
   pub(super) fn new_vec<K: Key, V: Value>(n: usize) -> Self {
     Self::new(Shared::new_vec(
       n.max(Self::min_cap::<K::Trailer, V::Trailer>()),
-      mem::align_of::<K::Trailer>().max(mem::align_of::<V::Trailer>()).max(NODE_ALIGNMENT_FACTOR)
+      mem::align_of::<K::Trailer>()
+        .max(mem::align_of::<V::Trailer>())
+        .max(NODE_ALIGNMENT_FACTOR),
     ))
   }
 

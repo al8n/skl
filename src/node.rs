@@ -228,21 +228,18 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<K, V>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let key_trailer_size = Self::key_trailer_size();
-    let value_trailer_size = Self::value_trailer_size();
     let align = mem::align_of::<K>()
       .max(mem::align_of::<V>())
       .max(NODE_ALIGNMENT_FACTOR);
     let (node_offset, alloc_size) =
       arena.alloc(Node::<K, V>::MAX_NODE_SIZE as u32, align as u32, 0)?;
+    println!("{:?}", node_offset);
 
     // Safety: we have check the offset is valid
     unsafe {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<K, V>);
-      ptr::write_bytes(&mut node.key_trailer, 0, key_trailer_size);
-      ptr::write_bytes(&mut node.value_trailer, 0, value_trailer_size);
       node.key_offset = 0;
       node.key_size = 0;
       node.value_size = 0;
@@ -250,16 +247,6 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       node.alloc_size = alloc_size;
       Ok(NodePtr::new(ptr, node_offset))
     }
-  }
-
-  #[inline]
-  const fn key_trailer_size() -> usize {
-    mem::size_of::<K>()
-  }
-
-  #[inline]
-  const fn value_trailer_size() -> usize {
-    mem::size_of::<V>()
   }
 }
 

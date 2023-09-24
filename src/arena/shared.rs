@@ -12,6 +12,7 @@ struct AlignedVec {
   ptr: ptr::NonNull<u8>,
   cap: usize,
   len: usize,
+  align: usize,
 }
 
 impl Drop for AlignedVec {
@@ -26,19 +27,19 @@ impl Drop for AlignedVec {
 }
 
 impl AlignedVec {
-  const ALIGNMENT: usize = 4;
+  // const ALIGNMENT: usize = 4;
 
-  const MAX_CAPACITY: usize = isize::MAX as usize - (Self::ALIGNMENT - 1);
+  // const MAX_CAPACITY: usize = isize::MAX as usize - (Self::ALIGNMENT - 1);
 
   #[inline]
-  fn new(capacity: usize) -> Self {
+  fn new(capacity: usize, align: usize) -> Self {
     assert!(
-      capacity <= Self::MAX_CAPACITY,
+      capacity <= Self::max_capacity(align),
       "`capacity` cannot exceed isize::MAX - {}",
-      Self::ALIGNMENT - 1
+      align - 1
     );
     let ptr = unsafe {
-      let layout = alloc::Layout::from_size_align_unchecked(capacity, Self::ALIGNMENT);
+      let layout = alloc::Layout::from_size_align_unchecked(capacity, align);
       let ptr = alloc::alloc(layout);
       if ptr.is_null() {
         alloc::handle_alloc_error(layout);
@@ -53,12 +54,18 @@ impl AlignedVec {
       ptr,
       cap: capacity,
       len: capacity,
+      align
     }
   }
 
   #[inline]
+  const fn max_capacity(align: usize) -> usize {
+    isize::MAX as usize - (align - 1) 
+  }
+
+  #[inline]
   fn layout(&self) -> alloc::Layout {
-    unsafe { alloc::Layout::from_size_align_unchecked(self.cap, Self::ALIGNMENT) }
+    unsafe { alloc::Layout::from_size_align_unchecked(self.cap, self.align) }
   }
 
   #[inline]
@@ -112,8 +119,8 @@ pub(super) struct Shared {
 }
 
 impl Shared {
-  pub(super) fn new_vec(cap: usize) -> Self {
-    let vec = AlignedVec::new(cap);
+  pub(super) fn new_vec(cap: usize, align: usize) -> Self {
+    let vec = AlignedVec::new(cap, align);
     Self {
       cap: vec.cap,
       backend: SharedBackend::Vec(vec),

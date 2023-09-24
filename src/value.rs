@@ -5,75 +5,17 @@ pub mod badger;
 
 /// Gives the users the ability to define their own value type, rather than just slice.
 ///
-/// For a value-value database, the value inserted by the end-users will always be encoded to a u8 array.
-/// But the value-value database developers are tend to add some extra information
+/// For a key-value database, the value inserted by the end-users will always be encoded to a u8 array.
+/// But the key-value database developers are tend to add some extra information
 /// to the value provided by the end-users.
 /// e.g. ttl, version, tombstones, and etc.
 ///
 /// This trait gives the value-value database developers the ability to add extra information
-/// to the value provided by the end-users by associated type [`Trailer`](crate::Trailer).
-///
+/// to the value provided by the end-users by associated type [`ValueTrailer`](crate::ValueTrailer).
+/// 
 /// # Example
 ///
-/// 1. The [`InternalValue`](https://github.com/cockroachdb/pebble/blob/master/internal/base/internal.go#L171) of [cockroachdb's pebble](https://github.com/cockroachdb/pebble) can be implemented by using this trait as:
-///
-///     ```rust,no_run
-///     #[repr(u64)]
-///     enum InternalValueVind {
-///       Delete,
-///       Set,
-///       Merge,
-///       LogData,
-///       // ...
-///     }
-///
-///     #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-///     #[repr(transparent)]
-///     struct PebbleValueTrailer(u64);
-///
-///     impl skl::Trailer for PebbleValueTrailer {
-///       fn encoded_size(&self) -> usize {
-///         core::mem::size_of::<u64>()
-///       }
-///
-///       fn encode(&self, buf: &mut [u8]) {
-///         buf.copy_from_slice(&self.0.to_le_bytes());
-///       }
-///
-///       fn decode(src: &[u8]) -> Self {
-///         Self(u64::from_le_bytes(src[..core::mem::size_of::<u64>()].try_into().unwrap()))
-///       }
-///     }
-///
-///     impl PebbleValueTrailer {
-///       fn make_trailer(seq_num: u64, kind: InternalValueVind) -> u64 {
-///         (seq_num << 8) | (kind as u64)
-///       }
-///
-///       fn seq_num(&self) -> u64 {
-///         self.0 >> 8
-///       }
-///     }
-///
-///     struct PebbleValue {
-///       user_value: Vec<u8>,
-///       trailer: PebbleValueTrailer,
-///     }
-///
-///     impl skl::Value for PebbleValue {
-///       type Trailer = PebbleValueTrailer;
-///       
-///       fn as_bytes(&self) -> &[u8] {
-///         self.user_value.as_slice()
-///       }
-///
-///       fn trailer(&self) -> &Self::Trailer {
-///         &self.trailer
-///       }
-///     }
-///     ```
-///
-/// 2. The [`Value`]() of [dgraph's badger](https://github.com/dgraph-io/badger) can be implemented by using this trait as:
+/// 1. The `Value` of [dgraph's badger](https://github.com/dgraph-io/badger) can be implemented by using this trait as:
 ///   
 ///     ```rust,no_run
 ///

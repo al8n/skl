@@ -31,7 +31,7 @@ pub mod badger;
 ///     #[repr(transparent)]
 ///     struct PebbleKeyTrailer(u64);
 ///
-///     impl skl::Trailer for PebbleKeyTrailer {
+///     impl skl::KeyTrailer for PebbleKeyTrailer {
 ///       fn encoded_size(&self) -> usize {
 ///         core::mem::size_of::<u64>()
 ///       }

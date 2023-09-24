@@ -117,7 +117,7 @@ fn test_basic_large_testcases_in(l: Arc<SkipMap<BadgerKey, BadgerValue>>) {
 
 #[test]
 fn test_basic_large_testcases() {
-  let l = Arc::new(SkipMap::new(ARENA_SIZE).unwrap());
+  let l = Arc::new(SkipMap::<BadgerKey, BadgerValue>::new(ARENA_SIZE).unwrap());
   test_basic_large_testcases_in(l);
 }
 

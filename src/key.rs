@@ -31,19 +31,7 @@ pub mod badger;
 ///     #[repr(transparent)]
 ///     struct PebbleKeyTrailer(u64);
 ///
-///     impl skl::KeyTrailer for PebbleKeyTrailer {
-///       fn encoded_size(&self) -> usize {
-///         core::mem::size_of::<u64>()
-///       }
-///
-///       fn encode(&self, buf: &mut [u8]) {
-///         buf.copy_from_slice(&self.0.to_le_bytes());
-///       }
-///
-///       fn decode(src: &[u8]) -> Self {
-///         Self(u64::from_le_bytes(src[..core::mem::size_of::<u64>()].try_into().unwrap()))
-///       }
-///     }
+///     impl skl::KeyTrailer for PebbleKeyTrailer {}
 ///
 ///     impl PebbleKeyTrailer {
 ///       fn make_trailer(seq_num: u64, kind: InternalKeyKind) -> u64 {
@@ -73,7 +61,7 @@ pub mod badger;
 ///     }
 ///     ```
 ///
-/// 2. The [`Key`]() of [dgraph's badger](https://github.com/dgraph-io/badger) can be implemented by using this trait as:
+/// 2. The `Key` of [dgraph's badger](https://github.com/dgraph-io/badger) can be implemented by using this trait as:
 ///   
 ///     ```rust,no_run
 ///

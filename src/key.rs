@@ -251,7 +251,7 @@ impl Key for smol_str::SmolStr {
 /// The key reference
 pub struct KeyRef<'a, K: Key> {
   data: &'a [u8],
-  trailer: &'a K::Trailer,
+  trailer: K::Trailer,
 }
 
 impl<'a, K: Key> Clone for KeyRef<'a, K> {
@@ -266,7 +266,7 @@ impl<'a, K: Key> Copy for KeyRef<'a, K> {}
 impl<'a, K: Key> KeyRef<'a, K> {
   /// Creates a new key reference directly from the given bytes and trailer.
   #[inline]
-  pub const fn new(data: &'a [u8], trailer: &'a K::Trailer) -> Self {
+  pub const fn new(data: &'a [u8], trailer: K::Trailer) -> Self {
     Self { data, trailer }
   }
 
@@ -279,7 +279,7 @@ impl<'a, K: Key> KeyRef<'a, K> {
   /// Returns the trailer of the key.
   #[inline]
   pub const fn trailer(&self) -> &K::Trailer {
-    self.trailer
+    &self.trailer
   }
 
   /// Returns the encoded size of the key part.
@@ -299,7 +299,7 @@ impl<'a, K: Key> Key for KeyRef<'a, K> {
 
   #[inline]
   fn trailer(&self) -> &Self::Trailer {
-    self.trailer
+    &self.trailer
   }
 }
 
@@ -319,7 +319,7 @@ impl<K: Key> AsKeyRef for K {
   fn as_key_ref(&self) -> KeyRef<K> {
     KeyRef {
       data: self.as_bytes(),
-      trailer: self.trailer(),
+      trailer: *self.trailer(),
     }
   }
 }

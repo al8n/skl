@@ -4,6 +4,7 @@ use super::{AsKeyRef, Comparator, Key, SkipSet, VoidValue};
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
+#[repr(transparent)]
 pub struct SetIterator<'a, K, L, U, C = ()>
 where
   K: Key,
@@ -67,10 +68,8 @@ where
 {
   /// Creates a new iterator over the skipmap with the given lower and upper bounds.
   #[inline]
-  pub const fn bounded(set: &'a SkipSet<K, C>, lower: L, upper: U) -> Self {
-    Self {
-      iter: set.map.iter_bounded(lower, upper),
-    }
+  pub fn bounded(set: &'a SkipSet<K, C>, lower: L, upper: U) -> Option<Self> {
+    set.map.iter_bounded(lower, upper).map(|iter| Self { iter })
   }
 
   /// Seeks position at the first entry in map. Returns the key

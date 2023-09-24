@@ -24,17 +24,17 @@ pub mod set;
 mod value;
 
 pub use arena::{Arena, ArenaError};
-pub use key::{Key, KeyRef};
+pub use key::{AsKeyRef, Key, KeyRef};
 pub use map::{MapIterator, SkipMap};
 pub use set::{SetIterator, SkipSet};
-pub use value::{Value, ValueRef};
+pub use value::{AsValueRef, Value, ValueRef};
 
 const MAX_HEIGHT: usize = 20;
 const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
 
-/// Comparator is used for users to define their own key comparison logic.
+/// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation
-pub trait Comparator {
+pub trait Comparator: Clone {
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering;
 }
@@ -47,7 +47,7 @@ impl Comparator for () {
 }
 
 /// A marker trait, which gives the key-value database developers the ability to add extra information
-/// to the key or value provided by the end-users. The only way to implement this trait is
+/// to the key or value provided by the end-users.
 ///
 /// **NB:**
 ///
@@ -116,6 +116,3 @@ mod sync {
     }
   }
 }
-
-// #[cfg(test)]
-// mod utils;

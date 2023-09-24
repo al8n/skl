@@ -13,8 +13,12 @@ use super::{
 
 mod error;
 pub use error::Error;
+mod entry;
+pub use entry::*;
 mod iterator;
 pub use iterator::*;
+mod snapshot;
+pub use snapshot::*;
 
 #[cfg(test)]
 mod tests;
@@ -77,8 +81,14 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
 
   /// Returns the arena backing this skipmap.
   #[inline]
-  pub fn arena(&self) -> &Arena {
+  pub const fn arena(&self) -> &Arena {
     &self.arena
+  }
+
+  /// Returns the comparator used for the skipmap.
+  #[inline]
+  pub const fn cmp(&self) -> &C {
+    &self.cmp
   }
 
   /// Returns the number of bytes that have allocated from the arena.
@@ -194,8 +204,8 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     self.get(key).is_some()
   }
 
-  /// Returns the value of the first entry in the map.
-  pub fn first(&self) -> Option<ValueRef<V>> {
+  /// Returns the first entry in the map.
+  pub fn first(&self) -> Option<EntryRef<K, V, C>> {
     // Safety: head node was definitely allocated by self.arena
     let nd = unsafe { self.get_next(self.head, 0) };
     if nd.is_null() || nd.ptr == self.tail.ptr {
@@ -205,15 +215,17 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     // Safety: we already check the not is not null, and the node is allocated by self.arena
     unsafe {
       let node = nd.as_ptr();
-      Some(ValueRef::new(
-        node.get_value(&self.arena),
-        node.value_trailer,
-      ))
+      Some(EntryRef {
+        map: self,
+        nd,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      })
     }
   }
 
-  /// Returns the value of the last entry in the map.
-  pub fn last(&self) -> Option<ValueRef<V>> {
+  /// Returns the last entry in the map.
+  pub fn last(&self) -> Option<EntryRef<K, V, C>> {
     // Safety: tail node was definitely allocated by self.arena
     let nd = unsafe { self.get_prev(self.tail, 0) };
     if nd.is_null() || nd.ptr == self.head.ptr {
@@ -223,10 +235,46 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     // Safety: we already check the not is not null, and the node is allocated by self.arena
     unsafe {
       let node = nd.as_ptr();
-      Some(ValueRef::new(
-        node.get_value(&self.arena),
-        node.value_trailer,
-      ))
+      Some(EntryRef {
+        map: self,
+        nd,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      })
+    }
+  }
+
+  /// Returns the `i`-th entry in the skip map.
+  /// This operation is `O(2/n)`.
+  pub fn ith(&self, index: usize) -> Option<EntryRef<K, V, C>> {
+    let len = self.len();
+    if index >= len {
+      return None;
+    }
+
+    unsafe {
+      // located in the first half
+      let nd = if index < len / 2 {
+        let mut nd = self.head;
+        for _ in 0..index {
+          nd = self.get_next(nd, 0);
+        }
+        nd
+      } else {
+        let mut nd = self.tail;
+        for _ in 0..index {
+          nd = self.get_prev(nd, 0);
+        }
+        nd
+      };
+
+      let node = nd.as_ptr();
+      Some(EntryRef {
+        map: self,
+        nd,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      })
     }
   }
 
@@ -316,11 +364,11 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
 
   /// Returns a new `Iterator` that with the lower and upper bounds.
   #[inline]
-  pub const fn iter_bounded<'a, L, U>(
+  pub fn iter_bounded<'a, L, U>(
     &'a self,
     lower: L,
     upper: U,
-  ) -> iterator::MapIterator<'a, K, V, L, U, C>
+  ) -> Option<iterator::MapIterator<'a, K, V, L, U, C>>
   where
     L: Key<Trailer = K::Trailer> + 'a,
     U: Key<Trailer = K::Trailer> + 'a,
@@ -351,8 +399,93 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   {
     iterator::MapIterator::bound_upper(self, upper)
   }
+
+  /// Returns an optional snapshot of the SkipMap's current state.
+  ///
+  /// A snapshot is a read-only view of the SkipMap at a specific point in time.
+  /// It provides a consistent view of the SkipMap's contents, which can be useful
+  /// for various purposes, such as implementing transactional semantics.
+  ///
+  /// # Returns
+  ///
+  /// - `Some(snapshot::Snapshot)`: If the SkipMap's is not empty.
+  /// - `None`: If the current SkipMap is empty.
+  ///
+  #[inline]
+  pub fn snapshot(&self) -> Option<snapshot::Snapshot<K, V, C>> {
+    let height = self.height();
+    let len = self.len() as u32;
+    let last = self.ith(len as usize - 1)?.nd;
+    let map = Self {
+      arena: self.arena.clone(),
+      head: self.head,
+      tail: self.tail,
+      height: CachePadded::new(AtomicU32::new(height)),
+      len: CachePadded::new(AtomicU32::new(len)),
+      #[cfg(test)]
+      testing: self.testing,
+      cmp: self.cmp.clone(),
+    };
+
+    Some(snapshot::Snapshot::new(
+      map,
+      height,
+      len,
+      self.arena.size(),
+      last,
+    ))
+  }
 }
 
+// --------------------------------Crate Level Methods--------------------------------
+impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  pub(crate) unsafe fn get_prev(
+    &self,
+    nd: NodePtr<K::Trailer, V::Trailer>,
+    height: usize,
+  ) -> NodePtr<K::Trailer, V::Trailer> {
+    if nd.is_null() {
+      return NodePtr::NULL;
+    }
+
+    let offset = nd.prev_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  pub(crate) unsafe fn get_next(
+    &self,
+    nptr: NodePtr<K::Trailer, V::Trailer>,
+    height: usize,
+  ) -> NodePtr<K::Trailer, V::Trailer> {
+    if nptr.is_null() {
+      return NodePtr::NULL;
+    }
+    let offset = nptr.next_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
+  }
+
+  #[inline]
+  pub(crate) const fn head(&self) -> NodePtr<K::Trailer, V::Trailer> {
+    self.head
+  }
+
+  #[inline]
+  pub(crate) const fn tail(&self) -> NodePtr<K::Trailer, V::Trailer> {
+    self.tail
+  }
+}
+
+// --------------------------------Private Methods--------------------------------
 impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
     alignment_assertion::<K, V>();
@@ -765,39 +898,35 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     }
   }
 
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_prev(
-    &self,
-    nd: NodePtr<K::Trailer, V::Trailer>,
-    height: usize,
-  ) -> NodePtr<K::Trailer, V::Trailer> {
-    if nd.is_null() {
-      return NodePtr::NULL;
+  fn seek_for_base_splice(&self, key: KeyRef<K>) -> SeekResult<K, V> {
+    let mut lvl = (self.height() - 1) as usize;
+
+    let mut prev = self.head;
+    let mut next;
+
+    loop {
+      let fr = unsafe { self.find_splice_for_level(&key, lvl, prev) };
+      prev = fr.splice.prev;
+      next = fr.splice.next;
+      if fr.found {
+        if lvl != 0 {
+          // next is pointing at the target node, but we need to find previous on
+          // the bottom level.
+
+          // Safety: the next we use here is got from the find_splice_for_level, so must be allocated by the same arena
+          prev = unsafe { self.get_prev(next, 0) };
+        }
+        break;
+      }
+
+      if lvl == 0 {
+        break;
+      }
+
+      lvl -= 1;
     }
 
-    let offset = nd.prev_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr, offset)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_next(
-    &self,
-    nptr: NodePtr<K::Trailer, V::Trailer>,
-    height: usize,
-  ) -> NodePtr<K::Trailer, V::Trailer> {
-    if nptr.is_null() {
-      return NodePtr::NULL;
-    }
-    let offset = nptr.next_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr, offset)
+    SeekResult { prev, next }
   }
 }
 
@@ -847,4 +976,9 @@ struct FindResult<K: Key, V: Value> {
   found: bool,
   splice: Splice<K, V>,
   curr: Option<NodePtr<K::Trailer, V::Trailer>>,
+}
+
+struct SeekResult<K: Key, V: Value> {
+  prev: NodePtr<K::Trailer, V::Trailer>,
+  next: NodePtr<K::Trailer, V::Trailer>,
 }

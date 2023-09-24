@@ -2,7 +2,7 @@ use crate::{
   sync::{AtomicMut, AtomicPtr, Ordering},
   Key, KeyTrailer, Value, ValueTrailer,
 };
-use ::alloc::boxed::Box;
+use alloc::{boxed::Box, sync::Arc};
 use core::{
   ptr::{self, NonNull},
   slice,
@@ -32,7 +32,9 @@ impl std::error::Error for ArenaError {}
 /// Arena should be lock-free
 pub struct Arena {
   data_ptr: NonNull<u8>,
-  n: CachePadded<AtomicU64>,
+  // TODO(al8n): may be move n to `Shared`? then we do not need Arc
+  // to make Arena clonable, but not sure which one is better.
+  n: Arc<CachePadded<AtomicU64>>,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -106,7 +108,7 @@ impl Arena {
       data_ptr,
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
-      n: CachePadded::new(AtomicU64::new(1)),
+      n: Arc::new(CachePadded::new(AtomicU64::new(1))),
     }
   }
 
@@ -199,6 +201,29 @@ impl Arena {
   }
 }
 
+impl Clone for Arena {
+  fn clone(&self) -> Self {
+    unsafe {
+      let shared: *mut Shared = self.inner.load(Ordering::Relaxed).cast();
+
+      let old_size = (*shared).refs.fetch_add(1, Ordering::Release);
+      if old_size > usize::MAX >> 1 {
+        abort();
+      }
+
+      // Safety:
+      // The ptr is always non-null, we just initialized it.
+      // And this ptr is only deallocated when the arena is dropped.
+      Self {
+        cap: (*shared).cap(),
+        inner: AtomicPtr::new(shared as _),
+        data_ptr: self.data_ptr,
+        n: self.n.clone(),
+      }
+    }
+  }
+}
+
 impl Drop for Arena {
   fn drop(&mut self) {
     unsafe {
@@ -238,5 +263,26 @@ impl Drop for Arena {
         shared.unmount(self.n.load(Ordering::Relaxed) as usize);
       });
     }
+  }
+}
+
+#[inline(never)]
+#[cold]
+fn abort() -> ! {
+  #[cfg(feature = "std")]
+  {
+    std::process::abort();
+  }
+
+  #[cfg(not(feature = "std"))]
+  {
+    struct Abort;
+    impl Drop for Abort {
+      fn drop(&mut self) {
+        panic!();
+      }
+    }
+    let _a = Abort;
+    panic!("abort");
   }
 }

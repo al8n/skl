@@ -41,12 +41,21 @@ where
 
   /// Creates a new iterator over the skipmap with the given lower and upper bounds.
   #[inline]
-  pub const fn bounded(map: &'a SkipMap<K, V, C>, lower: L, upper: U) -> Self {
-    Self {
-      map,
-      nd: map.head,
-      lower: Some(lower),
-      upper: Some(upper),
+  pub fn bounded(map: &'a SkipMap<K, V, C>, lower: L, upper: U) -> Option<Self> {
+    let lower_ref = lower.as_key_ref();
+    let upper_ref = upper.as_key_ref();
+    match map
+      .cmp
+      .compare(lower_ref.as_bytes(), upper_ref.as_bytes())
+      .then_with(|| lower_ref.trailer().cmp(upper_ref.trailer()))
+    {
+      cmp::Ordering::Greater | cmp::Ordering::Equal => None,
+      _ => Some(Self {
+        map,
+        nd: map.head,
+        lower: Some(lower),
+        upper: Some(upper),
+      }),
     }
   }
 
@@ -201,7 +210,7 @@ where
   where
     Q: Ord + ?Sized + AsKeyRef<Key = K>,
   {
-    let res = self.seek_for_base_splice(key.as_key_ref());
+    let res = self.map.seek_for_base_splice(key.as_key_ref());
     self.nd = res.next;
     if self.nd.ptr == self.map.tail.ptr {
       return None;
@@ -241,7 +250,7 @@ where
   {
     // NB: the top-level MapIterator has already adjusted key based on
     // the upper-bound.
-    let res = self.seek_for_base_splice(key.as_key_ref());
+    let res = self.map.seek_for_base_splice(key.as_key_ref());
     self.nd = res.prev;
     if self.nd.ptr == self.map.head.ptr {
       return None;
@@ -283,7 +292,7 @@ where
   unsafe fn key_unchecked(&self) -> KeyRef<'_, K> {
     let nd = self.nd.as_ptr();
     let val = nd.get_key(&self.map.arena);
-    KeyRef::new(val, &nd.key_trailer)
+    KeyRef::new(val, nd.key_trailer)
   }
 
   /// Returns the value of the current entry without any checks.
@@ -295,40 +304,4 @@ where
     let val = nd.get_value(&self.map.arena);
     ValueRef::new(val, nd.value_trailer)
   }
-
-  fn seek_for_base_splice(&self, key: KeyRef<K>) -> SeekResult<K, V> {
-    let mut lvl = (self.map.height() - 1) as usize;
-
-    let mut prev = self.map.head;
-    let mut next;
-
-    loop {
-      let fr = unsafe { self.map.find_splice_for_level(&key, lvl, prev) };
-      prev = fr.splice.prev;
-      next = fr.splice.next;
-      if fr.found {
-        if lvl != 0 {
-          // next is pointing at the target node, but we need to find previous on
-          // the bottom level.
-
-          // Safety: the next we use here is got from the find_splice_for_level, so must be allocated by the same arena
-          prev = unsafe { self.map.get_prev(next, 0) };
-        }
-        break;
-      }
-
-      if lvl == 0 {
-        break;
-      }
-
-      lvl -= 1;
-    }
-
-    SeekResult { prev, next }
-  }
-}
-
-struct SeekResult<K: Key, V: Value> {
-  prev: NodePtr<K::Trailer, V::Trailer>,
-  next: NodePtr<K::Trailer, V::Trailer>,
 }

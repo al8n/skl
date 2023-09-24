@@ -4,6 +4,8 @@ use super::{key::AsKeyRef, Arena, Comparator, Key, SkipMap, Value};
 
 mod error;
 pub use error::Error;
+mod entry;
+pub use entry::EntryRef;
 
 mod iterator;
 pub use iterator::*;
@@ -128,6 +130,34 @@ impl<K: Key> SkipSet<K, ()> {
 }
 
 impl<K: Key, C: Comparator> SkipSet<K, C> {
+  /// Returns the first entry in the set.
+  pub fn first(&self) -> Option<EntryRef<K, C>> {
+    self.map.first().map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
+  /// Returns the last entry in the set.
+  pub fn last(&self) -> Option<EntryRef<K, C>> {
+    self.map.last().map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
+  /// Returns the `i`-th entry in the skip set.
+  /// This operation is `O(2/n)`.
+  pub fn ith(&self, index: usize) -> Option<EntryRef<K, C>> {
+    self.map.ith(index).map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
   /// Returns true if the key exists in the set.
   #[inline]
   pub fn contains<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> bool
@@ -160,5 +190,46 @@ impl<K: Key, C: Comparator> SkipSet<K, C> {
         super::map::Error::Duplicated => Ok(true),
       },
     }
+  }
+
+  /// Returns a new `Iterator`. Note that it is
+  /// safe for an iterator to be copied by value.
+  #[inline]
+  pub const fn iter(&self) -> iterator::SetIterator<K, K, K, C> {
+    iterator::SetIterator::new(self)
+  }
+
+  /// Returns a new `Iterator` that with the lower and upper bounds.
+  ///
+  /// Returns `None` if `lower` is greater than or equal to `upper`.
+  #[inline]
+  pub fn iter_bounded<'a, L, U>(
+    &'a self,
+    lower: L,
+    upper: U,
+  ) -> Option<iterator::SetIterator<'a, K, L, U, C>>
+  where
+    L: Key<Trailer = K::Trailer> + 'a,
+    U: Key<Trailer = K::Trailer> + 'a,
+  {
+    iterator::SetIterator::bounded(self, lower, upper)
+  }
+
+  /// Returns a new `Iterator` that with the lower bound.
+  #[inline]
+  pub const fn iter_bound_lower<'a, L>(&'a self, lower: L) -> iterator::SetIterator<'a, K, L, K, C>
+  where
+    L: Key<Trailer = K::Trailer> + 'a,
+  {
+    iterator::SetIterator::bound_lower(self, lower)
+  }
+
+  /// Returns a new `Iterator` that with the upper bound.
+  #[inline]
+  pub const fn iter_bound_upper<'a, U>(&'a self, upper: U) -> iterator::SetIterator<'a, K, K, U, C>
+  where
+    U: Key<Trailer = K::Trailer> + 'a,
+  {
+    iterator::SetIterator::bound_upper(self, upper)
   }
 }

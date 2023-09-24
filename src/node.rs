@@ -71,7 +71,7 @@ impl<K, V> NodePtr<K, V> {
   /// ## Safety
   /// - the pointer must be valid
   #[inline]
-  pub(super) unsafe fn as_ptr(&self) -> &Node<K, V> {
+  pub(super) const unsafe fn as_ptr(&self) -> &Node<K, V> {
     &*self.ptr.cast()
   }
 

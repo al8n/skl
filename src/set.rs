@@ -158,6 +158,78 @@ impl<K: Key, C: Comparator> SkipSet<K, C> {
     })
   }
 
+  /// Returns the entry less than the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
+  /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
+  pub fn lt<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, C>>
+  where
+    K::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+  {
+    self.map.lt(key).map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
+  /// Returns the entry less than or equal to the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
+  /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
+  pub fn le<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, C>>
+  where
+    K::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+  {
+    self.map.le(key).map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
+  /// Returns the entry greater than or equal to the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, and key is equal to k1, then the entry contains k1 will be returned.
+  /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
+  pub fn ge<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, C>>
+  where
+    K::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+  {
+    self.map.ge(key).map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
+  /// Returns the entry greater than the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, and key is equal to k1, then the entry contains k2 will be returned.
+  /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
+  pub fn gt<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, C>>
+  where
+    K::Trailer: 'b,
+    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+  {
+    self.map.gt(key).map(|ent| EntryRef {
+      map: &self.map,
+      nd: ent.ptr(),
+      key: *ent.key(),
+    })
+  }
+
   /// Returns true if the key exists in the set.
   #[inline]
   pub fn contains<'a: 'b, 'b, Q>(&'b self, key: &'a Q) -> bool
@@ -209,8 +281,8 @@ impl<K: Key, C: Comparator> SkipSet<K, C> {
     upper: U,
   ) -> Option<iterator::SetIterator<'a, K, L, U, C>>
   where
-    L: Key<Trailer = K::Trailer> + 'a,
-    U: Key<Trailer = K::Trailer> + 'a,
+    L: AsKeyRef<Key = K> + 'a,
+    U: AsKeyRef<Key = K> + 'a,
   {
     iterator::SetIterator::bounded(self, lower, upper)
   }
@@ -219,7 +291,7 @@ impl<K: Key, C: Comparator> SkipSet<K, C> {
   #[inline]
   pub const fn iter_bound_lower<'a, L>(&'a self, lower: L) -> iterator::SetIterator<'a, K, L, K, C>
   where
-    L: Key<Trailer = K::Trailer> + 'a,
+    L: AsKeyRef<Key = K> + 'a,
   {
     iterator::SetIterator::bound_lower(self, lower)
   }
@@ -228,7 +300,7 @@ impl<K: Key, C: Comparator> SkipSet<K, C> {
   #[inline]
   pub const fn iter_bound_upper<'a, U>(&'a self, upper: U) -> iterator::SetIterator<'a, K, K, U, C>
   where
-    U: Key<Trailer = K::Trailer> + 'a,
+    U: AsKeyRef<Key = K> + 'a,
   {
     iterator::SetIterator::bound_upper(self, upper)
   }

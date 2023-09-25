@@ -283,13 +283,108 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   where
     K::Trailer: 'a,
     V::Trailer: 'a,
-    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+    Q: ?Sized + AsKeyRef<Key = K>,
   {
     let key = key.as_key_ref();
     self.get_in(key).map(|ptr| unsafe {
       let node = ptr.as_ptr();
-
       ValueRef::new(node.get_value(&self.arena), node.value_trailer)
+    })
+  }
+
+  /// Returns the entry greater or equal to the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
+  /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
+  pub fn gt<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V, C>>
+  where
+    K::Trailer: 'a,
+    V::Trailer: 'a,
+    Q: ?Sized + AsKeyRef<Key = K>,
+  {
+    self.gt_in(key.as_key_ref()).map(|ptr| unsafe {
+      // Safety: the gt_in guarantees that ptr is valid,
+      let node = ptr.as_ptr();
+      EntryRef {
+        map: self,
+        nd: ptr,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      }
+    })
+  }
+
+  /// Returns the entry less than the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
+  /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
+  pub fn lt<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V, C>>
+  where
+    K::Trailer: 'a,
+    V::Trailer: 'a,
+    Q: ?Sized + AsKeyRef<Key = K>,
+  {
+    self.lt_in(key.as_key_ref()).map(|ptr| unsafe {
+      // Safety: the lt_in guarantees that ptr is valid,
+      let node = ptr.as_ptr();
+      EntryRef {
+        map: self,
+        nd: ptr,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      }
+    })
+  }
+
+  /// Returns the entry greater than or equal to the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
+  /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
+  pub fn ge<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V, C>>
+  where
+    K::Trailer: 'a,
+    V::Trailer: 'a,
+    Q: ?Sized + AsKeyRef<Key = K>,
+  {
+    self.ge_in(key.as_key_ref()).map(|ptr| unsafe {
+      // Safety: the ge_in guarantees that ptr is valid,
+      let node = ptr.as_ptr();
+      EntryRef {
+        map: self,
+        nd: ptr,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      }
+    })
+  }
+
+  /// Returns the entry less than or equal to the given key, if it exists.
+  ///
+  /// e.g.
+  ///
+  /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
+  /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
+  pub fn le<'a, 'b: 'a, Q>(&'a self, key: &'b Q) -> Option<EntryRef<'a, K, V, C>>
+  where
+    K::Trailer: 'a,
+    V::Trailer: 'a,
+    Q: ?Sized + AsKeyRef<Key = K>,
+  {
+    self.le_in(key.as_key_ref()).map(|ptr| unsafe {
+      // Safety: the le_in guarantees that ptr is valid,
+      let node = ptr.as_ptr();
+      EntryRef {
+        map: self,
+        nd: ptr,
+        key: KeyRef::new(node.get_key(&self.arena), node.key_trailer),
+        value: ValueRef::new(node.get_value(&self.arena), node.value_trailer),
+      }
     })
   }
 
@@ -314,7 +409,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   where
     K::Trailer: 'a,
     V::Trailer: 'a,
-    Q: Ord + ?Sized + AsKeyRef<Key = K>,
+    Q: ?Sized + AsKeyRef<Key = K>,
     R: AsValueRef<Value = V> + ?Sized,
   {
     let key = key.as_key_ref();
@@ -363,6 +458,10 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
   }
 
   /// Returns a new `Iterator` that with the lower and upper bounds.
+  ///
+  /// # Returns
+  /// - `None`: the upper >= lower || lower is larger than the tail || upper is smaller than the head
+  /// - `Some(..)`: both lower and upper bounds are valid
   #[inline]
   pub fn iter_bounded<'a, L, U>(
     &'a self,
@@ -370,8 +469,8 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     upper: U,
   ) -> Option<iterator::MapIterator<'a, K, V, L, U, C>>
   where
-    L: Key<Trailer = K::Trailer> + 'a,
-    U: Key<Trailer = K::Trailer> + 'a,
+    L: AsKeyRef<Key = K> + 'a,
+    U: AsKeyRef<Key = K> + 'a,
   {
     iterator::MapIterator::bounded(self, lower, upper)
   }
@@ -383,7 +482,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     lower: L,
   ) -> iterator::MapIterator<'a, K, V, L, K, C>
   where
-    L: Key<Trailer = K::Trailer> + 'a,
+    L: AsKeyRef<Key = K> + 'a,
   {
     iterator::MapIterator::bound_lower(self, lower)
   }
@@ -395,7 +494,7 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     upper: U,
   ) -> iterator::MapIterator<'a, K, V, K, U, C>
   where
-    U: Key<Trailer = K::Trailer> + 'a,
+    U: AsKeyRef<Key = K> + 'a,
   {
     iterator::MapIterator::bound_upper(self, upper)
   }
@@ -516,6 +615,32 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     })
   }
 
+  #[allow(clippy::type_complexity)]
+  fn new_node(
+    &self,
+    key: &KeyRef<K>,
+    value: &ValueRef<V>,
+  ) -> Result<(NodePtr<K::Trailer, V::Trailer>, u32), Error> {
+    let height = Self::random_height();
+    let nd = Node::new_node_ptr(&self.arena, height, key, value)?;
+
+    // Try to increase self.height via CAS.
+    let mut list_height = self.height();
+    while height > list_height {
+      match self.height.compare_exchange_weak(
+        list_height,
+        height,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        // Successfully increased skiplist.height.
+        Ok(_) => break,
+        Err(h) => list_height = h,
+      }
+    }
+    Ok((nd, height))
+  }
+
   #[cfg(feature = "std")]
   #[inline]
   fn random_height() -> u32 {
@@ -542,6 +667,86 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
       h += 1;
     }
     h as u32
+  }
+
+  fn get_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let mut lvl = (self.height() - 1) as usize;
+
+    let mut prev = self.head;
+    loop {
+      let fr = unsafe { self.find_splice_for_level(&key, lvl, prev) };
+      if fr.found {
+        return fr.curr;
+      }
+      if lvl == 0 {
+        break;
+      }
+
+      prev = fr.splice.prev;
+      lvl -= 1;
+    }
+
+    None
+  }
+
+  fn lt_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let res = self.seek_for_base_splice(key);
+    let nd = res.prev;
+    if nd.ptr == self.head.ptr {
+      return None;
+    }
+    Some(nd)
+  }
+
+  fn gt_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let res = self.seek_for_base_splice(key);
+    let mut nd = res.next;
+    if nd.ptr == self.tail.ptr {
+      return None;
+    }
+
+    unsafe {
+      let node = nd.as_ptr();
+      if self.cmp.compare(key.as_bytes(), node.get_key(&self.arena)) == cmp::Ordering::Equal
+        && node.key_trailer.eq(key.trailer())
+      {
+        nd = self.get_next(nd, 0);
+        if nd.ptr == self.tail.ptr {
+          return None;
+        }
+      }
+    }
+    Some(nd)
+  }
+
+  fn le_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let res = self.seek_for_base_splice(key);
+    let mut nd = res.prev;
+
+    unsafe {
+      let node = res.next.as_ptr();
+
+      if self.cmp.compare(key.as_bytes(), node.get_key(&self.arena)) == cmp::Ordering::Equal
+        && node.key_trailer.eq(key.trailer())
+      {
+        nd = res.next;
+      }
+
+      if nd.ptr == self.head.ptr {
+        return None;
+      }
+    }
+    Some(nd)
+  }
+
+  fn ge_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
+    let res = self.seek_for_base_splice(key);
+    let nd = res.next;
+    if nd.ptr == self.tail.ptr {
+      return None;
+    }
+
+    Some(nd)
   }
 
   fn insert_in(
@@ -694,52 +899,6 @@ impl<K: Key, V: Value, C: Comparator> SkipMap<K, V, C> {
     }
     self.len.fetch_add(1, Ordering::AcqRel);
     Ok(())
-  }
-
-  #[allow(clippy::type_complexity)]
-  fn new_node(
-    &self,
-    key: &KeyRef<K>,
-    value: &ValueRef<V>,
-  ) -> Result<(NodePtr<K::Trailer, V::Trailer>, u32), Error> {
-    let height = Self::random_height();
-    let nd = Node::new_node_ptr(&self.arena, height, key, value)?;
-
-    // Try to increase self.height via CAS.
-    let mut list_height = self.height();
-    while height > list_height {
-      match self.height.compare_exchange_weak(
-        list_height,
-        height,
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      ) {
-        // Successfully increased skiplist.height.
-        Ok(_) => break,
-        Err(h) => list_height = h,
-      }
-    }
-    Ok((nd, height))
-  }
-
-  fn get_in(&self, key: KeyRef<K>) -> Option<NodePtr<K::Trailer, V::Trailer>> {
-    let mut lvl = (self.height() - 1) as usize;
-
-    let mut prev = self.head;
-    loop {
-      let fr = unsafe { self.find_splice_for_level(&key, lvl, prev) };
-      if fr.found {
-        return fr.curr;
-      }
-      if lvl == 0 {
-        break;
-      }
-
-      prev = fr.splice.prev;
-      lvl -= 1;
-    }
-
-    None
   }
 
   /// ## Safety:

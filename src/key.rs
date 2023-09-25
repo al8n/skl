@@ -1,3 +1,5 @@
+use core::cmp;
+
 use crate::KeyTrailer;
 
 /// Implement [badger's](https://github.com/dgraph-io/badger) key type
@@ -288,6 +290,32 @@ impl<'a, K: Key> Key for KeyRef<'a, K> {
   #[inline]
   fn trailer(&self) -> &Self::Trailer {
     &self.trailer
+  }
+}
+
+impl<'a, K: Key> PartialEq for KeyRef<'a, K> {
+  #[inline]
+  fn eq(&self, other: &Self) -> bool {
+    self.as_bytes() == other.as_bytes() && self.trailer == other.trailer
+  }
+}
+
+impl<'a, K: Key> Eq for KeyRef<'a, K> {}
+
+impl<'a, K: Key> PartialOrd for KeyRef<'a, K> {
+  #[inline]
+  fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl<'a, K: Key> Ord for KeyRef<'a, K> {
+  #[inline]
+  fn cmp(&self, other: &Self) -> cmp::Ordering {
+    match self.as_bytes().cmp(other.as_bytes()) {
+      cmp::Ordering::Equal => self.trailer.cmp(&other.trailer),
+      ord => ord,
+    }
   }
 }
 

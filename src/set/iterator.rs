@@ -8,8 +8,8 @@ use super::{AsKeyRef, Comparator, Key, SkipSet, VoidValue};
 pub struct SetIterator<'a, K, L, U, C = ()>
 where
   K: Key,
-  L: Key<Trailer = K::Trailer> + 'a,
-  U: Key<Trailer = K::Trailer> + 'a,
+  L: AsKeyRef<Key = K> + 'a,
+  U: AsKeyRef<Key = K> + 'a,
   C: Comparator,
 {
   iter: MapIterator<'a, K, VoidValue, L, U, C>,
@@ -32,7 +32,7 @@ where
 impl<'a, K, L, C> SetIterator<'a, K, L, K, C>
 where
   K: Key,
-  L: Key<Trailer = K::Trailer> + 'a,
+  L: AsKeyRef<Key = K> + 'a,
   C: Comparator,
 {
   /// Creates a new iterator over the skipmap with the given lower bound.
@@ -47,7 +47,7 @@ where
 impl<'a, K, U, C> SetIterator<'a, K, K, U, C>
 where
   K: Key,
-  U: Key<Trailer = K::Trailer> + 'a,
+  U: AsKeyRef<Key = K> + 'a,
   C: Comparator,
 {
   /// Creates a new iterator over the skipmap with the given upper bound.
@@ -62,8 +62,8 @@ where
 impl<'a, K, L, U, C> SetIterator<'a, K, L, U, C>
 where
   K: Key,
-  L: Key<Trailer = K::Trailer> + 'a,
-  U: Key<Trailer = K::Trailer> + 'a,
+  L: AsKeyRef<Key = K> + 'a,
+  U: AsKeyRef<Key = K> + 'a,
   C: Comparator,
 {
   /// Creates a new iterator over the skipmap with the given lower and upper bounds.

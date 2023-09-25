@@ -2,6 +2,9 @@ use core::cmp;
 
 use super::*;
 
+mod iterator;
+pub use iterator::*;
+
 /// A Snapshot is a read-only view of the SkipMap at a specific point in time.
 /// It provides a consistent view of the SkipMap's contents, which can be useful
 /// for various purposes, such as implementing transactional semantics.

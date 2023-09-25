@@ -185,7 +185,7 @@ impl Shared {
   ///
   /// ## Safety:
   /// - This method must be invoked in the drop impl of `Arena`.
-  pub(super) unsafe fn unmount(&mut self, size: usize) {
+  pub(super) unsafe fn unmount(&mut self, _size: usize) {
     #[cfg(feature = "mmap")]
     if let SharedBackend::Mmap { buf, file, lock } = &self.backend {
       use fs4::FileExt;
@@ -204,7 +204,7 @@ impl Shared {
 
       // relaxed ordering is enough here as we're in a drop, no one else can
       // access this memory anymore.
-      let _ = file.set_len(size as u64);
+      let _ = file.set_len(_size as u64);
       if *lock {
         let _ = file.unlock();
       }

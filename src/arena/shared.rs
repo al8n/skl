@@ -27,10 +27,6 @@ impl Drop for AlignedVec {
 }
 
 impl AlignedVec {
-  // const ALIGNMENT: usize = 4;
-
-  // const MAX_CAPACITY: usize = isize::MAX as usize - (Self::ALIGNMENT - 1);
-
   #[inline]
   fn new(capacity: usize, align: usize) -> Self {
     assert!(

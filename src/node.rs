@@ -150,19 +150,10 @@ pub(super) struct Node<KT, VT> {
 }
 
 impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
-  // pub(super) const ALIGNMENT: usize = NODE_ALIGNMENT_FACTOR - 1;
   pub(super) const SIZE: usize = core::mem::size_of::<Self>();
 
   pub(super) const MAX_NODE_SIZE: u64 =
     (Self::SIZE + MAX_HEIGHT * core::mem::size_of::<Link>()) as u64;
-
-  // /// Returns the maximum space needed for a node with the specified
-  // /// key and value sizes. This could overflow a `u32`, which is why a uint64
-  // /// is used here. If a key/value overflows a `u32`, it should not be added to
-  // /// the skiplist.
-  // pub(super) const fn max_node_size(key_size: u32, value_size: u32) -> u64 {
-  //   Self::MAX_NODE_SIZE + key_size as u64 + value_size as u64 + Self::ALIGNMENT as u64
-  // }
 
   pub(super) fn new_node_ptr<KK, VV>(
     arena: &Arena,
@@ -233,7 +224,6 @@ impl<K: KeyTrailer, V: ValueTrailer> Node<K, V> {
       .max(NODE_ALIGNMENT_FACTOR);
     let (node_offset, alloc_size) =
       arena.alloc(Node::<K, V>::MAX_NODE_SIZE as u32, align as u32, 0)?;
-    println!("{:?}", node_offset);
 
     // Safety: we have check the offset is valid
     unsafe {

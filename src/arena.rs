@@ -173,17 +173,6 @@ impl Arena {
     slice::from_raw_parts_mut(ptr, size)
   }
 
-  // /// ## Safety:
-  // /// - The caller must make sure that `ptr` must be less than the end bound of the arena.
-  // #[inline]
-  // pub(super) unsafe fn get_pointer_offset(&self, ptr: *const u8) -> usize {
-  //   if ptr.is_null() {
-  //     return 0;
-  //   }
-
-  //   ptr.offset_from(self.data_ptr.as_ptr()) as usize
-  // }
-
   /// ## Safety:
   /// - The caller must make sure that `offset` must be less than the capacity of the arena.
   #[inline]

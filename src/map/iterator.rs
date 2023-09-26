@@ -236,12 +236,12 @@ where
 
       if let Some(ref upper) = self.upper {
         let upper = upper.as_key_ref();
-        if let cmp::Ordering::Less | cmp::Ordering::Equal =
+        if let cmp::Ordering::Less =
           self.map.cmp.compare(upper.as_bytes(), nk)
         {
           self.nd = self.map.tail;
           return None;
-        } else if let cmp::Ordering::Less | cmp::Ordering::Equal =
+        } else if let cmp::Ordering::Less =
           upper.trailer().cmp(&node.key_trailer)
         {
           self.nd = self.map.tail;
@@ -252,12 +252,106 @@ where
       if let Some(ref lower) = self.lower {
         let lower = lower.as_key_ref();
         if let cmp::Ordering::Greater = self.map.cmp.compare(lower.as_bytes(), nk) {
+          self.nd = self.map.head;
           return None;
         } else if let cmp::Ordering::Greater = lower.trailer().cmp(&node.key_trailer) {
+          self.nd = self.map.head;
           return None;
         }
       }
 
+      Some((self.key_unchecked(), self.value_unchecked()))
+    }
+  }
+
+  /// Moves the iterator to the first entry whose key is greater than
+  /// the given key. Returns the key and value if the iterator is
+  /// pointing at a valid entry, and `None` otherwise.
+  pub fn seek_gt<'k: 'a, Q>(&'a mut self, key: &'k Q) -> Option<(KeyRef<'a, K>, ValueRef<'a, V>)>
+  where
+    Q: ?Sized + AsKeyRef<Key = K>,
+  {
+    self.nd = self.map.gt_in(key.as_key_ref())?;
+
+    unsafe {
+      // Safety: the nd is valid, we already check this
+      let node = self.nd.as_ptr();
+      // Safety: the node is allocated by the map's arena, so the key is valid
+      let nk = node.get_key(&self.map.arena);
+
+      if let Some(ref upper) = self.upper {
+        let upper = upper.as_key_ref();
+        if let cmp::Ordering::Less =
+          self.map.cmp.compare(upper.as_bytes(), nk)
+        {
+          self.nd = self.map.tail;
+          return None;
+        } else if let cmp::Ordering::Less =
+          upper.trailer().cmp(&node.key_trailer)
+        {
+          self.nd = self.map.tail;
+          return None;
+        }
+      }
+
+      if let Some(ref lower) = self.lower {
+        let lower = lower.as_key_ref();
+        if let cmp::Ordering::Greater = self.map.cmp.compare(lower.as_bytes(), nk) {
+          self.nd = self.map.head;
+          return None;
+        } else if let cmp::Ordering::Greater = lower.trailer().cmp(&node.key_trailer) {
+          self.nd = self.map.head;
+          return None;
+        }
+      }
+
+      Some((self.key_unchecked(), self.value_unchecked()))
+    }
+  }
+
+  /// Moves the iterator to the first entry whose key is less than or
+  /// equal to the given key. Returns the key and value if the iterator is
+  /// pointing at a valid entry, and `None` otherwise.
+  pub fn seek_le<'k: 'a, Q>(&'a mut self, key: &'k Q) -> Option<(KeyRef<'a, K>, ValueRef<'a, V>)>
+  where
+    Q: ?Sized + AsKeyRef<Key = K>,
+  {
+    // le_in has already checked the ptr is valid
+    self.nd = self.map.le_in(key.as_key_ref())?;
+
+    unsafe {
+      // Safety: the nd is valid, we already check this on line 75
+      let node = self.nd.as_ptr();
+      // Safety: the node is allocated by the map's arena, so the key is valid
+      let nk = node.get_key(&self.map.arena);
+
+      if let Some(ref lower) = self.lower {
+        let lower = lower.as_key_ref();
+        if let cmp::Ordering::Greater = self.map.cmp.compare(lower.as_bytes(), nk) {
+          self.nd = self.map.head;
+          return None;
+        } else if let cmp::Ordering::Greater = lower.trailer().cmp(&node.key_trailer) {
+          self.nd = self.map.head;
+          return None;
+        }
+      }
+
+      if let Some(ref upper) = self.upper {
+        let upper = upper.as_key_ref();
+        if let cmp::Ordering::Less =
+          self.map.cmp.compare(upper.as_bytes(), nk)
+        {
+          self.nd = self.map.tail;
+          return None;
+        } else if let cmp::Ordering::Less =
+          upper.trailer().cmp(&node.key_trailer)
+        {
+          self.nd = self.map.tail;
+          return None;
+        }
+      }
+
+      // Safety: the nd is valid, we already check this on line 115
       Some((self.key_unchecked(), self.value_unchecked()))
     }
   }
@@ -281,10 +375,10 @@ where
 
       if let Some(ref lower) = self.lower {
         let lower = lower.as_key_ref();
-        if let cmp::Ordering::Greater = self.map.cmp.compare(lower.as_bytes(), nk) {
+        if let cmp::Ordering::Greater | cmp::Ordering::Equal = self.map.cmp.compare(lower.as_bytes(), nk) {
           self.nd = self.map.head;
           return None;
-        } else if let cmp::Ordering::Greater = lower.trailer().cmp(&node.key_trailer) {
+        } else if let cmp::Ordering::Greater | cmp::Ordering::Equal = lower.trailer().cmp(&node.key_trailer) {
           self.nd = self.map.head;
           return None;
         }
@@ -295,10 +389,12 @@ where
         if let cmp::Ordering::Equal | cmp::Ordering::Less =
           self.map.cmp.compare(upper.as_bytes(), nk)
         {
+          self.nd = self.map.tail;
           return None;
         } else if let cmp::Ordering::Equal | cmp::Ordering::Less =
           upper.trailer().cmp(&node.key_trailer)
         {
+          self.nd = self.map.tail;
           return None;
         }
       }

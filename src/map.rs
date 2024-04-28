@@ -318,8 +318,8 @@ impl SkipMap {
   /// it does not mean the skipmap can store `cap` entries.
   ///
   /// `lock`: whether to lock the underlying file or not
-  #[cfg(feature = "mmap")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "mmap", not(target_family = "wasm")))))]
   pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
     let arena = Arena::new_mmap(cap, file, lock)?;
     let (head, _) = arena.new_node(
@@ -350,8 +350,8 @@ impl SkipMap {
   ///   especially if you're frequently accessing or modifying it.
   ///
   /// [`SkipMap::new`]: #method.new
-  #[cfg(feature = "mmap")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "mmap", not(target_family = "wasm")))))]
   pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
     let arena = Arena::new_anonymous_mmap(cap)?;
     let (head, _) = arena.new_node(

@@ -1,3 +1,4 @@
+use super::*;
 use bytes::Bytes;
 
 pub(crate) const TIMESTAMP_SIZE: usize = core::mem::size_of::<u64>();
@@ -13,7 +14,7 @@ pub struct KeyRef<'a> {
     getter(const, rename = "version"),
     setter(const, rename = "with_version")
   )]
-  expires_at: u64,
+  version: u64,
   #[viewit(getter(const), setter(skip))]
   data: &'a [u8],
 }
@@ -36,7 +37,7 @@ impl<'a> KeyRef<'a> {
   #[inline]
   pub const fn new(src: &'a [u8]) -> Self {
     Self {
-      expires_at: 0,
+      version: 0,
       data: src,
     }
   }
@@ -44,7 +45,7 @@ impl<'a> KeyRef<'a> {
   #[inline]
   pub fn into_owned(&self) -> Key {
     Key {
-      expires_at: self.expires_at,
+      version: self.version,
       data: Bytes::copy_from_slice(self.data),
     }
   }
@@ -52,7 +53,7 @@ impl<'a> KeyRef<'a> {
 
 impl<'a> PartialEq for KeyRef<'a> {
   fn eq(&self, other: &Self) -> bool {
-    self.data == other.data && self.expires_at == other.expires_at
+    self.data == other.data && self.version == other.version
   }
 }
 
@@ -69,16 +70,13 @@ impl<'a> Ord for KeyRef<'a> {
     self
       .data
       .cmp(other.data)
-      .then_with(|| self.expires_at.cmp(&other.expires_at))
+      .then_with(|| self.version.cmp(&other.version))
   }
 }
 
 impl<'a> From<&'a [u8]> for KeyRef<'a> {
   fn from(data: &'a [u8]) -> Self {
-    Self {
-      data,
-      expires_at: 0,
-    }
+    Self { data, version: 0 }
   }
 }
 
@@ -86,7 +84,7 @@ impl<'a> From<&'a str> for KeyRef<'a> {
   fn from(data: &'a str) -> Self {
     Self {
       data: data.as_bytes(),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
@@ -98,7 +96,7 @@ pub struct Key {
     getter(const, rename = "version"),
     setter(const, rename = "with_version")
   )]
-  expires_at: u64,
+  version: u64,
   #[viewit(getter(const, style = "ref"), setter(skip))]
   data: Bytes,
 }
@@ -119,7 +117,7 @@ impl core::ops::Deref for Key {
 
 impl PartialEq for Key {
   fn eq(&self, other: &Self) -> bool {
-    self.data == other.data && self.expires_at == other.expires_at
+    self.data == other.data && self.version == other.version
   }
 }
 
@@ -142,7 +140,7 @@ impl Ord for Key {
     self
       .data
       .cmp(&other.data)
-      .then_with(|| self.expires_at.cmp(&other.expires_at))
+      .then_with(|| self.version.cmp(&other.version))
   }
 }
 
@@ -157,7 +155,7 @@ impl Key {
   pub const fn new() -> Self {
     Self {
       data: Bytes::new(),
-      expires_at: 0,
+      version: 0,
     }
   }
 
@@ -165,14 +163,14 @@ impl Key {
   pub const fn from_bytes(b: Bytes) -> Self {
     Self {
       data: b,
-      expires_at: 0,
+      version: 0,
     }
   }
 
   #[inline]
   pub fn as_key_ref(&self) -> KeyRef {
     KeyRef {
-      expires_at: self.expires_at,
+      version: self.version,
       data: self.data.as_ref(),
     }
   }
@@ -180,12 +178,12 @@ impl Key {
   /// Destruct the key, returns key and ttl of the key.
   #[inline]
   pub fn into_components(self) -> (Bytes, u64) {
-    (self.data, self.expires_at)
+    (self.data, self.version)
   }
 
   #[inline]
   pub fn set_ttl(&mut self, ttl: u64) {
-    self.expires_at = ttl;
+    self.version = ttl;
   }
 
   /// Returns a key, with the current timestamp (in milliseconds)
@@ -194,7 +192,7 @@ impl Key {
   pub fn with_now(src: Bytes) -> Self {
     Self {
       data: src,
-      expires_at: std::time::SystemTime::UNIX_EPOCH
+      version: std::time::SystemTime::UNIX_EPOCH
         .elapsed()
         .unwrap()
         .as_millis() as u64,
@@ -204,10 +202,7 @@ impl Key {
 
 impl From<Bytes> for Key {
   fn from(data: Bytes) -> Self {
-    Self {
-      data,
-      expires_at: 0,
-    }
+    Self { data, version: 0 }
   }
 }
 
@@ -215,7 +210,7 @@ impl<'a> From<&'a [u8]> for Key {
   fn from(data: &'a [u8]) -> Self {
     Self {
       data: Bytes::copy_from_slice(data),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
@@ -224,7 +219,7 @@ impl<'a> From<&'a str> for Key {
   fn from(data: &str) -> Self {
     Self {
       data: Bytes::copy_from_slice(data.as_bytes()),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
@@ -233,7 +228,7 @@ impl From<String> for Key {
   fn from(data: String) -> Self {
     Self {
       data: data.into(),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
@@ -242,7 +237,7 @@ impl From<&Key> for Key {
   fn from(key: &Key) -> Self {
     Self {
       data: key.data.clone(),
-      expires_at: key.expires_at,
+      version: key.version,
     }
   }
 }
@@ -263,7 +258,7 @@ impl From<Vec<u8>> for Key {
   fn from(data: Vec<u8>) -> Self {
     Self {
       data: data.into(),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
@@ -272,7 +267,7 @@ impl From<Box<[u8]>> for Key {
   fn from(data: Box<[u8]>) -> Self {
     Self {
       data: data.into(),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
@@ -281,20 +276,20 @@ impl From<&Bytes> for Key {
   fn from(data: &Bytes) -> Self {
     Self {
       data: data.clone(),
-      expires_at: 0,
+      version: 0,
     }
   }
 }
 
 impl<'a> PartialEq<KeyRef<'a>> for Key {
   fn eq(&self, other: &KeyRef<'a>) -> bool {
-    self.data == other.data && self.expires_at == other.expires_at
+    self.data == other.data && self.version == other.version
   }
 }
 
 impl<'a> PartialEq<Key> for KeyRef<'a> {
   fn eq(&self, other: &Key) -> bool {
-    self.data == other.data && self.expires_at == other.expires_at
+    self.data == other.data && self.version == other.version
   }
 }
 
@@ -305,7 +300,7 @@ impl<'a> PartialOrd<KeyRef<'a>> for Key {
         .data
         .as_ref()
         .cmp(other.data)
-        .then_with(|| self.expires_at.cmp(&other.expires_at)),
+        .then_with(|| self.version.cmp(&other.version)),
     )
   }
 }
@@ -316,7 +311,7 @@ impl<'a> PartialOrd<Key> for KeyRef<'a> {
       self
         .data
         .cmp(&other.data)
-        .then_with(|| self.expires_at.cmp(&other.expires_at)),
+        .then_with(|| self.version.cmp(&other.version)),
     )
   }
 }

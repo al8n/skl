@@ -2,6 +2,8 @@
 
 use bytes::Bytes;
 
+use super::*;
+
 #[viewit::viewit(
   vis_all = "pub(crate)",
   setters(vis_all = "pub"),

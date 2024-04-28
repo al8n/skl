@@ -1,15 +1,6 @@
-use super::Node;
-use crate::{
-  key::{KeyRef, TIMESTAMP_SIZE},
-  sync::{AtomicMut, AtomicPtr, AtomicU64, Ordering},
-  value::ValueRef,
-};
-use ::alloc::boxed::Box;
-use core::{
-  mem,
-  ptr::{self, NonNull},
-  slice,
-};
+use super::{super::*, *};
+use crate::sync::{AtomicMut, AtomicPtr};
+use core::{ptr::NonNull, slice};
 
 mod shared;
 use shared::Shared;
@@ -40,7 +31,7 @@ impl Arena {
     }
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_mmap(n: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
     let mut inner = Shared::new_mmaped(n.max(Node::MAX_NODE_SIZE), file, lock)?;
@@ -52,7 +43,7 @@ impl Arena {
     })
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_anonymous_mmap(n: usize) -> std::io::Result<Self> {
     let mut inner = Shared::new_mmaped_anon(n.max(Node::MAX_NODE_SIZE))?;
@@ -143,7 +134,7 @@ impl Arena {
     // Safety: the underlying ptr will never be freed until the Arena is dropped.
     unsafe {
       KeyRef {
-        expires_at: if timestamped {
+        version: if timestamped {
           u64::from_be_bytes(
             slice::from_raw_parts(ptr.add(size), TIMESTAMP_SIZE)
               .try_into()

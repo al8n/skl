@@ -22,7 +22,7 @@ name = "loom"
 [features]
 default = ["std"]
 alloc = []
-mmap = ["memmapix", "fs4", "std"]
+mmap = ["memmap2", "fs4", "std"]
 std = ["bytes/std", "rand/std", "rand/std_rng", "inline_more"]
 inline_more = []
 js = ["getrandom/js"]
@@ -31,11 +31,11 @@ js = ["getrandom/js"]
 loom = "0.7"
 
 [dependencies]
-bytes = { version = "1.5", default-features = false }
+bytes = { version = "1", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
-fs4 = { version = "0.6", optional = true }
+fs4 = { version = "0.8", optional = true }
 getrandom = { version = "0.2", optional = true }
-memmapix = { version = "0.7", optional = true }
+memmap2 = { version = "0.9", optional = true }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 viewit = "0.1.5"
 

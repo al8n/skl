@@ -1,14 +1,10 @@
-use ::alloc::alloc;
+use std::alloc;
 
-use core::{
-  ops::{Index, IndexMut},
-  ptr, slice,
-};
+use core::ops::{Index, IndexMut};
 
-use crate::{
-  map::Node,
-  sync::{AtomicU32, AtomicUsize, Ordering},
-};
+use crate::sync::AtomicUsize;
+
+use super::*;
 
 #[derive(Debug)]
 struct AlignedVec {
@@ -98,14 +94,14 @@ impl<I: slice::SliceIndex<[u8]>> IndexMut<I> for AlignedVec {
 
 enum SharedBackend {
   Vec(AlignedVec),
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
   Mmap {
-    buf: *mut memmapix::MmapMut,
+    buf: *mut memmap2::MmapMut,
     file: std::fs::File,
     lock: bool,
   },
-  #[cfg(feature = "mmap")]
-  AnonymousMmap(memmapix::MmapMut),
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
+  AnonymousMmap(memmap2::MmapMut),
 }
 
 pub(super) struct Shared {
@@ -128,7 +124,7 @@ impl Shared {
     }
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
   pub(super) fn new_mmaped(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
     use fs4::FileExt;
 
@@ -138,7 +134,7 @@ impl Shared {
       }
 
       file.set_len(cap as u64).and_then(|_| {
-        memmapix::MmapOptions::new()
+        memmap2::MmapOptions::new()
           .len(cap)
           .map_mut(&file)
           .map(|mmap| {
@@ -159,30 +155,27 @@ impl Shared {
     }
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
   pub(super) fn new_mmaped_anon(cap: usize) -> std::io::Result<Self> {
-    memmapix::MmapOptions::new()
-      .len(cap)
-      .map_anon()
-      .map(|mmap| {
-        Self {
-          cap,
-          backend: SharedBackend::AnonymousMmap(mmap),
-          refs: AtomicUsize::new(1),
-          // Don't store data at position 0 in order to reserve offset=0 as a kind
-          // of nil pointer.
-          n: AtomicU32::new(1),
-        }
-      })
+    memmap2::MmapOptions::new().len(cap).map_anon().map(|mmap| {
+      Self {
+        cap,
+        backend: SharedBackend::AnonymousMmap(mmap),
+        refs: AtomicUsize::new(1),
+        // Don't store data at position 0 in order to reserve offset=0 as a kind
+        // of nil pointer.
+        n: AtomicU32::new(1),
+      }
+    })
   }
 
   pub(super) fn as_slice(&self) -> &[u8] {
     let end = self.n.load(Ordering::Acquire) as usize;
     match &self.backend {
       SharedBackend::Vec(vec) => &vec.as_slice()[..end],
-      #[cfg(feature = "mmap")]
+      #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
       SharedBackend::Mmap { buf: mmap, .. } => unsafe { &(&**mmap)[..end] },
-      #[cfg(feature = "mmap")]
+      #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
       SharedBackend::AnonymousMmap(mmap) => &mmap[..end],
     }
   }
@@ -190,9 +183,9 @@ impl Shared {
   pub(super) fn as_mut_ptr(&mut self) -> *mut u8 {
     match &mut self.backend {
       SharedBackend::Vec(vec) => vec.as_mut_ptr(),
-      #[cfg(feature = "mmap")]
+      #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
       SharedBackend::Mmap { buf: mmap, .. } => unsafe { (**mmap).as_mut_ptr() },
-      #[cfg(feature = "mmap")]
+      #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
       SharedBackend::AnonymousMmap(mmap) => mmap.as_mut_ptr(),
     }
   }
@@ -205,7 +198,7 @@ impl Shared {
 
 impl Drop for Shared {
   fn drop(&mut self) {
-    #[cfg(feature = "mmap")]
+    #[cfg(all(feature = "mmap", not(target_family = "wasm")))]
     if let SharedBackend::Mmap { buf, file, lock } = &self.backend {
       use fs4::FileExt;
 
@@ -220,7 +213,7 @@ impl Drop for Shared {
         }
 
         // we must trigger the drop of the mmap before truncating the file
-        drop(Box::from_raw(*buf));
+        let _ = Box::from_raw(*buf);
 
         // relaxed ordering is enough here as we're in a drop, no one else can
         // access this memory anymore.

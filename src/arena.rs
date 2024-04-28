@@ -1,6 +1,6 @@
 use crate::{
   sync::{AtomicMut, AtomicPtr, Ordering},
-  Key, KeyTrailer, Value, ValueTrailer, NODE_ALIGNMENT_FACTOR,
+  NODE_ALIGNMENT_FACTOR,
 };
 use alloc::{boxed::Box, sync::Arc};
 use core::{
@@ -70,34 +70,28 @@ impl Arena {
 
 impl Arena {
   #[inline]
-  const fn min_cap<K: KeyTrailer, V: ValueTrailer>() -> usize {
-    (Node::<K, V>::MAX_NODE_SIZE * 2) as usize
+  const fn min_cap() -> usize {
+    (Node::MAX_NODE_SIZE * 2) as usize
   }
 
   #[inline]
-  pub(super) fn new_vec<K: Key, V: Value>(n: usize) -> Self {
+  pub(super) fn new_vec(n: usize) -> Self {
     Self::new(Shared::new_vec(
-      n.max(Self::min_cap::<K::Trailer, V::Trailer>()),
-      mem::align_of::<K::Trailer>()
-        .max(mem::align_of::<V::Trailer>())
-        .max(NODE_ALIGNMENT_FACTOR),
+      n.max(Self::min_cap()),
+      mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
     ))
   }
 
   #[cfg(feature = "mmap")]
   #[inline]
-  pub(super) fn new_mmap<K: Key, V: Value>(
-    n: usize,
-    file: std::fs::File,
-    lock: bool,
-  ) -> std::io::Result<Self> {
-    Shared::new_mmaped(n.max(Self::min_cap::<K::Trailer, V::Trailer>()), file, lock).map(Self::new)
+  pub(super) fn new_mmap(n: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
+    Shared::new_mmaped(n.max(Self::min_cap()), file, lock).map(Self::new)
   }
 
   #[cfg(feature = "mmap")]
   #[inline]
-  pub(super) fn new_anonymous_mmap<K: Key, V: Value>(n: usize) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(Self::min_cap::<K::Trailer, V::Trailer>())).map(Self::new)
+  pub(super) fn new_anonymous_mmap(n: usize) -> std::io::Result<Self> {
+    Shared::new_mmaped_anon(n.max(Self::min_cap())).map(Self::new)
   }
 
   #[inline]

@@ -1,6 +1,6 @@
 use crate::ArenaError;
 
-use super::{key::AsKeyRef, Arena, Comparator, Key, SkipMap, Value};
+use super::{Arena, Comparator, SkipMap};
 
 mod error;
 pub use error::Error;
@@ -31,7 +31,7 @@ impl Value for VoidValue {
 /// is up to the user to process these shadow entries and tombstones
 /// appropriately during retrieval.
 #[repr(transparent)]
-pub struct SkipSet<K: Key, C: Comparator = ()> {
+pub struct SkipSet<C: Comparator = ()> {
   map: SkipMap<K, VoidValue, C>,
 }
 

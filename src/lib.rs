@@ -11,23 +11,16 @@ extern crate alloc;
 extern crate std;
 
 mod arena;
-/// key and value types used by [badger](https://github.com/dgraph-io/badger)
-pub mod badger {
-  pub use super::{key::badger::*, value::badger::*};
-}
-mod key;
 /// A map implementation based on skiplist
 pub mod map;
 mod node;
-/// A set implementation based on skiplist
-pub mod set;
-mod value;
+
+// /// A set implementation based on skiplist
+// pub mod set;
 
 pub use arena::{Arena, ArenaError};
-pub use key::{AsKeyRef, Key, KeyRef};
 pub use map::{MapIterator, SkipMap};
-pub use set::{SetIterator, SkipSet};
-pub use value::{AsValueRef, Value, ValueRef};
+// pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
 const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
@@ -45,44 +38,6 @@ impl Comparator for () {
     a.cmp(b)
   }
 }
-
-/// A marker trait, which gives the key-value database developers the ability to add extra information
-/// to the key or value provided by the end-users.
-///
-/// **NB:**
-///
-/// The alignment of the type implements this trait must be a multiple of `4`,
-/// typically a `u32`, `u64`, `u128` and etc.
-/// This is forced to guarantee we must make sure there is no read unalignment pointer happen,
-/// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
-///
-/// See [`Key`](crate::Key) for more details.
-pub trait KeyTrailer: Copy + Sized + Ord {}
-
-/// A marker trait, which gives the key-value database developers the ability to add extra information
-/// to the key or value provided by the end-users. The only way to implement this trait is
-///
-/// **NB:**
-///
-/// The alignment of the type implements this trait must be a multiple of `4`,
-/// typically a `u32`, `u64`, `u128` and etc.
-/// This is forced to guarantee we must make sure there is no read unalignment pointer happen,
-/// since read unalignment pointer will lead to UB(Undefined Behavior) on some platforms.
-///
-/// See [`Value`](crate::Value) for more details.
-pub trait ValueTrailer: Copy + Sized {}
-
-macro_rules! trailer {
-  ($($ty:ty), +$(,)?) => {
-    $(
-      impl KeyTrailer for $ty {}
-
-      impl ValueTrailer for $ty {}
-    )*
-  };
-}
-
-trailer!((), u32, u64, u128);
 
 /// Re-export bytes crate
 pub use bytes;

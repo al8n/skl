@@ -8,7 +8,6 @@ pub struct BadgerValueTrailer {
   meta: u8,
   user_meta: u8,
   expires_at: u64,
-  damn: u128,
 }
 
 impl crate::ValueTrailer for BadgerValueTrailer {}
@@ -27,7 +26,6 @@ impl BadgerValueTrailer {
       meta: 0,
       user_meta: 0,
       expires_at: 0,
-      damn: 100,
     }
   }
 

@@ -1,21 +1,13 @@
-use skl::{
-  badger::{BadgerKey, BadgerValue},
-  SkipMap, Value,
-};
+use skl::SkipMap;
 use std::{fs::File, sync::Arc};
 
-pub fn key(i: usize) -> BadgerKey {
-  BadgerKey::from(format!("{:05}", i))
+pub fn key(i: usize) -> Vec<u8> {
+  format!("{:05}", i).into_bytes()
 }
 
-pub fn new_value(i: usize) -> BadgerValue {
-  use bytes::{BufMut, BytesMut};
-
-  let mut vm = BytesMut::default();
-  vm.put_slice(format!("{:05}", i).as_bytes());
-  BadgerValue::from(vm.freeze())
+pub fn new_value(i: usize) -> Vec<u8> {
+  format!("{:05}", i).into_bytes()
 }
-
 fn main() {
   const N: usize = 1000;
 
@@ -26,7 +18,7 @@ fn main() {
     let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
-      l.insert(&key(i), &new_value(i)).unwrap();
+      l.insert(0, &key(i), &new_value(i)).unwrap();
       drop(w);
     });
   }
@@ -36,11 +28,7 @@ fn main() {
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(
-        l.get(&k).unwrap().as_bytes(),
-        new_value(i).as_bytes(),
-        "broken: {i}"
-      );
+      assert_eq!(l.get(0, &k).unwrap(), new_value(i), "broken: {i}");
       drop(w);
     });
   }

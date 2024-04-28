@@ -1,4 +1,4 @@
-use integration::badger::{big_value, key, new_value};
+use integration::{big_value, key, new_value};
 use skl::*;
 use std::sync::Arc;
 
@@ -9,7 +9,7 @@ fn main() {
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(&key(i), &new_value(i)).unwrap();
+        l.insert(0, &key(i), &new_value(i)).unwrap();
         drop(l);
       });
     }
@@ -18,11 +18,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(
-          l.get(&k).unwrap().as_bytes(),
-          new_value(i).as_bytes(),
-          "broken: {i}"
-        );
+        assert_eq!(l.get(0, &k).unwrap(), new_value(i), "broken: {i}");
         drop(l);
       });
     }
@@ -35,7 +31,7 @@ fn main() {
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(&key(i), &big_value(i)).unwrap();
+        l.insert(0, &key(i), &big_value(i)).unwrap();
       });
     }
     while Arc::strong_count(&l) > 1 {}
@@ -44,11 +40,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(
-          l.get(&k).unwrap().as_bytes(),
-          big_value(i).as_bytes(),
-          "broken: {i}"
-        );
+        assert_eq!(l.get(0, &k).unwrap(), big_value(i), "broken: {i}");
       });
     }
     while Arc::strong_count(&l) > 1 {}

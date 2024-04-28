@@ -1,29 +1,36 @@
 use super::*;
 
 /// An entry reference to the skipmap's entry.
-pub struct EntryRef<'a, K: Key, V: Value, C: Comparator> {
-  pub(super) map: &'a SkipMap<K, V, C>,
-  pub(super) nd: NodePtr<K::Trailer, V::Trailer>,
-  pub(super) key: KeyRef<'a, K>,
-  pub(super) value: ValueRef<'a, V>,
+pub struct EntryRef<'a, C: Comparator> {
+  pub(super) map: &'a SkipMap<C>,
+  pub(super) nd: NodePtr,
+  pub(super) key: &'a [u8],
+  pub(super) version: u64,
+  pub(super) value: &'a [u8],
 }
 
-impl<'a, K: Key, V: Value, C: Comparator> EntryRef<'a, K, V, C> {
+impl<'a, C: Comparator> EntryRef<'a, C> {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &KeyRef<'a, K> {
-    &self.key
+  pub const fn key(&self) -> &[u8] {
+    self.key
   }
 
   /// Returns the reference to the value
   #[inline]
-  pub const fn value(&self) -> &ValueRef<'a, V> {
-    &self.value
+  pub const fn value(&self) -> &[u8] {
+    self.value
+  }
+
+  /// Returns the version of the entry
+  #[inline]
+  pub const fn version(&self) -> u64 {
+    self.version
   }
 
   /// Returns the prev entry linked to this entry if any, otherwise returns `None`.
   #[inline]
-  pub fn prev(&self) -> Option<EntryRef<'a, K, V, C>> {
+  pub fn prev(&self) -> Option<EntryRef<'a, C>> {
     unsafe {
       let prev_ptr = self.map.get_prev(self.nd, 0);
 
@@ -35,18 +42,16 @@ impl<'a, K: Key, V: Value, C: Comparator> EntryRef<'a, K, V, C> {
       Some(Self {
         map: self.map,
         nd: prev_ptr,
-        key: KeyRef::new(prev_node.get_key(&self.map.arena), prev_node.key_trailer),
-        value: ValueRef::new(
-          prev_node.get_value(&self.map.arena),
-          prev_node.value_trailer,
-        ),
+        key: prev_node.get_key(&self.map.arena),
+        version: prev_node.version,
+        value: prev_node.get_value(&self.map.arena),
       })
     }
   }
 
   /// Returns the next entry linked to this entry if any, otherwise returns `None`.
   #[inline]
-  pub fn next(&self) -> Option<EntryRef<'a, K, V, C>> {
+  pub fn next(&self) -> Option<EntryRef<'a, C>> {
     unsafe {
       let next_ptr = self.map.get_next(self.nd, 0);
 
@@ -58,17 +63,15 @@ impl<'a, K: Key, V: Value, C: Comparator> EntryRef<'a, K, V, C> {
       Some(Self {
         map: self.map,
         nd: next_ptr,
-        key: KeyRef::new(next_node.get_key(&self.map.arena), next_node.key_trailer),
-        value: ValueRef::new(
-          next_node.get_value(&self.map.arena),
-          next_node.value_trailer,
-        ),
+        key: next_node.get_key(&self.map.arena),
+        version: next_node.version,
+        value: next_node.get_value(&self.map.arena),
       })
     }
   }
 
   #[inline]
-  pub(crate) const fn ptr(&self) -> NodePtr<K::Trailer, V::Trailer> {
+  pub(crate) const fn ptr(&self) -> NodePtr {
     self.nd
   }
 }

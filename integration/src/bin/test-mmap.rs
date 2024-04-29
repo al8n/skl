@@ -18,7 +18,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap(), new_value(i), "broken: {i}");
+        assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
         drop(l);
       });
     }
@@ -40,7 +40,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap(), big_value(i), "broken: {i}");
+        assert_eq!(l.get(0, &k).unwrap().value(), big_value(i), "broken: {i}");
       });
     }
     while Arc::strong_count(&l) > 1 {}

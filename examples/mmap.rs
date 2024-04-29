@@ -28,7 +28,7 @@ fn main() {
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(l.get(0, &k).unwrap(), new_value(i), "broken: {i}");
+      assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
       drop(w);
     });
   }

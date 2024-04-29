@@ -1,126 +1,316 @@
-use crate::{KeyRef, MapIterator};
+use core::ops::RangeFull;
 
-use super::{AsKeyRef, Comparator, Key, SkipSet, VoidValue};
+use super::*;
+
+/// A range over the skipmap. The current state of the iterator can be cloned by
+/// simply value copying the struct.
+pub struct SetRange<'a, C = (), R = RangeFull>(SetIterator<'a, C, R>);
+
+impl<'a, C, R> Clone for SetRange<'a, C, R>
+where
+  R: Clone,
+{
+  fn clone(&self) -> Self {
+    Self(self.0.clone())
+  }
+}
+
+impl<'a, C, R> Copy for SetRange<'a, C, R> where R: Copy {}
+
+impl<'a, C, R> core::ops::Deref for SetRange<'a, C, R> {
+  type Target = SetIterator<'a, C, R>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl<'a, C, R> core::ops::DerefMut for SetRange<'a, C, R> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-#[repr(transparent)]
-pub struct SetIterator<'a, K, L, U, C = ()>
-where
-  K: Key,
-  L: AsKeyRef<Key = K> + 'a,
-  U: AsKeyRef<Key = K> + 'a,
-  C: Comparator,
-{
-  iter: MapIterator<'a, K, VoidValue, L, U, C>,
+pub struct SetIterator<'a, C = (), R = core::ops::RangeFull> {
+  pub(super) map: &'a SkipSet<C>,
+  pub(super) nd: NodePtr,
+  pub(super) version: u64,
+  pub(super) range: R,
+  // pub(super) lower: Bound<&'a [u8]>,
+  // pub(super) upper: Bound<&'a [u8]>,
+
+  // {lower|upper}_node are lazily populated with an arbitrary node that is
+  // beyond the lower or upper bound respectively. Note the node is
+  // "arbitrary" because it may not be the first node that exceeds the bound.
+  // Concurrent insertions into the skiplist may introduce new nodes with keys
+  // that exceed the bounds but are closer to the bounds than the current
+  // values of [lower|upper]_node.
+  //
+  // Once populated, [lower|upper]_node may be used to detect when iteration
+  // has reached a bound without performing a key comparison. This may be
+  // beneficial when performing repeated `seek_ge`s with TrySeekUsingNext and an
+  // upper bound set. Once the upper bound has been met, no additional key
+  // comparisons are necessary.
+  pub(super) lower_node: Option<NodePtr>,
+  pub(super) upper_node: Option<NodePtr>,
 }
 
-impl<'a, K, C> SetIterator<'a, K, K, K, C>
-where
-  K: Key,
-  C: Comparator,
-{
-  /// Creates a new iterator over the skipmap.
-  #[inline]
-  pub const fn new(set: &'a SkipSet<K, C>) -> Self {
+impl<'a, R: Clone, C> Clone for SetIterator<'a, C, R> {
+  fn clone(&self) -> Self {
     Self {
-      iter: set.map.iter(),
+      map: self.map,
+      nd: self.nd,
+      version: self.version,
+      range: self.range.clone(),
+      lower_node: self.lower_node,
+      upper_node: self.upper_node,
     }
   }
 }
 
-impl<'a, K, L, C> SetIterator<'a, K, L, K, C>
+impl<'a, R: Copy, C> Copy for SetIterator<'a, C, R> {}
+
+impl<'a, C> SetIterator<'a, C>
 where
-  K: Key,
-  L: AsKeyRef<Key = K> + 'a,
   C: Comparator,
 {
-  /// Creates a new iterator over the skipmap with the given lower bound.
   #[inline]
-  pub const fn bound_lower(set: &'a SkipSet<K, C>, lower: L) -> Self {
+  pub(super) const fn new(version: u64, map: &'a SkipSet<C>) -> Self {
     Self {
-      iter: set.map.iter_bound_lower(lower),
+      map,
+      nd: map.head,
+      version,
+      range: RangeFull,
+      lower_node: None,
+      upper_node: None,
     }
   }
 }
 
-impl<'a, K, U, C> SetIterator<'a, K, K, U, C>
+impl<'a, R, C> SetIterator<'a, C, R>
 where
-  K: Key,
-  U: AsKeyRef<Key = K> + 'a,
   C: Comparator,
+  R: RangeBounds<[u8]>,
 {
-  /// Creates a new iterator over the skipmap with the given upper bound.
   #[inline]
-  pub const fn bound_upper(set: &'a SkipSet<K, C>, upper: U) -> Self {
-    Self {
-      iter: set.map.iter_bound_upper(upper),
+  pub(super) fn range(version: u64, map: &'a SkipSet<C>, r: R) -> SetRange<'a, C, R> {
+    SetRange(Self {
+      map,
+      nd: map.head,
+      version,
+      range: r,
+      lower_node: None,
+      upper_node: None,
+    })
+  }
+
+  /// Seeks position at the first entry in map. Returns the key and value
+  /// if the iterator is pointing at a valid entry, and `None` otherwise.
+  pub fn first(&mut self) -> Option<EntryRef> {
+    let mut cur = self.map.head;
+    loop {
+      unsafe {
+        cur = self.map.get_next(cur, 0);
+        if cur.ptr == self.map.tail.ptr {
+          self.nd = cur;
+          return None;
+        }
+
+        if let Some(ref upper) = self.upper_node {
+          if cur.ptr == upper.ptr {
+            self.nd = cur;
+            return None;
+          }
+        }
+
+        let node = cur.as_ptr();
+        let nk = node.get_key(&self.map.arena);
+        if self.map.cmp.contains(&self.range, nk) {
+          self.nd = cur;
+          self.lower_node.get_or_insert(cur);
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+          });
+        }
+      }
     }
   }
-}
 
-impl<'a, K, L, U, C> SetIterator<'a, K, L, U, C>
-where
-  K: Key,
-  L: AsKeyRef<Key = K> + 'a,
-  U: AsKeyRef<Key = K> + 'a,
-  C: Comparator,
-{
-  /// Creates a new iterator over the skipmap with the given lower and upper bounds.
-  #[inline]
-  pub fn bounded(set: &'a SkipSet<K, C>, lower: L, upper: U) -> Option<Self> {
-    set.map.iter_bounded(lower, upper).map(|iter| Self { iter })
+  /// Seeks position at the last entry in the iterator. Returns the key and value if
+  /// the iterator is pointing at a valid entry, and `None` otherwise.
+  pub fn last(&mut self) -> Option<EntryRef> {
+    let mut cur = self.map.tail;
+    loop {
+      unsafe {
+        cur = self.map.get_prev(cur, 0);
+        if cur.ptr == self.map.head.ptr {
+          self.nd = cur;
+          return None;
+        }
+
+        if let Some(ref lower) = self.lower_node {
+          if cur.ptr == lower.ptr {
+            self.nd = cur;
+            return None;
+          }
+        }
+
+        let node = cur.as_ptr();
+        let nk = node.get_key(&self.map.arena);
+        if self.map.cmp.contains(&self.range, nk) {
+          self.nd = cur;
+          self.upper_node.get_or_insert(cur);
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+          });
+        }
+      }
+    }
   }
 
-  /// Seeks position at the first entry in map. Returns the key
-  /// if the iterator is pointing at a valid entry, and `None` otherwise. Note
-  /// that First only checks the upper bound. It is up to the caller to ensure
-  /// that key is greater than or equal to the lower bound (e.g. via a call to `seek_ge(lower)`).
-  pub fn first(&mut self) -> Option<KeyRef<K>> {
-    self.iter.first().map(|ent| ent.0)
-  }
-
-  /// Seeks position at the last entry in list. Returns the key if
-  /// the iterator is pointing at a valid entry, and `None` otherwise. Note
-  /// that Last only checks the lower bound. It is up to the caller to ensure that
-  /// key is less than the upper bound (e.g. via a call to `seek_lt(upper)`).
-  pub fn last(&mut self) -> Option<KeyRef<K>> {
-    self.iter.last().map(|ent| ent.0)
-  }
-
-  /// Advances to the next position. Returns the key if the
+  /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   #[allow(clippy::should_implement_trait)]
-  pub fn next(&mut self) -> Option<KeyRef<K>> {
-    self.iter.next().map(|ent| ent.0)
+  pub fn next(&mut self) -> Option<EntryRef> {
+    unsafe {
+      self.nd = self.map.get_next(self.nd, 0);
+      if self.nd.ptr == self.map.tail.ptr {
+        return None;
+      }
+
+      let node = self.nd.as_ptr();
+      let nk = node.get_key(&self.map.arena);
+
+      if self.map.cmp.contains(&self.range, nk) {
+        return Some(EntryRef {
+          key: nk,
+          version: node.version,
+        });
+      }
+
+      None
+    }
   }
 
-  /// Advances to the prev position. Returns the key if the
+  /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  pub fn prev(&mut self) -> Option<KeyRef<K>> {
-    self.iter.prev().map(|ent| ent.0)
+  pub fn prev(&mut self) -> Option<EntryRef> {
+    unsafe {
+      self.nd = self.map.get_prev(self.nd, 0);
+      if self.nd.ptr == self.map.head.ptr {
+        return None;
+      }
+
+      let node = self.nd.as_ptr();
+      let nk = node.get_key(&self.map.arena);
+
+      if self.map.cmp.contains(&self.range, nk) {
+        return Some(EntryRef {
+          key: nk,
+          version: node.version,
+        });
+      }
+
+      None
+    }
   }
 
   /// Moves the iterator to the first entry whose key is greater than or
-  /// equal to the given key. Returns the key if the iterator is
-  /// pointing at a valid entry, and (nil, nil) otherwise. Note that `seek_ge` only
-  /// checks the upper bound. It is up to the caller to ensure that key is greater
-  /// than or equal to the lower bound.
-  pub fn seek_ge<'k: 'a, Q>(&'a mut self, key: &'k Q) -> Option<KeyRef<'a, K>>
-  where
-    Q: Ord + ?Sized + AsKeyRef<Key = K>,
-  {
-    self.iter.seek_ge(key).map(|ent| ent.0)
+  /// equal to the given key. Returns the key and value if the iterator is
+  /// pointing at a valid entry, and `None` otherwise.
+  pub fn seek_ge<'k: 'a, Q>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+    self.nd = self.map.ge_in(self.version, key)?;
+
+    unsafe {
+      // Safety: the nd is valid, we already check this
+      let node = self.nd.as_ptr();
+      // Safety: the node is allocated by the map's arena, so the key is valid
+      let nk = node.get_key(&self.map.arena);
+
+      if self.map.cmp.contains(&self.range, nk) {
+        Some(EntryRef {
+          key: nk,
+          version: node.version,
+        })
+      } else {
+        None
+      }
+    }
+  }
+
+  /// Moves the iterator to the first entry whose key is greater than
+  /// the given key. Returns the key and value if the iterator is
+  /// pointing at a valid entry, and `None` otherwise.
+  pub fn seek_gt<'k: 'a>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+    self.nd = self.map.gt_in(self.version, key)?;
+
+    unsafe {
+      // Safety: the nd is valid, we already check this
+      let node = self.nd.as_ptr();
+      // Safety: the node is allocated by the map's arena, so the key is valid
+      let nk = node.get_key(&self.map.arena);
+
+      if self.map.cmp.contains(&self.range, nk) {
+        Some(EntryRef {
+          key: nk,
+          version: node.version,
+        })
+      } else {
+        None
+      }
+    }
+  }
+
+  /// Moves the iterator to the first entry whose key is less than or
+  /// equal to the given key. Returns the key and value if the iterator is
+  /// pointing at a valid entry, and `None` otherwise.
+  pub fn seek_le<'k: 'a>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+    // le_in has already checked the ptr is valid
+    self.nd = self.map.le_in(self.version, key)?;
+
+    unsafe {
+      // Safety: the nd is valid, we already check this on line 75
+      let node = self.nd.as_ptr();
+      // Safety: the node is allocated by the map's arena, so the key is valid
+      let nk = node.get_key(&self.map.arena);
+
+      if self.map.cmp.contains(&self.range, nk) {
+        Some(EntryRef {
+          key: nk,
+          version: node.version,
+        })
+      } else {
+        None
+      }
+    }
   }
 
   /// Moves the iterator to the last entry whose key is less than the given
-  /// key. Returns the key if the iterator is pointing at a valid entry,
-  /// and `None` otherwise. Note that `seek_lt` only checks the lower bound. It
-  /// is up to the caller to ensure that key is less than the upper bound.
-  pub fn seek_lt<'k: 'a, Q>(&'a mut self, key: &'k Q) -> Option<KeyRef<'a, K>>
-  where
-    Q: Ord + ?Sized + AsKeyRef<Key = K>,
-  {
-    self.iter.seek_lt(key).map(|ent| ent.0)
+  /// key. Returns the key and value if the iterator is pointing at a valid entry,
+  /// and `None` otherwise.
+  pub fn seek_lt<'k: 'a>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+    // NB: the top-level SetIterator has already adjusted key based on
+    // the upper-bound.
+    self.nd = self.map.lt_in(self.version, key)?;
+
+    unsafe {
+      // Safety: the nd is valid, we already check this on line 75
+      let node = self.nd.as_ptr();
+      // Safety: the node is allocated by the map's arena, so the key is valid
+      let nk = node.get_key(&self.map.arena);
+
+      if self.map.cmp.contains(&self.range, nk) {
+        Some(EntryRef {
+          key: nk,
+          version: node.version,
+        })
+      } else {
+        None
+      }
+    }
   }
 }

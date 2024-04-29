@@ -83,7 +83,11 @@ impl Arena {
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(super) fn new_mmap<const N: u64>(n: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
+  pub(super) fn new_mmap<const N: u64>(
+    n: usize,
+    file: std::fs::File,
+    lock: bool,
+  ) -> std::io::Result<Self> {
     Shared::new_mmaped(n.max(Self::min_cap::<N>()), file, lock).map(Self::new)
   }
 

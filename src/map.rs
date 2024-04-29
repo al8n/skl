@@ -5,7 +5,7 @@ use crossbeam_utils::CachePadded;
 use super::{
   arena::Arena,
   sync::{AtomicU32, Ordering},
-  Comparator, MAX_HEIGHT,
+  Comparator, MAX_HEIGHT, PROBABILITIES,
 };
 
 mod node;
@@ -19,25 +19,6 @@ pub use iterator::*;
 
 #[cfg(test)]
 mod tests;
-
-/// Precompute the skiplist probabilities so that only a single random number
-/// needs to be generated and so that the optimal pvalue can be used (inverse
-/// of Euler's number).
-const PROBABILITIES: [u32; MAX_HEIGHT] = {
-  const P: f64 = 1.0 / core::f64::consts::E;
-
-  let mut probabilities = [0; MAX_HEIGHT];
-  let mut p = 1f64;
-
-  let mut i = 0;
-  while i < MAX_HEIGHT {
-    probabilities[i] = ((u32::MAX as f64) * p) as u32;
-    p *= P;
-    i += 1;
-  }
-
-  probabilities
-};
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration. Keys and values are immutable once added to the skipmap and
@@ -264,10 +245,14 @@ impl<C: Comparator> SkipMap<C> {
   }
 
   /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<&'a [u8]> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
     self.get_in(version, key).map(|ptr| unsafe {
       let node = ptr.as_ptr();
-      node.get_value(&self.arena)
+      EntryRef {
+        key: node.get_key(&self.arena),
+        version: node.version,
+        value: node.get_value(&self.arena),
+      }
     })
   }
 
@@ -361,7 +346,7 @@ impl<C: Comparator> SkipMap<C> {
     version: u64,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<&'a [u8]>, Error> {
+  ) -> Result<Option<EntryRef<'a>>, Error> {
     let ins = &mut Default::default();
 
     unsafe {
@@ -369,7 +354,11 @@ impl<C: Comparator> SkipMap<C> {
       if let Some(curr) = curr {
         return Ok(Some({
           let nd = curr.as_ptr();
-          nd.get_value(&self.arena)
+          EntryRef {
+            key: nd.get_key(&self.arena),
+            version: nd.version,
+            value: nd.get_value(&self.arena),
+          }
         }));
       }
       self.insert_in(version, key, value, ins).map(|_| None)

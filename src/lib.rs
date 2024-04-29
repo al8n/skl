@@ -18,8 +18,8 @@ mod arena;
 /// A map implementation based on skiplist
 pub mod map;
 
-// /// A set implementation based on skiplist
-// pub mod set;
+/// A set implementation based on skiplist
+pub mod set;
 
 pub use arena::{Arena, ArenaError};
 pub use map::{MapIterator, SkipMap};
@@ -27,6 +27,25 @@ pub use map::{MapIterator, SkipMap};
 
 const MAX_HEIGHT: usize = 20;
 const NODE_ALIGNMENT_FACTOR: usize = mem::align_of::<u32>();
+
+/// Precompute the skiplist probabilities so that only a single random number
+/// needs to be generated and so that the optimal pvalue can be used (inverse
+/// of Euler's number).
+const PROBABILITIES: [u32; MAX_HEIGHT] = {
+  const P: f64 = 1.0 / core::f64::consts::E;
+
+  let mut probabilities = [0; MAX_HEIGHT];
+  let mut p = 1f64;
+
+  let mut i = 0;
+  while i < MAX_HEIGHT {
+    probabilities[i] = ((u32::MAX as f64) * p) as u32;
+    p *= P;
+    i += 1;
+  }
+
+  probabilities
+};
 
 /// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation

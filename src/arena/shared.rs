@@ -1,9 +1,6 @@
-use std::{alloc, boxed::Box};
+use super::*;
 
-use core::{
-  ops::{Index, IndexMut},
-  ptr, slice,
-};
+use core::ops::{Index, IndexMut};
 
 use crate::sync::AtomicUsize;
 
@@ -20,7 +17,7 @@ impl Drop for AlignedVec {
   fn drop(&mut self) {
     if self.cap != 0 {
       unsafe {
-        alloc::dealloc(self.ptr.as_ptr(), self.layout());
+        std::alloc::dealloc(self.ptr.as_ptr(), self.layout());
       }
     }
   }
@@ -35,10 +32,10 @@ impl AlignedVec {
       align - 1
     );
     let ptr = unsafe {
-      let layout = alloc::Layout::from_size_align_unchecked(capacity, align);
-      let ptr = alloc::alloc(layout);
+      let layout = std::alloc::Layout::from_size_align_unchecked(capacity, align);
+      let ptr = std::alloc::alloc(layout);
       if ptr.is_null() {
-        alloc::handle_alloc_error(layout);
+        std::alloc::handle_alloc_error(layout);
       }
       ptr::NonNull::new_unchecked(ptr)
     };
@@ -60,8 +57,8 @@ impl AlignedVec {
   }
 
   #[inline]
-  fn layout(&self) -> alloc::Layout {
-    unsafe { alloc::Layout::from_size_align_unchecked(self.cap, self.align) }
+  fn layout(&self) -> std::alloc::Layout {
+    unsafe { std::alloc::Layout::from_size_align_unchecked(self.cap, self.align) }
   }
 
   #[inline]

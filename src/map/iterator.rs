@@ -1,8 +1,37 @@
-use core::ops::{Bound, RangeBounds, RangeFull};
+use core::ops::{RangeBounds, RangeFull};
 
 use crate::node::NodePtr;
 
 use super::{Comparator, EntryRef, SkipMap};
+
+/// A range over the skipmap. The current state of the iterator can be cloned by
+/// simply value copying the struct.
+pub struct MapRange<'a, C = (), R = RangeFull>(MapIterator<'a, C, R>);
+
+impl<'a, C, R> Clone for MapRange<'a, C, R>
+where
+  R: Clone,
+{
+  fn clone(&self) -> Self {
+    Self(self.0.clone())
+  }
+}
+
+impl<'a, C, R> Copy for MapRange<'a, C, R> where R: Copy {}
+
+impl<'a, C, R> core::ops::Deref for MapRange<'a, C, R> {
+  type Target = MapIterator<'a, C, R>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl<'a, C, R> core::ops::DerefMut for MapRange<'a, C, R> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
@@ -68,15 +97,15 @@ where
   R: RangeBounds<[u8]>,
 {
   #[inline]
-  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> Self {
-    Self {
+  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> MapRange<'a, C, R> {
+    MapRange(Self {
       map,
       nd: map.head,
       version,
       range: r,
       lower_node: None,
       upper_node: None,
-    }
+    })
   }
 
   /// Seeks position at the first entry in map. Returns the key and value

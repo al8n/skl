@@ -182,6 +182,29 @@ impl<C> SkipMap<C> {
       len: self.len,
     }
   }
+
+  /// Clear the skiplist to empty and re-initialize.
+  pub fn clear(&mut self) {
+    let head = Node::new_empty_node_ptr(&self.arena)
+      .expect("arena is not large enough to hold the head node");
+    let tail = Node::new_empty_node_ptr(&self.arena)
+      .expect("arena is not large enough to hold the tail node");
+
+    // Safety:
+    // We will always allocate enough space for the head node and the tail node.
+    unsafe {
+      // Link all head/tail levels together.
+      for i in 0..MAX_HEIGHT {
+        let head_link = head.tower(&self.arena, i);
+        let tail_link = tail.tower(&self.arena, i);
+        head_link.next_offset.store(tail.offset, Ordering::Relaxed);
+        tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
+      }
+    }
+
+    self.height.store(1, Ordering::Release);
+    self.len.store(0, Ordering::Release);
+  }
 }
 
 impl<C: Comparator> SkipMap<C> {
@@ -378,7 +401,7 @@ impl<C: Comparator> SkipMap<C> {
 
   /// Returns a `Iterator` that within the range.
   #[inline]
-  pub fn range<'a, 'b: 'a, R>(&'a self, version: u64, range: R) -> iterator::MapIterator<'a, C, R>
+  pub fn range<'a, 'b: 'a, R>(&'a self, version: u64, range: R) -> iterator::MapRange<'a, C, R>
   where
     R: RangeBounds<[u8]> + 'b,
   {
@@ -417,7 +440,7 @@ impl<C: Comparator> SkipMap<C> {
 }
 
 // --------------------------------Private Methods--------------------------------
-impl<C: Comparator> SkipMap<C> {
+impl<C> SkipMap<C> {
   fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
@@ -495,7 +518,9 @@ impl<C: Comparator> SkipMap<C> {
     }
     h as u32
   }
+}
 
+impl<C: Comparator> SkipMap<C> {
   fn get_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let mut lvl = (self.height() - 1) as usize;
 

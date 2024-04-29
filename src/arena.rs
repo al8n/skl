@@ -8,6 +8,7 @@ use core::{
   slice,
   sync::atomic::AtomicU64,
 };
+#[allow(unused_imports)]
 use std::{boxed::Box, sync::Arc};
 
 use crossbeam_utils::CachePadded;

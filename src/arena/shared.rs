@@ -1,4 +1,4 @@
-use ::alloc::alloc;
+use std::{alloc, boxed::Box};
 
 use core::{
   ops::{Index, IndexMut},
@@ -98,14 +98,14 @@ impl<I: slice::SliceIndex<[u8]>> IndexMut<I> for AlignedVec {
 
 enum SharedBackend {
   Vec(AlignedVec),
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   Mmap {
-    buf: *mut memmapix::MmapMut,
+    buf: *mut memmap2::MmapMut,
     file: std::fs::File,
     lock: bool,
   },
-  #[cfg(feature = "mmap")]
-  AnonymousMmap(memmapix::MmapMut),
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  AnonymousMmap(memmap2::MmapMut),
 }
 
 pub(super) struct Shared {
@@ -124,7 +124,7 @@ impl Shared {
     }
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   pub(super) fn new_mmaped(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
     use fs4::FileExt;
 
@@ -134,7 +134,7 @@ impl Shared {
       }
 
       file.set_len(cap as u64).and_then(|_| {
-        memmapix::MmapOptions::new()
+        memmap2::MmapOptions::new()
           .len(cap)
           .map_mut(&file)
           .map(|mmap| Self {
@@ -150,9 +150,9 @@ impl Shared {
     }
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   pub(super) fn new_mmaped_anon(cap: usize) -> std::io::Result<Self> {
-    memmapix::MmapOptions::new()
+    memmap2::MmapOptions::new()
       .len(cap)
       .map_anon()
       .map(|mmap| Self {
@@ -165,9 +165,9 @@ impl Shared {
   pub(super) fn as_mut_ptr(&mut self) -> *mut u8 {
     match &mut self.backend {
       SharedBackend::Vec(vec) => vec.as_mut_ptr(),
-      #[cfg(feature = "mmap")]
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       SharedBackend::Mmap { buf: mmap, .. } => unsafe { (**mmap).as_mut_ptr() },
-      #[cfg(feature = "mmap")]
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       SharedBackend::AnonymousMmap(mmap) => mmap.as_mut_ptr(),
     }
   }
@@ -182,7 +182,7 @@ impl Shared {
   /// ## Safety:
   /// - This method must be invoked in the drop impl of `Arena`.
   pub(super) unsafe fn unmount(&mut self, _size: usize) {
-    #[cfg(feature = "mmap")]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     if let SharedBackend::Mmap { buf, file, lock } = &self.backend {
       use fs4::FileExt;
 

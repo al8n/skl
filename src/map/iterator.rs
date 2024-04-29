@@ -6,16 +6,21 @@ use super::{Comparator, SkipMap};
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct MapIterator<'a, C = ()>
-where
-  C: Comparator,
-{
+pub struct MapIterator<'a, C = ()> {
   pub(super) map: &'a SkipMap<C>,
   pub(super) nd: NodePtr,
   pub(super) version: u64,
   pub(super) lower: Option<&'a [u8]>,
   pub(super) upper: Option<&'a [u8]>,
 }
+
+impl<'a, C> Clone for MapIterator<'a, C> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<'a, C> Copy for MapIterator<'a, C> {}
 
 impl<'a, C> MapIterator<'a, C>
 where

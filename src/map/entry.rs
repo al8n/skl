@@ -7,6 +7,7 @@ pub struct EntryRef<'a, C: Comparator> {
   pub(super) key: &'a [u8],
   pub(super) version: u64,
   pub(super) value: &'a [u8],
+  pub(super) max_version: u64,
 }
 
 impl<'a, C: Comparator> EntryRef<'a, C> {
@@ -45,6 +46,7 @@ impl<'a, C: Comparator> EntryRef<'a, C> {
         key: prev_node.get_key(&self.map.arena),
         version: prev_node.version,
         value: prev_node.get_value(&self.map.arena),
+        max_version: self.max_version,
       })
     }
   }
@@ -60,12 +62,22 @@ impl<'a, C: Comparator> EntryRef<'a, C> {
       }
       let next_node = next_ptr.as_ptr();
 
+      if self
+        .map
+        .comparator()
+        .compare_trailer(next_node.version, self.max_version)
+        == cmp::Ordering::Greater
+      {
+        return None;
+      }
+
       Some(Self {
         map: self.map,
         nd: next_ptr,
         key: next_node.get_key(&self.map.arena),
         version: next_node.version,
         value: next_node.get_value(&self.map.arena),
+        max_version: self.max_version,
       })
     }
   }

@@ -101,8 +101,8 @@ impl<K: Key> SkipSet<K, ()> {
   /// it does not mean the skipset can store `cap` entries.
   ///
   /// `lock`: whether to lock the underlying file or not
-  #[cfg(feature = "mmap")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
     SkipMap::<K, VoidValue>::mmap(cap, file, lock).map(|map| Self { map })
   }
@@ -122,8 +122,8 @@ impl<K: Key> SkipSet<K, ()> {
   ///   especially if you're frequently accessing or modifying it.
   ///
   /// [`SkipSet::new`]: #method.new
-  #[cfg(feature = "mmap")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "mmap")))]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
     SkipMap::<K, VoidValue>::mmap_anon(cap).map(|map| Self { map })
   }

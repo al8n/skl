@@ -1,7 +1,7 @@
 use super::*;
 use crate::sync::Arc;
-use alloc::format;
 use bytes::{BufMut, BytesMut};
+use std::format;
 
 const ARENA_SIZE: usize = 1 << 20;
 

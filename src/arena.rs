@@ -2,13 +2,13 @@ use crate::{
   sync::{AtomicMut, AtomicPtr, Ordering},
   NODE_ALIGNMENT_FACTOR,
 };
-use alloc::{boxed::Box, sync::Arc};
 use core::{
   mem,
   ptr::{self, NonNull},
   slice,
   sync::atomic::AtomicU64,
 };
+use std::{boxed::Box, sync::Arc};
 
 use crossbeam_utils::CachePadded;
 
@@ -82,13 +82,13 @@ impl Arena {
     ))
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_mmap(n: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
     Shared::new_mmaped(n.max(Self::min_cap()), file, lock).map(Self::new)
   }
 
-  #[cfg(feature = "mmap")]
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_anonymous_mmap(n: usize) -> std::io::Result<Self> {
     Shared::new_mmaped_anon(n.max(Self::min_cap())).map(Self::new)

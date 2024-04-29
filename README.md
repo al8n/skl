@@ -32,7 +32,7 @@ Inspired by [Dgraph's badger](https://github.com/dgraph-io/badger/tree/main/skl)
 
     ```toml
     [dependencies]
-    skl = { version = "0.4", features = ["mmap"] }
+    skl = { version = "0.4", features = ["memmap"] }
     ```
 
 ## Features

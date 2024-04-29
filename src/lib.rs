@@ -1,14 +1,17 @@
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(all(feature = "std", test)), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
 #![allow(clippy::type_complexity, clippy::mut_from_ref)]
 
-extern crate alloc;
+#[cfg(not(feature = "std"))]
+extern crate alloc as std;
 
 #[cfg(feature = "std")]
 extern crate std;
+
+use ::core::{cmp, mem};
 
 mod arena;
 /// A map implementation based on skiplist
@@ -23,19 +26,27 @@ pub use map::{MapIterator, SkipMap};
 // pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
-const NODE_ALIGNMENT_FACTOR: usize = core::mem::align_of::<u32>();
+const NODE_ALIGNMENT_FACTOR: usize = mem::align_of::<u32>();
 
 /// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation
 pub trait Comparator: Clone {
   /// Compares two byte slices.
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering;
+  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
+
+  /// Compares two u64 values.
+  fn compare_trailer(&self, a: u64, b: u64) -> cmp::Ordering;
 }
 
 impl Comparator for () {
   #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
+  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
     a.cmp(b)
+  }
+
+  #[inline]
+  fn compare_trailer(&self, a: u64, b: u64) -> cmp::Ordering {
+    a.cmp(&b)
   }
 }
 
@@ -43,10 +54,10 @@ impl Comparator for () {
 pub use bytes;
 
 mod sync {
-  #[cfg(all(not(loom), test))]
-  pub(crate) use alloc::sync::Arc;
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
+  #[cfg(all(not(loom), test))]
+  pub(crate) use std::sync::Arc;
 
   #[cfg(loom)]
   pub(crate) use loom::sync::{atomic::*, Arc};

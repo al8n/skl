@@ -16,8 +16,6 @@
 1. A lock-free thread-safe concurrent `SkipMap` and `SkipSet` implementation based on ARENA skiplist which helps develop MVCC memtable for LSM-Tree.
 2. A lock-free thread-safe concurrent memory map based on-disk `SkipMap` and `SkipSet`.
 
-Inspired by [Dgraph's badger](https://github.com/dgraph-io/badger/tree/main/skl).
-
 </div>
 
 ## Installation
@@ -84,6 +82,26 @@ Please see [examples](https://github.com/al8n/skl-rs/tree/main/examples) folder 
 | x86_64-unknown-linux-gnu      |  &#9989;  |
 | x86_64-pc-windows-gnu         |  &#9989;  |
 | x86_64-linux-android          |  &#9989;  |
+
+## Pedigree
+
+This code is inspired and modified based on Cockroachdb's pebble arenaskl code:
+
+https://github.com/cockroachdb/pebble/tree/master/internal/arenaskl
+
+The pebble's arenaskl code is based on Andy Kimball's arenaskl code:
+
+https://github.com/andy-kimball/arenaskl
+
+The arenaskl code is based on the skiplist found in Badger, a Go-based
+KV store:
+
+https://github.com/dgraph-io/badger/tree/master/skl
+
+The skiplist in Badger is itself based on a C++ skiplist built for
+Facebook's RocksDB:
+
+https://github.com/facebook/rocksdb/tree/master/memtable
 
 ## TODO (help wanted)
 

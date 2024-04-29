@@ -4,7 +4,7 @@ use super::*;
 
 /// An entry reference to the skipmap's entry.
 pub struct EntryRef<'a, K: Key, C: Comparator> {
-  pub(super) map: &'a SkipMap<K, VoidValue, C>,
+  pub(super) map: Either<&'a SkipMap<K, VoidValue, C>>,
   pub(super) nd: NodePtr<K::Trailer, ()>,
   pub(super) key: KeyRef<'a, K>,
 }

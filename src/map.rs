@@ -1,4 +1,4 @@
-use core::cmp;
+use core::{cmp, ops::RangeBounds};
 
 use crossbeam_utils::CachePadded;
 
@@ -192,7 +192,7 @@ impl<C: Comparator> SkipMap<C> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: u64) -> Option<EntryRef<C>> {
+  pub fn first(&self, version: u64) -> Option<EntryRef<'_>> {
     // Safety: head node was definitely allocated by self.arena
     let nd = unsafe { self.get_next(self.head, 0) };
     if nd.is_null() || nd.ptr == self.tail.ptr {
@@ -207,18 +207,15 @@ impl<C: Comparator> SkipMap<C> {
       }
 
       Some(EntryRef {
-        map: self,
-        nd,
         key: node.get_key(&self.arena),
         version: node.version,
         value: node.get_value(&self.arena),
-        max_version: version,
       })
     }
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: u64) -> Option<EntryRef<C>> {
+  pub fn last(&self, version: u64) -> Option<EntryRef<'_>> {
     // Safety: tail node was definitely allocated by self.arena
     let mut nd = unsafe { self.get_prev(self.tail, 0) };
 
@@ -232,12 +229,9 @@ impl<C: Comparator> SkipMap<C> {
         let node = nd.as_ptr();
         if node.version <= version {
           return Some(EntryRef {
-            map: self,
-            nd,
             key: node.get_key(&self.arena),
             version: node.version,
             value: node.get_value(&self.arena),
-            max_version: version,
           });
         }
         nd = self.get_prev(nd, 0);
@@ -259,17 +253,14 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, C>> {
+  pub fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
     self.gt_in(version, key).map(|ptr| unsafe {
       // Safety: the gt_in guarantees that ptr is valid,
       let node = ptr.as_ptr();
       EntryRef {
-        map: self,
-        nd: ptr,
         key: node.get_key(&self.arena),
         version: node.version,
         value: node.get_value(&self.arena),
-        max_version: version,
       }
     })
   }
@@ -280,17 +271,14 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, C>> {
+  pub fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
     self.lt_in(version, key).map(|ptr| unsafe {
       // Safety: the lt_in guarantees that ptr is valid,
       let node = ptr.as_ptr();
       EntryRef {
-        map: self,
-        nd: ptr,
         key: node.get_key(&self.arena),
         version: node.version,
         value: node.get_value(&self.arena),
-        max_version: version,
       }
     })
   }
@@ -301,17 +289,14 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, C>> {
+  pub fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
     self.ge_in(version, key).map(|ptr| unsafe {
       // Safety: the ge_in guarantees that ptr is valid,
       let node = ptr.as_ptr();
       EntryRef {
-        map: self,
-        nd: ptr,
         key: node.get_key(&self.arena),
         version: node.version,
         value: node.get_value(&self.arena),
-        max_version: version,
       }
     })
   }
@@ -322,17 +307,14 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, C>> {
+  pub fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
     self.le_in(version, key).map(|ptr| unsafe {
       // Safety: the le_in guarantees that ptr is valid,
       let node = ptr.as_ptr();
       EntryRef {
-        map: self,
-        nd: ptr,
         key: node.get_key(&self.arena),
         version: node.version,
         value: node.get_value(&self.arena),
-        max_version: version,
       }
     })
   }
@@ -394,20 +376,14 @@ impl<C: Comparator> SkipMap<C> {
     iterator::MapIterator::new(version, self)
   }
 
-  // /// Returns a new `Iterator` that with the lower and upper bounds.
-  // ///
-  // /// # Returns
-  // /// - `None`: the upper >= lower || lower is larger than the tail || upper is smaller than the head
-  // /// - `Some(..)`: both lower and upper bounds are valid
-  // #[inline]
-  // pub fn range<'a, 'b: 'a>(
-  //   &'a self,
-  //   version: u64,
-  //   range: impl RangeBounds<[u8]> + 'b,
-  // ) -> Option<iterator::MapIterator<'a, C>>
-  // {
-  //   iterator::MapIterator::bounded(self, version, lower, upper)
-  // }
+  /// Returns a `Iterator` that within the range.
+  #[inline]
+  pub fn range<'a, 'b: 'a, R>(&'a self, version: u64, range: R) -> iterator::MapIterator<'a, C, R>
+  where
+    R: RangeBounds<[u8]> + 'b,
+  {
+    iterator::MapIterator::range(version, self, range)
+  }
 }
 
 // --------------------------------Crate Level Methods--------------------------------
@@ -437,16 +413,6 @@ impl<C: Comparator> SkipMap<C> {
     let offset = nptr.next_offset(&self.arena, height);
     let ptr = self.arena.get_pointer(offset as usize);
     NodePtr::new(ptr, offset)
-  }
-
-  #[inline]
-  pub(crate) const fn head(&self) -> NodePtr {
-    self.head
-  }
-
-  #[inline]
-  pub(crate) const fn tail(&self) -> NodePtr {
-    self.tail
   }
 }
 
@@ -588,7 +554,7 @@ impl<C: Comparator> SkipMap<C> {
       let node = res.next.as_ptr();
 
       if self.cmp.compare(key, node.get_key(&self.arena)) == cmp::Ordering::Equal
-        && node.version == version
+        && self.cmp.compare_trailer(node.version, version) == cmp::Ordering::Equal
       {
         nd = res.next;
       }
@@ -909,7 +875,7 @@ impl<C: Comparator> SkipMap<C> {
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
         // User-key equality.
-        if nd.version == version {
+        if self.cmp.compare_trailer(nd.version, version) == cmp::Ordering::Equal {
           // Trailer equality.
           return false;
         }

@@ -12,6 +12,7 @@ extern crate alloc as std;
 extern crate std;
 
 use ::core::{cmp, mem};
+use core::ops::RangeBounds;
 
 mod arena;
 /// A map implementation based on skiplist
@@ -34,6 +35,9 @@ pub trait Comparator: Clone {
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
 
+  /// Returns if a is contained in range.
+  fn contains(&self, range: &impl RangeBounds<[u8]>, key: &[u8]) -> bool;
+
   /// Compares two u64 values.
   fn compare_trailer(&self, a: u64, b: u64) -> cmp::Ordering;
 }
@@ -42,6 +46,11 @@ impl Comparator for () {
   #[inline]
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
     a.cmp(b)
+  }
+
+  #[inline]
+  fn contains(&self, range: &impl RangeBounds<[u8]>, key: &[u8]) -> bool {
+    range.contains(key)
   }
 
   #[inline]

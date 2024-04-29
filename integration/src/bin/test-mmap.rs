@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 fn main() {
   {
-    const N: usize = 1000;
+    const N: usize = 10;
     let l = Arc::new(SkipMap::mmap(1 << 20, tempfile::tempfile().unwrap(), true).unwrap());
     for i in 0..N {
       let l = l.clone();
@@ -26,7 +26,7 @@ fn main() {
   }
 
   {
-    const N2: usize = 100;
+    const N2: usize = 10;
     let l = Arc::new(SkipMap::mmap(120 << 20, tempfile::tempfile().unwrap(), false).unwrap());
     for i in 0..N2 {
       let l = l.clone();

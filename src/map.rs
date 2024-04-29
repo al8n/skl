@@ -4,11 +4,12 @@ use crossbeam_utils::CachePadded;
 
 use super::{
   arena::Arena,
-  node::{Node, NodePtr},
   sync::{AtomicU32, Ordering},
   Comparator, MAX_HEIGHT,
 };
 
+mod node;
+use node::{Node, NodePtr};
 mod error;
 pub use error::Error;
 mod entry;
@@ -128,7 +129,7 @@ impl SkipMap {
   ///
   /// [`SkipMap::mmap_anon`]: #method.mmap_anon
   pub fn new(cap: usize) -> Result<Self, Error> {
-    let arena = Arena::new_vec(cap);
+    let arena = Arena::new_vec::<{ Node::MAX_NODE_SIZE }>(cap);
     Self::new_in(arena, ())
   }
 
@@ -141,7 +142,7 @@ impl SkipMap {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
-    let arena = Arena::new_mmap(cap, file, lock)?;
+    let arena = Arena::new_mmap::<{ Node::MAX_NODE_SIZE }>(cap, file, lock)?;
     Self::new_in(arena, ()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
@@ -163,7 +164,7 @@ impl SkipMap {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
-    let arena = Arena::new_anonymous_mmap(cap)?;
+    let arena = Arena::new_anonymous_mmap::<{ Node::MAX_NODE_SIZE }>(cap)?;
     Self::new_in(arena, ()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 }

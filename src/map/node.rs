@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-  arena::{Arena, ArenaError},
+  super::arena::{Arena, ArenaError},
   MAX_HEIGHT,
 };
 
@@ -29,7 +29,7 @@ impl Link {
   }
 }
 
-pub(super) struct NodePtr {
+pub(crate) struct NodePtr {
   pub(super) ptr: *const Node,
   pub(super) offset: u32,
 }

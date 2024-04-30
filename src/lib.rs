@@ -73,7 +73,7 @@ impl Comparator for () {
 
   #[inline]
   fn compare_trailer(&self, a: u64, b: u64) -> cmp::Ordering {
-    a.cmp(&b)
+    a.cmp(&b).reverse()
   }
 }
 

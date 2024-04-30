@@ -3,7 +3,7 @@ use crate::ArenaError;
 /// Error type for the [`SkipMap`](crate::SkipMap).
 ///
 /// [`SkipMap`]: crate::SkipMap
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
   /// Indicates that the arena is full
   Full(ArenaError),

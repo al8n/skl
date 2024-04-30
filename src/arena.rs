@@ -17,7 +17,7 @@ mod shared;
 use shared::Shared;
 
 /// An error indicating that the arena is full
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ArenaError;
 
 impl core::fmt::Display for ArenaError {

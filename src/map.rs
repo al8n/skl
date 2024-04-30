@@ -563,7 +563,7 @@ impl<C: Comparator> SkipMap<C> {
     unsafe {
       let node = nd.as_ptr();
       if self.cmp.compare(key, node.get_key(&self.arena)) == cmp::Ordering::Equal
-        && self.cmp.compare_trailer(node.version, version) == cmp::Ordering::Equal
+        && self.cmp.compare_version(node.version, version) == cmp::Ordering::Equal
       {
         nd = self.get_next(nd, 0);
         if nd.ptr == self.tail.ptr {
@@ -585,7 +585,7 @@ impl<C: Comparator> SkipMap<C> {
       let node = res.next.as_ptr();
 
       if self.cmp.compare(key, node.get_key(&self.arena)) == cmp::Ordering::Equal
-        && self.cmp.compare_trailer(node.version, version) == cmp::Ordering::Equal
+        && self.cmp.compare_version(node.version, version) == cmp::Ordering::Equal
       {
         nd = res.next;
       }
@@ -867,7 +867,7 @@ impl<C: Comparator> SkipMap<C> {
         cmp::Ordering::Greater => prev = next,
         cmp::Ordering::Equal => {
           // User-key equality.
-          let cmp = self.cmp.compare_trailer(version, next_node.version);
+          let cmp = self.cmp.compare_version(version, next_node.version);
 
           if let cmp::Ordering::Equal = cmp {
             // Internal key equality.
@@ -908,7 +908,7 @@ impl<C: Comparator> SkipMap<C> {
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
         // User-key equality.
-        let cmp = self.cmp.compare_trailer(version, nd.version);
+        let cmp = self.cmp.compare_version(nd.version, version);
         if cmp == cmp::Ordering::Equal {
           // Trailer equality.
           return false;

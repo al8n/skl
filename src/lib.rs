@@ -52,14 +52,14 @@ pub trait Comparator: Clone {
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
 
+  /// Compares the trailer.
+  fn compare_version(&self, a: u64, b: u64) -> cmp::Ordering;
+
   /// Returns if a is contained in range.
   fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>;
-
-  /// Compares two u64 values.
-  fn compare_trailer(&self, a: u64, b: u64) -> cmp::Ordering;
 }
 
 impl Comparator for () {
@@ -74,26 +74,12 @@ impl Comparator for () {
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
   {
-    // let start = range.start_bound();
-    // let end = range.end_bound();
-    // let start = match start {
-    //   Bound::Included(s) => Bound::Included(s.borrow()),
-    //   Bound::Excluded(s) => Bound::Excluded(s.borrow()),
-    //   Bound::Unbounded => Bound::Unbounded,
-    // };
-    // let end = match end {
-    //   Bound::Included(s) => Bound::Included(s.borrow()),
-    //   Bound::Excluded(s) => Bound::Excluded(s.borrow()),
-    //   Bound::Unbounded => Bound::Unbounded,
-    // };
-
-    // (start, end).contains(key)
     range.contains(&key)
   }
 
   #[inline]
-  fn compare_trailer(&self, a: u64, b: u64) -> cmp::Ordering {
-    a.cmp(&b).reverse()
+  fn compare_version(&self, a: u64, b: u64) -> cmp::Ordering {
+    a.cmp(&b)
   }
 }
 

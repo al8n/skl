@@ -222,7 +222,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  pub fn seek_ge<'k: 'a, Q>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+  pub fn seek_ge(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     self.nd = self.map.ge_in(self.version, key)?;
 
     unsafe {
@@ -245,7 +245,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  pub fn seek_gt<'k: 'a>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+  pub fn seek_gt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     self.nd = self.map.gt_in(self.version, key)?;
 
     unsafe {
@@ -268,7 +268,7 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  pub fn seek_le<'k: 'a>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+  pub fn seek_le(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     // le_in has already checked the ptr is valid
     self.nd = self.map.le_in(self.version, key)?;
 
@@ -292,7 +292,7 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  pub fn seek_lt<'k: 'a>(&'a mut self, key: &'k [u8]) -> Option<EntryRef<'a>> {
+  pub fn seek_lt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     // NB: the top-level SetIterator has already adjusted key based on
     // the upper-bound.
     self.nd = self.map.lt_in(self.version, key)?;

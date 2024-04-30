@@ -1,3 +1,5 @@
+use wg::WaitGroup;
+
 use super::*;
 use crate::sync::Arc;
 use std::format;
@@ -304,23 +306,21 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
   #[cfg(miri)]
   const N: usize = 5;
 
-  let wg = Arc::new(());
+  let wg = WaitGroup::new();
   for _ in 0..N {
-    let wg = wg.clone();
+    let wg = wg.add(1);
     let l = l.clone();
     std::thread::spawn(move || {
       let _ = l.insert(0, b"thekey");
-      drop(wg);
+      wg.done();
     });
   }
 
-  while Arc::strong_count(&wg) > 1 {
-    crossbeam_utils::Backoff::new().spin();
-  }
+  wg.wait();
 
   let saw_value = Arc::new(AtomicU32::new(0));
   for _ in 0..N {
-    let wg = wg.clone();
+    let wg = wg.add(1);
     let l = l.clone();
     let saw_value = saw_value.clone();
     std::thread::spawn(move || {
@@ -331,13 +331,11 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
       let ent = it.seek_ge(b"thekey").unwrap();
       assert_eq!(ent.key(), b"thekey");
       saw_value.fetch_add(1, Ordering::SeqCst);
-      drop(wg);
+      wg.done();
     });
   }
 
-  while Arc::strong_count(&wg) > 1 {
-    crossbeam_utils::Backoff::new().spin();
-  }
+  wg.wait();
 
   assert_eq!(N, saw_value.load(Ordering::SeqCst) as usize);
   assert_eq!(l.len(), 1);

@@ -1,31 +1,37 @@
-use core::ops::RangeFull;
+use core::ops::{Bound, RangeFull};
 
 use super::*;
 
 /// A range over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct MapRange<'a, C = (), R = RangeFull>(MapIterator<'a, C, R>);
+pub struct MapRange<'a, C = (), Q: ?Sized = &'static str, R = RangeFull>(MapIterator<'a, C, Q, R>);
 
-impl<'a, C, R> Clone for MapRange<'a, C, R>
+impl<'a, C, Q, R> Clone for MapRange<'a, C, Q, R>
 where
   R: Clone,
+  Q: Clone,
 {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, C, R> Copy for MapRange<'a, C, R> where R: Copy {}
+impl<'a, C, Q, R> Copy for MapRange<'a, C, Q, R>
+where
+  R: Copy,
+  Q: Copy,
+{
+}
 
-impl<'a, C, R> core::ops::Deref for MapRange<'a, C, R> {
-  type Target = MapIterator<'a, C, R>;
+impl<'a, C, Q, R> core::ops::Deref for MapRange<'a, C, Q, R> {
+  type Target = MapIterator<'a, C, Q, R>;
 
   fn deref(&self) -> &Self::Target {
     &self.0
   }
 }
 
-impl<'a, C, R> core::ops::DerefMut for MapRange<'a, C, R> {
+impl<'a, C, Q, R> core::ops::DerefMut for MapRange<'a, C, Q, R> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.0
   }
@@ -33,7 +39,7 @@ impl<'a, C, R> core::ops::DerefMut for MapRange<'a, C, R> {
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct MapIterator<'a, C = (), R = core::ops::RangeFull> {
+pub struct MapIterator<'a, C = (), Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
   pub(super) map: &'a SkipMap<C>,
   pub(super) nd: NodePtr,
   pub(super) version: u64,
@@ -55,9 +61,10 @@ pub struct MapIterator<'a, C = (), R = core::ops::RangeFull> {
   // comparisons are necessary.
   pub(super) lower_node: Option<NodePtr>,
   pub(super) upper_node: Option<NodePtr>,
+  pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, R: Clone, C> Clone for MapIterator<'a, C, R> {
+impl<'a, R: Clone, Q: Clone, C> Clone for MapIterator<'a, C, Q, R> {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
@@ -66,11 +73,12 @@ impl<'a, R: Clone, C> Clone for MapIterator<'a, C, R> {
       range: self.range.clone(),
       lower_node: self.lower_node,
       upper_node: self.upper_node,
+      _phantom: core::marker::PhantomData,
     }
   }
 }
 
-impl<'a, R: Copy, C> Copy for MapIterator<'a, C, R> {}
+impl<'a, R: Copy, Q: Copy, C> Copy for MapIterator<'a, C, Q, R> {}
 
 impl<'a, C> MapIterator<'a, C>
 where
@@ -85,17 +93,20 @@ where
       range: RangeFull,
       lower_node: None,
       upper_node: None,
+      _phantom: core::marker::PhantomData,
     }
   }
 }
 
-impl<'a, R, C> MapIterator<'a, C, R>
+impl<'a, Q, R, C> MapIterator<'a, C, Q, R>
 where
   C: Comparator,
-  R: RangeBounds<[u8]>,
+  &'a [u8]: PartialOrd<Q>,
+  Q: ?Sized + PartialOrd<&'a [u8]>,
+  R: RangeBounds<Q>,
 {
   #[inline]
-  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> MapRange<'a, C, R> {
+  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> MapRange<'a, C, Q, R> {
     MapRange(Self {
       map,
       nd: map.head,
@@ -103,6 +114,7 @@ where
       range: r,
       lower_node: None,
       upper_node: None,
+      _phantom: core::marker::PhantomData,
     })
   }
 
@@ -113,14 +125,13 @@ where
     loop {
       unsafe {
         cur = self.map.get_next(cur, 0);
-        if cur.ptr == self.map.tail.ptr {
-          self.nd = cur;
+        self.nd = cur;
+        if cur.is_null() || cur.ptr == self.map.tail.ptr {
           return None;
         }
 
         if let Some(ref upper) = self.upper_node {
           if cur.ptr == upper.ptr {
-            self.nd = cur;
             return None;
           }
         }
@@ -128,7 +139,6 @@ where
         let node = cur.as_ptr();
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
-          self.nd = cur;
           self.lower_node.get_or_insert(cur);
           return Some(EntryRef {
             key: nk,
@@ -147,14 +157,13 @@ where
     loop {
       unsafe {
         cur = self.map.get_prev(cur, 0);
-        if cur.ptr == self.map.head.ptr {
-          self.nd = cur;
+        self.nd = cur;
+        if cur.is_null() || cur.ptr == self.map.head.ptr {
           return None;
         }
 
         if let Some(ref lower) = self.lower_node {
           if cur.ptr == lower.ptr {
-            self.nd = cur;
             return None;
           }
         }
@@ -162,7 +171,6 @@ where
         let node = cur.as_ptr();
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
-          self.nd = cur;
           self.upper_node.get_or_insert(cur);
           return Some(EntryRef {
             key: nk,
@@ -180,7 +188,8 @@ where
   pub fn next(&mut self) -> Option<EntryRef> {
     unsafe {
       self.nd = self.map.get_next(self.nd, 0);
-      if self.nd.ptr == self.map.tail.ptr {
+
+      if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
         return None;
       }
 
@@ -204,7 +213,8 @@ where
   pub fn prev(&mut self) -> Option<EntryRef> {
     unsafe {
       self.nd = self.map.get_prev(self.nd, 0);
-      if self.nd.ptr == self.map.head.ptr {
+
+      if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
         return None;
       }
 
@@ -229,20 +239,36 @@ where
   pub fn seek_ge(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     self.nd = self.map.ge_in(self.version, key)?;
 
-    unsafe {
-      // Safety: the nd is valid, we already check this
-      let node = self.nd.as_ptr();
-      // Safety: the node is allocated by the map's arena, so the key is valid
-      let nk = node.get_key(&self.map.arena);
+    loop {
+      unsafe {
+        // Safety: the nd is valid, we already check this
+        let node = self.nd.as_ptr();
+        // Safety: the node is allocated by the map's arena, so the key is valid
+        let nk = node.get_key(&self.map.arena);
 
-      if self.map.cmp.contains(&self.range, nk) {
-        Some(EntryRef {
-          key: nk,
-          version: node.version,
-          value: node.get_value(&self.map.arena),
-        })
-      } else {
-        None
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+            value: node.get_value(&self.map.arena),
+          });
+        } else {
+          let upper = self.range.end_bound();
+          match upper {
+            Bound::Included(upper) => {
+              if upper.lt(&nk) {
+                return None;
+              }
+            }
+            Bound::Excluded(upper) => {
+              if upper.le(&nk) {
+                return None;
+              }
+            }
+            Bound::Unbounded => {}
+          }
+          self.next();
+        }
       }
     }
   }
@@ -253,20 +279,36 @@ where
   pub fn seek_gt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     self.nd = self.map.gt_in(self.version, key)?;
 
-    unsafe {
-      // Safety: the nd is valid, we already check this
-      let node = self.nd.as_ptr();
-      // Safety: the node is allocated by the map's arena, so the key is valid
-      let nk = node.get_key(&self.map.arena);
+    loop {
+      unsafe {
+        // Safety: the nd is valid, we already check this
+        let node = self.nd.as_ptr();
+        // Safety: the node is allocated by the map's arena, so the key is valid
+        let nk = node.get_key(&self.map.arena);
 
-      if self.map.cmp.contains(&self.range, nk) {
-        Some(EntryRef {
-          key: nk,
-          version: node.version,
-          value: node.get_value(&self.map.arena),
-        })
-      } else {
-        None
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+            value: node.get_value(&self.map.arena),
+          });
+        } else {
+          let upper = self.range.end_bound();
+          match upper {
+            Bound::Included(upper) => {
+              if upper.lt(&nk) {
+                return None;
+              }
+            }
+            Bound::Excluded(upper) => {
+              if upper.le(&nk) {
+                return None;
+              }
+            }
+            Bound::Unbounded => {}
+          }
+          self.next();
+        }
       }
     }
   }
@@ -278,20 +320,38 @@ where
     // le_in has already checked the ptr is valid
     self.nd = self.map.le_in(self.version, key)?;
 
-    unsafe {
-      // Safety: the nd is valid, we already check this on line 75
-      let node = self.nd.as_ptr();
-      // Safety: the node is allocated by the map's arena, so the key is valid
-      let nk = node.get_key(&self.map.arena);
+    loop {
+      unsafe {
+        // Safety: the nd is valid, we already check this on line 75
+        let node = self.nd.as_ptr();
 
-      if self.map.cmp.contains(&self.range, nk) {
-        Some(EntryRef {
-          key: nk,
-          version: node.version,
-          value: node.get_value(&self.map.arena),
-        })
-      } else {
-        None
+        // Safety: the node is allocated by the map's arena, so the key is valid
+        let nk = node.get_key(&self.map.arena);
+
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+            value: node.get_value(&self.map.arena),
+          });
+        } else {
+          let lower = self.range.start_bound();
+          match lower {
+            Bound::Included(lower) => {
+              if lower.gt(&nk) {
+                return None;
+              }
+            }
+            Bound::Excluded(lower) => {
+              if lower.ge(&nk) {
+                return None;
+              }
+            }
+            Bound::Unbounded => {}
+          }
+
+          self.prev();
+        }
       }
     }
   }
@@ -304,20 +364,37 @@ where
     // the upper-bound.
     self.nd = self.map.lt_in(self.version, key)?;
 
-    unsafe {
-      // Safety: the nd is valid, we already check this on line 75
-      let node = self.nd.as_ptr();
-      // Safety: the node is allocated by the map's arena, so the key is valid
-      let nk = node.get_key(&self.map.arena);
+    loop {
+      unsafe {
+        // Safety: the nd is valid, we already check this on line 75
+        let node = self.nd.as_ptr();
+        // Safety: the node is allocated by the map's arena, so the key is valid
+        let nk = node.get_key(&self.map.arena);
 
-      if self.map.cmp.contains(&self.range, nk) {
-        Some(EntryRef {
-          key: nk,
-          version: node.version,
-          value: node.get_value(&self.map.arena),
-        })
-      } else {
-        None
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+            value: node.get_value(&self.map.arena),
+          });
+        } else {
+          let lower = self.range.start_bound();
+          match lower {
+            Bound::Included(lower) => {
+              if lower.gt(&nk) {
+                return None;
+              }
+            }
+            Bound::Excluded(lower) => {
+              if lower.ge(&nk) {
+                return None;
+              }
+            }
+            Bound::Unbounded => {}
+          }
+
+          self.prev();
+        }
       }
     }
   }

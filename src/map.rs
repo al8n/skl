@@ -249,13 +249,17 @@ impl<C: Comparator> SkipMap<C> {
 
   /// Returns the value associated with the given key, if it exists.
   pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
-    self.get_in(version, key).map(|ptr| unsafe {
+    self.get_in(version, key).and_then(|ptr| unsafe {
+      if ptr.is_null() {
+        return None;
+      }
+
       let node = ptr.as_ptr();
-      EntryRef {
+      Some(EntryRef {
         key: node.get_key(&self.arena),
         version: node.version,
         value: node.get_value(&self.arena),
-      }
+      })
     })
   }
 
@@ -355,6 +359,10 @@ impl<C: Comparator> SkipMap<C> {
     unsafe {
       let (_, curr) = self.find_splice(version, key, ins, true);
       if let Some(curr) = curr {
+        if curr.is_null() {
+          return self.insert_in(version, key, value, ins).map(|_| None);
+        }
+
         return Ok(Some({
           let nd = curr.as_ptr();
           EntryRef {
@@ -394,9 +402,11 @@ impl<C: Comparator> SkipMap<C> {
 
   /// Returns a `Iterator` that within the range.
   #[inline]
-  pub fn range<'a, 'b: 'a, R>(&'a self, version: u64, range: R) -> iterator::MapRange<'a, C, R>
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapRange<'a, C, Q, R>
   where
-    R: RangeBounds<[u8]> + 'b,
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+    R: RangeBounds<Q> + 'a,
   {
     iterator::MapIterator::range(version, self, range)
   }
@@ -537,7 +547,7 @@ impl<C: Comparator> SkipMap<C> {
   fn lt_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
     let nd = res.prev;
-    if nd.ptr == self.head.ptr {
+    if nd.is_null() || nd.ptr == self.head.ptr {
       return None;
     }
     Some(nd)
@@ -546,7 +556,7 @@ impl<C: Comparator> SkipMap<C> {
   fn gt_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
     let mut nd = res.next;
-    if nd.ptr == self.tail.ptr {
+    if nd.is_null() || nd.ptr == self.tail.ptr {
       return None;
     }
 
@@ -567,6 +577,9 @@ impl<C: Comparator> SkipMap<C> {
   fn le_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
     let mut nd = res.prev;
+    if nd.is_null() || nd.ptr == self.head.ptr {
+      return None;
+    }
 
     unsafe {
       let node = res.next.as_ptr();
@@ -587,7 +600,7 @@ impl<C: Comparator> SkipMap<C> {
   fn ge_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
     let nd = res.next;
-    if nd.ptr == self.tail.ptr {
+    if nd.is_null() || nd.ptr == self.tail.ptr {
       return None;
     }
 
@@ -854,7 +867,9 @@ impl<C: Comparator> SkipMap<C> {
         cmp::Ordering::Greater => prev = next,
         cmp::Ordering::Equal => {
           // User-key equality.
-          if version == next_node.version {
+          let cmp = self.cmp.compare_trailer(version, next_node.version);
+
+          if let cmp::Ordering::Equal = cmp {
             // Internal key equality.
             return FindResult {
               splice: Splice { prev, next },
@@ -863,7 +878,7 @@ impl<C: Comparator> SkipMap<C> {
             };
           }
 
-          if version.gt(&next_node.version) {
+          if let cmp::Ordering::Greater = cmp {
             // We are done for this level, since prev.key < key < next.key.
             return FindResult {
               splice: Splice { prev, next },
@@ -893,11 +908,12 @@ impl<C: Comparator> SkipMap<C> {
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
         // User-key equality.
-        if self.cmp.compare_trailer(nd.version, version) == cmp::Ordering::Equal {
+        let cmp = self.cmp.compare_trailer(version, nd.version);
+        if cmp == cmp::Ordering::Equal {
           // Trailer equality.
           return false;
         }
-        nd.version.le(&version)
+        cmp == cmp::Ordering::Less
       }
     }
   }

@@ -361,3 +361,357 @@ fn test_concurrent_one_key_mmap() {
 fn test_concurrent_one_key_mmap_anon() {
   concurrent_one_key(Arc::new(SkipSet::mmap_anon(ARENA_SIZE).unwrap()));
 }
+
+fn iterator_next(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  let mut it = l.iter(0);
+  let mut ent = it.first().unwrap();
+  for i in 0..N {
+    assert_eq!(ent.key(), make_int_key(i));
+    if i != N - 1 {
+      ent = it.next().unwrap();
+    }
+  }
+
+  assert!(it.next().is_none());
+}
+
+#[test]
+fn test_iterator_next() {
+  iterator_next(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_next_mmap() {
+  iterator_next(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_next_mmap_anon() {
+  iterator_next(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn range_next(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  let mut it = l.iter(0);
+  let mut ent = it.seek_ge(&make_int_key(50)).unwrap();
+  for i in 50..N {
+    assert_eq!(ent.key(), make_int_key(i));
+    if i != N - 1 {
+      ent = it.next().unwrap();
+    }
+  }
+
+  assert!(it.next().is_none());
+}
+
+#[test]
+fn test_range_next() {
+  range_next(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_next_mmap() {
+  range_next(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_next_mmap_anon() {
+  range_next(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn iterator_prev(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in 0..N {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  let mut it = l.iter(0);
+  let mut ent = it.last().unwrap();
+  for i in (0..N).rev() {
+    assert_eq!(ent.key(), make_int_key(i));
+    if i != 0 {
+      ent = it.prev().unwrap();
+    }
+  }
+
+  assert!(it.prev().is_none());
+}
+
+#[test]
+fn test_iterator_prev() {
+  iterator_prev(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_prev_mmap() {
+  iterator_prev(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_prev_mmap_anon() {
+  iterator_prev(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn range_prev(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in 0..N {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  let mut it = l.iter(0);
+  let mut ent = it.seek_le(&make_int_key(50)).unwrap();
+  for i in (0..=50).rev() {
+    assert_eq!(ent.key(), make_int_key(i));
+    if i != 0 {
+      ent = it.prev().unwrap();
+    }
+  }
+
+  assert!(it.prev().is_none());
+}
+
+#[test]
+fn test_range_prev() {
+  range_prev(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_prev_mmap() {
+  range_prev(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_prev_mmap_anon() {
+  range_prev(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn iterator_seek_ge(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    let v = i * 10 + 1000;
+    l.insert(0, &make_int_key(v)).unwrap();
+  }
+
+  let mut it = l.iter(0);
+  let ent = it.seek_ge(b"").unwrap();
+  assert_eq!(ent.key(), make_int_key(1000));
+
+  let ent = it.seek_ge(b"01000").unwrap();
+  assert_eq!(ent.key(), make_int_key(1000));
+
+  let ent = it.seek_ge(b"01005").unwrap();
+  assert_eq!(ent.key(), make_int_key(1010));
+
+  let ent = it.seek_ge(b"01010").unwrap();
+  assert_eq!(ent.key(), make_int_key(1010));
+
+  let ent = it.seek_ge(b"01020").unwrap();
+  assert_eq!(ent.key(), make_int_key(1020));
+
+  let ent = it.seek_ge(b"01200").unwrap();
+  assert_eq!(ent.key(), make_int_key(1200));
+
+  let ent = it.seek_ge(b"01100").unwrap();
+  assert_eq!(ent.key(), make_int_key(1100));
+
+  let ent = it.seek_ge(b"99999");
+  assert!(ent.is_none());
+
+  l.insert(0, &[]).unwrap();
+  let ent = it.seek_ge(b"").unwrap();
+  assert_eq!(ent.key(), &[]);
+
+  let ent = it.seek_ge(b"").unwrap();
+  assert_eq!(ent.key(), &[]);
+}
+
+#[test]
+fn test_iterator_seek_ge() {
+  iterator_seek_ge(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_seek_ge_mmap() {
+  iterator_seek_ge(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_seek_ge_mmap_anon() {
+  iterator_seek_ge(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn iterator_seek_lt(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    let v = i * 10 + 1000;
+    l.insert(0, &make_int_key(v)).unwrap();
+  }
+
+  let mut it = l.iter(0);
+  assert!(it.seek_lt(b"").is_none());
+
+  let ent = it.seek_lt(b"01000");
+  assert!(ent.is_none());
+
+  let ent = it.seek_lt(b"01001").unwrap();
+  assert_eq!(ent.key(), make_int_key(1000));
+
+  let ent = it.seek_lt(b"01991").unwrap();
+  assert_eq!(ent.key(), make_int_key(1990));
+
+  let ent = it.seek_lt(b"99999").unwrap();
+  assert_eq!(ent.key(), make_int_key(1990));
+
+  l.insert(0, &[]).unwrap();
+  assert!(l.lt(0, &[]).is_none());
+
+  let ent = it.seek_lt(b"");
+  assert!(ent.is_none());
+
+  let ent = it.seek_lt(b"\x01").unwrap();
+  assert_eq!(ent.key(), &[]);
+}
+
+#[test]
+fn test_iterator_seek_lt() {
+  iterator_seek_lt(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_seek_lt_mmap() {
+  iterator_seek_lt(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iterator_seek_lt_mmap_anon() {
+  iterator_seek_lt(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn range(l: SkipSet) {
+  for i in 1..10 {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  let k3 = make_int_key(3);
+  let k7 = make_int_key(7);
+  let mut it = l.range(0, k3.as_slice()..k7.as_slice());
+
+  for i in 3..=6 {
+    let k = make_int_key(i);
+    let ent = it.seek_ge(&k).unwrap();
+    assert_eq!(ent.key(), make_int_key(i));
+  }
+
+  for i in 1..3 {
+    let k = make_int_key(i);
+    let ent = it.seek_ge(&k).unwrap();
+    assert_eq!(ent.key(), make_int_key(3));
+  }
+
+  for i in 7..10 {
+    let k = make_int_key(i);
+    assert!(it.seek_ge(&k).is_none());
+  }
+
+  for i in 7..10 {
+    let k = make_int_key(i);
+    let ent = it.seek_le(&k).unwrap();
+    assert_eq!(ent.key(), make_int_key(6));
+  }
+
+  let ent = it.seek_ge(&make_int_key(6)).unwrap();
+  assert_eq!(ent.key(), make_int_key(6));
+
+  assert!(it.next().is_none());
+
+  let ent = it.seek_le(&make_int_key(6)).unwrap();
+  assert_eq!(ent.key(), make_int_key(6));
+
+  assert!(it.next().is_none());
+
+  for i in 4..=7 {
+    let k = make_int_key(i);
+    let ent = it.seek_lt(&k).unwrap();
+    assert_eq!(ent.key(), make_int_key(i - 1));
+  }
+
+  for i in 7..10 {
+    let k = make_int_key(i);
+    let ent = it.seek_lt(&k).unwrap();
+    assert_eq!(ent.key(), make_int_key(6));
+  }
+
+  for i in 1..3 {
+    let k = make_int_key(i);
+    let ent = it.seek_gt(&k).unwrap();
+    assert_eq!(ent.key(), make_int_key(3));
+  }
+
+  for i in 1..4 {
+    let k = make_int_key(i);
+    assert!(it.seek_lt(&k).is_none());
+  }
+
+  let ent = it.seek_lt(&make_int_key(4)).unwrap();
+  assert_eq!(ent.key(), make_int_key(3));
+
+  assert!(it.prev().is_none());
+}
+
+#[test]
+fn test_range() {
+  range(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_mmap() {
+  range(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_mmap_anon() {
+  range(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}

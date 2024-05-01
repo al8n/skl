@@ -187,6 +187,8 @@ impl<C> SkipMap<C> {
       }
     }
 
+    self.head = head;
+    self.tail = tail;
     self.height.store(1, Ordering::Release);
     self.len.store(0, Ordering::Release);
   }

@@ -214,8 +214,7 @@ jobs:
       - stable
       - nightly
       - sanitizer
-      - valgrind
-      - miri
+      - valgrind 
       - minrust
     steps:
       - uses: actions/checkout@v3

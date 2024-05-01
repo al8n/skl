@@ -105,7 +105,7 @@ fn test_full_mmap_anon() {
   full_in(|n| SkipMap::mmap_anon(n).unwrap());
 }
 
-fn basic_in(l: SkipMap) {
+fn basic_in(mut l: SkipMap) {
   // Try adding values.
   l.insert(0, b"key1", &make_value(1)).unwrap();
   l.insert(0, b"key3", &make_value(3)).unwrap();
@@ -159,6 +159,18 @@ fn basic_in(l: SkipMap) {
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.value(), &[]);
     assert_eq!(ent.version(), 1);
+  }
+
+  l.get_or_insert(2, b"b", &[]).unwrap().unwrap();
+
+  assert!(l.get_or_insert(2, b"c", &[]).unwrap().is_none());
+
+  l.clear();
+
+  {
+    let mut it = l.iter(0);
+    assert!(it.first().is_none());
+    assert!(it.last().is_none());
   }
 }
 

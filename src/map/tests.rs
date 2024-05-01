@@ -193,6 +193,314 @@ fn test_basic_mmap_anon() {
   basic_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
 }
 
+fn get_mvcc(l: SkipMap) {
+  l.insert(1, b"a", b"a1").unwrap();
+  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(1, b"b", b"b1").unwrap();
+  l.insert(2, b"b", b"b2").unwrap();
+
+  let ent = l.get(1, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.get(2, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  assert!(l.last(0).is_none());
+  assert!(l.first(0).is_none());
+
+  // let ent = l.last(1).unwrap();
+  // assert_eq!(ent.key(), b"b");
+  // assert_eq!(ent.value(), b"b1");
+  // assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter(2);
+  while let Some(ent) = it.next() {
+    println!("{:?} {:?} {}", ent.key(), ent.value(), ent.version());
+  }
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"b");
+  assert_eq!(ent.value(), b"b2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.last(2).unwrap();
+  assert_eq!(ent.key(), b"b");
+  assert_eq!(ent.value(), b"b2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.last(3).unwrap();
+  assert_eq!(ent.key(), b"b");
+  assert_eq!(ent.value(), b"b2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.first(1).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.first(2).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.first(3).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+}
+
+#[test]
+fn test_get_mvcc() {
+  get_mvcc(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+fn gt_in(l: SkipMap) {
+  l.insert(1, b"a", b"a1").unwrap();
+  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(1, b"c", b"c1").unwrap();
+  l.insert(2, b"c", b"c2").unwrap();
+
+  assert!(l.gt(0, b"a").is_none());
+  assert!(l.gt(0, b"b").is_none());
+  assert!(l.gt(0, b"c").is_none());
+
+  let ent = l.gt(1, b"a").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.gt(2, b"a").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.gt(1, b"b").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.gt(2, b"b").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  assert!(l.gt(1, b"c").is_none());
+  assert!(l.gt(2, b"c").is_none());
+}
+
+#[test]
+fn test_gt() {
+  gt_in(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_gt_mmap() {
+  gt_in(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_gt_mmap_anon() {
+  gt_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn ge_in(l: SkipMap) {
+  l.insert(1, b"a", b"a1").unwrap();
+  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(1, b"c", b"c1").unwrap();
+  l.insert(2, b"c", b"c2").unwrap();
+
+  assert!(l.ge(0, b"a").is_none());
+  assert!(l.ge(0, b"b").is_none());
+  assert!(l.ge(0, b"c").is_none());
+
+  let ent = l.ge(1, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.ge(2, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.ge(1, b"b").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.ge(2, b"b").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.ge(1, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.ge(2, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  assert!(l.ge(1, b"d").is_none());
+  assert!(l.ge(2, b"d").is_none());
+}
+
+#[test]
+fn test_ge() {
+  ge_in(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_ge_mmap() {
+  ge_in(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_ge_mmap_anon() {
+  ge_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn le_in(l: SkipMap) {
+  l.insert(1, b"a", b"a1").unwrap();
+  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(1, b"c", b"c1").unwrap();
+  l.insert(2, b"c", b"c2").unwrap();
+
+  assert!(l.le(0, b"a").is_none());
+  assert!(l.le(0, b"b").is_none());
+  assert!(l.le(0, b"c").is_none());
+
+  let ent = l.le(1, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.le(2, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.le(2, b"b").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.le(2, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.le(1, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.le(2, b"d").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.le(1, b"d").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+}
+
+#[test]
+fn test_le() {
+  le_in(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_le_mmap() {
+  gt_in(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_le_mmap_anon() {
+  gt_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn lt_in(l: SkipMap) {
+  l.insert(1, b"a", b"a1").unwrap();
+  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(1, b"c", b"c1").unwrap();
+  l.insert(2, b"c", b"c2").unwrap();
+
+  assert!(l.lt(0, b"a").is_none());
+  assert!(l.lt(0, b"b").is_none());
+  assert!(l.lt(0, b"c").is_none());
+
+  assert!(l.lt(1, b"a").is_none());
+  assert!(l.lt(2, b"a").is_none());
+
+  let ent = l.lt(1, b"b").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lt(2, b"b").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.lt(2, b"c").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.lt(1, b"c").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lt(2, b"d").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 2);
+
+  let ent = l.lt(1, b"d").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+}
+
+#[test]
+fn test_lt() {
+  lt_in(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_lt_mmap() {
+  lt_in(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_lt_mmap_anon() {
+  lt_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
 fn test_basic_large_testcases_in(l: Arc<SkipMap>) {
   let n = 1000;
 

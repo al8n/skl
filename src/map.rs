@@ -204,23 +204,27 @@ impl<C: Comparator> SkipMap<C> {
   /// Returns the first entry in the map.
   pub fn first(&self, version: u64) -> Option<EntryRef<'_>> {
     // Safety: head node was definitely allocated by self.arena
-    let nd = unsafe { self.get_next(self.head, 0) };
-    if nd.is_null() || nd.ptr == self.tail.ptr {
-      return None;
-    }
+    let mut nd = unsafe { self.get_next(self.head, 0) };
 
-    // Safety: we already check the not is not null, and the node is allocated by self.arena
-    unsafe {
-      let node = nd.as_ptr();
-      if node.version > version {
+    loop {
+      if nd.is_null() || nd.ptr == self.tail.ptr {
         return None;
       }
 
-      Some(EntryRef {
-        key: node.get_key(&self.arena),
-        version: node.version,
-        value: node.get_value(&self.arena),
-      })
+      // Safety: we already check the node is not null, and the node is allocated by self.arena
+      unsafe {
+        let node = nd.as_ptr();
+        if let cmp::Ordering::Less | cmp::Ordering::Equal =
+          self.cmp.compare_version(node.version, version)
+        {
+          return Some(EntryRef {
+            key: node.get_key(&self.arena),
+            version: node.version,
+            value: node.get_value(&self.arena),
+          });
+        }
+        nd = self.get_next(nd, 0);
+      }
     }
   }
 
@@ -229,6 +233,7 @@ impl<C: Comparator> SkipMap<C> {
     // Safety: tail node was definitely allocated by self.arena
     let mut nd = unsafe { self.get_prev(self.tail, 0) };
 
+    let h = self.height() - 1;
     loop {
       if nd.is_null() || nd.ptr == self.head.ptr {
         return None;
@@ -237,14 +242,22 @@ impl<C: Comparator> SkipMap<C> {
       // Safety: we already check the node is not null, and the node is allocated by self.arena
       unsafe {
         let node = nd.as_ptr();
-        if node.version <= version {
+        if let cmp::Ordering::Less | cmp::Ordering::Equal =
+          self.cmp.compare_version(node.version, version)
+        {
+          let next = self.get_next(nd, 0);
+          if !(next.is_null() || next.ptr == self.tail.ptr) {
+            let nn = next.as_ptr();
+            std::println!("next: {:?} {}", nn.get_key(&self.arena), nn.version);
+          }
+
           return Some(EntryRef {
             key: node.get_key(&self.arena),
             version: node.version,
             value: node.get_value(&self.arena),
           });
         }
-        nd = self.get_prev(nd, 0);
+        nd = self.get_prev(nd, h as usize);
       }
     }
   }
@@ -548,65 +561,152 @@ impl<C: Comparator> SkipMap<C> {
 
   fn lt_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
-    let nd = res.prev;
-    if nd.is_null() || nd.ptr == self.head.ptr {
-      return None;
+    let mut nd = res.next;
+
+    loop {
+      if nd.is_null() || nd.ptr == self.head.ptr {
+        return None;
+      }
+
+      unsafe {
+        let next_node = res.next.as_ptr();
+        let next_node_key = next_node.get_key(&self.arena);
+        let next_node_version = next_node.version;
+        let next_cmp = self.cmp.compare(next_node_key, key);
+        let next_version_cmp = self.cmp.compare_version(next_node_version, version);
+        if let cmp::Ordering::Less = next_cmp {
+          if let cmp::Ordering::Equal = next_version_cmp {
+            if res.next.ptr == self.tail.ptr {
+              return None;
+            }
+            return Some(res.next);
+          }
+        }
+
+        let prev_node = nd.as_ptr();
+        let prev_node_key = prev_node.get_key(&self.arena);
+        let prev_node_version = prev_node.version;
+        let prev_cmp = self.cmp.compare(prev_node_key, key);
+        if let cmp::Ordering::Less = prev_cmp {
+          if let cmp::Ordering::Equal = self.cmp.compare_version(prev_node_version, version) {
+            if nd.ptr == self.head.ptr || nd.ptr == self.tail.ptr {
+              return None;
+            }
+            return Some(nd);
+          }
+        }
+
+        nd = self.get_prev(nd, 0);
+      }
     }
-    Some(nd)
   }
 
   fn gt_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
     let mut nd = res.next;
-    if nd.is_null() || nd.ptr == self.tail.ptr {
-      return None;
-    }
 
-    unsafe {
-      let node = nd.as_ptr();
-      if self.cmp.compare(key, node.get_key(&self.arena)) == cmp::Ordering::Equal
-        && self.cmp.compare_version(node.version, version) == cmp::Ordering::Equal
-      {
-        nd = self.get_next(nd, 0);
-        if nd.ptr == self.tail.ptr {
-          return None;
+    loop {
+      if nd.is_null() || nd.ptr == self.tail.ptr {
+        return None;
+      }
+
+      unsafe {
+        let node = nd.as_ptr();
+        let node_key = node.get_key(&self.arena);
+        let node_version = node.version;
+        if let cmp::Ordering::Greater = self.cmp.compare(node_key, key) {
+          if let cmp::Ordering::Equal = self.cmp.compare_version(node_version, version) {
+            return Some(nd);
+          }
         }
+
+        let node = res.prev.as_ptr();
+        let node_key = node.get_key(&self.arena);
+        let node_version = node.version;
+        if let cmp::Ordering::Greater = self.cmp.compare(node_key, key) {
+          if let cmp::Ordering::Equal = self.cmp.compare_version(node_version, version) {
+            return Some(nd);
+          }
+        }
+
+        nd = self.get_next(nd, 0);
       }
     }
-    Some(nd)
   }
 
   fn le_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
-    let mut nd = res.prev;
-    if nd.is_null() || nd.ptr == self.head.ptr {
-      return None;
-    }
+    let mut nd = res.next;
 
-    unsafe {
-      let node = res.next.as_ptr();
-
-      if self.cmp.compare(key, node.get_key(&self.arena)) == cmp::Ordering::Equal
-        && self.cmp.compare_version(node.version, version) == cmp::Ordering::Equal
-      {
-        nd = res.next;
-      }
-
-      if nd.ptr == self.head.ptr {
+    loop {
+      if nd.is_null() || nd.ptr == self.head.ptr {
         return None;
       }
+
+      unsafe {
+        let next_node = res.next.as_ptr();
+        let next_node_key = next_node.get_key(&self.arena);
+        let next_node_version = next_node.version;
+        let next_cmp = self.cmp.compare(next_node_key, key);
+        let next_version_cmp = self.cmp.compare_version(next_node_version, version);
+        if let cmp::Ordering::Less | cmp::Ordering::Equal = next_cmp {
+          if let cmp::Ordering::Equal = next_version_cmp {
+            if res.next.ptr == self.tail.ptr {
+              return None;
+            }
+            return Some(res.next);
+          }
+        }
+
+        let prev_node = nd.as_ptr();
+        let prev_node_key = prev_node.get_key(&self.arena);
+        let prev_node_version = prev_node.version;
+        let prev_cmp = self.cmp.compare(prev_node_key, key);
+        if let cmp::Ordering::Less | cmp::Ordering::Equal = prev_cmp {
+          if let cmp::Ordering::Equal = self.cmp.compare_version(prev_node_version, version) {
+            if nd.ptr == self.head.ptr || nd.ptr == self.tail.ptr {
+              return None;
+            }
+            return Some(nd);
+          }
+        }
+
+        nd = self.get_prev(nd, 0);
+      }
     }
-    Some(nd)
   }
 
   fn ge_in(&self, version: u64, key: &[u8]) -> Option<NodePtr> {
     let res = self.seek_for_base_splice(version, key);
-    let nd = res.next;
-    if nd.is_null() || nd.ptr == self.tail.ptr {
-      return None;
-    }
+    let mut nd = res.next;
 
-    Some(nd)
+    loop {
+      if nd.is_null() || nd.ptr == self.tail.ptr {
+        return None;
+      }
+
+      unsafe {
+        let node = nd.as_ptr();
+        let node_key = node.get_key(&self.arena);
+        let node_version = node.version;
+        if let cmp::Ordering::Greater | cmp::Ordering::Equal = self.cmp.compare(node_key, key) {
+          if let cmp::Ordering::Equal = self.cmp.compare_version(node_version, version) {
+            return Some(nd);
+          }
+        }
+
+        let node = res.prev.as_ptr();
+        let node_key = node.get_key(&self.arena);
+        let node_version = node.version;
+        if let cmp::Ordering::Greater | cmp::Ordering::Equal = self.cmp.compare(node_key, key) {
+          if let cmp::Ordering::Equal = self.cmp.compare_version(node_version, version) {
+            return Some(nd);
+          }
+        }
+
+        nd = self.get_next(nd, 0);
+      }
+    }
   }
 
   fn insert_in(
@@ -869,7 +969,7 @@ impl<C: Comparator> SkipMap<C> {
         cmp::Ordering::Greater => prev = next,
         cmp::Ordering::Equal => {
           // User-key equality.
-          let cmp = self.cmp.compare_version(version, next_node.version);
+          let cmp = self.cmp.compare_version(next_node.version, version);
 
           if let cmp::Ordering::Equal = cmp {
             // Internal key equality.

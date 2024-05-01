@@ -319,7 +319,6 @@ where
   pub fn seek_le(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     // le_in has already checked the ptr is valid
     self.nd = self.map.le_in(self.version, key)?;
-
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this on line 75

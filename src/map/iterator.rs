@@ -237,7 +237,7 @@ where
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
   pub fn seek_ge(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
-    self.nd = self.map.ge_in(self.version, key)?;
+    self.nd = self.map.ge(self.version, key)?;
 
     loop {
       unsafe {
@@ -277,7 +277,7 @@ where
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
   pub fn seek_gt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
-    self.nd = self.map.gt_in(self.version, key)?;
+    self.nd = self.map.gt(self.version, key)?;
 
     loop {
       unsafe {
@@ -318,7 +318,7 @@ where
   /// pointing at a valid entry, and `None` otherwise.
   pub fn seek_le(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     // le_in has already checked the ptr is valid
-    self.nd = self.map.le_in(self.version, key)?;
+    self.nd = self.map.le(self.version, key)?;
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this on line 75
@@ -361,7 +361,7 @@ where
   pub fn seek_lt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
     // NB: the top-level MapIterator has already adjusted key based on
     // the upper-bound.
-    self.nd = self.map.lt_in(self.version, key)?;
+    self.nd = self.map.lt(self.version, key)?;
 
     loop {
       unsafe {

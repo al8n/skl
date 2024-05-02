@@ -449,48 +449,93 @@ fn test_ge_mmap_anon() {
 
 fn le_in(l: SkipMap) {
   l.insert(1, b"a", b"a1").unwrap();
-  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(3, b"a", b"a2").unwrap();
   l.insert(1, b"c", b"c1").unwrap();
-  l.insert(2, b"c", b"c2").unwrap();
+  l.insert(3, b"c", b"c2").unwrap();
 
-  assert!(l.le(0, b"a").is_none());
-  assert!(l.le(0, b"b").is_none());
-  assert!(l.le(0, b"c").is_none());
+  assert!(l.upper_bound(0, Bound::Included(b"a")).is_none());
+  assert!(l.upper_bound(0, Bound::Included(b"b")).is_none());
+  assert!(l.upper_bound(0, Bound::Included(b"c")).is_none());
 
-  let ent = l.le(1, b"a").unwrap();
+  let ent = l.upper_bound(1, Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.le(2, b"a").unwrap();
+  let ent = l.upper_bound(2, Bound::Included(b"a")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(3, Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  let ent = l.le(2, b"b").unwrap();
+  let ent = l.upper_bound(4, Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  let ent = l.le(2, b"c").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
+  let ent = l.upper_bound(1, Bound::Included(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
 
-  let ent = l.le(1, b"c").unwrap();
+  let ent = l.upper_bound(2, Bound::Included(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(3, Bound::Included(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(4, Bound::Included(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(1, Bound::Included(b"c")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.le(2, b"d").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
-
-  let ent = l.le(1, b"d").unwrap();
+  let ent = l.upper_bound(2, Bound::Included(b"c")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(3, Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(4, Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(1, Bound::Included(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(2, Bound::Included(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(3, Bound::Included(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(4, Bound::Included(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
 }
 
 #[test]
@@ -518,52 +563,71 @@ fn lt_in(l: SkipMap) {
   l.insert(1, b"c", b"c1").unwrap();
   l.insert(3, b"c", b"c2").unwrap();
 
-  // assert!(l.lt(0, b"a").is_none());
-  // assert!(l.lt(0, b"b").is_none());
-  // assert!(l.lt(0, b"c").is_none());
+  assert!(l.upper_bound(0, Bound::Excluded(b"a")).is_none());
+  assert!(l.upper_bound(0, Bound::Excluded(b"b")).is_none());
+  assert!(l.upper_bound(0, Bound::Excluded(b"c")).is_none());
+  assert!(l.upper_bound(1, Bound::Excluded(b"a")).is_none());
+  assert!(l.upper_bound(2, Bound::Excluded(b"a")).is_none());
 
-  // assert!(l.lt(1, b"a").is_none());
-  // assert!(l.lt(2, b"a").is_none());
-
-  let ent = l.lt(1, b"b").unwrap();
+  let ent = l.upper_bound(1, Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lt(2, b"b").unwrap();
+  let ent = l.upper_bound(2, Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lt(3, b"b").unwrap();
+  let ent = l.upper_bound(3, Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lt(4, b"b").unwrap();
+  let ent = l.upper_bound(4, Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lt(2, b"c").unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
-
-  let ent = l.lt(1, b"c").unwrap();
+  let ent = l.upper_bound(1, Bound::Excluded(b"c")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lt(2, b"d").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
+  let ent = l.upper_bound(2, Bound::Excluded(b"c")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
 
-  let ent = l.lt(1, b"d").unwrap();
+  let ent = l.upper_bound(3, Bound::Excluded(b"c")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(4, Bound::Excluded(b"c")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(1, Bound::Excluded(b"d")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(2, Bound::Excluded(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.upper_bound(3, Bound::Excluded(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.upper_bound(4, Bound::Excluded(b"d")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
 }
 
 #[test]

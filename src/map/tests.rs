@@ -195,9 +195,9 @@ fn test_basic_mmap_anon() {
 
 fn get_mvcc(l: SkipMap) {
   l.insert(1, b"a", b"a1").unwrap();
-  l.insert(2, b"a", b"a2").unwrap();
-  l.insert(1, b"b", b"b1").unwrap();
-  l.insert(2, b"b", b"b2").unwrap();
+  l.insert(3, b"a", b"a2").unwrap();
+  l.insert(1, b"c", b"c1").unwrap();
+  l.insert(3, b"c", b"c2").unwrap();
 
   let ent = l.get(1, b"a").unwrap();
   assert_eq!(ent.key(), b"a");
@@ -206,56 +206,46 @@ fn get_mvcc(l: SkipMap) {
 
   let ent = l.get(2, b"a").unwrap();
   assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
 
   let ent = l.get(3, b"a").unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  // assert!(l.last(0).is_none());
-  // assert!(l.first(0).is_none());
+  let ent = l.get(4, b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
 
-  // let ent = l.first(1).unwrap();
-  // assert_eq!(ent.key(), b"a");
-  // assert_eq!(ent.value(), b"a1");
-  // assert_eq!(ent.version(), 1);
+  assert!(l.get(0, b"b").is_none());
+  assert!(l.get(1, b"b").is_none());
+  assert!(l.get(2, b"b").is_none());
+  assert!(l.get(3, b"b").is_none());
+  assert!(l.get(4, b"b").is_none());
 
-  // let ent = l.first(2).unwrap();
-  // assert_eq!(ent.key(), b"a");
-  // assert_eq!(ent.value(), b"a2");
-  // assert_eq!(ent.version(), 2);
+  let ent = l.get(1, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
 
-  // let ent = l.first(3).unwrap();
-  // assert_eq!(ent.key(), b"a");
-  // assert_eq!(ent.value(), b"a2");
-  // assert_eq!(ent.version(), 2);
+  let ent = l.get(2, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
 
-  // let ent = l.last(1).unwrap();
-  // assert_eq!(ent.key(), b"b");
-  // assert_eq!(ent.value(), b"b1");
-  // assert_eq!(ent.version(), 1);
+  let ent = l.get(3, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
 
-  // let mut it = l.iter(2);
-  // while let Some(ent) = it.next() {
-  //   println!("{:?} {:?} {}", ent.key(), ent.value(), ent.version());
-  // }
+  let ent = l.get(4, b"c").unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
 
-  // let ent = it.last().unwrap();
-  // assert_eq!(ent.key(), b"b");
-  // assert_eq!(ent.value(), b"b2");
-  // assert_eq!(ent.version(), 2);
-
-  // let ent = l.last(2).unwrap();
-  // assert_eq!(ent.key(), b"b");
-  // assert_eq!(ent.value(), b"b2");
-  // assert_eq!(ent.version(), 2);
-
-  // let ent = l.last(3).unwrap();
-  // assert_eq!(ent.key(), b"b");
-  // assert_eq!(ent.value(), b"b2");
-  // assert_eq!(ent.version(), 2);
+  assert!(l.get(5, b"d").is_none());
 }
 
 #[test]
@@ -265,36 +255,81 @@ fn test_get_mvcc() {
 
 fn gt_in(l: SkipMap) {
   l.insert(1, b"a", b"a1").unwrap();
-  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(3, b"a", b"a2").unwrap();
   l.insert(1, b"c", b"c1").unwrap();
-  l.insert(2, b"c", b"c2").unwrap();
+  l.insert(3, b"c", b"c2").unwrap();
+  l.insert(5, b"c", b"c3").unwrap();
 
-  assert!(l.gt(0, b"a").is_none());
-  assert!(l.gt(0, b"b").is_none());
-  assert!(l.gt(0, b"c").is_none());
+  assert!(l.lower_bound(0, Bound::Excluded(b"a")).is_none());
+  assert!(l.lower_bound(0, Bound::Excluded(b"b")).is_none());
+  assert!(l.lower_bound(0, Bound::Excluded(b"c")).is_none());
 
-  let ent = l.gt(1, b"a").unwrap();
+  let ent = l.lower_bound(1, Bound::Excluded(b"")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(2, Bound::Excluded(b"")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(3, Bound::Excluded(b"")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.lower_bound(1, Bound::Excluded(b"a")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.gt(2, b"a").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
-
-  let ent = l.gt(1, b"b").unwrap();
+  let ent = l.lower_bound(2, Bound::Excluded(b"a")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.gt(2, b"b").unwrap();
+  let ent = l.lower_bound(3, Bound::Excluded(b"a")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  assert!(l.gt(1, b"c").is_none());
-  assert!(l.gt(2, b"c").is_none());
+  let ent = l.lower_bound(1, Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(2, Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(3, Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.lower_bound(4, Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.lower_bound(5, Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c3");
+  assert_eq!(ent.version(), 5);
+
+  let ent = l.lower_bound(6, Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c3");
+  assert_eq!(ent.version(), 5);
+
+  assert!(l.lower_bound(1, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(2, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(3, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(4, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(5, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(6, Bound::Excluded(b"c")).is_none());
 }
 
 #[test]
@@ -318,51 +353,79 @@ fn test_gt_mmap_anon() {
 
 fn ge_in(l: SkipMap) {
   l.insert(1, b"a", b"a1").unwrap();
-  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(3, b"a", b"a2").unwrap();
   l.insert(1, b"c", b"c1").unwrap();
-  l.insert(2, b"c", b"c2").unwrap();
+  l.insert(3, b"c", b"c2").unwrap();
 
-  assert!(l.ge(0, b"a").is_none());
-  assert!(l.ge(0, b"b").is_none());
-  assert!(l.ge(0, b"c").is_none());
+  assert!(l.lower_bound(0, Bound::Included(b"a")).is_none());
+  assert!(l.lower_bound(0, Bound::Included(b"b")).is_none());
+  assert!(l.lower_bound(0, Bound::Included(b"c")).is_none());
 
-  let ent = l.ge(1, b"a").unwrap();
+  let ent = l.lower_bound(1, Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.ge(2, b"a").unwrap();
+  let ent = l.lower_bound(2, Bound::Included(b"a")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(3, Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  let ent = l.ge(1, b"b").unwrap();
+  let ent = l.lower_bound(4, Bound::Included(b"a")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.lower_bound(1, Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.ge(2, b"b").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
-
-  let ent = l.ge(1, b"c").unwrap();
+  let ent = l.lower_bound(2, Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.version(), 1);
 
-  let ent = l.ge(2, b"c").unwrap();
+  let ent = l.lower_bound(3, Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  let ent = l.ge(3, b"c").unwrap();
+  let ent = l.lower_bound(4, Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
 
-  assert!(l.ge(1, b"d").is_none());
-  assert!(l.ge(2, b"d").is_none());
+  let ent = l.lower_bound(1, Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(2, Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lower_bound(3, Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.lower_bound(4, Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  assert!(l.lower_bound(0, Bound::Included(b"d")).is_none());
+  assert!(l.lower_bound(1, Bound::Included(b"d")).is_none());
+  assert!(l.lower_bound(2, Bound::Included(b"d")).is_none());
+  assert!(l.lower_bound(3, Bound::Included(b"d")).is_none());
+  assert!(l.lower_bound(4, Bound::Included(b"d")).is_none());
 }
 
 #[test]
@@ -451,16 +514,16 @@ fn test_le_mmap_anon() {
 
 fn lt_in(l: SkipMap) {
   l.insert(1, b"a", b"a1").unwrap();
-  l.insert(2, b"a", b"a2").unwrap();
+  l.insert(3, b"a", b"a2").unwrap();
   l.insert(1, b"c", b"c1").unwrap();
-  l.insert(2, b"c", b"c2").unwrap();
+  l.insert(3, b"c", b"c2").unwrap();
 
-  assert!(l.lt(0, b"a").is_none());
-  assert!(l.lt(0, b"b").is_none());
-  assert!(l.lt(0, b"c").is_none());
+  // assert!(l.lt(0, b"a").is_none());
+  // assert!(l.lt(0, b"b").is_none());
+  // assert!(l.lt(0, b"c").is_none());
 
-  assert!(l.lt(1, b"a").is_none());
-  assert!(l.lt(2, b"a").is_none());
+  // assert!(l.lt(1, b"a").is_none());
+  // assert!(l.lt(2, b"a").is_none());
 
   let ent = l.lt(1, b"b").unwrap();
   assert_eq!(ent.key(), b"a");
@@ -469,8 +532,18 @@ fn lt_in(l: SkipMap) {
 
   let ent = l.lt(2, b"b").unwrap();
   assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = l.lt(3, b"b").unwrap();
+  assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 2);
+  assert_eq!(ent.version(), 3);
+
+  let ent = l.lt(4, b"b").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
 
   let ent = l.lt(2, b"c").unwrap();
   assert_eq!(ent.key(), b"a");

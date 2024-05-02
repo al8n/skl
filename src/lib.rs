@@ -49,6 +49,11 @@ const PROBABILITIES: [u32; MAX_HEIGHT] = {
 /// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation
 pub trait Comparator: Clone {
+  /// The maximum version number.
+  const MAX_VERSION: u64;
+  /// The minimum version number.
+  const MIN_VERSION: u64;
+
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
 
@@ -63,6 +68,9 @@ pub trait Comparator: Clone {
 }
 
 impl Comparator for () {
+  const MAX_VERSION: u64 = u64::MAX;
+  const MIN_VERSION: u64 = 0;
+
   #[inline]
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
     a.cmp(b)

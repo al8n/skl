@@ -1014,7 +1014,7 @@ impl<C: Comparator> SkipMap<C> {
             splice: Splice { prev, next },
             found: true,
             curr: Some(next),
-          }; 
+          };
         }
       }
     }

@@ -156,6 +156,7 @@ fn basic_in(mut l: SkipSet) {
     assert!(it.first().is_none());
     assert!(it.last().is_none());
   }
+  assert!(l.is_empty());
 }
 
 #[test]

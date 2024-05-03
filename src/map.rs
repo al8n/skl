@@ -63,18 +63,6 @@ impl<C> SkipMap<C> {
     self.height.load(Ordering::Acquire)
   }
 
-  /// Returns the arena backing this skipmap.
-  #[inline]
-  pub const fn arena(&self) -> &Arena {
-    &self.arena
-  }
-
-  /// Returns the comparator used for the skipmap.
-  #[inline]
-  pub const fn comparator(&self) -> &C {
-    &self.cmp
-  }
-
   /// Returns the number of bytes that have allocated from the arena.
   #[inline]
   pub fn size(&self) -> usize {
@@ -1058,6 +1046,7 @@ impl<'a> Default for Inserter<'a> {
   }
 }
 
+#[derive(Debug, Clone, Copy)]
 struct Splice {
   prev: NodePtr,
   next: NodePtr,
@@ -1072,15 +1061,6 @@ impl Default for Splice {
     }
   }
 }
-
-impl Clone for Splice {
-  #[inline]
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-
-impl Copy for Splice {}
 
 struct FindResult {
   found: bool,

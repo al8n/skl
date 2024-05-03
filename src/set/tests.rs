@@ -1079,7 +1079,7 @@ fn range(l: SkipSet) {
 
   let k3 = make_int_key(3);
   let k7 = make_int_key(7);
-  let mut it = l.range(0, k3.as_slice()..k7.as_slice());
+  let mut it = l.range(0, k3.as_slice()..k7.as_slice()).clone();
 
   for i in 3..=6 {
     let k = make_int_key(i);

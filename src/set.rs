@@ -1000,24 +1000,6 @@ impl<C: Comparator> SkipSet<C> {
             found: true,
             curr: Some(next),
           };
-          // // User-key equality.
-          // let cmp = self.cmp.compare_version(version, next_node.version);
-
-          // if let cmp::Ordering::Equal = cmp {
-
-          // }
-
-          // if let cmp::Ordering::Greater = cmp {
-          //   // We are done for this level, since prev.key < key < next.key.
-          //   return FindResult {
-          //     splice: Splice { prev, next },
-          //     found: false,
-          //     curr: None,
-          //   };
-          // }
-
-          // // Keep moving right on this level.
-          // prev = next;
         }
       }
     }

@@ -1,3 +1,7 @@
+use crate::Arena;
+
+use super::node::NodePtr;
+
 /// An entry reference to the skipmap's entry.
 pub struct EntryRef<'a> {
   pub(super) key: &'a [u8],
@@ -22,5 +26,16 @@ impl<'a> EntryRef<'a> {
   #[inline]
   pub const fn version(&self) -> u64 {
     self.version
+  }
+
+  pub(super) fn from_node(node: NodePtr, arena: &'a Arena) -> EntryRef<'a> {
+    unsafe {
+      let node = node.as_ptr();
+      EntryRef {
+        key: node.get_key(arena),
+        version: node.version,
+        value: node.get_value(arena),
+      }
+    }
   }
 }

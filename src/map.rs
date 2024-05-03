@@ -216,7 +216,9 @@ impl<C: Comparator> SkipMap<C> {
     unsafe {
       let node = nd.as_ptr();
       let curr_key = node.get_key(&self.arena);
-      return self.ge(version, curr_key);
+      return self
+        .ge(version, curr_key)
+        .map(|n| EntryRef::from_node(n, &self.arena));
     }
   }
 
@@ -232,7 +234,9 @@ impl<C: Comparator> SkipMap<C> {
     unsafe {
       let node = nd.as_ptr();
       let curr_key = node.get_key(&self.arena);
-      return self.le(version, curr_key);
+      return self
+        .le(version, curr_key)
+        .map(|n| EntryRef::from_node(n, &self.arena));
     }
   }
 
@@ -273,8 +277,12 @@ impl<C: Comparator> SkipMap<C> {
     upper: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a>> {
     match upper {
-      Bound::Included(key) => self.le(version, key),
-      Bound::Excluded(key) => self.lt(version, key),
+      Bound::Included(key) => self
+        .le(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Excluded(key) => self
+        .lt(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
       Bound::Unbounded => self.last(version),
     }
   }
@@ -287,8 +295,12 @@ impl<C: Comparator> SkipMap<C> {
     lower: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a>> {
     match lower {
-      Bound::Included(key) => self.ge(version, key),
-      Bound::Excluded(key) => self.gt(version, key),
+      Bound::Included(key) => self
+        .ge(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Excluded(key) => self
+        .gt(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
       Bound::Unbounded => self.first(version),
     }
   }
@@ -488,7 +500,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
+  fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
       let (n, _) = self.find_near(C::MAX_VERSION, key, false, false); // find the key with the max version.
 
@@ -508,7 +520,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
+  fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
       let (n, _) = self.find_near(C::MIN_VERSION, key, true, false); // find less or equal.
 
@@ -527,8 +539,9 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
+  fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
+      // TODO: optimize find_near implementation, so that we can directly use version instead of C::MIN_VERSION
       let (n, _) = self.find_near(C::MIN_VERSION, key, false, true); // find the key with the max version.
 
       let n = n?;
@@ -547,7 +560,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
+  fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
       let (n, _) = self.find_near(C::MAX_VERSION, key, true, true); // find less or equal.
 
@@ -713,7 +726,7 @@ impl<C: Comparator> SkipMap<C> {
     Ok(())
   }
 
-  unsafe fn find_prev_max_version(&self, mut curr: NodePtr, version: u64) -> Option<EntryRef> {
+  unsafe fn find_prev_max_version(&self, mut curr: NodePtr, version: u64) -> Option<NodePtr> {
     let mut prev = self.get_prev(curr, 0);
 
     loop {
@@ -722,20 +735,12 @@ impl<C: Comparator> SkipMap<C> {
       // if the current version is less or equal to the given version, we should return.
       let version_cmp = self.cmp.compare_version(curr_node.version, version);
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        return Some(EntryRef {
-          key: curr_key,
-          version: curr_node.version,
-          value: curr_node.get_value(&self.arena),
-        });
+        return Some(curr);
       }
 
       if prev.is_null() || prev.ptr == self.head.ptr {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-          return Some(EntryRef {
-            key: curr_key,
-            version: curr_node.version,
-            value: curr_node.get_value(&self.arena),
-          });
+          return Some(curr);
         }
 
         return None;
@@ -746,22 +751,14 @@ impl<C: Comparator> SkipMap<C> {
       let version_cmp = self.cmp.compare_version(prev_node.version, version);
       if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-          return Some(EntryRef {
-            key: curr_key,
-            version: curr_node.version,
-            value: curr_node.get_value(&self.arena),
-          });
+          return Some(curr);
         }
 
         return None;
       }
 
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        return Some(EntryRef {
-          key: prev_key,
-          version: prev_node.version,
-          value: prev_node.get_value(&self.arena),
-        });
+        return Some(prev);
       }
 
       curr = prev;
@@ -769,7 +766,7 @@ impl<C: Comparator> SkipMap<C> {
     }
   }
 
-  unsafe fn find_next_max_version(&self, mut curr: NodePtr, version: u64) -> Option<EntryRef> {
+  unsafe fn find_next_max_version(&self, mut curr: NodePtr, version: u64) -> Option<NodePtr> {
     let mut next = self.get_next(curr, 0);
 
     loop {
@@ -782,39 +779,23 @@ impl<C: Comparator> SkipMap<C> {
       }
 
       if next.is_null() || next.ptr == self.tail.ptr {
-        return Some(EntryRef {
-          key: curr_key,
-          version: curr_node.version,
-          value: curr_node.get_value(&self.arena),
-        });
+        return Some(curr);
       }
 
       let next_node = next.as_ptr();
       let next_key = next_node.get_key(&self.arena);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
-        return Some(EntryRef {
-          key: curr_key,
-          version: curr_node.version,
-          value: curr_node.get_value(&self.arena),
-        });
+        return Some(curr);
       }
 
       let version_cmp = self.cmp.compare_version(next_node.version, version);
 
       if version_cmp == cmp::Ordering::Equal {
-        return Some(EntryRef {
-          key: next_key,
-          version: next_node.version,
-          value: next_node.get_value(&self.arena),
-        });
+        return Some(next);
       }
 
       if version_cmp == cmp::Ordering::Greater {
-        return Some(EntryRef {
-          key: curr_key,
-          version: curr_node.version,
-          value: curr_node.get_value(&self.arena),
-        });
+        return Some(curr);
       }
 
       curr = next;
@@ -1058,127 +1039,6 @@ impl<C: Comparator> SkipMap<C> {
   }
 
   /// ## Safety
-  /// - `level` is less than `MAX_HEIGHT`.
-  /// - `start` must be allocated by self's arena.
-  unsafe fn find_splice_for_level_for_get(
-    &self,
-    version: u64,
-    key: &[u8],
-    level: usize,
-    start: NodePtr,
-  ) -> FindResult {
-    let mut prev = start;
-
-    loop {
-      // Assume prev.key < key.
-      let next = self.get_next(prev, level);
-      if next.ptr == self.tail.ptr {
-        // Tail node, so done.
-        return FindResult {
-          splice: Splice { prev, next },
-          found: false,
-          curr: None,
-        };
-      }
-
-      // offset is not zero, so we can safely dereference the next node ptr.
-      let next_node = next.as_ptr();
-      let next_key = next_node.get_key(&self.arena);
-
-      match self.cmp.compare(key, next_key) {
-        // We are done for this level, since prev.key < key < next.key.
-        cmp::Ordering::Less => {
-          return FindResult {
-            splice: Splice { prev, next },
-            found: false,
-            curr: None,
-          };
-        }
-        // Keep moving right on this level.
-        cmp::Ordering::Greater => prev = next,
-        cmp::Ordering::Equal => {
-          // User-key equality.
-          // let cmp = self.cmp.compare_version(next_node.version, version);
-
-          // if let cmp::Ordering::Equal = cmp {
-          // Internal key equality.
-          return FindResult {
-            splice: Splice { prev, next },
-            found: true,
-            curr: Some(next),
-          };
-          // }
-
-          // if let cmp::Ordering::Less = cmp {
-          //   // We are done for this level, since prev.key < key < next.key.
-          //   return FindResult {
-          //     splice: Splice { prev, next },
-          //     found: false,
-          //     curr: None,
-          //   };
-          // }
-
-          // prev = next;
-        }
-      }
-    }
-  }
-
-  // unsafe fn find_next_max_version(&self, version: u64, level: usize, curr: NodePtr) -> FindResult {
-  //   let mut prev = curr;
-  //   let prev_node = prev.as_ptr();
-  //   let mut prev_key = prev_node.get_key(&self.arena);
-
-  //   loop {
-  //     let mut next = self.get_next(prev, level);
-  //     if next.is_null() || next.ptr == self.tail.ptr {
-  //       return FindResult {
-  //         found: true,
-  //         splice: Splice { prev, next, },
-  //         curr: Some(prev),
-  //       };
-  //     }
-
-  //     let next_node = next.as_ptr();
-  //     let next_key = next_node.get_key(&self.arena);
-  //     let cmp = self.cmp.compare_version(next_node.version, version);
-
-  //     let key_cmp = self.cmp.compare(next_key, prev_key);
-
-  //     match key_cmp {
-  //       cmp::Ordering::Less => unreachable!("next key is less than current key"),
-  //       cmp::Ordering::Greater => {
-  //         return FindResult {
-  //           found: true,
-  //           splice: Splice { prev, next },
-  //           curr: Some(prev),
-  //         };
-  //       },
-  //       cmp::Ordering::Equal => {
-  //         {
-  //           std::println!("max: next: {:?} {}", next_key, next_node.version);
-  //           std::println!("max: prev: {:?} {}", prev_key, prev.as_ptr().version);
-  //         }
-  //         match cmp {
-  //           cmp::Ordering::Equal | cmp::Ordering::Greater => {
-
-  //             return FindResult {
-  //               found: true,
-  //               splice: Splice { prev, next },
-  //               curr: Some(prev),
-  //             };
-  //           },
-  //           cmp::Ordering::Less => {
-  //             prev = next;
-  //             prev_key = next_key;
-  //           },
-  //         }
-  //       },
-  //     }
-  //   }
-  // }
-
-  /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
   unsafe fn key_is_after_node(&self, nd: NodePtr, version: u64, key: &[u8]) -> bool {
@@ -1195,37 +1055,6 @@ impl<C: Comparator> SkipMap<C> {
       cmp::Ordering::Less => true,
       cmp::Ordering::Equal | cmp::Ordering::Greater => false,
     }
-  }
-
-  fn seek_for_base_splice(&self, version: u64, key: &[u8]) -> SeekResult {
-    let mut lvl = (self.height() - 1) as usize;
-
-    let mut prev = self.head;
-    let mut next;
-
-    loop {
-      let fr = unsafe { self.find_splice_for_level_for_get(C::MAX_VERSION, key, lvl, prev) };
-      prev = fr.splice.prev;
-      next = fr.splice.next;
-      if fr.found {
-        if lvl != 0 {
-          // next is pointing at the target node, but we need to find previous on
-          // the bottom level.
-
-          // Safety: the next we use here is got from the find_splice_for_level, so must be allocated by the same arena
-          prev = unsafe { self.get_prev(next, 0) };
-        }
-        break;
-      }
-
-      if lvl == 0 {
-        break;
-      }
-
-      lvl -= 1;
-    }
-
-    SeekResult { prev, next }
   }
 }
 
@@ -1275,9 +1104,4 @@ struct FindResult {
   found: bool,
   splice: Splice,
   curr: Option<NodePtr>,
-}
-
-struct SeekResult {
-  prev: NodePtr,
-  next: NodePtr,
 }

@@ -34,10 +34,10 @@ fn empty_in(l: SkipMap) {
 
   assert!(it.first().is_none());
   assert!(it.last().is_none());
-  assert!(it.seek_ge(b"aaa").is_none());
-  assert!(it.seek_lt(b"aaa").is_none());
-  assert!(it.seek_gt(b"aaa").is_none());
-  assert!(it.seek_le(b"aaa").is_none());
+  assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
+  assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
+  assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
+  assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
   assert!(l.first(0).is_none());
   assert!(l.last(0).is_none());
   assert!(l.ge(0, b"aaa").is_none());
@@ -113,17 +113,17 @@ fn basic_in(mut l: SkipMap) {
 
   {
     let mut it = l.iter(0);
-    let ent = it.seek_ge(b"key1").unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
     assert_eq!(ent.key(), b"key1");
     assert_eq!(ent.value(), &make_value(1));
     assert_eq!(ent.version(), 0);
 
-    let ent = it.seek_ge(b"key2").unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(b"key2")).unwrap();
     assert_eq!(ent.key(), b"key2");
     assert_eq!(ent.value(), &make_value(2));
     assert_eq!(ent.version(), 0);
 
-    let ent = it.seek_ge(b"key3").unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(b"key3")).unwrap();
     assert_eq!(ent.key(), b"key3");
     assert_eq!(ent.value(), &make_value(3));
     assert_eq!(ent.version(), 0);
@@ -134,15 +134,15 @@ fn basic_in(mut l: SkipMap) {
 
   {
     let mut it = l.iter(2);
-    let ent = it.seek_ge(b"a").unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(b"a")).unwrap();
     assert_eq!(ent.key(), b"a");
     assert_eq!(ent.value(), &[]);
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), b"a");
-    assert_eq!(ent.value(), &[]);
-    assert_eq!(ent.version(), 1);
+    assert_eq!(ent.key(), b"key1");
+    assert_eq!(ent.value(), make_value(1));
+    assert_eq!(ent.version(), 0);
   }
 
   l.insert(2, "b".as_bytes(), &[]).unwrap();
@@ -150,15 +150,15 @@ fn basic_in(mut l: SkipMap) {
 
   {
     let mut it = l.iter(2);
-    let ent = it.seek_ge(b"b").unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.value(), &[]);
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.value(), &[]);
-    assert_eq!(ent.version(), 1);
+    assert_eq!(ent.key(), b"key1");
+    assert_eq!(ent.value(), make_value(1));
+    assert_eq!(ent.version(), 0);
   }
 
   l.get_or_insert(2, b"b", &[]).unwrap().unwrap();
@@ -813,7 +813,7 @@ fn concurrent_one_key(l: Arc<SkipMap>) {
       assert!((0..N).contains(&num));
 
       let mut it = l.iter(0);
-      let ent = it.seek_ge(b"thekey").unwrap();
+      let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
       let val = ent.value();
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
@@ -1029,43 +1029,43 @@ fn iterator_seek_ge(l: SkipMap) {
   }
 
   let mut it = l.iter(0);
-  let ent = it.seek_ge(b"").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
   assert_eq!(ent.value(), make_value(1000));
 
-  let ent = it.seek_ge(b"01000").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"01000")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
   assert_eq!(ent.value(), make_value(1000));
 
-  let ent = it.seek_ge(b"01005").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"01005")).unwrap();
   assert_eq!(ent.key(), make_int_key(1010));
   assert_eq!(ent.value(), make_value(1010));
 
-  let ent = it.seek_ge(b"01010").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"01010")).unwrap();
   assert_eq!(ent.key(), make_int_key(1010));
   assert_eq!(ent.value(), make_value(1010));
 
-  let ent = it.seek_ge(b"01020").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"01020")).unwrap();
   assert_eq!(ent.key(), make_int_key(1020));
   assert_eq!(ent.value(), make_value(1020));
 
-  let ent = it.seek_ge(b"01200").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"01200")).unwrap();
   assert_eq!(ent.key(), make_int_key(1200));
   assert_eq!(ent.value(), make_value(1200));
 
-  let ent = it.seek_ge(b"01100").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"01100")).unwrap();
   assert_eq!(ent.key(), make_int_key(1100));
   assert_eq!(ent.value(), make_value(1100));
 
-  let ent = it.seek_ge(b"99999");
+  let ent = it.seek_lower_bound(Bound::Included(b"99999"));
   assert!(ent.is_none());
 
   l.insert(0, &[], &[]).unwrap();
-  let ent = it.seek_ge(b"").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value(), &[]);
 
-  let ent = it.seek_ge(b"").unwrap();
+  let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value(), &[]);
 }
@@ -1098,30 +1098,30 @@ fn iterator_seek_lt(l: SkipMap) {
   }
 
   let mut it = l.iter(0);
-  assert!(it.seek_lt(b"").is_none());
+  assert!(it.seek_upper_bound(Bound::Excluded(b"")).is_none());
 
-  let ent = it.seek_lt(b"01000");
+  let ent = it.seek_upper_bound(Bound::Excluded(b"01000"));
   assert!(ent.is_none());
 
-  let ent = it.seek_lt(b"01001").unwrap();
+  let ent = it.seek_upper_bound(Bound::Excluded(b"01001")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
   assert_eq!(ent.value(), make_value(1000));
 
-  let ent = it.seek_lt(b"01991").unwrap();
+  let ent = it.seek_upper_bound(Bound::Excluded(b"01991")).unwrap();
   assert_eq!(ent.key(), make_int_key(1990));
   assert_eq!(ent.value(), make_value(1990));
 
-  let ent = it.seek_lt(b"99999").unwrap();
+  let ent = it.seek_upper_bound(Bound::Excluded(b"99999")).unwrap();
   assert_eq!(ent.key(), make_int_key(1990));
   assert_eq!(ent.value(), make_value(1990));
 
   l.insert(0, &[], &[]).unwrap();
   assert!(l.lt(0, &[]).is_none());
 
-  let ent = it.seek_lt(b"");
+  let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());
 
-  let ent = it.seek_lt(b"\x01").unwrap();
+  let ent = it.seek_upper_bound(Bound::Excluded(b"\x01")).unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value(), &[]);
 }
@@ -1156,37 +1156,41 @@ fn range(l: SkipMap) {
 
   for i in 3..=6 {
     let k = make_int_key(i);
-    let ent = it.seek_ge(&k).unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(&k)).unwrap();
     assert_eq!(ent.key(), make_int_key(i));
     assert_eq!(ent.value(), make_value(i));
   }
 
   for i in 1..3 {
     let k = make_int_key(i);
-    let ent = it.seek_ge(&k).unwrap();
+    let ent = it.seek_lower_bound(Bound::Included(&k)).unwrap();
     assert_eq!(ent.key(), make_int_key(3));
     assert_eq!(ent.value(), make_value(3));
   }
 
   for i in 7..10 {
     let k = make_int_key(i);
-    assert!(it.seek_ge(&k).is_none());
+    assert!(it.seek_lower_bound(Bound::Included(&k)).is_none());
   }
 
   for i in 7..10 {
     let k = make_int_key(i);
-    let ent = it.seek_le(&k).unwrap();
+    let ent = it.seek_upper_bound(Bound::Included(&k)).unwrap();
     assert_eq!(ent.key(), make_int_key(6));
     assert_eq!(ent.value(), make_value(6));
   }
 
-  let ent = it.seek_ge(&make_int_key(6)).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(&make_int_key(6)))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(6));
   assert_eq!(ent.value(), make_value(6));
 
   assert!(it.next().is_none());
 
-  let ent = it.seek_le(&make_int_key(6)).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Included(&make_int_key(6)))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(6));
   assert_eq!(ent.value(), make_value(6));
 
@@ -1194,31 +1198,33 @@ fn range(l: SkipMap) {
 
   for i in 4..=7 {
     let k = make_int_key(i);
-    let ent = it.seek_lt(&k).unwrap();
+    let ent = it.seek_upper_bound(Bound::Excluded(&k)).unwrap();
     assert_eq!(ent.key(), make_int_key(i - 1));
     assert_eq!(ent.value(), make_value(i - 1));
   }
 
   for i in 7..10 {
     let k = make_int_key(i);
-    let ent = it.seek_lt(&k).unwrap();
+    let ent = it.seek_upper_bound(Bound::Excluded(&k)).unwrap();
     assert_eq!(ent.key(), make_int_key(6));
     assert_eq!(ent.value(), make_value(6));
   }
 
   for i in 1..3 {
     let k = make_int_key(i);
-    let ent = it.seek_gt(&k).unwrap();
+    let ent = it.seek_lower_bound(Bound::Excluded(&k)).unwrap();
     assert_eq!(ent.key(), make_int_key(3));
     assert_eq!(ent.value(), make_value(3));
   }
 
   for i in 1..4 {
     let k = make_int_key(i);
-    assert!(it.seek_lt(&k).is_none());
+    assert!(it.seek_upper_bound(Bound::Excluded(&k)).is_none());
   }
 
-  let ent = it.seek_lt(&make_int_key(4)).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(&make_int_key(4)))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(3));
   assert_eq!(ent.value(), make_value(3));
 

@@ -1,4 +1,4 @@
-use core::ops::{Bound, RangeFull};
+use core::ops::RangeFull;
 
 use super::*;
 
@@ -44,23 +44,6 @@ pub struct SetIterator<'a, C = (), Q: ?Sized = &'static [u8], R = core::ops::Ran
   pub(super) nd: NodePtr,
   pub(super) version: u64,
   pub(super) range: R,
-  // pub(super) lower: Bound<&'a [u8]>,
-  // pub(super) upper: Bound<&'a [u8]>,
-
-  // {lower|upper}_node are lazily populated with an arbitrary node that is
-  // beyond the lower or upper bound respectively. Note the node is
-  // "arbitrary" because it may not be the first node that exceeds the bound.
-  // Concurrent insertions into the skiplist may introduce new nodes with keys
-  // that exceed the bounds but are closer to the bounds than the current
-  // values of [lower|upper]_node.
-  //
-  // Once populated, [lower|upper]_node may be used to detect when iteration
-  // has reached a bound without performing a key comparison. This may be
-  // beneficial when performing repeated `seek_ge`s with TrySeekUsingNext and an
-  // upper bound set. Once the upper bound has been met, no additional key
-  // comparisons are necessary.
-  pub(super) lower_node: Option<NodePtr>,
-  pub(super) upper_node: Option<NodePtr>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
@@ -71,8 +54,6 @@ impl<'a, R: Clone, Q: Clone, C> Clone for SetIterator<'a, C, Q, R> {
       nd: self.nd,
       version: self.version,
       range: self.range.clone(),
-      lower_node: self.lower_node,
-      upper_node: self.upper_node,
       _phantom: core::marker::PhantomData,
     }
   }
@@ -91,8 +72,6 @@ where
       nd: map.head,
       version,
       range: RangeFull,
-      lower_node: None,
-      upper_node: None,
       _phantom: core::marker::PhantomData,
     }
   }
@@ -112,8 +91,6 @@ where
       nd: map.head,
       version,
       range: r,
-      lower_node: None,
-      upper_node: None,
       _phantom: core::marker::PhantomData,
     })
   }
@@ -130,16 +107,9 @@ where
           return None;
         }
 
-        if let Some(ref upper) = self.upper_node {
-          if cur.ptr == upper.ptr {
-            return None;
-          }
-        }
-
         let node = cur.as_ptr();
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
-          self.lower_node.get_or_insert(cur);
           return Some(EntryRef {
             key: nk,
             version: node.version,
@@ -157,21 +127,13 @@ where
       unsafe {
         cur = self.map.get_prev(cur, 0);
         self.nd = cur;
-
         if cur.is_null() || cur.ptr == self.map.head.ptr {
           return None;
-        }
-
-        if let Some(ref lower) = self.lower_node {
-          if cur.ptr == lower.ptr {
-            return None;
-          }
         }
 
         let node = cur.as_ptr();
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
-          self.upper_node.get_or_insert(cur);
           return Some(EntryRef {
             key: nk,
             version: node.version,
@@ -230,11 +192,42 @@ where
     }
   }
 
+  /// Moves the iterator to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<EntryRef<'_>> {
+    match upper {
+      Bound::Included(key) => self
+        .seek_le(key)
+        .map(|n| EntryRef::from_node(n, &self.map.arena)),
+      Bound::Excluded(key) => self
+        .seek_lt(key)
+        .map(|n| EntryRef::from_node(n, &self.map.arena)),
+      Bound::Unbounded => self.last(),
+    }
+  }
+
+  /// Moves the iterator to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<EntryRef<'_>> {
+    match lower {
+      Bound::Included(key) => self
+        .seek_ge(key)
+        .map(|n| EntryRef::from_node(n, &self.map.arena)),
+      Bound::Excluded(key) => self
+        .seek_gt(key)
+        .map(|n| EntryRef::from_node(n, &self.map.arena)),
+      Bound::Unbounded => self.first(),
+    }
+  }
+
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  pub fn seek_ge(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
-    self.nd = self.map.ge_in(self.version, key)?;
+  fn seek_ge(&mut self, key: &[u8]) -> Option<NodePtr> {
+    self.nd = self.map.ge(self.version, key)?;
+    if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+      return None;
+    }
 
     loop {
       unsafe {
@@ -244,10 +237,7 @@ where
         let nk = node.get_key(&self.map.arena);
 
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
-            key: nk,
-            version: node.version,
-          });
+          return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
           match upper {
@@ -272,8 +262,12 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  pub fn seek_gt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
-    self.nd = self.map.gt_in(self.version, key)?;
+  fn seek_gt(&mut self, key: &[u8]) -> Option<NodePtr> {
+    self.nd = self.map.gt(self.version, key)?;
+
+    if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+      return None;
+    }
 
     loop {
       unsafe {
@@ -283,10 +277,7 @@ where
         let nk = node.get_key(&self.map.arena);
 
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
-            key: nk,
-            version: node.version,
-          });
+          return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
           match upper {
@@ -311,9 +302,8 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  pub fn seek_le(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
-    // le_in has already checked the ptr is valid
-    self.nd = self.map.le_in(self.version, key)?;
+  fn seek_le(&mut self, key: &[u8]) -> Option<NodePtr> {
+    self.nd = self.map.le(self.version, key)?;
 
     loop {
       unsafe {
@@ -324,10 +314,7 @@ where
         let nk = node.get_key(&self.map.arena);
 
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
-            key: nk,
-            version: node.version,
-          });
+          return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
           match lower {
@@ -353,10 +340,10 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  pub fn seek_lt(&mut self, key: &[u8]) -> Option<EntryRef<'_>> {
+  fn seek_lt(&mut self, key: &[u8]) -> Option<NodePtr> {
     // NB: the top-level SetIterator has already adjusted key based on
     // the upper-bound.
-    self.nd = self.map.lt_in(self.version, key)?;
+    self.nd = self.map.lt(self.version, key)?;
 
     loop {
       unsafe {
@@ -366,10 +353,7 @@ where
         let nk = node.get_key(&self.map.arena);
 
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
-            key: nk,
-            version: node.version,
-          });
+          return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
           match lower {

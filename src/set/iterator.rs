@@ -4,7 +4,9 @@ use super::*;
 
 /// A range over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct SetRange<'a, C = (), Q: ?Sized = &'static str, R = RangeFull>(SetIterator<'a, C, Q, R>);
+pub struct SetRange<'a, C = Ascend, Q: ?Sized = &'static str, R = RangeFull>(
+  SetIterator<'a, C, Q, R>,
+);
 
 impl<'a, C, Q, R> Clone for SetRange<'a, C, Q, R>
 where
@@ -39,7 +41,7 @@ impl<'a, C, Q, R> core::ops::DerefMut for SetRange<'a, C, Q, R> {
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct SetIterator<'a, C = (), Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
+pub struct SetIterator<'a, C = Ascend, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
   pub(super) map: &'a SkipSet<C>,
   pub(super) nd: NodePtr,
   pub(super) version: u64,
@@ -98,23 +100,30 @@ where
   /// Seeks position at the first entry in map. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
   pub fn first(&mut self) -> Option<EntryRef> {
-    let mut cur = self.map.head;
+    self.nd = self.map.first_in(self.version)?;
+
     loop {
+      if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+        return None;
+      }
+
       unsafe {
-        cur = self.map.get_next(cur, 0);
-        self.nd = cur;
-        if cur.is_null() || cur.ptr == self.map.tail.ptr {
-          return None;
+        let node = self.nd.as_ptr();
+        let nk = node.get_key(&self.map.arena);
+
+        if node.version > self.version {
+          self.nd = self.map.get_next(self.nd, 0);
+          continue;
         }
 
-        let node = cur.as_ptr();
-        let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
           return Some(EntryRef {
             key: nk,
             version: node.version,
           });
         }
+
+        self.nd = self.map.get_next(self.nd, 0);
       }
     }
   }
@@ -122,16 +131,20 @@ where
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
   pub fn last(&mut self) -> Option<EntryRef> {
-    let mut cur = self.map.tail;
+    self.nd = self.map.last_in(self.version)?;
+
     loop {
       unsafe {
-        cur = self.map.get_prev(cur, 0);
-        self.nd = cur;
-        if cur.is_null() || cur.ptr == self.map.head.ptr {
+        if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
           return None;
         }
 
-        let node = cur.as_ptr();
+        let node = self.nd.as_ptr();
+        if node.version > self.version {
+          self.nd = self.map.get_prev(self.nd, 0);
+          continue;
+        }
+
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
           return Some(EntryRef {
@@ -139,6 +152,8 @@ where
             version: node.version,
           });
         }
+
+        self.nd = self.map.get_prev(self.nd, 0);
       }
     }
   }
@@ -147,48 +162,56 @@ where
   /// iterator is pointing at a valid entry, and `None` otherwise.
   #[allow(clippy::should_implement_trait)]
   pub fn next(&mut self) -> Option<EntryRef> {
-    unsafe {
-      self.nd = self.map.get_next(self.nd, 0);
+    loop {
+      unsafe {
+        self.nd = self.map.get_next(self.nd, 0);
 
-      if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
-        return None;
+        if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+          return None;
+        }
+
+        let node = self.nd.as_ptr();
+        if node.version > self.version {
+          continue;
+        }
+
+        let nk = node.get_key(&self.map.arena);
+
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+          });
+        }
       }
-
-      let node = self.nd.as_ptr();
-      let nk = node.get_key(&self.map.arena);
-
-      if self.map.cmp.contains(&self.range, nk) {
-        return Some(EntryRef {
-          key: nk,
-          version: node.version,
-        });
-      }
-
-      None
     }
   }
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   pub fn prev(&mut self) -> Option<EntryRef> {
-    unsafe {
-      self.nd = self.map.get_prev(self.nd, 0);
+    loop {
+      unsafe {
+        self.nd = self.map.get_prev(self.nd, 0);
 
-      if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
-        return None;
+        if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
+          return None;
+        }
+
+        let node = self.nd.as_ptr();
+        if node.version > self.version {
+          continue;
+        }
+
+        let nk = node.get_key(&self.map.arena);
+
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+          });
+        }
       }
-
-      let node = self.nd.as_ptr();
-      let nk = node.get_key(&self.map.arena);
-
-      if self.map.cmp.contains(&self.range, nk) {
-        return Some(EntryRef {
-          key: nk,
-          version: node.version,
-        });
-      }
-
-      None
     }
   }
 

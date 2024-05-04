@@ -1,5 +1,5 @@
 use super::*;
-use crate::sync::Arc;
+use crate::{sync::Arc, Descend};
 use std::format;
 use wg::WaitGroup;
 
@@ -192,6 +192,137 @@ fn test_basic_mmap() {
 #[cfg_attr(miri, ignore)]
 fn test_basic_mmap_anon() {
   basic_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn iter_mvcc(l: SkipMap) {
+  l.insert(1, b"a", b"a1").unwrap();
+  l.insert(3, b"a", b"a2").unwrap();
+  l.insert(1, b"c", b"c1").unwrap();
+  l.insert(3, b"c", b"c2").unwrap();
+
+  let mut it = l.iter(0);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 0);
+
+  let mut it = l.iter(1);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut it = l.iter(2);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut it = l.iter(3);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 4);
+
+  let mut it = l.iter(0);
+  assert!(it.first().is_none());
+  assert!(it.last().is_none());
+
+  let mut it = l.iter(1);
+  let ent = it.first().unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter(2);
+  let ent = it.first().unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter(3);
+  let ent = it.first().unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_upper_bound(Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_lower_bound(Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_lower_bound(Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value(), b"c2");
+  assert_eq!(ent.version(), 3);
+}
+
+#[test]
+fn test_iter_mvcc() {
+  iter_mvcc(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iter_mvcc_mmap() {
+  iter_mvcc(SkipMap::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iter_mvcc_mmap_anon() {
+  iter_mvcc(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn ordering() {
+  let l = SkipMap::with_comparator(ARENA_SIZE, Descend).unwrap();
+
+  l.insert(1, b"a1", b"a1").unwrap();
+  l.insert(2, b"a2", b"a2").unwrap();
+  l.insert(3, b"a3", b"a3").unwrap();
+
+  let mut it = l.iter(3);
+  for i in (1..=3).rev() {
+    let ent = it.next().unwrap();
+    assert_eq!(ent.key(), format!("a{i}").as_bytes());
+    assert_eq!(ent.value(), format!("a{i}").as_bytes());
+  }
+}
+
+#[test]
+fn test_ordering() {
+  ordering();
 }
 
 fn get_mvcc(l: SkipMap) {

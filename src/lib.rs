@@ -21,7 +21,7 @@ pub mod map;
 pub mod set;
 
 pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, MapRange, SkipMap};
+pub use map::{AllVersionMapIterator, AllVersionMapRange, SkipMap};
 pub use set::{SetIterator, SetRange, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
@@ -48,17 +48,9 @@ const PROBABILITIES: [u32; MAX_HEIGHT] = {
 
 /// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation
-pub trait Comparator: Clone {
-  /// The maximum version number.
-  const MAX_VERSION: u64;
-  /// The minimum version number.
-  const MIN_VERSION: u64;
-
+pub trait Comparator {
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
-
-  /// Compares the trailer.
-  fn compare_version(&self, a: u64, b: u64) -> cmp::Ordering;
 
   /// Returns if a is contained in range.
   fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
@@ -67,10 +59,11 @@ pub trait Comparator: Clone {
     Q: ?Sized + PartialOrd<&'a [u8]>;
 }
 
-impl Comparator for () {
-  const MAX_VERSION: u64 = u64::MAX;
-  const MIN_VERSION: u64 = 0;
+/// Ascend is a comparator that compares byte slices in ascending order.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Ascend;
 
+impl Comparator for Ascend {
   #[inline]
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
     a.cmp(b)
@@ -84,10 +77,25 @@ impl Comparator for () {
   {
     range.contains(&key)
   }
+}
+
+/// Descend is a comparator that compares byte slices in descending order.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Descend;
+
+impl Comparator for Descend {
+  #[inline]
+  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
+    b.cmp(a)
+  }
 
   #[inline]
-  fn compare_version(&self, a: u64, b: u64) -> cmp::Ordering {
-    a.cmp(&b)
+  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+  {
+    range.contains(&key)
   }
 }
 

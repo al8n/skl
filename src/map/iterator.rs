@@ -4,9 +4,11 @@ use super::*;
 
 /// A range over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct MapRange<'a, C = (), Q: ?Sized = &'static str, R = RangeFull>(MapIterator<'a, C, Q, R>);
+pub struct AllVersionMapRange<'a, C = Ascend, Q: ?Sized = &'static str, R = RangeFull>(
+  AllVersionMapIterator<'a, C, Q, R>,
+);
 
-impl<'a, C, Q, R> Clone for MapRange<'a, C, Q, R>
+impl<'a, C, Q, R> Clone for AllVersionMapRange<'a, C, Q, R>
 where
   R: Clone,
   Q: Clone,
@@ -16,22 +18,22 @@ where
   }
 }
 
-impl<'a, C, Q, R> Copy for MapRange<'a, C, Q, R>
+impl<'a, C, Q, R> Copy for AllVersionMapRange<'a, C, Q, R>
 where
   R: Copy,
   Q: Copy,
 {
 }
 
-impl<'a, C, Q, R> core::ops::Deref for MapRange<'a, C, Q, R> {
-  type Target = MapIterator<'a, C, Q, R>;
+impl<'a, C, Q, R> core::ops::Deref for AllVersionMapRange<'a, C, Q, R> {
+  type Target = AllVersionMapIterator<'a, C, Q, R>;
 
   fn deref(&self) -> &Self::Target {
     &self.0
   }
 }
 
-impl<'a, C, Q, R> core::ops::DerefMut for MapRange<'a, C, Q, R> {
+impl<'a, C, Q, R> core::ops::DerefMut for AllVersionMapRange<'a, C, Q, R> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.0
   }
@@ -39,7 +41,12 @@ impl<'a, C, Q, R> core::ops::DerefMut for MapRange<'a, C, Q, R> {
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct MapIterator<'a, C = (), Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
+pub struct AllVersionMapIterator<
+  'a,
+  C = Ascend,
+  Q: ?Sized = &'static [u8],
+  R = core::ops::RangeFull,
+> {
   pub(super) map: &'a SkipMap<C>,
   pub(super) nd: NodePtr,
   pub(super) version: u64,
@@ -47,7 +54,7 @@ pub struct MapIterator<'a, C = (), Q: ?Sized = &'static [u8], R = core::ops::Ran
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, R: Clone, Q: Clone, C> Clone for MapIterator<'a, C, Q, R> {
+impl<'a, R: Clone, Q: Clone, C> Clone for AllVersionMapIterator<'a, C, Q, R> {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
@@ -59,9 +66,9 @@ impl<'a, R: Clone, Q: Clone, C> Clone for MapIterator<'a, C, Q, R> {
   }
 }
 
-impl<'a, R: Copy, Q: Copy, C> Copy for MapIterator<'a, C, Q, R> {}
+impl<'a, R: Copy, Q: Copy, C> Copy for AllVersionMapIterator<'a, C, Q, R> {}
 
-impl<'a, C> MapIterator<'a, C>
+impl<'a, C> AllVersionMapIterator<'a, C>
 where
   C: Comparator,
 {
@@ -77,7 +84,7 @@ where
   }
 }
 
-impl<'a, Q, R, C> MapIterator<'a, C, Q, R>
+impl<'a, Q, R, C> AllVersionMapIterator<'a, C, Q, R>
 where
   C: Comparator,
   &'a [u8]: PartialOrd<Q>,
@@ -85,8 +92,8 @@ where
   R: RangeBounds<Q>,
 {
   #[inline]
-  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> MapRange<'a, C, Q, R> {
-    MapRange(Self {
+  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> AllVersionMapRange<'a, C, Q, R> {
+    AllVersionMapRange(Self {
       map,
       nd: map.head,
       version,
@@ -98,17 +105,22 @@ where
   /// Seeks position at the first entry in map. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
   pub fn first(&mut self) -> Option<EntryRef> {
-    let mut cur = self.map.head;
+    self.nd = self.map.first_in(self.version)?;
+
     loop {
+      if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+        return None;
+      }
+
       unsafe {
-        cur = self.map.get_next(cur, 0);
-        self.nd = cur;
-        if cur.is_null() || cur.ptr == self.map.tail.ptr {
-          return None;
+        let node = self.nd.as_ptr();
+        let nk = node.get_key(&self.map.arena);
+
+        if node.version > self.version {
+          self.nd = self.map.get_next(self.nd, 0);
+          continue;
         }
 
-        let node = cur.as_ptr();
-        let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
           return Some(EntryRef {
             key: nk,
@@ -116,6 +128,8 @@ where
             value: node.get_value(&self.map.arena),
           });
         }
+
+        self.nd = self.map.get_next(self.nd, 0);
       }
     }
   }
@@ -123,16 +137,20 @@ where
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
   pub fn last(&mut self) -> Option<EntryRef> {
-    let mut cur = self.map.tail;
+    self.nd = self.map.last_in(self.version)?;
+
     loop {
       unsafe {
-        cur = self.map.get_prev(cur, 0);
-        self.nd = cur;
-        if cur.is_null() || cur.ptr == self.map.head.ptr {
+        if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
           return None;
         }
 
-        let node = cur.as_ptr();
+        let node = self.nd.as_ptr();
+        if node.version > self.version {
+          self.nd = self.map.get_prev(self.nd, 0);
+          continue;
+        }
+
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
           return Some(EntryRef {
@@ -141,6 +159,8 @@ where
             value: node.get_value(&self.map.arena),
           });
         }
+
+        self.nd = self.map.get_prev(self.nd, 0);
       }
     }
   }
@@ -149,50 +169,58 @@ where
   /// iterator is pointing at a valid entry, and `None` otherwise.
   #[allow(clippy::should_implement_trait)]
   pub fn next(&mut self) -> Option<EntryRef> {
-    unsafe {
-      self.nd = self.map.get_next(self.nd, 0);
+    loop {
+      unsafe {
+        self.nd = self.map.get_next(self.nd, 0);
 
-      if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
-        return None;
+        if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+          return None;
+        }
+
+        let node = self.nd.as_ptr();
+        if node.version > self.version {
+          continue;
+        }
+
+        let nk = node.get_key(&self.map.arena);
+
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+            value: node.get_value(&self.map.arena),
+          });
+        }
       }
-
-      let node = self.nd.as_ptr();
-      let nk = node.get_key(&self.map.arena);
-
-      if self.map.cmp.contains(&self.range, nk) {
-        return Some(EntryRef {
-          key: nk,
-          version: node.version,
-          value: node.get_value(&self.map.arena),
-        });
-      }
-
-      None
     }
   }
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   pub fn prev(&mut self) -> Option<EntryRef> {
-    unsafe {
-      self.nd = self.map.get_prev(self.nd, 0);
+    loop {
+      unsafe {
+        self.nd = self.map.get_prev(self.nd, 0);
 
-      if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
-        return None;
+        if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
+          return None;
+        }
+
+        let node = self.nd.as_ptr();
+        if node.version > self.version {
+          continue;
+        }
+
+        let nk = node.get_key(&self.map.arena);
+
+        if self.map.cmp.contains(&self.range, nk) {
+          return Some(EntryRef {
+            key: nk,
+            version: node.version,
+            value: node.get_value(&self.map.arena),
+          });
+        }
       }
-
-      let node = self.nd.as_ptr();
-      let nk = node.get_key(&self.map.arena);
-
-      if self.map.cmp.contains(&self.range, nk) {
-        return Some(EntryRef {
-          key: nk,
-          version: node.version,
-          value: node.get_value(&self.map.arena),
-        });
-      }
-
-      None
     }
   }
 
@@ -345,7 +373,7 @@ where
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
   fn seek_lt(&mut self, key: &[u8]) -> Option<NodePtr> {
-    // NB: the top-level MapIterator has already adjusted key based on
+    // NB: the top-level AllVersionMapIterator has already adjusted key based on
     // the upper-bound.
     self.nd = self.map.lt(self.version, key)?;
 

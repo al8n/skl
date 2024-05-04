@@ -21,7 +21,7 @@ pub mod map;
 pub mod set;
 
 pub use arena::{Arena, ArenaError};
-pub use map::{AllVersionMapIterator, AllVersionMapRange, SkipMap};
+pub use map::{MapIterator, MapRange, SkipMap};
 pub use set::{SetIterator, SetRange, SkipSet};
 
 const MAX_HEIGHT: usize = 20;

@@ -4,11 +4,9 @@ use super::*;
 
 /// A range over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct AllVersionMapRange<'a, C = Ascend, Q: ?Sized = &'static str, R = RangeFull>(
-  AllVersionMapIterator<'a, C, Q, R>,
-);
+pub struct MapRange<'a, C, Q: ?Sized = &'static str, R = RangeFull>(MapIterator<'a, C, Q, R>);
 
-impl<'a, C, Q, R> Clone for AllVersionMapRange<'a, C, Q, R>
+impl<'a, C, Q, R> Clone for MapRange<'a, C, Q, R>
 where
   R: Clone,
   Q: Clone,
@@ -18,22 +16,22 @@ where
   }
 }
 
-impl<'a, C, Q, R> Copy for AllVersionMapRange<'a, C, Q, R>
+impl<'a, C, Q, R> Copy for MapRange<'a, C, Q, R>
 where
   R: Copy,
   Q: Copy,
 {
 }
 
-impl<'a, C, Q, R> core::ops::Deref for AllVersionMapRange<'a, C, Q, R> {
-  type Target = AllVersionMapIterator<'a, C, Q, R>;
+impl<'a, C, Q, R> core::ops::Deref for MapRange<'a, C, Q, R> {
+  type Target = MapIterator<'a, C, Q, R>;
 
   fn deref(&self) -> &Self::Target {
     &self.0
   }
 }
 
-impl<'a, C, Q, R> core::ops::DerefMut for AllVersionMapRange<'a, C, Q, R> {
+impl<'a, C, Q, R> core::ops::DerefMut for MapRange<'a, C, Q, R> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.0
   }
@@ -41,50 +39,51 @@ impl<'a, C, Q, R> core::ops::DerefMut for AllVersionMapRange<'a, C, Q, R> {
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct AllVersionMapIterator<
-  'a,
-  C = Ascend,
-  Q: ?Sized = &'static [u8],
-  R = core::ops::RangeFull,
-> {
+pub struct MapIterator<'a, C, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
   pub(super) map: &'a SkipMap<C>,
   pub(super) nd: NodePtr,
   pub(super) version: u64,
   pub(super) range: R,
+  pub(super) all_versions: bool,
+  pub(super) last: Option<EntryRef<'a>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, R: Clone, Q: Clone, C> Clone for AllVersionMapIterator<'a, C, Q, R> {
+impl<'a, R: Clone, Q: Clone, C> Clone for MapIterator<'a, C, Q, R> {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
       nd: self.nd,
       version: self.version,
       range: self.range.clone(),
+      last: self.last,
+      all_versions: self.all_versions,
       _phantom: core::marker::PhantomData,
     }
   }
 }
 
-impl<'a, R: Copy, Q: Copy, C> Copy for AllVersionMapIterator<'a, C, Q, R> {}
+impl<'a, R: Copy, Q: Copy, C> Copy for MapIterator<'a, C, Q, R> {}
 
-impl<'a, C> AllVersionMapIterator<'a, C>
+impl<'a, C> MapIterator<'a, C>
 where
   C: Comparator,
 {
   #[inline]
-  pub(super) const fn new(version: u64, map: &'a SkipMap<C>) -> Self {
+  pub(super) const fn new(version: u64, map: &'a SkipMap<C>, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
       version,
       range: RangeFull,
+      last: None,
+      all_versions,
       _phantom: core::marker::PhantomData,
     }
   }
 }
 
-impl<'a, Q, R, C> AllVersionMapIterator<'a, C, Q, R>
+impl<'a, Q, R, C> MapIterator<'a, C, Q, R>
 where
   C: Comparator,
   &'a [u8]: PartialOrd<Q>,
@@ -92,12 +91,19 @@ where
   R: RangeBounds<Q>,
 {
   #[inline]
-  pub(super) fn range(version: u64, map: &'a SkipMap<C>, r: R) -> AllVersionMapRange<'a, C, Q, R> {
-    AllVersionMapRange(Self {
+  pub(super) fn range(
+    version: u64,
+    map: &'a SkipMap<C>,
+    r: R,
+    all_versions: bool,
+  ) -> MapRange<'a, C, Q, R> {
+    MapRange(Self {
       map,
       nd: map.head,
       version,
       range: r,
+      last: None,
+      all_versions,
       _phantom: core::marker::PhantomData,
     })
   }
@@ -122,11 +128,13 @@ where
         }
 
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
+          let ent = EntryRef {
             key: nk,
             version: node.version,
             value: node.get_value(&self.map.arena),
-          });
+          };
+          self.last = Some(ent);
+          return Some(ent);
         }
 
         self.nd = self.map.get_next(self.nd, 0);
@@ -153,11 +161,12 @@ where
 
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
+          let ent = EntryRef {
             key: nk,
             version: node.version,
             value: node.get_value(&self.map.arena),
-          });
+          };
+          return Some(ent);
         }
 
         self.nd = self.map.get_prev(self.nd, 0);
@@ -184,12 +193,22 @@ where
 
         let nk = node.get_key(&self.map.arena);
 
+        if !self.all_versions {
+          if let Some(last) = self.last {
+            if self.map.cmp.compare(last.key, nk) == cmp::Ordering::Equal {
+              continue;
+            }
+          }
+        }
+
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
+          let ent = EntryRef {
             key: nk,
             version: node.version,
             value: node.get_value(&self.map.arena),
-          });
+          };
+          self.last = Some(ent);
+          return Some(ent);
         }
       }
     }
@@ -213,12 +232,22 @@ where
 
         let nk = node.get_key(&self.map.arena);
 
+        if !self.all_versions {
+          if let Some(last) = self.last {
+            if self.map.cmp.compare(last.key, nk) == cmp::Ordering::Equal {
+              continue;
+            }
+          }
+        }
+
         if self.map.cmp.contains(&self.range, nk) {
-          return Some(EntryRef {
+          let ent = EntryRef {
             key: nk,
             version: node.version,
             value: node.get_value(&self.map.arena),
-          });
+          };
+          self.last = Some(ent);
+          return Some(ent);
         }
       }
     }
@@ -228,12 +257,16 @@ where
   /// If no such element is found then `None` is returned.
   pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<EntryRef<'_>> {
     match upper {
-      Bound::Included(key) => self
-        .seek_le(key)
-        .map(|n| EntryRef::from_node(n, &self.map.arena)),
-      Bound::Excluded(key) => self
-        .seek_lt(key)
-        .map(|n| EntryRef::from_node(n, &self.map.arena)),
+      Bound::Included(key) => self.seek_le(key).map(|n| {
+        let ent = EntryRef::from_node(n, &self.map.arena);
+        self.last = Some(ent);
+        ent
+      }),
+      Bound::Excluded(key) => self.seek_lt(key).map(|n| {
+        let ent = EntryRef::from_node(n, &self.map.arena);
+        self.last = Some(ent);
+        ent
+      }),
       Bound::Unbounded => self.last(),
     }
   }
@@ -242,12 +275,16 @@ where
   /// If no such element is found then `None` is returned.
   pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<EntryRef<'_>> {
     match lower {
-      Bound::Included(key) => self
-        .seek_ge(key)
-        .map(|n| EntryRef::from_node(n, &self.map.arena)),
-      Bound::Excluded(key) => self
-        .seek_gt(key)
-        .map(|n| EntryRef::from_node(n, &self.map.arena)),
+      Bound::Included(key) => self.seek_ge(key).map(|n| {
+        let ent = EntryRef::from_node(n, &self.map.arena);
+        self.last = Some(ent);
+        ent
+      }),
+      Bound::Excluded(key) => self.seek_gt(key).map(|n| {
+        let ent = EntryRef::from_node(n, &self.map.arena);
+        self.last = Some(ent);
+        ent
+      }),
       Bound::Unbounded => self.first(),
     }
   }
@@ -285,7 +322,8 @@ where
             }
             Bound::Unbounded => {}
           }
-          self.next();
+
+          self.nd = self.map.get_next(self.nd, 0);
         }
       }
     }
@@ -325,7 +363,8 @@ where
             }
             Bound::Unbounded => {}
           }
-          self.next();
+
+          self.nd = self.map.get_next(self.nd, 0);
         }
       }
     }
@@ -363,7 +402,7 @@ where
             Bound::Unbounded => {}
           }
 
-          self.prev();
+          self.nd = self.map.get_prev(self.nd, 0);
         }
       }
     }
@@ -373,7 +412,7 @@ where
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
   fn seek_lt(&mut self, key: &[u8]) -> Option<NodePtr> {
-    // NB: the top-level AllVersionMapIterator has already adjusted key based on
+    // NB: the top-level MapIterator has already adjusted key based on
     // the upper-bound.
     self.nd = self.map.lt(self.version, key)?;
 
@@ -402,7 +441,7 @@ where
             Bound::Unbounded => {}
           }
 
-          self.prev();
+          self.nd = self.map.get_prev(self.nd, 0);
         }
       }
     }

@@ -3,6 +3,7 @@ use crate::Arena;
 use super::node::NodePtr;
 
 /// An entry reference to the skipmap's entry.
+#[derive(Debug, Copy, Clone)]
 pub struct EntryRef<'a> {
   pub(super) key: &'a [u8],
   pub(super) version: u64,

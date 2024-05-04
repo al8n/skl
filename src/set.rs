@@ -51,8 +51,8 @@ pub struct SkipSet<C = Ascend> {
 }
 
 // Safety: SkipSet is Sync and Send
-unsafe impl<C: Comparator> Send for SkipSet<C> {}
-unsafe impl<C: Comparator> Sync for SkipSet<C> {}
+unsafe impl<C: Comparator + Send> Send for SkipSet<C> {}
+unsafe impl<C: Comparator + Sync> Sync for SkipSet<C> {}
 
 // --------------------------------Public Methods--------------------------------
 impl<C> SkipSet<C> {
@@ -203,7 +203,6 @@ impl<C: Comparator> SkipSet<C> {
   }
 
   /// Returns the first entry in the map.
-  #[inline]
   pub fn first(&self, version: u64) -> Option<EntryRef<'_>> {
     self
       .first_in(version)
@@ -211,7 +210,6 @@ impl<C: Comparator> SkipSet<C> {
   }
 
   /// Returns the last entry in the map.
-  #[inline]
   pub fn last(&self, version: u64) -> Option<EntryRef<'_>> {
     self
       .last_in(version)
@@ -221,7 +219,7 @@ impl<C: Comparator> SkipSet<C> {
   /// Returns the value associated with the given key, if it exists.
   pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
     unsafe {
-      let (n, eq) = self.find_near(version, key, true, true); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let n = n?;
       let node = n.as_ptr();
@@ -332,14 +330,19 @@ impl<C: Comparator> SkipSet<C> {
     self.insert_in(version, key, &mut Inserter::default())
   }
 
-  /// Returns a new `Iterator`. Note that it is
-  /// safe for an iterator to be copied by value.
+  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
   pub const fn iter(&self, version: u64) -> iterator::SetIterator<C> {
-    iterator::SetIterator::new(version, self)
+    iterator::SetIterator::new(version, self, false)
   }
 
-  /// Returns a `Iterator` that within the range.
+  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
+  #[inline]
+  pub const fn iter_all_versions(&self, version: u64) -> iterator::SetIterator<C> {
+    iterator::SetIterator::new(version, self, true)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
   pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::SetRange<'a, C, Q, R>
   where
@@ -347,7 +350,22 @@ impl<C: Comparator> SkipSet<C> {
     Q: ?Sized + PartialOrd<&'a [u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::SetIterator::range(version, self, range)
+    iterator::SetIterator::range(version, self, range, false)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
+  #[inline]
+  pub fn range_all_versions<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> iterator::SetRange<'a, C, Q, R>
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+    R: RangeBounds<Q> + 'a,
+  {
+    iterator::SetIterator::range(version, self, range, true)
   }
 }
 
@@ -503,7 +521,7 @@ impl<C: Comparator> SkipSet<C> {
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
   fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
-      let (n, _) = self.find_near(u64::MAX, key, false, false); // find the key with the max version.
+      let (n, _) = self.find_near(u64::MIN, key, false, false); // find the key with the max version.
 
       let n = n?;
 
@@ -523,7 +541,7 @@ impl<C: Comparator> SkipSet<C> {
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
   fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
-      let (n, _) = self.find_near(u64::MIN, key, true, false); // find less or equal.
+      let (n, _) = self.find_near(u64::MAX, key, true, false); // find less or equal.
 
       let n = n?;
       if n.is_null() || n.ptr == self.head.ptr {
@@ -543,7 +561,7 @@ impl<C: Comparator> SkipSet<C> {
   fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
       // TODO: optimize find_near implementation, so that we can directly use version instead of u64::MIN
-      let (n, _) = self.find_near(u64::MIN, key, false, true); // find the key with the max version.
+      let (n, _) = self.find_near(u64::MAX, key, false, true); // find the key with the max version.
 
       let n = n?;
 
@@ -563,7 +581,7 @@ impl<C: Comparator> SkipSet<C> {
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
   fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
     unsafe {
-      let (n, _) = self.find_near(u64::MAX, key, true, true); // find less or equal.
+      let (n, _) = self.find_near(u64::MIN, key, true, true); // find less or equal.
 
       let n = n?;
       if n.is_null() || n.ptr == self.head.ptr {
@@ -729,8 +747,11 @@ impl<C: Comparator> SkipSet<C> {
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
       let version_cmp = curr_node.version.cmp(&version);
-      if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        return Some(curr);
+      // if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+      //   return Some(curr);
+      // }
+      if version_cmp == cmp::Ordering::Greater {
+        return None;
       }
 
       if prev.is_null() || prev.ptr == self.head.ptr {
@@ -741,19 +762,37 @@ impl<C: Comparator> SkipSet<C> {
         return None;
       }
 
+      // let prev_node = prev.as_ptr();
+      // let prev_key = prev_node.get_key(&self.arena);
+      // let version_cmp = prev_node.version.cmp(&version);
+      // if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {
+      //   if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+      //     return Some(curr);
+      //   }
+
+      //   return None;
+      // }
+
+      // if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+      //   return Some(prev);
+      // }
+
+      // curr = prev;
+      // prev = self.get_prev(curr, 0);
       let prev_node = prev.as_ptr();
       let prev_key = prev_node.get_key(&self.arena);
-      let version_cmp = prev_node.version.cmp(&version);
       if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {
-        if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-          return Some(curr);
-        }
-
-        return None;
+        return Some(curr);
       }
 
-      if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+      let version_cmp = prev_node.version.cmp(&version);
+
+      if version_cmp == cmp::Ordering::Equal {
         return Some(prev);
+      }
+
+      if version_cmp == cmp::Ordering::Greater {
+        return Some(curr);
       }
 
       curr = prev;
@@ -767,30 +806,37 @@ impl<C: Comparator> SkipSet<C> {
     loop {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
-      // if the minimum version is greater than the given version, we should return None.
+      // if the current version is less or equal to the given version, we should return.
       let version_cmp = curr_node.version.cmp(&version);
-      if version_cmp == cmp::Ordering::Greater {
-        return None;
+      if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+        return Some(curr);
       }
 
-      if next.is_null() || next.ptr == self.tail.ptr {
-        return Some(curr);
+      if next.is_null() || next.ptr == self.head.ptr {
+        if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+          return Some(curr);
+        }
+
+        return None;
       }
 
       let next_node = next.as_ptr();
       let next_key = next_node.get_key(&self.arena);
-      if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
-        return Some(curr);
-      }
-
       let version_cmp = next_node.version.cmp(&version);
+      if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
+        if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+          return Some(curr);
+        }
 
-      if version_cmp == cmp::Ordering::Equal {
-        return Some(next);
+        return None;
       }
 
-      if version_cmp == cmp::Ordering::Greater {
-        return Some(curr);
+      if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
+        if next.ptr == self.tail.ptr {
+          return None;
+        }
+
+        return Some(next);
       }
 
       curr = next;
@@ -843,7 +889,7 @@ impl<C: Comparator> SkipSet<C> {
       let cmp = self
         .cmp
         .compare(key, next_key)
-        .then_with(|| version.cmp(&next_node.version));
+        .then_with(|| next_node.version.cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -991,7 +1037,7 @@ impl<C: Comparator> SkipSet<C> {
       match self
         .cmp
         .compare(key, next_key)
-        .then_with(|| version.cmp(&next_node.version))
+        .then_with(|| next_node.version.cmp(&version))
       {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
@@ -1027,10 +1073,13 @@ impl<C: Comparator> SkipSet<C> {
     match self
       .cmp
       .compare(nd_key, key)
-      .then_with(|| nd.version.cmp(&version))
+      // .then_with(|| version.cmp(&nd.version))
     {
       cmp::Ordering::Less => true,
-      cmp::Ordering::Equal | cmp::Ordering::Greater => false,
+      cmp::Ordering::Greater => false,
+      cmp::Ordering::Equal => {
+        matches!(version.cmp(&nd.version), cmp::Ordering::Less)
+      }
     }
   }
 }

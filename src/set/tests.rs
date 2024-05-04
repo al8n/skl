@@ -1,5 +1,5 @@
 use super::*;
-use crate::sync::Arc;
+use crate::{sync::Arc, Descend};
 use std::format;
 use wg::WaitGroup;
 
@@ -21,7 +21,7 @@ fn make_int_key(i: usize) -> Vec<u8> {
 }
 
 fn empty_in(l: SkipSet) {
-  let mut it = l.iter(0);
+  let mut it = l.iter_all_versions(0);
 
   assert!(it.first().is_none());
   assert!(it.last().is_none());
@@ -103,7 +103,7 @@ fn basic_in(mut l: SkipSet) {
   l.insert(0, b"key2").unwrap();
 
   {
-    let mut it = l.iter(0);
+    let mut it = l.iter_all_versions(0);
     let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
     assert_eq!(ent.key(), b"key1");
     assert_eq!(ent.version(), 0);
@@ -121,28 +121,28 @@ fn basic_in(mut l: SkipSet) {
   l.insert(2, "a".as_bytes()).unwrap();
 
   {
-    let mut it = l.iter(2);
+    let mut it = l.iter_all_versions(2);
     let ent = it.seek_lower_bound(Bound::Included(b"a")).unwrap();
     assert_eq!(ent.key(), b"a");
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), b"key1");
-    assert_eq!(ent.version(), 0);
+    assert_eq!(ent.key(), b"a");
+    assert_eq!(ent.version(), 1);
   }
 
   l.insert(2, "b".as_bytes()).unwrap();
   l.insert(1, "b".as_bytes()).unwrap();
 
   {
-    let mut it = l.iter(2);
+    let mut it = l.iter_all_versions(2);
     let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), b"key1");
-    assert_eq!(ent.version(), 0);
+    assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.version(), 1);
   }
 
   l.get_or_insert(2, b"b").unwrap().unwrap();
@@ -152,7 +152,7 @@ fn basic_in(mut l: SkipSet) {
   l.clear();
 
   {
-    let mut it = l.iter(0);
+    let mut it = l.iter_all_versions(0);
     assert!(it.first().is_none());
     assert!(it.last().is_none());
   }
@@ -176,6 +176,126 @@ fn test_basic_mmap() {
 #[cfg_attr(miri, ignore)]
 fn test_basic_mmap_anon() {
   basic_in(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn iter_all_versions_mvcc(l: SkipSet) {
+  l.insert(1, b"a").unwrap();
+  l.insert(3, b"a").unwrap();
+  l.insert(1, b"c").unwrap();
+  l.insert(3, b"c").unwrap();
+
+  let mut it = l.iter_all_versions(0);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 0);
+
+  let mut it = l.iter_all_versions(1);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut it = l.iter_all_versions(2);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut it = l.iter_all_versions(3);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 4);
+
+  let mut it = l.iter_all_versions(0);
+  assert!(it.first().is_none());
+  assert!(it.last().is_none());
+
+  let mut it = l.iter_all_versions(1);
+  let ent = it.first().unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.version(), 1);
+
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter_all_versions(2);
+  let ent = it.first().unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.version(), 1);
+
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter_all_versions(3);
+  let ent = it.first().unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.last().unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_upper_bound(Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_lower_bound(Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_lower_bound(Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.version(), 3);
+}
+
+#[test]
+fn test_iter_all_versions_mvcc() {
+  iter_all_versions_mvcc(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iter_all_versions_mvcc_mmap() {
+  iter_all_versions_mvcc(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iter_all_versions_mvcc_mmap_anon() {
+  iter_all_versions_mvcc(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn ordering() {
+  let l = SkipSet::with_comparator(ARENA_SIZE, Descend).unwrap();
+
+  l.insert(1, b"a1").unwrap();
+  l.insert(2, b"a2").unwrap();
+  l.insert(3, b"a3").unwrap();
+
+  let mut it = l.iter_all_versions(3);
+  for i in (1..=3).rev() {
+    let ent = it.next().unwrap();
+    assert_eq!(ent.key(), format!("a{i}").as_bytes());
+  }
+}
+
+#[test]
+fn test_ordering() {
+  ordering();
 }
 
 fn get_mvcc(l: SkipSet) {
@@ -228,6 +348,20 @@ fn get_mvcc(l: SkipSet) {
 #[test]
 fn test_get_mvcc() {
   get_mvcc(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_get_mvcc_mmap() {
+  get_mvcc(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_get_mvcc_mmap_anon() {
+  get_mvcc(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
 fn gt_in(l: SkipSet) {
@@ -759,7 +893,7 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
     let l = l.clone();
     let saw_value = saw_value.clone();
     std::thread::spawn(move || {
-      let mut it = l.iter(0);
+      let mut it = l.iter_all_versions(0);
       let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
       assert_eq!(ent.key(), b"thekey");
       saw_value.fetch_add(1, Ordering::SeqCst);
@@ -794,14 +928,14 @@ fn test_concurrent_one_key_mmap_anon() {
   concurrent_one_key(Arc::new(SkipSet::mmap_anon(ARENA_SIZE).unwrap()));
 }
 
-fn iterator_next(l: SkipSet) {
+fn iter_all_versionsator_next(l: SkipSet) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
     l.insert(0, &make_int_key(i)).unwrap();
   }
 
-  let mut it = l.iter(0);
+  let mut it = l.iter_all_versions(0);
   let mut ent = it.first().unwrap();
   for i in 0..N {
     assert_eq!(ent.key(), make_int_key(i));
@@ -814,22 +948,24 @@ fn iterator_next(l: SkipSet) {
 }
 
 #[test]
-fn test_iterator_next() {
-  iterator_next(SkipSet::new(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_next() {
+  iter_all_versionsator_next(SkipSet::new(ARENA_SIZE).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_next_mmap() {
-  iterator_next(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_iter_all_versionsator_next_mmap() {
+  iter_all_versionsator_next(
+    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
+  );
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_next_mmap_anon() {
-  iterator_next(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_next_mmap_anon() {
+  iter_all_versionsator_next(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
 fn range_next(l: SkipSet) {
@@ -867,24 +1003,26 @@ fn test_range_next() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_next_mmap() {
-  iterator_next(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+  iter_all_versionsator_next(
+    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
+  );
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_next_mmap_anon() {
-  iterator_next(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+  iter_all_versionsator_next(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
-fn iterator_prev(l: SkipSet) {
+fn iter_all_versionsator_prev(l: SkipSet) {
   const N: usize = 100;
 
   for i in 0..N {
     l.insert(0, &make_int_key(i)).unwrap();
   }
 
-  let mut it = l.iter(0);
+  let mut it = l.iter_all_versions(0);
   let mut ent = it.last().unwrap();
   for i in (0..N).rev() {
     assert_eq!(ent.key(), make_int_key(i));
@@ -898,22 +1036,24 @@ fn iterator_prev(l: SkipSet) {
 }
 
 #[test]
-fn test_iterator_prev() {
-  iterator_prev(SkipSet::new(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_prev() {
+  iter_all_versionsator_prev(SkipSet::new(ARENA_SIZE).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_prev_mmap() {
-  iterator_prev(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_iter_all_versionsator_prev_mmap() {
+  iter_all_versionsator_prev(
+    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
+  );
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_prev_mmap_anon() {
-  iterator_prev(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_prev_mmap_anon() {
+  iter_all_versionsator_prev(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
 fn range_prev(l: SkipSet) {
@@ -961,7 +1101,7 @@ fn test_range_prev_mmap_anon() {
   range_prev(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
-fn iterator_seek_ge(l: SkipSet) {
+fn iter_all_versionsator_seek_ge(l: SkipSet) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -969,7 +1109,7 @@ fn iterator_seek_ge(l: SkipSet) {
     l.insert(0, &make_int_key(v)).unwrap();
   }
 
-  let mut it = l.iter(0);
+  let mut it = l.iter_all_versions(0);
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
 
@@ -1003,25 +1143,27 @@ fn iterator_seek_ge(l: SkipSet) {
 }
 
 #[test]
-fn test_iterator_seek_ge() {
-  iterator_seek_ge(SkipSet::new(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_seek_ge() {
+  iter_all_versionsator_seek_ge(SkipSet::new(ARENA_SIZE).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_seek_ge_mmap() {
-  iterator_seek_ge(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_iter_all_versionsator_seek_ge_mmap() {
+  iter_all_versionsator_seek_ge(
+    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
+  );
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_seek_ge_mmap_anon() {
-  iterator_seek_ge(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_seek_ge_mmap_anon() {
+  iter_all_versionsator_seek_ge(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
-fn iterator_seek_lt(l: SkipSet) {
+fn iter_all_versionsator_seek_lt(l: SkipSet) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -1029,7 +1171,7 @@ fn iterator_seek_lt(l: SkipSet) {
     l.insert(0, &make_int_key(v)).unwrap();
   }
 
-  let mut it = l.iter(0);
+  let mut it = l.iter_all_versions(0);
   assert!(it.seek_upper_bound(Bound::Excluded(b"")).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01000"));
@@ -1055,22 +1197,24 @@ fn iterator_seek_lt(l: SkipSet) {
 }
 
 #[test]
-fn test_iterator_seek_lt() {
-  iterator_seek_lt(SkipSet::new(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_seek_lt() {
+  iter_all_versionsator_seek_lt(SkipSet::new(ARENA_SIZE).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_seek_lt_mmap() {
-  iterator_seek_lt(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_iter_all_versionsator_seek_lt_mmap() {
+  iter_all_versionsator_seek_lt(
+    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
+  );
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iterator_seek_lt_mmap_anon() {
-  iterator_seek_lt(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+fn test_iter_all_versionsator_seek_lt_mmap_anon() {
+  iter_all_versionsator_seek_lt(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }
 
 fn range(l: SkipSet) {
@@ -1166,4 +1310,92 @@ fn test_range_mmap() {
 #[cfg_attr(miri, ignore)]
 fn test_range_mmap_anon() {
   range(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn iter_latest(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in 0..N {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  for i in 50..N {
+    l.insert(1, &make_int_key(i)).unwrap();
+  }
+
+  for i in 0..50 {
+    l.insert(2, &make_int_key(i)).unwrap();
+  }
+
+  let mut it = l.iter(3);
+  let mut num = 0;
+  for i in 0..N {
+    let ent = it.next().unwrap();
+    assert_eq!(ent.key(), make_int_key(i));
+    num += 1;
+  }
+  assert_eq!(num, N);
+}
+
+#[test]
+fn test_iter_latest() {
+  iter_latest(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iter_latest_mmap() {
+  iter_latest(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_iter_latest_mmap_anon() {
+  iter_latest(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn range_latest(l: SkipSet) {
+  const N: usize = 100;
+
+  for i in 0..N {
+    l.insert(0, &make_int_key(i)).unwrap();
+  }
+
+  for i in 50..N {
+    l.insert(1, &make_int_key(i)).unwrap();
+  }
+
+  for i in 0..50 {
+    l.insert(2, &make_int_key(i)).unwrap();
+  }
+
+  let mut it = l.range(3, ..);
+  let mut num = 0;
+  for i in 0..N {
+    let ent = it.next().unwrap();
+    assert_eq!(ent.key(), make_int_key(i));
+    num += 1;
+  }
+  assert_eq!(num, N);
+}
+
+#[test]
+fn test_range_latest() {
+  range_latest(SkipSet::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_latest_mmap() {
+  range_latest(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_range_latest_mmap_anon() {
+  range_latest(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
 }

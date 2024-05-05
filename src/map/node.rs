@@ -274,3 +274,11 @@ impl<T> Node<T> {
     )
   }
 }
+
+#[cfg(test)]
+#[test]
+fn test_clone() {
+  let node_ptr = NodePtr::<u8>::NULL;
+  #[allow(clippy::clone_on_copy)]
+  let _ = node_ptr.clone();
+}

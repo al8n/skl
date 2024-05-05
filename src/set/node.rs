@@ -239,3 +239,11 @@ impl<T> Node<T> {
     arena.get_bytes_mut(self.key_offset as usize, self.key_size as usize)
   }
 }
+
+#[cfg(test)]
+#[test]
+fn test_clone() {
+  let node_ptr = NodePtr::<u8>::NULL;
+  #[allow(clippy::clone_on_copy)]
+  let _ = node_ptr.clone();
+}

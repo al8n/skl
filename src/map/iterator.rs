@@ -85,6 +85,14 @@ where
   }
 }
 
+impl<'a, Q, R, T, C> MapIterator<'a, T, C, Q, R> {
+  /// Returns the bounds of the iterator.
+  #[inline]
+  pub const fn bounds(&self) -> &R {
+    &self.range
+  }
+}
+
 impl<'a, Q, R, T, C> MapIterator<'a, T, C, Q, R>
 where
   C: Comparator,

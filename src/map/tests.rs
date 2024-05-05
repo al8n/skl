@@ -1320,6 +1320,7 @@ fn range(l: SkipMap) {
   let k3 = make_int_key(3);
   let k7 = make_int_key(7);
   let mut it = l.range(0, k3.as_slice()..k7.as_slice()).clone();
+  assert_eq!(it.bounds(), &(k3.as_slice()..k7.as_slice()));
 
   for i in 3..=6 {
     let k = make_int_key(i);

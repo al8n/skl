@@ -1,22 +1,25 @@
 use super::*;
 use crate::{sync::Arc, Descend};
 use std::format;
+
+#[cfg(feature = "std")]
 use wg::WaitGroup;
 
 const ARENA_SIZE: usize = 1 << 20;
 
 /// Only used for testing
 
-pub fn key(i: usize) -> Vec<u8> {
+pub fn key(i: usize) -> std::vec::Vec<u8> {
   format!("{:05}", i).into_bytes()
 }
 
 /// Only used for testing
-pub fn big_key(i: usize) -> Vec<u8> {
+#[cfg(feature = "std")]
+pub fn big_key(i: usize) -> std::vec::Vec<u8> {
   format!("{:01048576}", i).into_bytes()
 }
 
-fn make_int_key(i: usize) -> Vec<u8> {
+fn make_int_key(i: usize) -> std::vec::Vec<u8> {
   format!("{:05}", i).into_bytes()
 }
 
@@ -777,6 +780,7 @@ fn test_basic_large_testcases_mmap_anon() {
   test_basic_large_testcases_in(l);
 }
 
+#[cfg(feature = "std")]
 fn test_concurrent_basic_runner(l: Arc<SkipSet>) {
   #[cfg(miri)]
   const N: usize = 5;
@@ -805,6 +809,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipSet>) {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn test_concurrent_basic() {
   let l = Arc::new(SkipSet::new(ARENA_SIZE).unwrap());
   test_concurrent_basic_runner(l);
@@ -825,6 +830,7 @@ fn test_concurrent_basic_mmap_anon() {
   test_concurrent_basic_runner(Arc::new(SkipSet::mmap_anon(ARENA_SIZE).unwrap()));
 }
 
+#[cfg(feature = "std")]
 fn test_concurrent_basic_big_keys_runner(l: Arc<SkipSet>) {
   #[cfg(miri)]
   const N: usize = 5;
@@ -850,6 +856,7 @@ fn test_concurrent_basic_big_keys_runner(l: Arc<SkipSet>) {
 }
 
 #[test]
+#[cfg(feature = "std")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_keys() {
   test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::new(120 << 20).unwrap()));
@@ -871,6 +878,7 @@ fn test_concurrent_basic_big_keys_mmap_anon() {
   test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::mmap_anon(120 << 20).unwrap()));
 }
 
+#[cfg(feature = "std")]
 fn concurrent_one_key(l: Arc<SkipSet>) {
   #[cfg(not(miri))]
   const N: usize = 100;
@@ -910,6 +918,7 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn test_concurrent_one_key() {
   concurrent_one_key(Arc::new(SkipSet::new(ARENA_SIZE).unwrap()));
 }

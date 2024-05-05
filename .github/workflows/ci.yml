@@ -85,18 +85,25 @@ jobs:
         # --no-self-update is necessary because the windows environment cannot self-update rustup.exe.
         run: rustup update stable --no-self-update && rustup default stable
       - name: Test
-        run: . ci/test-stable.sh test
+        run: . ci/test-stable.sh test 
 
-  # Nightly
-  nightly:
-    name: nightly
-    runs-on: ubuntu-latest
+  # no std
+  no_std:
+    name: no_std
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
-        run: rustup update $nightly && rustup default $nightly
+        # --no-self-update is necessary because the windows environment cannot self-update rustup.exe.
+        run: rustup update stable --no-self-update && rustup default stable
       - name: Test
-        run: . ci/test-stable.sh test
+        run: cargo test --no-default-features --features alloc
 
   # Run tests on some extra platforms
   cross:
@@ -212,7 +219,7 @@ jobs:
       - rustfmt
       - clippy
       - stable
-      - nightly
+      - no_std
       - sanitizer
       - valgrind 
       - minrust

@@ -22,7 +22,7 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
-#[cfg(test)]
+#[cfg(all(test, not(loom)))]
 mod tests;
 
 // #[cfg(all(test, loom))]
@@ -46,7 +46,7 @@ pub struct SkipSet<T = u64, C = Ascend> {
 
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
-  #[cfg(test)]
+  #[cfg(all(test, feature = "std"))]
   testing: bool,
 
   cmp: C,
@@ -223,7 +223,7 @@ impl<T, C> SkipSet<T, C> {
       head,
       tail,
       height: CachePadded::new(AtomicU32::new(1)),
-      #[cfg(test)]
+      #[cfg(all(test, feature = "std"))]
       testing: false,
       cmp,
       len: CachePadded::new(AtomicU32::new(0)),
@@ -476,7 +476,7 @@ impl<T: Trailer, C> SkipSet<T, C> {
   #[cfg(not(feature = "std"))]
   #[inline]
   fn random_height() -> u32 {
-    use rand::{rngs::OsRng, Rng, RngCore};
+    use rand::{rngs::OsRng, Rng};
 
     let rnd: u32 = OsRng.gen();
     let mut h = 1;

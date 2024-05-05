@@ -36,7 +36,7 @@
 
 ## Features
 
-- **3D access**: key-value-version
+- **MVCC and 3D access**: Builtin MVCC (multiple versioning concurrency control) and key-value-version access support.
 - **Lock-free and Concurrent-Safe:** SkipMap and SkipSet provide lock-free operations, ensuring efficient concurrent access without the need for explicit locking mechanisms.
 - **Extensible for Key-Value Database Developers:** Designed as a low-level crate, SkipMap and SkipSet offer a flexible foundation for key-value database developers. You can easily build your own memtable or write-ahead-log (WAL) using these structures.
 - **Memory Efficiency:** These data structures are optimized for minimal memory overhead. They operate around references, avoiding unnecessary allocations and deep copies, which can be crucial for efficient memory usage.

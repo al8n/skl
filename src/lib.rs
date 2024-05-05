@@ -3,7 +3,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
-#![allow(clippy::type_complexity, clippy::mut_from_ref)]
+#![allow(unexpected_cfgs, clippy::type_complexity, clippy::mut_from_ref)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;
@@ -96,6 +96,20 @@ impl Comparator for Descend {
     Q: ?Sized + PartialOrd<&'a [u8]>,
   {
     range.contains(&key)
+  }
+}
+
+/// A trait for extra information that can be stored with entry in the skiplist.
+pub trait Trailer: Copy {
+  /// Returns the version of the trailer.
+  fn version(&self) -> u64;
+}
+
+impl Trailer for u64 {
+  /// Returns the version of the trailer.
+  #[inline]
+  fn version(&self) -> u64 {
+    *self
   }
 }
 

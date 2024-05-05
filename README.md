@@ -24,18 +24,19 @@
   
     ```toml
     [dependencies]
-    skl = "0.4"
+    skl = "0.5"
     ```
 
 - Enable memory map backend
 
     ```toml
     [dependencies]
-    skl = { version = "0.4", features = ["memmap"] }
+    skl = { version = "0.5", features = ["memmap"] }
     ```
 
 ## Features
 
+- **MVCC and 3D access**: Builtin MVCC (multiple versioning concurrency control) and key-value-version access support.
 - **Lock-free and Concurrent-Safe:** SkipMap and SkipSet provide lock-free operations, ensuring efficient concurrent access without the need for explicit locking mechanisms.
 - **Extensible for Key-Value Database Developers:** Designed as a low-level crate, SkipMap and SkipSet offer a flexible foundation for key-value database developers. You can easily build your own memtable or write-ahead-log (WAL) using these structures.
 - **Memory Efficiency:** These data structures are optimized for minimal memory overhead. They operate around references, avoiding unnecessary allocations and deep copies, which can be crucial for efficient memory usage.
@@ -85,9 +86,11 @@ Please see [examples](https://github.com/al8n/skl-rs/tree/main/examples) folder 
 
 ## Pedigree
 
-This code is inspired and modified based on Cockroachdb's pebble arenaskl code:
+This code is inspired and modified based on Cockroachdb's pebble arenaskl and Dgraph's badger skl code:
 
 https://github.com/cockroachdb/pebble/tree/master/internal/arenaskl
+
+https://github.com/dgraph-io/badger/tree/master/skl
 
 The pebble's arenaskl code is based on Andy Kimball's arenaskl code:
 

@@ -69,32 +69,28 @@ impl Arena {
 
 impl Arena {
   #[inline]
-  const fn min_cap<const N: u64>() -> usize {
-    (N * 2) as usize
-  }
-
-  #[inline]
-  pub(super) fn new_vec<const N: u64>(n: usize) -> Self {
+  pub(super) fn new_vec(n: usize, min_cap: usize) -> Self {
     Self::new(Shared::new_vec(
-      n.max(Self::min_cap::<N>()),
+      n.max(min_cap),
       mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
     ))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(super) fn new_mmap<const N: u64>(
+  pub(super) fn new_mmap(
     n: usize,
+    min_cap: usize,
     file: std::fs::File,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Shared::new_mmaped(n.max(Self::min_cap::<N>()), file, lock).map(Self::new)
+    Shared::new_mmaped(n.max(min_cap), file, lock).map(Self::new)
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(super) fn new_anonymous_mmap<const N: u64>(n: usize) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(Self::min_cap::<N>())).map(Self::new)
+  pub(super) fn new_anonymous_mmap(n: usize, min_cap: usize) -> std::io::Result<Self> {
+    Shared::new_mmaped_anon(n.max(min_cap)).map(Self::new)
   }
 
   #[inline]
@@ -191,29 +187,6 @@ impl Arena {
   }
 }
 
-impl Clone for Arena {
-  fn clone(&self) -> Self {
-    unsafe {
-      let shared: *mut Shared = self.inner.load(Ordering::Relaxed).cast();
-
-      let old_size = (*shared).refs.fetch_add(1, Ordering::Release);
-      if old_size > usize::MAX >> 1 {
-        abort();
-      }
-
-      // Safety:
-      // The ptr is always non-null, we just initialized it.
-      // And this ptr is only deallocated when the arena is dropped.
-      Self {
-        cap: (*shared).cap(),
-        inner: AtomicPtr::new(shared as _),
-        data_ptr: self.data_ptr,
-        n: self.n.clone(),
-      }
-    }
-  }
-}
-
 impl Drop for Arena {
   fn drop(&mut self) {
     unsafe {
@@ -253,26 +226,5 @@ impl Drop for Arena {
         shared.unmount(self.n.load(Ordering::Relaxed) as usize);
       });
     }
-  }
-}
-
-#[inline(never)]
-#[cold]
-fn abort() -> ! {
-  #[cfg(feature = "std")]
-  {
-    std::process::abort();
-  }
-
-  #[cfg(not(feature = "std"))]
-  {
-    struct Abort;
-    impl Drop for Abort {
-      fn drop(&mut self) {
-        panic!();
-      }
-    }
-    let _a = Abort;
-    panic!("abort");
   }
 }

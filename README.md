@@ -86,9 +86,11 @@ Please see [examples](https://github.com/al8n/skl-rs/tree/main/examples) folder 
 
 ## Pedigree
 
-This code is inspired and modified based on Cockroachdb's pebble arenaskl code:
+This code is inspired and modified based on Cockroachdb's pebble arenaskl and Dgraph's badger skl code:
 
 https://github.com/cockroachdb/pebble/tree/master/internal/arenaskl
+
+https://github.com/dgraph-io/badger/tree/master/skl
 
 The pebble's arenaskl code is based on Andy Kimball's arenaskl code:
 

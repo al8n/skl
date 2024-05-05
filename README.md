@@ -24,18 +24,19 @@
   
     ```toml
     [dependencies]
-    skl = "0.4"
+    skl = "0.5"
     ```
 
 - Enable memory map backend
 
     ```toml
     [dependencies]
-    skl = { version = "0.4", features = ["memmap"] }
+    skl = { version = "0.5", features = ["memmap"] }
     ```
 
 ## Features
 
+- **3D access**: key-value-version
 - **Lock-free and Concurrent-Safe:** SkipMap and SkipSet provide lock-free operations, ensuring efficient concurrent access without the need for explicit locking mechanisms.
 - **Extensible for Key-Value Database Developers:** Designed as a low-level crate, SkipMap and SkipSet offer a flexible foundation for key-value database developers. You can easily build your own memtable or write-ahead-log (WAL) using these structures.
 - **Memory Efficiency:** These data structures are optimized for minimal memory overhead. They operate around references, avoiding unnecessary allocations and deep copies, which can be crucial for efficient memory usage.

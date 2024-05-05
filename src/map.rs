@@ -71,6 +71,12 @@ impl<T, C> SkipMap<T, C> {
     self.arena.size()
   }
 
+  /// Returns the capacity of the arena.
+  #[inline]
+  pub const fn capacity(&self) -> usize {
+    self.arena.capacity()
+  }
+
   /// Returns the number of entries in the skipmap.
   #[inline]
   pub fn len(&self) -> usize {
@@ -762,11 +768,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     loop {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
-      // if the current version is less or equal to the given version, we should return.
+      // if the current version is greater than the given version, we should return.
       let version_cmp = curr_node.trailer.version().cmp(&version);
-      // if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-      //   return Some(curr);
-      // }
       if version_cmp == cmp::Ordering::Greater {
         return None;
       }
@@ -779,23 +782,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
-      // let prev_node = prev.as_ptr();
-      // let prev_key = prev_node.get_key(&self.arena);
-      // let version_cmp = prev_node.version.cmp(&version);
-      // if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {
-      //   if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-      //     return Some(curr);
-      //   }
-
-      //   return None;
-      // }
-
-      // if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-      //   return Some(prev);
-      // }
-
-      // curr = prev;
-      // prev = self.get_prev(curr, 0);
       let prev_node = prev.as_ptr();
       let prev_key = prev_node.get_key(&self.arena);
       if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {

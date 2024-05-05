@@ -37,6 +37,8 @@ fn empty_in(l: SkipSet) {
   assert!(l.le(0, b"aaa").is_none());
   assert!(l.get(0, b"aaa").is_none());
   assert!(!l.contains_key(0, b"aaa"));
+  assert!(l.size() > 0);
+  assert!(l.capacity() > 0);
 }
 
 #[test]

@@ -1,14 +1,11 @@
 use super::*;
 
-use core::ops::{Index, IndexMut};
-
 use crate::sync::AtomicUsize;
 
 #[derive(Debug)]
 struct AlignedVec {
   ptr: ptr::NonNull<u8>,
   cap: usize,
-  len: usize,
   align: usize,
 }
 
@@ -46,7 +43,6 @@ impl AlignedVec {
     Self {
       ptr,
       cap: capacity,
-      len: capacity,
       align,
     }
   }
@@ -64,32 +60,6 @@ impl AlignedVec {
   #[inline]
   fn as_mut_ptr(&mut self) -> *mut u8 {
     self.ptr.as_ptr()
-  }
-
-  #[inline]
-  const fn as_slice(&self) -> &[u8] {
-    unsafe { slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
-  }
-
-  #[inline]
-  fn as_mut_slice(&mut self) -> &mut [u8] {
-    unsafe { slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
-  }
-}
-
-impl<I: slice::SliceIndex<[u8]>> Index<I> for AlignedVec {
-  type Output = <I as slice::SliceIndex<[u8]>>::Output;
-
-  #[inline]
-  fn index(&self, index: I) -> &Self::Output {
-    &self.as_slice()[index]
-  }
-}
-
-impl<I: slice::SliceIndex<[u8]>> IndexMut<I> for AlignedVec {
-  #[inline]
-  fn index_mut(&mut self, index: I) -> &mut Self::Output {
-    &mut self.as_mut_slice()[index]
   }
 }
 

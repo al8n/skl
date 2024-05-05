@@ -37,18 +37,10 @@ impl Link {
   }
 }
 
+#[derive(Debug)]
 pub(crate) struct NodePtr<T> {
   pub(super) ptr: *const Node<T>,
   pub(super) offset: u32,
-}
-
-impl<T> core::fmt::Debug for NodePtr<T> {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("NodePtr")
-      .field("ptr", &self.ptr)
-      .field("offset", &self.offset)
-      .finish()
-  }
 }
 
 impl<T> Clone for NodePtr<T> {

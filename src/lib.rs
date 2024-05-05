@@ -2,7 +2,7 @@
 #![cfg_attr(not(all(feature = "std", test)), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
-#![deny(missing_docs)]
+#![deny(missing_docs, warnings)]
 #![allow(unexpected_cfgs, clippy::type_complexity, clippy::mut_from_ref)]
 
 #[cfg(not(feature = "std"))]

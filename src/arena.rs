@@ -228,3 +228,19 @@ impl Drop for Arena {
     }
   }
 }
+
+#[test]
+#[cfg(test)]
+fn test_debug() {
+  let arena = Arena::new_vec(1024, 1024);
+  assert_eq!(
+    format!("{:?}", arena),
+    "Arena { cap: 1024, allocated: 1, data: [0] }"
+  );
+
+  let err = ArenaError;
+  assert_eq!(
+    format!("{}", err),
+    "allocation failed because arena is full"
+  );
+}

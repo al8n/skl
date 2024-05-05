@@ -43,3 +43,28 @@ impl From<ArenaError> for Error {
     Self::Full(e)
   }
 }
+
+#[cfg(test)]
+#[test]
+fn test_fmt() {
+  assert_eq!(
+    std::format!("{}", Error::Duplicated),
+    "key already exists in the skipmap"
+  );
+  assert_eq!(
+    std::format!("{}", Error::KeyTooLarge(10)),
+    "key size 10 is too large"
+  );
+  assert_eq!(
+    std::format!("{}", Error::ValueTooLarge(10)),
+    "value size 10 is too large"
+  );
+  assert_eq!(
+    std::format!("{}", Error::EntryTooLarge(10)),
+    "entry size 10 is too large"
+  );
+  assert_eq!(
+    std::format!("{}", Error::Full(ArenaError)),
+    "allocation failed because arena is full",
+  );
+}

@@ -13,10 +13,10 @@ pub enum Error {
   /// instead must be handled by the user.
   Duplicated,
 
-  /// Indicates that the key is too large to be stored in the [`SkipMap`](super::SkipMap).
+  /// Indicates that the key is too large to be stored in the [`SkipSet`](crate::SkipSet).
   KeyTooLarge(u64),
 
-  /// Indicates that the entry is too large to be stored in the [`SkipMap`](super::SkipMap).
+  /// Indicates that the entry is too large to be stored in the [`SkipSet`](crate::SkipSet).
   EntryTooLarge(u64),
 }
 
@@ -38,4 +38,25 @@ impl From<ArenaError> for Error {
   fn from(e: ArenaError) -> Self {
     Self::Full(e)
   }
+}
+
+#[cfg(test)]
+#[test]
+fn test_fmt() {
+  assert_eq!(
+    std::format!("{}", Error::Duplicated),
+    "key already exists in the skipset"
+  );
+  assert_eq!(
+    std::format!("{}", Error::KeyTooLarge(10)),
+    "key size 10 is too large"
+  );
+  assert_eq!(
+    std::format!("{}", Error::EntryTooLarge(10)),
+    "entry size 10 is too large"
+  );
+  assert_eq!(
+    std::format!("{}", Error::Full(ArenaError)),
+    "allocation failed because arena is full",
+  );
 }

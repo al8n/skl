@@ -18,16 +18,6 @@ pub(super) struct Link {
 }
 
 impl Link {
-  #[cfg(not(loom))]
-  #[inline]
-  pub(super) const fn new(next_offset: u32, prev_offset: u32) -> Self {
-    Self {
-      next_offset: AtomicU32::new(next_offset),
-      prev_offset: AtomicU32::new(prev_offset),
-    }
-  }
-
-  #[cfg(loom)]
   #[inline]
   pub(super) fn new(next_offset: u32, prev_offset: u32) -> Self {
     Self {

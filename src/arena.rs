@@ -234,13 +234,13 @@ impl Drop for Arena {
 fn test_debug() {
   let arena = Arena::new_vec(1024, 1024);
   assert_eq!(
-    format!("{:?}", arena),
+    std::format!("{:?}", arena),
     "Arena { cap: 1024, allocated: 1, data: [0] }"
   );
 
   let err = ArenaError;
   assert_eq!(
-    format!("{}", err),
+    std::format!("{}", err),
     "allocation failed because arena is full"
   );
 }

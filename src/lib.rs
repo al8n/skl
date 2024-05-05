@@ -3,7 +3,12 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs, warnings)]
-#![allow(unexpected_cfgs, clippy::type_complexity, clippy::mut_from_ref)]
+#![allow(
+  unexpected_cfgs,
+  clippy::type_complexity,
+  clippy::mut_from_ref,
+  rustdoc::bare_urls
+)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc as std;

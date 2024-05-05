@@ -22,7 +22,7 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
-#[cfg(all(test, not(loom)))]
+#[cfg(test)]
 mod tests;
 
 // #[cfg(all(test, loom))]

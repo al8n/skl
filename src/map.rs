@@ -22,11 +22,11 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
-#[cfg(all(test, not(loom)))]
+#[cfg(test)]
 mod tests;
 
-#[cfg(all(test, loom))]
-mod loom;
+// #[cfg(all(test, loom))]
+// mod loom;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration. Keys and values are immutable once added to the skipmap and

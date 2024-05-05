@@ -99,6 +99,20 @@ impl Comparator for Descend {
   }
 }
 
+/// A trait for extra information that can be stored with entry in the skiplist.
+pub trait Trailer: Copy {
+  /// Returns the version of the trailer.
+  fn version(&self) -> u64;
+}
+
+impl Trailer for u64 {
+  /// Returns the version of the trailer.
+  #[inline]
+  fn version(&self) -> u64 {
+    *self
+  }
+}
+
 mod sync {
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;

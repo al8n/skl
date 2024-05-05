@@ -2,7 +2,7 @@ use core::{mem, ptr};
 
 use crate::{
   sync::{AtomicU32, Ordering},
-  NODE_ALIGNMENT_FACTOR,
+  Trailer,
 };
 
 use super::{
@@ -37,12 +37,12 @@ impl Link {
   }
 }
 
-pub(crate) struct NodePtr {
-  pub(super) ptr: *const Node,
+pub(crate) struct NodePtr<T> {
+  pub(super) ptr: *const Node<T>,
   pub(super) offset: u32,
 }
 
-impl core::fmt::Debug for NodePtr {
+impl<T> core::fmt::Debug for NodePtr<T> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("NodePtr")
       .field("ptr", &self.ptr)
@@ -51,15 +51,15 @@ impl core::fmt::Debug for NodePtr {
   }
 }
 
-impl Clone for NodePtr {
+impl<T> Clone for NodePtr<T> {
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl Copy for NodePtr {}
+impl<T> Copy for NodePtr<T> {}
 
-impl NodePtr {
+impl<T> NodePtr<T> {
   pub(super) const NULL: Self = Self {
     ptr: ptr::null(),
     offset: 0,
@@ -81,14 +81,14 @@ impl NodePtr {
   /// ## Safety
   /// - the pointer must be valid
   #[inline]
-  pub(super) const unsafe fn as_ptr(&self) -> &Node {
+  pub(super) const unsafe fn as_ptr(&self) -> &Node<T> {
     &*self.ptr.cast()
   }
 
   #[inline]
   pub(super) unsafe fn tower(&self, arena: &Arena, idx: usize) -> &Link {
     let tower_ptr_offset =
-      self.offset as usize + mem::size_of::<Node>() + idx * mem::size_of::<Link>();
+      self.offset as usize + mem::size_of::<Node<T>>() + idx * mem::size_of::<Link>();
     let tower_ptr = arena.get_pointer(tower_ptr_offset);
     &*tower_ptr.cast()
   }
@@ -102,7 +102,7 @@ impl NodePtr {
     next_offset: u32,
   ) {
     let tower_ptr_offset =
-      self.offset as usize + mem::size_of::<Node>() + idx * mem::size_of::<Link>();
+      self.offset as usize + mem::size_of::<Node<T>>() + idx * mem::size_of::<Link>();
     let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
     *tower_ptr = Link::new(next_offset, prev_offset);
   }
@@ -126,8 +126,8 @@ impl NodePtr {
 
 #[derive(Debug)]
 #[repr(C)]
-pub(super) struct Node {
-  pub(super) version: u64,
+pub(super) struct Node<T> {
+  pub(super) trailer: T,
 
   // A byte slice is 24 bytes. We are trying to save space here.
 
@@ -154,18 +154,55 @@ pub(super) struct Node {
   // pub(super) tower: [Link; Self::MAX_HEIGHT],
 }
 
-impl Node {
+impl<T> Node<T> {
   pub(super) const SIZE: usize = core::mem::size_of::<Self>();
 
   pub(super) const MAX_NODE_SIZE: u64 =
     (Self::SIZE + MAX_HEIGHT * core::mem::size_of::<Link>()) as u64;
 
+  #[inline]
+  pub(super) const fn min_cap() -> usize {
+    (Node::<T>::MAX_NODE_SIZE * 2) as usize
+  }
+
+  #[inline]
+  const fn alignment() -> u32 {
+    let alignment = mem::align_of::<T>();
+    let alignment = if alignment < mem::size_of::<u32>() {
+      mem::size_of::<u32>()
+    } else {
+      alignment
+    };
+    alignment as u32
+  }
+
+  pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
+    // Compute the amount of the tower that will never be used, since the height
+    // is less than maxHeight.
+    let (node_offset, alloc_size) =
+      arena.alloc(Node::<T>::MAX_NODE_SIZE as u32, Self::alignment(), 0)?;
+
+    // Safety: we have check the offset is valid
+    unsafe {
+      let ptr = arena.get_pointer_mut(node_offset as usize);
+      // Safety: the node is well aligned
+      let node = &mut *(ptr as *mut Node<T>);
+      // node.trailer = Default::default();
+      node.key_offset = 0;
+      node.key_size = 0;
+      node.height = MAX_HEIGHT as u16;
+      node.alloc_size = alloc_size;
+      Ok(NodePtr::new(ptr, node_offset))
+    }
+  }
+}
+impl<T: Trailer> Node<T> {
   pub(super) fn new_node_ptr(
     arena: &Arena,
     height: u32,
     key: &[u8],
-    version: u64,
-  ) -> Result<NodePtr, Error> {
+    trailer: T,
+  ) -> Result<NodePtr<T>, Error> {
     if height < 1 || height > MAX_HEIGHT as u32 {
       panic!("height cannot be less than one or greater than the max height");
     }
@@ -175,7 +212,7 @@ impl Node {
       return Err(Error::KeyTooLarge(key_size as u64));
     }
 
-    let entry_size = (key_size as u64) + Node::MAX_NODE_SIZE;
+    let entry_size = (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
     if entry_size > u32::MAX as u64 {
       return Err(Error::EntryTooLarge(entry_size));
     }
@@ -185,18 +222,15 @@ impl Node {
     let unused_size = (MAX_HEIGHT as u32 - height) * (mem::size_of::<Link>() as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, alloc_size) = arena.alloc(
-      node_size + key_size as u32,
-      NODE_ALIGNMENT_FACTOR as u32,
-      unused_size,
-    )?;
+    let (node_offset, alloc_size) =
+      arena.alloc(node_size + key_size as u32, Self::alignment(), unused_size)?;
 
     unsafe {
       // Safety: we have check the offset is valid
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
-      let node = &mut *(ptr as *mut Node);
-      node.version = version;
+      let node = &mut *(ptr as *mut Node<T>);
+      node.trailer = trailer;
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u32;
       node.height = height as u16;
@@ -205,29 +239,9 @@ impl Node {
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
-
-  pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr, ArenaError> {
-    // Compute the amount of the tower that will never be used, since the height
-    // is less than maxHeight.
-    let (node_offset, alloc_size) =
-      arena.alloc(Node::MAX_NODE_SIZE as u32, NODE_ALIGNMENT_FACTOR as u32, 0)?;
-
-    // Safety: we have check the offset is valid
-    unsafe {
-      let ptr = arena.get_pointer_mut(node_offset as usize);
-      // Safety: the node is well aligned
-      let node = &mut *(ptr as *mut Node);
-      node.version = 0;
-      node.key_offset = 0;
-      node.key_size = 0;
-      node.height = MAX_HEIGHT as u16;
-      node.alloc_size = alloc_size;
-      Ok(NodePtr::new(ptr, node_offset))
-    }
-  }
 }
 
-impl Node {
+impl<T> Node<T> {
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.

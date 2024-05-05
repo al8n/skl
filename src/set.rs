@@ -5,6 +5,8 @@ use core::{
 
 use crossbeam_utils::CachePadded;
 
+use crate::Trailer;
+
 use super::{
   arena::Arena,
   sync::{AtomicU32, Ordering},
@@ -33,10 +35,10 @@ mod tests;
 /// is up to the user to process these shadow entries and tombstones
 /// appropriately during retrieval.
 #[derive(Debug)]
-pub struct SkipSet<C = Ascend> {
+pub struct SkipSet<T = u64, C = Ascend> {
   arena: Arena,
-  head: NodePtr,
-  tail: NodePtr,
+  head: NodePtr<T>,
+  tail: NodePtr<T>,
 
   /// Current height. 1 <= height <= kMaxHeight. CAS.
   height: CachePadded<AtomicU32>,
@@ -51,11 +53,11 @@ pub struct SkipSet<C = Ascend> {
 }
 
 // Safety: SkipSet is Sync and Send
-unsafe impl<C: Comparator + Send> Send for SkipSet<C> {}
-unsafe impl<C: Comparator + Sync> Sync for SkipSet<C> {}
+unsafe impl<T: Send, C: Comparator + Send> Send for SkipSet<T, C> {}
+unsafe impl<T: Send, C: Comparator + Sync> Sync for SkipSet<T, C> {}
 
 // --------------------------------Public Methods--------------------------------
-impl<C> SkipSet<C> {
+impl<T, C> SkipSet<T, C> {
   /// Returns the height of the highest tower within any of the nodes that
   /// have ever been allocated as part of this skiplist.
   #[inline]
@@ -141,10 +143,10 @@ impl SkipSet {
   }
 }
 
-impl<C> SkipSet<C> {
+impl<T, C> SkipSet<T, C> {
   /// Like [`SkipSet::new`], but with a custom comparator.
   pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
-    let arena = Arena::new_vec::<{ Node::MAX_NODE_SIZE }>(cap);
+    let arena = Arena::new_vec(cap, Node::<T>::min_cap());
     Self::new_in(arena, cmp)
   }
 
@@ -157,7 +159,7 @@ impl<C> SkipSet<C> {
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::new_mmap::<{ Node::MAX_NODE_SIZE }>(cap, file, lock)?;
+    let arena = Arena::new_mmap(cap, Node::<T>::min_cap(), file, lock)?;
     Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
@@ -165,7 +167,7 @@ impl<C> SkipSet<C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
-    let arena = Arena::new_anonymous_mmap::<{ Node::MAX_NODE_SIZE }>(cap)?;
+    let arena = Arena::new_anonymous_mmap(cap, Node::<T>::min_cap())?;
     Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
@@ -193,214 +195,7 @@ impl<C> SkipSet<C> {
     self.height.store(1, Ordering::Release);
     self.len.store(0, Ordering::Release);
   }
-}
 
-impl<C: Comparator> SkipSet<C> {
-  /// Returns true if the key exists in the map.
-  #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> bool {
-    self.get(version, key).is_some()
-  }
-
-  /// Returns the first entry in the map.
-  pub fn first(&self, version: u64) -> Option<EntryRef<'_>> {
-    self
-      .first_in(version)
-      .map(|n| EntryRef::from_node(n, &self.arena))
-  }
-
-  /// Returns the last entry in the map.
-  pub fn last(&self, version: u64) -> Option<EntryRef<'_>> {
-    self
-      .last_in(version)
-      .map(|n| EntryRef::from_node(n, &self.arena))
-  }
-
-  /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a>> {
-    unsafe {
-      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
-
-      let n = n?;
-      let node = n.as_ptr();
-      let node_key = node.get_key(&self.arena);
-
-      if eq {
-        return Some(EntryRef {
-          key: node_key,
-          version: node.version,
-        });
-      }
-
-      if !matches!(self.cmp.compare(key, node_key), cmp::Ordering::Equal) {
-        return None;
-      }
-
-      Some(EntryRef {
-        key: node_key,
-        version: node.version,
-      })
-    }
-  }
-
-  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
-    version: u64,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a>> {
-    match upper {
-      Bound::Included(key) => self
-        .le(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Excluded(key) => self
-        .lt(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Unbounded => self.last(version),
-    }
-  }
-
-  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
-  /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
-    version: u64,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a>> {
-    match lower {
-      Bound::Included(key) => self
-        .ge(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Excluded(key) => self
-        .gt(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Unbounded => self.first(version),
-    }
-  }
-
-  /// Gets or inserts a new entry.
-  ///
-  /// # Success
-  ///
-  /// - Returns `Ok(Some(&[u8]))` if the key exists.
-  /// - Returns `Ok(None)` if the key does not exist, and successfully inserts the key and value.
-  ///
-  /// As a low-level crate, users are expected to handle the error cases themselves.
-  ///
-  /// # Errors
-  ///
-  /// - Returns `Err(Error::Duplicated)`, if the key already exists.
-  /// - Returns `Err(Error::Full)`, if there isn't enough room in the arena.
-  pub fn get_or_insert<'a, 'b: 'a>(
-    &'a self,
-    version: u64,
-    key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a>>, Error> {
-    let ins = &mut Default::default();
-
-    unsafe {
-      let (_, curr) = self.find_splice(version, key, ins, true);
-      if let Some(curr) = curr {
-        if curr.is_null() {
-          return self.insert_in(version, key, ins).map(|_| None);
-        }
-
-        return Ok(Some({
-          let nd = curr.as_ptr();
-          EntryRef {
-            key: nd.get_key(&self.arena),
-            version: nd.version,
-          }
-        }));
-      }
-      self.insert_in(version, key, ins).map(|_| None)
-    }
-  }
-
-  /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
-  ///
-  /// As a low-level crate, users are expected to handle the error cases themselves.
-  ///
-  /// # Errors
-  ///
-  /// - Returns `Error::Duplicated`, if the key already exists.
-  /// - Returns `Error::Full`, if there isn't enough room in the arena.
-  pub fn insert<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Result<(), Error> {
-    self.insert_in(version, key, &mut Inserter::default())
-  }
-
-  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
-  #[inline]
-  pub const fn iter(&self, version: u64) -> iterator::SetIterator<C> {
-    iterator::SetIterator::new(version, self, false)
-  }
-
-  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
-  #[inline]
-  pub const fn iter_all_versions(&self, version: u64) -> iterator::SetIterator<C> {
-    iterator::SetIterator::new(version, self, true)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::SetRange<'a, C, Q, R>
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    iterator::SetIterator::range(version, self, range, false)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range_all_versions<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> iterator::SetRange<'a, C, Q, R>
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    iterator::SetIterator::range(version, self, range, true)
-  }
-}
-
-// --------------------------------Crate Level Methods--------------------------------
-impl<C: Comparator> SkipSet<C> {
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  pub(crate) unsafe fn get_prev(&self, nd: NodePtr, height: usize) -> NodePtr {
-    if nd.is_null() {
-      return NodePtr::NULL;
-    }
-
-    let offset = nd.prev_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr, offset)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  pub(crate) unsafe fn get_next(&self, nptr: NodePtr, height: usize) -> NodePtr {
-    if nptr.is_null() {
-      return NodePtr::NULL;
-    }
-    let offset = nptr.next_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr, offset)
-  }
-}
-
-// --------------------------------Private Methods--------------------------------
-impl<C> SkipSet<C> {
   fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
@@ -428,11 +223,218 @@ impl<C> SkipSet<C> {
       len: CachePadded::new(AtomicU32::new(0)),
     })
   }
+}
 
+impl<T: Trailer, C: Comparator> SkipSet<T, C> {
+  /// Returns true if the key exists in the map.
+  #[inline]
+  pub fn contains_key<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> bool {
+    self.get(version, key).is_some()
+  }
+
+  /// Returns the first entry in the map.
+  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T>> {
+    self
+      .first_in(version)
+      .map(|n| EntryRef::from_node(n, &self.arena))
+  }
+
+  /// Returns the last entry in the map.
+  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T>> {
+    self
+      .last_in(version)
+      .map(|n| EntryRef::from_node(n, &self.arena))
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+    unsafe {
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
+
+      let n = n?;
+      let node = n.as_ptr();
+      let node_key = node.get_key(&self.arena);
+
+      if eq {
+        return Some(EntryRef {
+          key: node_key,
+          trailer: node.trailer,
+        });
+      }
+
+      if !matches!(self.cmp.compare(key, node_key), cmp::Ordering::Equal) {
+        return None;
+      }
+
+      Some(EntryRef {
+        key: node_key,
+        trailer: node.trailer,
+      })
+    }
+  }
+
+  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn upper_bound<'a, 'b: 'a>(
+    &'a self,
+    version: u64,
+    upper: Bound<&'b [u8]>,
+  ) -> Option<EntryRef<'a, T>> {
+    match upper {
+      Bound::Included(key) => self
+        .le(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Excluded(key) => self
+        .lt(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Unbounded => self.last(version),
+    }
+  }
+
+  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn lower_bound<'a, 'b: 'a>(
+    &'a self,
+    version: u64,
+    lower: Bound<&'b [u8]>,
+  ) -> Option<EntryRef<'a, T>> {
+    match lower {
+      Bound::Included(key) => self
+        .ge(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Excluded(key) => self
+        .gt(version, key)
+        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Unbounded => self.first(version),
+    }
+  }
+
+  /// Gets or inserts a new entry.
+  ///
+  /// # Success
+  ///
+  /// - Returns `Ok(Some(&[u8]))` if the key exists.
+  /// - Returns `Ok(None)` if the key does not exist, and successfully inserts the key and value.
+  ///
+  /// As a low-level crate, users are expected to handle the error cases themselves.
+  ///
+  /// # Errors
+  ///
+  /// - Returns `Err(Error::Duplicated)`, if the key already exists.
+  /// - Returns `Err(Error::Full)`, if there isn't enough room in the arena.
+  pub fn get_or_insert<'a, 'b: 'a>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    let ins = &mut Default::default();
+
+    unsafe {
+      let (_, curr) = self.find_splice(trailer.version(), key, ins, true);
+      if let Some(curr) = curr {
+        if curr.is_null() {
+          return self.insert_in(trailer, key, ins).map(|_| None);
+        }
+
+        return Ok(Some({
+          let nd = curr.as_ptr();
+          EntryRef {
+            key: nd.get_key(&self.arena),
+            trailer: nd.trailer,
+          }
+        }));
+      }
+      self.insert_in(trailer, key, ins).map(|_| None)
+    }
+  }
+
+  /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
+  ///
+  /// As a low-level crate, users are expected to handle the error cases themselves.
+  ///
+  /// # Errors
+  ///
+  /// - Returns `Error::Duplicated`, if the key already exists.
+  /// - Returns `Error::Full`, if there isn't enough room in the arena.
+  pub fn insert<'a, 'b: 'a>(&'a self, trailer: T, key: &'b [u8]) -> Result<(), Error> {
+    self.insert_in(trailer, key, &mut Inserter::default())
+  }
+
+  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
+  #[inline]
+  pub const fn iter(&self, version: u64) -> iterator::SetIterator<T, C> {
+    iterator::SetIterator::new(version, self, false)
+  }
+
+  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
+  #[inline]
+  pub const fn iter_all_versions(&self, version: u64) -> iterator::SetIterator<T, C> {
+    iterator::SetIterator::new(version, self, true)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
+  #[inline]
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::SetRange<'a, T, C, Q, R>
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+    R: RangeBounds<Q> + 'a,
+  {
+    iterator::SetIterator::range(version, self, range, false)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
+  #[inline]
+  pub fn range_all_versions<'a, Q, R>(
+    &'a self,
+    version: u64,
+    range: R,
+  ) -> iterator::SetRange<'a, T, C, Q, R>
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+    R: RangeBounds<Q> + 'a,
+  {
+    iterator::SetIterator::range(version, self, range, true)
+  }
+}
+
+// --------------------------------Crate Level Methods--------------------------------
+impl<T: Trailer, C: Comparator> SkipSet<T, C> {
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  pub(crate) unsafe fn get_prev(&self, nd: NodePtr<T>, height: usize) -> NodePtr<T> {
+    if nd.is_null() {
+      return NodePtr::NULL;
+    }
+
+    let offset = nd.prev_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  pub(crate) unsafe fn get_next(&self, nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
+    if nptr.is_null() {
+      return NodePtr::NULL;
+    }
+    let offset = nptr.next_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
+  }
+}
+
+// --------------------------------Private Methods--------------------------------
+impl<T: Trailer, C> SkipSet<T, C> {
   #[allow(clippy::type_complexity)]
-  fn new_node(&self, key: &[u8], version: u64) -> Result<(NodePtr, u32), Error> {
+  fn new_node(&self, key: &[u8], trailer: T) -> Result<(NodePtr<T>, u32), Error> {
     let height = Self::random_height();
-    let nd = Node::new_node_ptr(&self.arena, height, key, version)?;
+    let nd = Node::new_node_ptr(&self.arena, height, key, trailer)?;
 
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
@@ -480,9 +482,9 @@ impl<C> SkipSet<C> {
   }
 }
 
-impl<C: Comparator> SkipSet<C> {
+impl<T: Trailer, C: Comparator> SkipSet<T, C> {
   /// Returns the first entry in the map.
-  fn first_in(&self, version: u64) -> Option<NodePtr> {
+  fn first_in(&self, version: u64) -> Option<NodePtr<T>> {
     // Safety: head node was definitely allocated by self.arena
     let nd = unsafe { self.get_next(self.head, 0) };
 
@@ -498,7 +500,7 @@ impl<C: Comparator> SkipSet<C> {
   }
 
   /// Returns the last entry in the map.
-  fn last_in(&self, version: u64) -> Option<NodePtr> {
+  fn last_in(&self, version: u64) -> Option<NodePtr<T>> {
     // Safety: tail node was definitely allocated by self.arena
     let nd = unsafe { self.get_prev(self.tail, 0) };
 
@@ -519,7 +521,7 @@ impl<C: Comparator> SkipSet<C> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
+  fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
       let (n, _) = self.find_near(u64::MIN, key, false, false); // find the key with the max version.
 
@@ -539,7 +541,7 @@ impl<C: Comparator> SkipSet<C> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
+  fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
       let (n, _) = self.find_near(u64::MAX, key, true, false); // find less or equal.
 
@@ -558,7 +560,7 @@ impl<C: Comparator> SkipSet<C> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
+  fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
       // TODO: optimize find_near implementation, so that we can directly use version instead of u64::MIN
       let (n, _) = self.find_near(u64::MAX, key, false, true); // find the key with the max version.
@@ -579,7 +581,7 @@ impl<C: Comparator> SkipSet<C> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr> {
+  fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
       let (n, _) = self.find_near(u64::MIN, key, true, true); // find less or equal.
 
@@ -592,9 +594,9 @@ impl<C: Comparator> SkipSet<C> {
     }
   }
 
-  fn insert_in(&self, version: u64, key: &[u8], ins: &mut Inserter) -> Result<(), Error> {
+  fn insert_in(&self, trailer: T, key: &[u8], ins: &mut Inserter<T>) -> Result<(), Error> {
     // Safety: a fresh new Inserter, so safe here
-    if unsafe { self.find_splice(version, key, ins, false).0 } {
+    if unsafe { self.find_splice(trailer.version(), key, ins, false).0 } {
       return Err(Error::Duplicated);
     }
 
@@ -606,7 +608,7 @@ impl<C: Comparator> SkipSet<C> {
       std::thread::yield_now();
     }
 
-    let (nd, height) = self.new_node(key, version)?;
+    let (nd, height) = self.new_node(key, trailer)?;
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -705,7 +707,7 @@ impl<C: Comparator> SkipSet<C> {
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
-              let fr = self.find_splice_for_level(version, key, i, prev);
+              let fr = self.find_splice_for_level(trailer.version(), key, i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");
@@ -739,14 +741,14 @@ impl<C: Comparator> SkipSet<C> {
     Ok(())
   }
 
-  unsafe fn find_prev_max_version(&self, mut curr: NodePtr, version: u64) -> Option<NodePtr> {
+  unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {
     let mut prev = self.get_prev(curr, 0);
 
     loop {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
-      let version_cmp = curr_node.version.cmp(&version);
+      let version_cmp = curr_node.trailer.version().cmp(&version);
       // if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
       //   return Some(curr);
       // }
@@ -785,7 +787,7 @@ impl<C: Comparator> SkipSet<C> {
         return Some(curr);
       }
 
-      let version_cmp = prev_node.version.cmp(&version);
+      let version_cmp = prev_node.trailer.version().cmp(&version);
 
       if version_cmp == cmp::Ordering::Equal {
         return Some(prev);
@@ -800,14 +802,14 @@ impl<C: Comparator> SkipSet<C> {
     }
   }
 
-  unsafe fn find_next_max_version(&self, mut curr: NodePtr, version: u64) -> Option<NodePtr> {
+  unsafe fn find_next_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {
     let mut next = self.get_next(curr, 0);
 
     loop {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
-      let version_cmp = curr_node.version.cmp(&version);
+      let version_cmp = curr_node.trailer.version().cmp(&version);
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
         return Some(curr);
       }
@@ -822,7 +824,7 @@ impl<C: Comparator> SkipSet<C> {
 
       let next_node = next.as_ptr();
       let next_key = next_node.get_key(&self.arena);
-      let version_cmp = next_node.version.cmp(&version);
+      let version_cmp = next_node.trailer.version().cmp(&version);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
@@ -856,7 +858,7 @@ impl<C: Comparator> SkipSet<C> {
     key: &[u8],
     less: bool,
     allow_equal: bool,
-  ) -> (Option<NodePtr>, bool) {
+  ) -> (Option<NodePtr<T>>, bool) {
     let mut x = self.head;
     let mut level = self.height() as usize - 1;
 
@@ -889,7 +891,7 @@ impl<C: Comparator> SkipSet<C> {
       let cmp = self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.version.cmp(&version));
+        .then_with(|| next_node.trailer.version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -946,9 +948,9 @@ impl<C: Comparator> SkipSet<C> {
     &self,
     version: u64,
     key: &[u8],
-    ins: &mut Inserter,
+    ins: &mut Inserter<T>,
     returned_when_found: bool,
-  ) -> (bool, Option<NodePtr>) {
+  ) -> (bool, Option<NodePtr<T>>) {
     let list_height = self.height();
     let mut level = 0;
 
@@ -1012,8 +1014,8 @@ impl<C: Comparator> SkipSet<C> {
     version: u64,
     key: &[u8],
     level: usize,
-    start: NodePtr,
-  ) -> FindResult {
+    start: NodePtr<T>,
+  ) -> FindResult<T> {
     let mut prev = start;
 
     loop {
@@ -1037,7 +1039,7 @@ impl<C: Comparator> SkipSet<C> {
       match self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.version.cmp(&version))
+        .then_with(|| next_node.trailer.version().cmp(&version))
       {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
@@ -1064,7 +1066,7 @@ impl<C: Comparator> SkipSet<C> {
   /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
-  unsafe fn key_is_after_node(&self, nd: NodePtr, version: u64, key: &[u8]) -> bool {
+  unsafe fn key_is_after_node(&self, nd: NodePtr<T>, version: u64, key: &[u8]) -> bool {
     let nd = &*nd.ptr;
     let nd_key = self
       .arena
@@ -1078,24 +1080,24 @@ impl<C: Comparator> SkipSet<C> {
       cmp::Ordering::Less => true,
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
-        matches!(version.cmp(&nd.version), cmp::Ordering::Less)
+        matches!(version.cmp(&nd.trailer.version()), cmp::Ordering::Less)
       }
     }
   }
 }
 
 /// A helper struct for caching splice information
-pub struct Inserter<'a> {
-  spl: [Splice; MAX_HEIGHT],
+pub struct Inserter<'a, T> {
+  spl: [Splice<T>; MAX_HEIGHT],
   height: u32,
   _m: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a> Default for Inserter<'a> {
+impl<'a, T: Copy> Default for Inserter<'a, T> {
   #[inline]
   fn default() -> Self {
     Self {
-      spl: [Splice::default(); MAX_HEIGHT],
+      spl: [Splice::<T>::default(); MAX_HEIGHT],
       height: 0,
       _m: core::marker::PhantomData,
     }
@@ -1103,12 +1105,12 @@ impl<'a> Default for Inserter<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Splice {
-  prev: NodePtr,
-  next: NodePtr,
+struct Splice<T> {
+  prev: NodePtr<T>,
+  next: NodePtr<T>,
 }
 
-impl Default for Splice {
+impl<T> Default for Splice<T> {
   #[inline]
   fn default() -> Self {
     Self {
@@ -1118,8 +1120,8 @@ impl Default for Splice {
   }
 }
 
-struct FindResult {
+struct FindResult<T> {
   found: bool,
-  splice: Splice,
-  curr: Option<NodePtr>,
+  splice: Splice<T>,
+  curr: Option<NodePtr<T>>,
 }

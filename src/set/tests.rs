@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-  sync::{Arc, AtomicU32},
-  Descend,
-};
+use crate::{sync::Arc, Descend};
 use std::format;
 
 #[cfg(feature = "std")]
@@ -934,7 +931,7 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
 
   wg.wait();
 
-  let saw_value = Arc::new(AtomicU32::new(0));
+  let saw_value = Arc::new(crate::sync::AtomicU32::new(0));
   for _ in 0..N {
     let wg = wg.add(1);
     let l = l.clone();

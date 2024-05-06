@@ -108,6 +108,36 @@ impl Arena {
   }
 
   #[inline]
+  fn head_offset(&self, size: u32, align: u32) -> u32 {
+    // Pad the allocation with enough bytes to ensure the requested alignment.
+    let padded = size as u64 + align as u64 - 1;
+    let new_size = 1 + padded;
+
+    // Return the aligned offset.
+    (new_size as u32 - size) & !(align - 1)
+  }
+
+  pub(super) fn head_ptr(&self, size: u32, align: u32) -> (*const u8, u32) {
+    // Safety: this method is only invoked when we want a readonly,
+    // in readonly mode, we must have the head_ptr valid.
+    let offset = self.head_offset(size, align);
+    (unsafe { self.get_pointer(offset as usize) }, offset)
+  }
+
+  pub(super) fn tail_ptr(&self, size: u32, align: u32) -> (*const u8, u32) {
+    // Pad the allocation with enough bytes to ensure the requested alignment.
+    let padded = size as u64 + align as u64 - 1;
+    let new_size = self.head_offset(size, align) as u64 + padded;
+
+    // Return the aligned offset.
+    let offset = (new_size as u32 - size) & !(align - 1);
+
+    // Safety: this method is only invoked when we want a readonly,
+    // in readonly mode, we must have the head_ptr valid.
+    (unsafe { self.get_pointer(offset as usize) }, offset)
+  }
+
+  #[inline]
   fn new(mut shared: Shared, allocated: Option<u64>) -> Self {
     // Safety:
     // The ptr is always non-null, we just initialized it.

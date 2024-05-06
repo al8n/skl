@@ -174,7 +174,7 @@ fn basic_in(mut l: SkipMap) {
 
   assert!(l.get_or_insert(2, b"c", &[]).unwrap().is_none());
 
-  l.clear();
+  l.clear().unwrap();
 
   {
     let mut it = l.iter_all_versions(0);

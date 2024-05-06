@@ -230,7 +230,11 @@ impl<T, C> SkipMap<T, C> {
   }
 
   /// Clear the skiplist to empty and re-initialize.
-  pub fn clear(&mut self) {
+  pub fn clear(&mut self) -> Result<(), Error> {
+    if self.ro {
+      return Err(Error::Readonly);
+    }
+
     let head = Node::new_empty_node_ptr(&self.arena)
       .expect("arena is not large enough to hold the head node");
     let tail = Node::new_empty_node_ptr(&self.arena)
@@ -252,24 +256,31 @@ impl<T, C> SkipMap<T, C> {
     self.tail = tail;
     self.height.store(1, Ordering::Release);
     self.len.store(0, Ordering::Release);
+    Ok(())
   }
 
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
     if ro {
-      let head = arena.head();
-      let tail = arena.tail();
+      let head = {
+        let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+        NodePtr::new(ptr, offset)
+      };
+      let tail = {
+        let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+        NodePtr::new(ptr, offset)
+      };
 
-      // Safety:
-      // We will always allocate enough space for the head node and the tail node.
-      unsafe {
-        // Link all head/tail levels together.
-        for i in 0..MAX_HEIGHT {
-          let head_link = head.tower(&arena, i);
-          let tail_link = tail.tower(&arena, i);
-          head_link.next_offset.store(tail.offset, Ordering::Relaxed);
-          tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
-        }
-      }
+      // // Safety:
+      // // We will always allocate enough space for the head node and the tail node.
+      // unsafe {
+      //   // Link all head/tail levels together.
+      //   for i in 0..MAX_HEIGHT {
+      //     let head_link = head.tower(&arena, i);
+      //     let tail_link = tail.tower(&arena, i);
+      //     head_link.next_offset.store(tail.offset, Ordering::Relaxed);
+      //     tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
+      //   }
+      // }
 
       return Ok(Self {
         arena,
@@ -298,8 +309,6 @@ impl<T, C> SkipMap<T, C> {
         tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
       }
     }
-    std::println!("{}", head.offset);
-    std::println!("{}", tail.offset);
 
     Ok(Self {
       arena,

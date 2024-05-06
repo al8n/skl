@@ -88,6 +88,28 @@ impl<T, C> SkipSet<T, C> {
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
+
+  /// Flushes outstanding memory map modifications to disk.
+  ///
+  /// When this method returns with a non-error result,
+  /// all outstanding changes to a file-backed memory map are guaranteed to be durably stored.
+  /// The file's metadata (including last modification timestamp) may not be updated.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn flush(&self) -> std::io::Result<()> {
+    self.arena.flush()
+  }
+
+  /// Asynchronously flushes outstanding memory map modifications to disk.
+  ///
+  /// This method initiates flushing modified pages to durable storage, but it will not wait for
+  /// the operation to complete before returning. The file's metadata (including last
+  /// modification timestamp) may not be updated.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn flush_async(&self) -> std::io::Result<()> {
+    self.arena.flush_async()
+  }
 }
 
 impl SkipSet {
@@ -123,8 +145,21 @@ impl SkipSet {
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
-  pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
-    Self::mmap_with_comparator(cap, file, lock, Ascend)
+  pub fn mmap_mut<P: AsRef<std::path::Path>>(
+    cap: usize,
+    path: P,
+    lock: bool,
+  ) -> std::io::Result<Self> {
+    Self::mmap_mut_with_comparator(cap, path, lock, Ascend)
+  }
+
+  /// Open an exist file and mmap it to create skipmap.
+  ///
+  /// `lock`: whether to lock the underlying file or not
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
+    Self::mmap_with_comparator(path, lock, Ascend)
   }
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
@@ -156,16 +191,28 @@ impl<T, C> SkipSet<T, C> {
     Self::new_in(arena, cmp)
   }
 
-  /// Like [`SkipSet::mmap`], but with a custom comparator.
+  /// Like [`SkipSet::mmap_mut`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
-  pub fn mmap_with_comparator(
+  pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
     cap: usize,
-    file: std::fs::File,
+    path: P,
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::new_mmap(cap, Node::<T>::min_cap(), file, lock)?;
+    let arena = Arena::mmap_mut(cap, Node::<T>::min_cap(), path, lock)?;
+    Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+  }
+
+  /// Like [`SkipSet::mmap`], but with a custom comparator.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn mmap_with_comparator<P: AsRef<std::path::Path>>(
+    path: P,
+    lock: bool,
+    cmp: C,
+  ) -> std::io::Result<Self> {
+    let arena = Arena::mmap(path, lock)?;
     Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 

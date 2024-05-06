@@ -49,6 +49,8 @@ pub struct SkipMap<T = u64, C = Ascend> {
   #[cfg(all(test, feature = "std"))]
   testing: bool,
 
+  ro: bool,
+
   cmp: C,
 }
 
@@ -88,6 +90,28 @@ impl<T, C> SkipMap<T, C> {
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
+
+  /// Flushes outstanding memory map modifications to disk.
+  ///
+  /// When this method returns with a non-error result,
+  /// all outstanding changes to a file-backed memory map are guaranteed to be durably stored.
+  /// The file's metadata (including last modification timestamp) may not be updated.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn flush(&self) -> std::io::Result<()> {
+    self.arena.flush()
+  }
+
+  /// Asynchronously flushes outstanding memory map modifications to disk.
+  ///
+  /// This method initiates flushing modified pages to durable storage, but it will not wait for
+  /// the operation to complete before returning. The file's metadata (including last
+  /// modification timestamp) may not be updated.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn flush_async(&self) -> std::io::Result<()> {
+    self.arena.flush_async()
+  }
 }
 
 impl SkipMap {
@@ -123,8 +147,21 @@ impl SkipMap {
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
-  pub fn mmap(cap: usize, file: std::fs::File, lock: bool) -> std::io::Result<Self> {
-    Self::mmap_with_comparator(cap, file, lock, Ascend)
+  pub fn mmap_mut<P: AsRef<std::path::Path>>(
+    cap: usize,
+    path: P,
+    lock: bool,
+  ) -> std::io::Result<Self> {
+    Self::mmap_mut_with_comparator(cap, path, lock, Ascend)
+  }
+
+  /// Open an exist file and mmap it to create skipmap.
+  ///
+  /// `lock`: whether to lock the underlying file or not
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
+    Self::mmap_with_comparator(path, lock, Ascend)
   }
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
@@ -153,20 +190,34 @@ impl<T, C> SkipMap<T, C> {
   /// Like [`SkipMap::new`], but with a custom comparator.
   pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
     let arena = Arena::new_vec(cap, Node::<T>::min_cap());
-    Self::new_in(arena, cmp)
+    Self::new_in(arena, cmp, false)
+  }
+
+  /// Like [`SkipMap::mmap_mut`], but with a custom comparator.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
+    cap: usize,
+    path: P,
+    lock: bool,
+    cmp: C,
+  ) -> std::io::Result<Self> {
+    let arena = Arena::mmap_mut(cap, Node::<T>::min_cap(), path, lock)?;
+    Self::new_in(arena, cmp, false)
+      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Like [`SkipMap::mmap`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
-  pub fn mmap_with_comparator(
-    cap: usize,
-    file: std::fs::File,
+  pub fn mmap_with_comparator<P: AsRef<std::path::Path>>(
+    path: P,
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::new_mmap(cap, Node::<T>::min_cap(), file, lock)?;
-    Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    let arena = Arena::mmap(path, lock)?;
+    Self::new_in(arena, cmp, true)
+      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Like [`SkipMap::mmap_anon`], but with a custom comparator.
@@ -174,7 +225,8 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
     let arena = Arena::new_anonymous_mmap(cap, Node::<T>::min_cap())?;
-    Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    Self::new_in(arena, cmp, false)
+      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Clear the skiplist to empty and re-initialize.
@@ -202,7 +254,36 @@ impl<T, C> SkipMap<T, C> {
     self.len.store(0, Ordering::Release);
   }
 
-  fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
+  fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
+    if ro {
+      let head = arena.head();
+      let tail = arena.tail();
+
+      // Safety:
+      // We will always allocate enough space for the head node and the tail node.
+      unsafe {
+        // Link all head/tail levels together.
+        for i in 0..MAX_HEIGHT {
+          let head_link = head.tower(&arena, i);
+          let tail_link = tail.tower(&arena, i);
+          head_link.next_offset.store(tail.offset, Ordering::Relaxed);
+          tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
+        }
+      }
+
+      return Ok(Self {
+        arena,
+        head,
+        tail,
+        ro,
+        height: CachePadded::new(AtomicU32::new(1)),
+        #[cfg(all(test, feature = "std"))]
+        testing: false,
+        cmp,
+        len: CachePadded::new(AtomicU32::new(0)),
+      });
+    }
+
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
 
@@ -217,11 +298,14 @@ impl<T, C> SkipMap<T, C> {
         tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
       }
     }
+    std::println!("{}", head.offset);
+    std::println!("{}", tail.offset);
 
     Ok(Self {
       arena,
       head,
       tail,
+      ro,
       height: CachePadded::new(AtomicU32::new(1)),
       #[cfg(all(test, feature = "std"))]
       testing: false,
@@ -336,6 +420,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    if self.ro {
+      return Err(Error::Readonly);
+    }
+
     let ins = &mut Default::default();
 
     unsafe {
@@ -372,6 +460,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<(), Error> {
+    if self.ro {
+      return Err(Error::Readonly);
+    }
+
     self.insert_in(trailer, key, value, &mut Inserter::default())
   }
 

@@ -9,12 +9,15 @@ use core::{
   sync::atomic::AtomicU64,
 };
 #[allow(unused_imports)]
-use std::{boxed::Box, sync::Arc};
+use std::boxed::Box;
 
 use crossbeam_utils::CachePadded;
 
 mod shared;
 use shared::Shared;
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+const ALLOCATED_OFFSET: usize = mem::size_of::<u64>();
 
 /// An error indicating that the arena is full
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -31,10 +34,11 @@ impl std::error::Error for ArenaError {}
 
 /// Arena should be lock-free
 pub struct Arena {
-  data_ptr: NonNull<u8>,
+  write_data_ptr: NonNull<u8>,
+  read_data_ptr: *const u8,
   // TODO(al8n): may be move n to `Shared`? then we do not need Arc
   // to make Arena clonable, but not sure which one is better.
-  n: Arc<CachePadded<AtomicU64>>,
+  n: CachePadded<AtomicU64>,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -44,7 +48,7 @@ impl core::fmt::Debug for Arena {
     let allocated = self.size();
     // Safety:
     // The ptr is always non-null, we only deallocate it when the arena is dropped.
-    let data = unsafe { slice::from_raw_parts(self.data_ptr.as_ptr(), allocated) };
+    let data = unsafe { slice::from_raw_parts(self.read_data_ptr, allocated) };
     f.debug_struct("Arena")
       .field("cap", &self.cap)
       .field("allocated", &allocated)
@@ -70,42 +74,75 @@ impl Arena {
 impl Arena {
   #[inline]
   pub(super) fn new_vec(n: usize, min_cap: usize) -> Self {
-    Self::new(Shared::new_vec(
-      n.max(min_cap),
-      mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
-    ))
+    Self::new(
+      Shared::new_vec(
+        n.max(min_cap),
+        mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
+      ),
+      None,
+    )
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(super) fn new_mmap(
+  pub(super) fn mmap_mut<P: AsRef<std::path::Path>>(
     n: usize,
     min_cap: usize,
-    file: std::fs::File,
+    path: P,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Shared::new_mmaped(n.max(min_cap), file, lock).map(Self::new)
+    Shared::mmap_mut(n.max(min_cap.saturating_add(ALLOCATED_OFFSET)), path, lock)
+      .map(|shared| Self::new(shared, None))
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[inline]
+  pub(super) fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
+    Shared::mmap(path, lock).map(|(allocated, shared)| Self::new(shared, Some(allocated)))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_anonymous_mmap(n: usize, min_cap: usize) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(min_cap)).map(Self::new)
+    Shared::new_mmaped_anon(n.max(min_cap)).map(|shared| Self::new(shared, None))
   }
 
   #[inline]
-  fn new(mut shared: Shared) -> Self {
+  fn new(mut shared: Shared, allocated: Option<u64>) -> Self {
     // Safety:
     // The ptr is always non-null, we just initialized it.
     // And this ptr is only deallocated when the arena is dropped.
-    let data_ptr = unsafe { NonNull::new_unchecked(shared.as_mut_ptr()) };
+    let read_data_ptr = shared.as_ptr();
+    let write_data_ptr = shared
+      .as_mut_ptr()
+      .map(|p| unsafe { NonNull::new_unchecked(p) })
+      .unwrap_or_else(NonNull::dangling);
     Self {
       cap: shared.cap(),
       inner: AtomicPtr::new(Box::into_raw(Box::new(shared)) as _),
-      data_ptr,
+      write_data_ptr,
+      read_data_ptr,
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
-      n: Arc::new(CachePadded::new(AtomicU64::new(1))),
+      n: CachePadded::new(AtomicU64::new(allocated.unwrap_or(1))),
+    }
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  pub(super) fn flush(&self) -> std::io::Result<()> {
+    let shared = self.inner.load(Ordering::Acquire);
+    {
+      let shared: *mut Shared = shared.cast();
+      unsafe { (*shared).flush() }
+    }
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  pub(super) fn flush_async(&self) -> std::io::Result<()> {
+    let shared = self.inner.load(Ordering::Acquire);
+    {
+      let shared: *mut Shared = shared.cast();
+      unsafe { (*shared).flush_async() }
     }
   }
 
@@ -173,7 +210,7 @@ impl Arena {
     if offset == 0 {
       return ptr::null();
     }
-    self.data_ptr.as_ptr().add(offset)
+    self.read_data_ptr.add(offset)
   }
 
   /// ## Safety:
@@ -183,7 +220,7 @@ impl Arena {
     if offset == 0 {
       return ptr::null_mut();
     }
-    self.data_ptr.as_ptr().add(offset)
+    self.write_data_ptr.as_ptr().add(offset)
   }
 }
 
@@ -223,7 +260,7 @@ impl Drop for Arena {
 
         // Relaxed is enough here as we're in a drop, no one else can
         // access this memory anymore.
-        shared.unmount(self.n.load(Ordering::Relaxed) as usize);
+        shared.unmount(self.n.load(Ordering::Relaxed));
       });
     }
   }

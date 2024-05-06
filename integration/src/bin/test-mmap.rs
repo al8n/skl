@@ -3,9 +3,11 @@ use skl::*;
 use std::sync::Arc;
 
 fn main() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_mmap");
   {
     const N: usize = 10;
-    let l = Arc::new(SkipMap::mmap(1 << 20, tempfile::tempfile().unwrap(), true).unwrap());
+    let l = Arc::new(SkipMap::mmap_mut(1 << 20, &p, true).unwrap());
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -27,7 +29,7 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = Arc::new(SkipMap::mmap(120 << 20, tempfile::tempfile().unwrap(), false).unwrap());
+    let l = Arc::new(SkipMap::mmap_mut(120 << 20, &p, false).unwrap());
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {

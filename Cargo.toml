@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 repository = "https://github.com/al8n/skl-rs"
 description = "A lock-free thread-safe concurrent ARENA based (heap backend or memory map backend) skiplist implementation which helps develop MVCC memtable for LSM-Tree."

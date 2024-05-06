@@ -1,12 +1,11 @@
 use crate::{
-  sync::{AtomicMut, AtomicPtr, Ordering},
+  sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, Ordering},
   NODE_ALIGNMENT_FACTOR,
 };
 use core::{
   mem,
   ptr::{self, NonNull},
   slice,
-  sync::atomic::AtomicU64,
 };
 #[allow(unused_imports)]
 use std::boxed::Box;
@@ -17,7 +16,7 @@ mod shared;
 use shared::Shared;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const ALLOCATED_OFFSET: usize = mem::size_of::<u64>();
+const MMAP_OVERHEAD: usize = mem::size_of::<u64>();
 
 /// An error indicating that the arena is full
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -36,9 +35,10 @@ impl std::error::Error for ArenaError {}
 pub struct Arena {
   write_data_ptr: NonNull<u8>,
   read_data_ptr: *const u8,
-  // TODO(al8n): may be move n to `Shared`? then we do not need Arc
-  // to make Arena clonable, but not sure which one is better.
   n: CachePadded<AtomicU64>,
+  /// Current height. 1 <= height <= kMaxHeight. CAS.
+  pub(super) height: CachePadded<AtomicU32>,
+  pub(super) len: AtomicU32,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -80,6 +80,8 @@ impl Arena {
         mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
       ),
       None,
+      None,
+      None,
     )
   }
 
@@ -91,46 +93,52 @@ impl Arena {
     path: P,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Shared::mmap_mut(n.max(min_cap.saturating_add(ALLOCATED_OFFSET)), path, lock)
-      .map(|shared| Self::new(shared, None))
+    Shared::mmap_mut(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), path, lock)
+      .map(|shared| Self::new(shared, None, None, None))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(super) fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
-    Shared::mmap(path, lock).map(|(allocated, shared)| Self::new(shared, Some(allocated)))
+  pub(super) fn mmap<P: AsRef<std::path::Path>>(
+    min_cap: usize,
+    path: P,
+    lock: bool,
+  ) -> std::io::Result<Self> {
+    Shared::mmap(min_cap + MMAP_OVERHEAD, path, lock).map(|(allocated, height, num, shared)| {
+      Self::new(shared, Some(allocated), Some(height), Some(num))
+    })
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_anonymous_mmap(n: usize, min_cap: usize) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(min_cap)).map(|shared| Self::new(shared, None))
+    Shared::new_mmaped_anon(n.max(min_cap)).map(|shared| Self::new(shared, None, None, None))
   }
 
   #[inline]
-  fn head_offset(&self, size: u32, align: u32) -> u32 {
+  fn head_offset(&self, max_node_size: u32, align: u32) -> u32 {
     // Pad the allocation with enough bytes to ensure the requested alignment.
-    let padded = size as u64 + align as u64 - 1;
+    let padded = max_node_size as u64 + align as u64 - 1;
     let new_size = 1 + padded;
 
     // Return the aligned offset.
-    (new_size as u32 - size) & !(align - 1)
+    (new_size as u32 - max_node_size) & !(align - 1)
   }
 
-  pub(super) fn head_ptr(&self, size: u32, align: u32) -> (*const u8, u32) {
+  pub(super) fn head_ptr(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
     // Safety: this method is only invoked when we want a readonly,
     // in readonly mode, we must have the head_ptr valid.
-    let offset = self.head_offset(size, align);
+    let offset = self.head_offset(max_node_size, align);
     (unsafe { self.get_pointer(offset as usize) }, offset)
   }
 
-  pub(super) fn tail_ptr(&self, size: u32, align: u32) -> (*const u8, u32) {
+  pub(super) fn tail_ptr(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
     // Pad the allocation with enough bytes to ensure the requested alignment.
-    let padded = size as u64 + align as u64 - 1;
-    let new_size = self.head_offset(size, align) as u64 + padded;
+    let padded = max_node_size as u64 + align as u64 - 1;
+    let new_size = self.head_offset(max_node_size, align) as u64 + padded + max_node_size as u64;
 
     // Return the aligned offset.
-    let offset = (new_size as u32 - size) & !(align - 1);
+    let offset = (new_size as u32 - max_node_size) & !(align - 1);
 
     // Safety: this method is only invoked when we want a readonly,
     // in readonly mode, we must have the head_ptr valid.
@@ -138,7 +146,12 @@ impl Arena {
   }
 
   #[inline]
-  fn new(mut shared: Shared, allocated: Option<u64>) -> Self {
+  fn new(
+    mut shared: Shared,
+    allocated: Option<u64>,
+    height: Option<u32>,
+    len: Option<u32>,
+  ) -> Self {
     // Safety:
     // The ptr is always non-null, we just initialized it.
     // And this ptr is only deallocated when the arena is dropped.
@@ -152,6 +165,8 @@ impl Arena {
       inner: AtomicPtr::new(Box::into_raw(Box::new(shared)) as _),
       write_data_ptr,
       read_data_ptr,
+      height: CachePadded::new(AtomicU32::new(height.unwrap_or(1))),
+      len: AtomicU32::new(len.unwrap_or(0)),
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
       n: CachePadded::new(AtomicU64::new(allocated.unwrap_or(1))),
@@ -290,7 +305,11 @@ impl Drop for Arena {
 
         // Relaxed is enough here as we're in a drop, no one else can
         // access this memory anymore.
-        shared.unmount(self.n.load(Ordering::Relaxed));
+        shared.unmount(
+          self.height.load(Ordering::Acquire),
+          self.len.load(Ordering::Acquire),
+          self.n.load(Ordering::Acquire),
+        );
       });
     }
   }

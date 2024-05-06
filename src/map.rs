@@ -3,15 +3,9 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use crossbeam_utils::CachePadded;
-
 use crate::Trailer;
 
-use super::{
-  arena::Arena,
-  sync::{AtomicU32, Ordering},
-  Ascend, Comparator, MAX_HEIGHT, PROBABILITIES,
-};
+use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT, PROBABILITIES};
 
 mod node;
 use node::{Node, NodePtr};
@@ -40,10 +34,6 @@ pub struct SkipMap<T = u64, C = Ascend> {
   head: NodePtr<T>,
   tail: NodePtr<T>,
 
-  /// Current height. 1 <= height <= kMaxHeight. CAS.
-  height: CachePadded<AtomicU32>,
-  len: CachePadded<AtomicU32>,
-
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
@@ -64,7 +54,7 @@ impl<T, C> SkipMap<T, C> {
   /// have ever been allocated as part of this skiplist.
   #[inline]
   pub fn height(&self) -> u32 {
-    self.height.load(Ordering::Acquire)
+    self.arena.height.load(Ordering::Acquire)
   }
 
   /// Returns the number of bytes that have allocated from the arena.
@@ -82,7 +72,7 @@ impl<T, C> SkipMap<T, C> {
   /// Returns the number of entries in the skipmap.
   #[inline]
   pub fn len(&self) -> usize {
-    self.len.load(Ordering::Acquire) as usize
+    self.arena.len.load(Ordering::Acquire) as usize
   }
 
   /// Returns true if the skipmap is empty.
@@ -215,7 +205,7 @@ impl<T, C> SkipMap<T, C> {
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::mmap(path, lock)?;
+    let arena = Arena::mmap(Node::<T>::min_cap(), path, lock)?;
     Self::new_in(arena, cmp, true)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
@@ -254,8 +244,8 @@ impl<T, C> SkipMap<T, C> {
 
     self.head = head;
     self.tail = tail;
-    self.height.store(1, Ordering::Release);
-    self.len.store(0, Ordering::Release);
+    self.arena.height.store(1, Ordering::Release);
+    self.arena.len.store(0, Ordering::Release);
     Ok(())
   }
 
@@ -270,28 +260,14 @@ impl<T, C> SkipMap<T, C> {
         NodePtr::new(ptr, offset)
       };
 
-      // // Safety:
-      // // We will always allocate enough space for the head node and the tail node.
-      // unsafe {
-      //   // Link all head/tail levels together.
-      //   for i in 0..MAX_HEIGHT {
-      //     let head_link = head.tower(&arena, i);
-      //     let tail_link = tail.tower(&arena, i);
-      //     head_link.next_offset.store(tail.offset, Ordering::Relaxed);
-      //     tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
-      //   }
-      // }
-
       return Ok(Self {
         arena,
         head,
         tail,
         ro,
-        height: CachePadded::new(AtomicU32::new(1)),
         #[cfg(all(test, feature = "std"))]
         testing: false,
         cmp,
-        len: CachePadded::new(AtomicU32::new(0)),
       });
     }
 
@@ -315,11 +291,9 @@ impl<T, C> SkipMap<T, C> {
       head,
       tail,
       ro,
-      height: CachePadded::new(AtomicU32::new(1)),
       #[cfg(all(test, feature = "std"))]
       testing: false,
       cmp,
-      len: CachePadded::new(AtomicU32::new(0)),
     })
   }
 }
@@ -555,7 +529,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
     while height > list_height {
-      match self.height.compare_exchange_weak(
+      match self.arena.height.compare_exchange_weak(
         list_height,
         height,
         Ordering::SeqCst,
@@ -859,7 +833,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         ins.spl[i].prev = nd;
       }
     }
-    self.len.fetch_add(1, Ordering::AcqRel);
+    self.arena.len.fetch_add(1, Ordering::AcqRel);
     Ok(())
   }
 

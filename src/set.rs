@@ -3,15 +3,9 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use crossbeam_utils::CachePadded;
-
 use crate::Trailer;
 
-use super::{
-  arena::Arena,
-  sync::{AtomicU32, Ordering},
-  Ascend, Comparator, MAX_HEIGHT, PROBABILITIES,
-};
+use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT, PROBABILITIES};
 
 mod node;
 use node::{Node, NodePtr};
@@ -40,15 +34,12 @@ pub struct SkipSet<T = u64, C = Ascend> {
   head: NodePtr<T>,
   tail: NodePtr<T>,
 
-  /// Current height. 1 <= height <= kMaxHeight. CAS.
-  height: CachePadded<AtomicU32>,
-  len: CachePadded<AtomicU32>,
-
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
   testing: bool,
 
+  ro: bool,
   cmp: C,
 }
 
@@ -62,7 +53,7 @@ impl<T, C> SkipSet<T, C> {
   /// have ever been allocated as part of this skiplist.
   #[inline]
   pub fn height(&self) -> u32 {
-    self.height.load(Ordering::Acquire)
+    self.arena.height.load(Ordering::Acquire)
   }
 
   /// Returns the number of bytes that have allocated from the arena.
@@ -80,7 +71,7 @@ impl<T, C> SkipSet<T, C> {
   /// Returns the number of entries in the skipmap.
   #[inline]
   pub fn len(&self) -> usize {
-    self.len.load(Ordering::Acquire) as usize
+    self.arena.len.load(Ordering::Acquire) as usize
   }
 
   /// Returns true if the skipmap is empty.
@@ -188,7 +179,7 @@ impl<T, C> SkipSet<T, C> {
   /// Like [`SkipSet::new`], but with a custom comparator.
   pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
     let arena = Arena::new_vec(cap, Node::<T>::min_cap());
-    Self::new_in(arena, cmp)
+    Self::new_in(arena, cmp, false)
   }
 
   /// Like [`SkipSet::mmap_mut`], but with a custom comparator.
@@ -201,7 +192,8 @@ impl<T, C> SkipSet<T, C> {
     cmp: C,
   ) -> std::io::Result<Self> {
     let arena = Arena::mmap_mut(cap, Node::<T>::min_cap(), path, lock)?;
-    Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    Self::new_in(arena, cmp, false)
+      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Like [`SkipSet::mmap`], but with a custom comparator.
@@ -212,8 +204,9 @@ impl<T, C> SkipSet<T, C> {
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::mmap(path, lock)?;
-    Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    let arena = Arena::mmap(Node::<T>::min_cap(), path, lock)?;
+    Self::new_in(arena, cmp, true)
+      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Like [`SkipSet::mmap_anon`], but with a custom comparator.
@@ -221,7 +214,8 @@ impl<T, C> SkipSet<T, C> {
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
     let arena = Arena::new_anonymous_mmap(cap, Node::<T>::min_cap())?;
-    Self::new_in(arena, cmp).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    Self::new_in(arena, cmp, false)
+      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Clear the skiplist to empty and re-initialize.
@@ -245,11 +239,31 @@ impl<T, C> SkipSet<T, C> {
 
     self.head = head;
     self.tail = tail;
-    self.height.store(1, Ordering::Release);
-    self.len.store(0, Ordering::Release);
+    self.arena.height.store(1, Ordering::Release);
+    self.arena.len.store(0, Ordering::Release);
   }
 
-  fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
+  fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
+    if ro {
+      let head = {
+        let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+        NodePtr::new(ptr, offset)
+      };
+      let tail = {
+        let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+        NodePtr::new(ptr, offset)
+      };
+
+      return Ok(Self {
+        arena,
+        head,
+        tail,
+        ro,
+        #[cfg(all(test, feature = "std"))]
+        testing: false,
+        cmp,
+      });
+    }
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
 
@@ -269,11 +283,10 @@ impl<T, C> SkipSet<T, C> {
       arena,
       head,
       tail,
-      height: CachePadded::new(AtomicU32::new(1)),
       #[cfg(all(test, feature = "std"))]
       testing: false,
+      ro,
       cmp,
-      len: CachePadded::new(AtomicU32::new(0)),
     })
   }
 }
@@ -380,6 +393,10 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     trailer: T,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    if self.ro {
+      return Err(Error::Readonly);
+    }
+
     let ins = &mut Default::default();
 
     unsafe {
@@ -410,6 +427,10 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
   /// - Returns `Error::Duplicated`, if the key already exists.
   /// - Returns `Error::Full`, if there isn't enough room in the arena.
   pub fn insert<'a, 'b: 'a>(&'a self, trailer: T, key: &'b [u8]) -> Result<(), Error> {
+    if self.ro {
+      return Err(Error::Readonly);
+    }
+
     self.insert_in(trailer, key, &mut Inserter::default())
   }
 
@@ -492,13 +513,13 @@ impl<T: Trailer, C> SkipSet<T, C> {
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
     while height > list_height {
-      match self.height.compare_exchange_weak(
+      match self.arena.height.compare_exchange_weak(
         list_height,
         height,
         Ordering::SeqCst,
         Ordering::Acquire,
       ) {
-        // Successfully increased skiplist.height.
+        // Successfully increased skiplist.arena.height.
         Ok(_) => break,
         Err(h) => list_height = h,
       }
@@ -790,7 +811,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
         ins.spl[i].prev = nd;
       }
     }
-    self.len.fetch_add(1, Ordering::AcqRel);
+    self.arena.len.fetch_add(1, Ordering::AcqRel);
     Ok(())
   }
 

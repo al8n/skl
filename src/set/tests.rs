@@ -1,5 +1,8 @@
 use super::*;
-use crate::{sync::Arc, Descend};
+use crate::{
+  sync::{Arc, AtomicU32},
+  Descend,
+};
 use std::format;
 
 #[cfg(feature = "std")]
@@ -1460,4 +1463,52 @@ fn test_range_latest_mmap_mut() {
 #[cfg_attr(miri, ignore)]
 fn test_range_latest_mmap_anon() {
   range_latest(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_reopen_mmap() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("reopen_skipmap");
+  {
+    let l = SkipSet::mmap_mut(ARENA_SIZE, &p, true).unwrap();
+    for i in 0..1000 {
+      l.insert(0, &key(i)).unwrap();
+    }
+    l.flush().unwrap();
+  }
+
+  let l = SkipSet::mmap(&p, false).unwrap();
+  assert_eq!(1000, l.len());
+  for i in 0..1000 {
+    let k = key(i);
+    let ent = l.get(0, &k).unwrap();
+    assert_eq!(ent.trailer().version(), 0);
+    assert_eq!(ent.key(), k);
+  }
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_reopen_mmap2() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("reopen_skipset2");
+  {
+    let l = SkipSet::mmap_mut_with_comparator(ARENA_SIZE, &p, true, Ascend).unwrap();
+    for i in 0..1000 {
+      l.insert(0, &key(i)).unwrap();
+    }
+    l.flush_async().unwrap();
+  }
+
+  let l = SkipSet::<u64, Ascend>::mmap_with_comparator(&p, false, Ascend).unwrap();
+  assert_eq!(1000, l.len());
+  for i in 0..1000 {
+    let k = key(i);
+    let ent = l.get(0, &k).unwrap();
+    assert_eq!(ent.trailer().version(), 0);
+    assert_eq!(ent.key(), k);
+  }
 }

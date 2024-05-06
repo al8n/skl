@@ -1,5 +1,8 @@
 use super::*;
-use crate::{sync::Arc, Descend};
+use crate::{
+  sync::{Arc, AtomicU32},
+  Descend,
+};
 use std::format;
 
 #[cfg(feature = "std")]
@@ -1579,6 +1582,32 @@ fn test_reopen_mmap() {
   }
 
   let l = SkipMap::mmap(&p, false).unwrap();
+  assert_eq!(1000, l.len());
+  for i in 0..1000 {
+    let k = key(i);
+    let ent = l.get(0, &k).unwrap();
+    assert_eq!(new_value(i), ent.value());
+    assert_eq!(ent.trailer().version(), 0);
+    assert_eq!(ent.key(), k);
+  }
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_reopen_mmap2() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("reopen_skipmap2");
+  {
+    let l = SkipMap::mmap_mut_with_comparator(ARENA_SIZE, &p, true, Ascend).unwrap();
+    for i in 0..1000 {
+      l.insert(0, &key(i), &new_value(i)).unwrap();
+    }
+    l.flush_async().unwrap();
+  }
+
+  let l = SkipMap::<u64, Ascend>::mmap_with_comparator(&p, false, Ascend).unwrap();
+  assert_eq!(1000, l.len());
   for i in 0..1000 {
     let k = key(i);
     let ent = l.get(0, &k).unwrap();

@@ -1,4 +1,4 @@
-use integration::{big_value, key, new_value};
+use integration::{key, new_value};
 use skl::*;
 use std::sync::Arc;
 
@@ -29,20 +29,13 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = Arc::new(SkipMap::mmap_mut(120 << 20, &p, false).unwrap());
-    for i in 0..N2 {
-      let l = l.clone();
-      std::thread::spawn(move || {
-        l.insert(0, &key(i), &big_value(i)).unwrap();
-      });
-    }
-    while Arc::strong_count(&l) > 1 {}
+    let l = Arc::new(SkipMap::mmap(&p, false).unwrap());
     assert_eq!(N2, l.len());
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap().value(), big_value(i), "broken: {i}");
+        assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
       });
     }
     while Arc::strong_count(&l) > 1 {}

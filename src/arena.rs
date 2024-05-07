@@ -93,6 +93,7 @@ impl Arena {
     path: P,
     lock: bool,
   ) -> std::io::Result<Self> {
+    let n = n.saturating_add(MMAP_OVERHEAD);
     Shared::mmap_mut(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), path, lock)
       .map(|shared| Self::new(shared, None, None, None))
   }

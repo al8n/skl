@@ -125,7 +125,7 @@ impl Shared {
           .len(cap)
           .map_mut(&file)
           .map(|mmap| Self {
-            cap,
+            cap: cap - MMAP_OVERHEAD,
             backend: SharedBackend::MmapMut {
               buf: Box::into_raw(Box::new(mmap)),
               file,

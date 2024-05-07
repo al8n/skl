@@ -21,6 +21,9 @@ pub enum Error {
 
   /// Indicates that the entry is too large to be stored in the [`SkipMap`](super::SkipMap).
   EntryTooLarge(u64),
+
+  /// Readonly skipmap
+  Readonly,
 }
 
 impl core::fmt::Display for Error {
@@ -31,6 +34,7 @@ impl core::fmt::Display for Error {
       Self::ValueTooLarge(size) => write!(f, "value size {} is too large", size),
       Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
       Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
+      Self::Readonly => write!(f, "skipmap is read only"),
     }
   }
 }
@@ -67,4 +71,5 @@ fn test_fmt() {
     std::format!("{}", Error::Full(ArenaError)),
     "allocation failed because arena is full",
   );
+  assert_eq!(std::format!("{}", Error::Readonly), "skipmap is read only");
 }

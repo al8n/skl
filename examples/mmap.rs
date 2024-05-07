@@ -1,5 +1,5 @@
 use skl::SkipMap;
-use std::{fs::File, sync::Arc};
+use std::sync::Arc;
 
 pub fn key(i: usize) -> Vec<u8> {
   format!("{:05}", i).into_bytes()
@@ -11,8 +11,7 @@ pub fn new_value(i: usize) -> Vec<u8> {
 fn main() {
   const N: usize = 1000;
 
-  let wal = File::create("test.wal").unwrap();
-  let l = Arc::new(SkipMap::mmap(1 << 20, wal, true).unwrap());
+  let l = Arc::new(SkipMap::mmap_mut(1 << 20, "test.wal", true).unwrap());
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();

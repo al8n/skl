@@ -18,6 +18,9 @@ pub enum Error {
 
   /// Indicates that the entry is too large to be stored in the [`SkipSet`](crate::SkipSet).
   EntryTooLarge(u64),
+
+  /// Readonly skipmap
+  Readonly,
 }
 
 impl core::fmt::Display for Error {
@@ -27,6 +30,7 @@ impl core::fmt::Display for Error {
       Self::Duplicated => write!(f, "key already exists in the skipset"),
       Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
       Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
+      Self::Readonly => write!(f, "skipset is read only"),
     }
   }
 }
@@ -59,4 +63,5 @@ fn test_fmt() {
     std::format!("{}", Error::Full(ArenaError)),
     "allocation failed because arena is full",
   );
+  assert_eq!(std::format!("{}", Error::Readonly), "skipset is read only");
 }

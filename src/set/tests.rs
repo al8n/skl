@@ -52,8 +52,10 @@ fn test_empty() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_empty_mmap() {
-  empty_in(SkipSet::mmap(1000, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_empty_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_empty_mmap_mut");
+  empty_in(SkipSet::mmap_mut(1000, p, true).unwrap());
 }
 
 #[test]
@@ -90,8 +92,10 @@ fn test_full() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_full_mmap() {
-  full_in(|n| SkipSet::mmap(n, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_full_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_full_mmap_mut");
+  full_in(|n| SkipSet::mmap_mut(n, p, true).unwrap());
 }
 
 #[test]
@@ -162,6 +166,12 @@ fn basic_in(mut l: SkipSet) {
     assert!(it.last().is_none());
   }
   assert!(l.is_empty());
+
+  #[cfg(feature = "memmap")]
+  l.flush().unwrap();
+
+  #[cfg(feature = "memmap")]
+  l.flush_async().unwrap();
 }
 
 #[test]
@@ -172,8 +182,10 @@ fn test_basic() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_basic_mmap() {
-  basic_in(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_basic_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_basic_mmap_mut");
+  basic_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -273,8 +285,12 @@ fn test_iter_all_versions_mvcc() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versions_mvcc_mmap() {
-  iter_all_versions_mvcc(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_iter_all_versions_mvcc_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_iter_all_versions_mvcc_mmap_mut");
+  iter_all_versions_mvcc(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -358,8 +374,10 @@ fn test_get_mvcc() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_get_mvcc_mmap() {
-  get_mvcc(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_get_mvcc_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_get_mvcc_mmap_mut");
+  get_mvcc(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -444,8 +462,10 @@ fn test_gt() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_gt_mmap() {
-  gt_in(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_gt_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_gt_mmap_mut");
+  gt_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -528,8 +548,10 @@ fn test_ge() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_ge_mmap() {
-  ge_in(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_ge_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_ge_mmap_mut");
+  ge_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -638,8 +660,10 @@ fn test_le() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_le_mmap() {
-  gt_in(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_le_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_le_mmap_mut");
+  gt_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -730,8 +754,10 @@ fn test_lt() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_lt_mmap() {
-  lt_in(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_lt_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_lt_mmap_mut");
+  lt_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -767,8 +793,12 @@ fn test_basic_large_testcases() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_basic_large_testcases_mmap() {
-  let l = Arc::new(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_basic_large_testcases_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_basic_large_testcases_mmap_mut");
+  let l = Arc::new(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
   test_basic_large_testcases_in(l);
 }
 
@@ -818,8 +848,10 @@ fn test_concurrent_basic() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_concurrent_basic_mmap() {
-  let l = Arc::new(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_concurrent_basic_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_concurrent_basic_mmap_mut");
+  let l = Arc::new(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
   test_concurrent_basic_runner(l);
 }
 
@@ -865,10 +897,12 @@ fn test_concurrent_basic_big_keys() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_concurrent_basic_big_keys_mmap() {
-  test_concurrent_basic_big_keys_runner(Arc::new(
-    SkipSet::mmap(120 << 20, tempfile::tempfile().unwrap(), true).unwrap(),
-  ));
+fn test_concurrent_basic_big_keys_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_concurrent_basic_big_keys_mmap_mut");
+  test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::mmap_mut(120 << 20, p, true).unwrap()));
 }
 
 #[test]
@@ -897,7 +931,7 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
 
   wg.wait();
 
-  let saw_value = Arc::new(AtomicU32::new(0));
+  let saw_value = Arc::new(crate::sync::AtomicU32::new(0));
   for _ in 0..N {
     let wg = wg.add(1);
     let l = l.clone();
@@ -926,10 +960,10 @@ fn test_concurrent_one_key() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_concurrent_one_key_mmap() {
-  concurrent_one_key(Arc::new(
-    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
-  ));
+fn test_concurrent_one_key_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_concurrent_one_key_mmap_mut");
+  concurrent_one_key(Arc::new(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap()));
 }
 
 #[test]
@@ -966,10 +1000,12 @@ fn test_iter_all_versionsator_next() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_next_mmap() {
-  iter_all_versionsator_next(
-    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
-  );
+fn test_iter_all_versionsator_next_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_iter_all_versionsator_next_mmap_mut");
+  iter_all_versionsator_next(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1013,10 +1049,10 @@ fn test_range_next() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_range_next_mmap() {
-  iter_all_versionsator_next(
-    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
-  );
+fn test_range_next_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_range_next_mmap_mut");
+  iter_all_versionsator_next(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1054,10 +1090,12 @@ fn test_iter_all_versionsator_prev() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_prev_mmap() {
-  iter_all_versionsator_prev(
-    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
-  );
+fn test_iter_all_versionsator_prev_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_iter_all_versionsator_prev_mmap_mut");
+  iter_all_versionsator_prev(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1101,8 +1139,10 @@ fn test_range_prev() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_range_prev_mmap() {
-  range_prev(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_range_prev_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_range_prev_mmap_mut");
+  range_prev(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1161,10 +1201,12 @@ fn test_iter_all_versionsator_seek_ge() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_seek_ge_mmap() {
-  iter_all_versionsator_seek_ge(
-    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
-  );
+fn test_iter_all_versionsator_seek_ge_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_iter_all_versionsator_seek_ge_mmap_mut");
+  iter_all_versionsator_seek_ge(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1215,10 +1257,12 @@ fn test_iter_all_versionsator_seek_lt() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_seek_lt_mmap() {
-  iter_all_versionsator_seek_lt(
-    SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap(),
-  );
+fn test_iter_all_versionsator_seek_lt_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir
+    .path()
+    .join("test_skipset_iter_all_versionsator_seek_lt_mmap_mut");
+  iter_all_versionsator_seek_lt(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1313,8 +1357,10 @@ fn test_range() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_range_mmap() {
-  range(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_range_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_range_mmap_mut");
+  range(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1357,8 +1403,10 @@ fn test_iter_latest() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_latest_mmap() {
-  iter_latest(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_iter_latest_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_iter_latest_mmap_mut");
+  iter_latest(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1401,8 +1449,10 @@ fn test_range_latest() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_range_latest_mmap() {
-  range_latest(SkipSet::mmap(ARENA_SIZE, tempfile::tempfile().unwrap(), true).unwrap());
+fn test_range_latest_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipset_range_latest_mmap_mut");
+  range_latest(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
 }
 
 #[test]
@@ -1410,4 +1460,52 @@ fn test_range_latest_mmap() {
 #[cfg_attr(miri, ignore)]
 fn test_range_latest_mmap_anon() {
   range_latest(SkipSet::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_reopen_mmap() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("reopen_skipmap");
+  {
+    let l = SkipSet::mmap_mut(ARENA_SIZE, &p, true).unwrap();
+    for i in 0..1000 {
+      l.insert(0, &key(i)).unwrap();
+    }
+    l.flush().unwrap();
+  }
+
+  let l = SkipSet::mmap(&p, false).unwrap();
+  assert_eq!(1000, l.len());
+  for i in 0..1000 {
+    let k = key(i);
+    let ent = l.get(0, &k).unwrap();
+    assert_eq!(ent.trailer().version(), 0);
+    assert_eq!(ent.key(), k);
+  }
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_reopen_mmap2() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("reopen_skipset2");
+  {
+    let l = SkipSet::mmap_mut_with_comparator(ARENA_SIZE, &p, true, Ascend).unwrap();
+    for i in 0..1000 {
+      l.insert(0, &key(i)).unwrap();
+    }
+    l.flush_async().unwrap();
+  }
+
+  let l = SkipSet::<u64, Ascend>::mmap_with_comparator(&p, false, Ascend).unwrap();
+  assert_eq!(1000, l.len());
+  for i in 0..1000 {
+    let k = key(i);
+    let ent = l.get(0, &k).unwrap();
+    assert_eq!(ent.trailer().version(), 0);
+    assert_eq!(ent.key(), k);
+  }
 }

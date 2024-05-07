@@ -119,6 +119,25 @@ impl Trailer for u64 {
 }
 
 mod sync {
+  #[derive(Debug)]
+  #[repr(C)]
+  pub(super) struct Link {
+    pub(super) next_offset: AtomicU32,
+    pub(super) prev_offset: AtomicU32,
+  }
+
+  impl Link {
+    pub(super) const SIZE: usize = core::mem::size_of::<Self>();
+
+    #[inline]
+    pub(super) fn new(next_offset: u32, prev_offset: u32) -> Self {
+      Self {
+        next_offset: AtomicU32::new(next_offset),
+        prev_offset: AtomicU32::new(prev_offset),
+      }
+    }
+  }
+
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
   #[cfg(all(not(loom), test))]

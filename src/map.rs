@@ -251,24 +251,12 @@ impl<T, C> SkipMap<T, C> {
 
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
     if ro {
-      let head = {
-        let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
-        NodePtr::new(ptr, offset)
-      };
-      let tail = {
-        let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
-        NodePtr::new(ptr, offset)
-      };
+      let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let head = NodePtr::new(ptr, offset);
+      let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let tail = NodePtr::new(ptr, offset);
 
-      return Ok(Self {
-        arena,
-        head,
-        tail,
-        ro,
-        #[cfg(all(test, feature = "std"))]
-        testing: false,
-        cmp,
-      });
+      return Ok(Self::construct(arena, head, tail, ro, cmp));
     }
 
     let head = Node::new_empty_node_ptr(&arena)?;
@@ -286,7 +274,12 @@ impl<T, C> SkipMap<T, C> {
       }
     }
 
-    Ok(Self {
+    Ok(Self::construct(arena, head, tail, ro, cmp))
+  }
+
+  #[inline]
+  fn construct(arena: Arena, head: NodePtr<T>, tail: NodePtr<T>, ro: bool, cmp: C) -> Self {
+    Self {
       arena,
       head,
       tail,
@@ -294,7 +287,7 @@ impl<T, C> SkipMap<T, C> {
       #[cfg(all(test, feature = "std"))]
       testing: false,
       cmp,
-    })
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 use core::{mem, ptr};
 
 use crate::{
-  sync::{AtomicU32, Ordering},
+  sync::{Link, Ordering},
   Trailer,
 };
 
@@ -9,23 +9,6 @@ use super::{
   super::arena::{Arena, ArenaError},
   Error, MAX_HEIGHT,
 };
-
-#[derive(Debug)]
-#[repr(C)]
-pub(super) struct Link {
-  pub(super) next_offset: AtomicU32,
-  pub(super) prev_offset: AtomicU32,
-}
-
-impl Link {
-  #[inline]
-  pub(super) fn new(next_offset: u32, prev_offset: u32) -> Self {
-    Self {
-      next_offset: AtomicU32::new(next_offset),
-      prev_offset: AtomicU32::new(prev_offset),
-    }
-  }
-}
 
 #[derive(Debug)]
 pub(crate) struct NodePtr<T> {
@@ -69,8 +52,7 @@ impl<T> NodePtr<T> {
 
   #[inline]
   pub(super) unsafe fn tower(&self, arena: &Arena, idx: usize) -> &Link {
-    let tower_ptr_offset =
-      self.offset as usize + mem::size_of::<Node<T>>() + idx * mem::size_of::<Link>();
+    let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
     let tower_ptr = arena.get_pointer(tower_ptr_offset);
     &*tower_ptr.cast()
   }
@@ -83,8 +65,7 @@ impl<T> NodePtr<T> {
     prev_offset: u32,
     next_offset: u32,
   ) {
-    let tower_ptr_offset =
-      self.offset as usize + mem::size_of::<Node<T>>() + idx * mem::size_of::<Link>();
+    let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
     let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
     *tower_ptr = Link::new(next_offset, prev_offset);
   }
@@ -139,10 +120,9 @@ pub(super) struct Node<T> {
 }
 
 impl<T> Node<T> {
-  pub(super) const SIZE: usize = core::mem::size_of::<Self>();
+  pub(super) const SIZE: usize = mem::size_of::<Self>();
 
-  pub(super) const MAX_NODE_SIZE: u64 =
-    (Self::SIZE + MAX_HEIGHT * core::mem::size_of::<Link>()) as u64;
+  pub(super) const MAX_NODE_SIZE: u64 = (Self::SIZE + MAX_HEIGHT * Link::SIZE) as u64;
 
   #[inline]
   pub(super) const fn min_cap() -> usize {
@@ -160,18 +140,21 @@ impl<T> Node<T> {
     alignment as u32
   }
 
+  #[inline]
+  const fn max_node_size() -> u32 {
+    Node::<T>::MAX_NODE_SIZE as u32
+  }
+
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let (node_offset, alloc_size) =
-      arena.alloc(Node::<T>::MAX_NODE_SIZE as u32, Self::alignment(), 0)?;
+    let (node_offset, alloc_size) = arena.alloc(Self::max_node_size(), Self::alignment(), 0)?;
 
     // Safety: we have check the offset is valid
     unsafe {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
-      // node.trailer = Default::default();
       node.key_offset = 0;
       node.key_size = 0;
       node.value_size = 0;
@@ -210,7 +193,7 @@ impl<T: Trailer> Node<T> {
 
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let unused_size = (MAX_HEIGHT as u32 - height) * (mem::size_of::<Link>() as u32);
+    let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
     let (node_offset, alloc_size) = arena.alloc(

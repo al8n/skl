@@ -68,6 +68,12 @@ impl<T, C> SkipSet<T, C> {
     self.arena.capacity()
   }
 
+  /// Returns the number of remaining bytes can be allocated by the arena.
+  #[inline]
+  pub fn remaining(&self) -> usize {
+    self.arena.remaining()
+  }
+
   /// Returns the number of entries in the skipmap.
   #[inline]
   pub fn len(&self) -> usize {

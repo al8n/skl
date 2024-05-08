@@ -161,6 +161,7 @@ impl<T> Node<T> {
     }
   }
 }
+
 impl<T: Trailer> Node<T> {
   pub(super) fn new_node_ptr(
     arena: &Arena,

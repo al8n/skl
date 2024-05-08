@@ -51,6 +51,7 @@ fn empty_in(l: SkipMap) {
   assert!(!l.contains_key(0, b"aaa"));
   assert!(l.size() > 0);
   assert!(l.capacity() > 0);
+  assert_eq!(l.remaining(), l.capacity() - l.size());
 }
 
 #[test]

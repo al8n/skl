@@ -63,6 +63,12 @@ impl<T, C> SkipMap<T, C> {
     self.arena.size()
   }
 
+  /// Returns the number of remaining bytes can be allocated by the arena.
+  #[inline]
+  pub fn remaining(&self) -> usize {
+    self.arena.remaining()
+  }
+
   /// Returns the capacity of the arena.
   #[inline]
   pub const fn capacity(&self) -> usize {

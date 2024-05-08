@@ -69,6 +69,12 @@ impl Arena {
   pub const fn capacity(&self) -> usize {
     self.cap
   }
+
+  /// Returns the number of bytes remaining bytes can be allocated by the arena.
+  #[inline]
+  pub fn remaining(&self) -> usize {
+    self.cap.saturating_sub(self.size())
+  }
 }
 
 impl Arena {

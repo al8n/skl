@@ -26,11 +26,37 @@ pub mod map;
 pub mod set;
 
 pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, MapRange, SkipMap};
-pub use set::{SetIterator, SetRange, SkipSet};
+pub use map::{MapIterator, SkipMap};
+pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
 const NODE_ALIGNMENT_FACTOR: usize = mem::align_of::<u64>();
+
+#[cfg(feature = "std")]
+fn random_height() -> u32 {
+  use rand::{thread_rng, Rng};
+  let mut rng = thread_rng();
+  let rnd: u32 = rng.gen();
+  let mut h = 1;
+
+  while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+    h += 1;
+  }
+  h as u32
+}
+
+#[cfg(not(feature = "std"))]
+fn random_height() -> u32 {
+  use rand::{rngs::OsRng, Rng};
+
+  let rnd: u32 = OsRng.gen();
+  let mut h = 1;
+
+  while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+    h += 1;
+  }
+  h as u32
+}
 
 /// Precompute the skiplist probabilities so that only a single random number
 /// needs to be generated and so that the optimal pvalue can be used (inverse

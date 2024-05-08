@@ -5,7 +5,7 @@ use core::{
 
 use crate::Trailer;
 
-use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT, PROBABILITIES};
+use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
 
 mod node;
 use node::{Node, NodePtr};
@@ -63,6 +63,12 @@ impl<T, C> SkipMap<T, C> {
     self.arena.size()
   }
 
+  /// Returns the number of remaining bytes can be allocated by the arena.
+  #[inline]
+  pub fn remaining(&self) -> usize {
+    self.arena.remaining()
+  }
+
   /// Returns the capacity of the arena.
   #[inline]
   pub const fn capacity(&self) -> usize {
@@ -87,7 +93,7 @@ impl<T, C> SkipMap<T, C> {
   /// all outstanding changes to a file-backed memory map are guaranteed to be durably stored.
   /// The file's metadata (including last modification timestamp) may not be updated.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn flush(&self) -> std::io::Result<()> {
     self.arena.flush()
   }
@@ -98,7 +104,7 @@ impl<T, C> SkipMap<T, C> {
   /// the operation to complete before returning. The file's metadata (including last
   /// modification timestamp) may not be updated.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.arena.flush_async()
   }
@@ -136,20 +142,20 @@ impl SkipMap {
   ///
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_mut<P: AsRef<std::path::Path>>(
-    cap: usize,
     path: P,
+    cap: usize,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Self::mmap_mut_with_comparator(cap, path, lock, Ascend)
+    Self::mmap_mut_with_comparator(path, cap, lock, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
   ///
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
     Self::mmap_with_comparator(path, lock, Ascend)
   }
@@ -170,7 +176,7 @@ impl SkipMap {
   ///
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
     Self::mmap_anon_with_comparator(cap, Ascend)
   }
@@ -185,10 +191,10 @@ impl<T, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::mmap_mut`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
-    cap: usize,
     path: P,
+    cap: usize,
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
@@ -199,7 +205,7 @@ impl<T, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::mmap`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
     lock: bool,
@@ -212,7 +218,7 @@ impl<T, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::mmap_anon`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
     let arena = Arena::new_anonymous_mmap(cap, Node::<T>::min_cap())?;
     Self::new_in(arena, cmp, false)
@@ -299,21 +305,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T>> {
-    self
-      .first_in(version)
-      .map(|n| EntryRef::from_node(n, &self.arena))
+  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
+    self.first_in(version).map(|n| EntryRef::from_node(n, self))
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T>> {
-    self
-      .last_in(version)
-      .map(|n| EntryRef::from_node(n, &self.arena))
+  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
+    self.last_in(version).map(|n| EntryRef::from_node(n, self))
   }
 
   /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -323,6 +325,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
       if eq {
         return Some(EntryRef {
+          map: self,
           key: node_key,
           trailer: node.trailer,
           value: node.get_value(&self.arena),
@@ -333,7 +336,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
+      if node.trailer.version() > version {
+        return None;
+      }
+
       Some(EntryRef {
+        map: self,
         key: node_key,
         trailer: node.trailer,
         value: node.get_value(&self.arena),
@@ -347,14 +355,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
+  ) -> Option<EntryRef<'a, T, C>> {
     match upper {
-      Bound::Included(key) => self
-        .le(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Excluded(key) => self
-        .lt(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Included(key) => self.le(version, key).map(|n| EntryRef::from_node(n, self)),
+      Bound::Excluded(key) => self.lt(version, key).map(|n| EntryRef::from_node(n, self)),
       Bound::Unbounded => self.last(version),
     }
   }
@@ -365,14 +369,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
+  ) -> Option<EntryRef<'a, T, C>> {
     match lower {
-      Bound::Included(key) => self
-        .ge(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Excluded(key) => self
-        .gt(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Included(key) => self.ge(version, key).map(|n| EntryRef::from_node(n, self)),
+      Bound::Excluded(key) => self.gt(version, key).map(|n| EntryRef::from_node(n, self)),
       Bound::Unbounded => self.first(version),
     }
   }
@@ -395,7 +395,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
     if self.ro {
       return Err(Error::Readonly);
     }
@@ -412,6 +412,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return Ok(Some({
           let nd = curr.as_ptr();
           EntryRef {
+            map: self,
             key: nd.get_key(&self.arena),
             trailer: nd.trailer,
             value: nd.get_value(&self.arena),
@@ -457,7 +458,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapRange<'a, T, C, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapIterator<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
@@ -472,7 +473,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     range: R,
-  ) -> iterator::MapRange<'a, T, C, Q, R>
+  ) -> iterator::MapIterator<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
@@ -516,7 +517,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 impl<T: Trailer, C> SkipMap<T, C> {
   #[allow(clippy::type_complexity)]
   fn new_node(&self, key: &[u8], trailer: T, value: &[u8]) -> Result<(NodePtr<T>, u32), Error> {
-    let height = Self::random_height();
+    let height = super::random_height();
     let nd = Node::new_node_ptr(&self.arena, height, key, trailer, value)?;
 
     // Try to increase self.height via CAS.
@@ -534,34 +535,6 @@ impl<T: Trailer, C> SkipMap<T, C> {
       }
     }
     Ok((nd, height))
-  }
-
-  #[cfg(feature = "std")]
-  #[inline]
-  fn random_height() -> u32 {
-    use rand::{thread_rng, Rng};
-    let mut rng = thread_rng();
-    let rnd: u32 = rng.gen();
-    let mut h = 1;
-
-    while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
-      h += 1;
-    }
-    h as u32
-  }
-
-  #[cfg(not(feature = "std"))]
-  #[inline]
-  fn random_height() -> u32 {
-    use rand::{rngs::OsRng, Rng};
-
-    let rnd: u32 = OsRng.gen();
-    let mut h = 1;
-
-    while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
-      h += 1;
-    }
-    h as u32
   }
 }
 

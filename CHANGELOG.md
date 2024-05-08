@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.7.0
+
+- Implement `Iterator` for `MapIterator` and `SetIterator`.
+- Optimize `Arena::alloc` logic.
+
 ## 0.6.0
 
 - Change mmap related API

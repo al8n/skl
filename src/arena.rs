@@ -205,25 +205,27 @@ impl Arena {
     align: u32,
     overflow: u32,
   ) -> Result<(u32, u32), ArenaError> {
-    // Verify that the arena isn't already full.
-    let orig_size = self.n.load(Ordering::Acquire);
-    if orig_size > self.cap as u64 {
-      return Err(ArenaError);
-    }
-
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = size as u64 + align as u64 - 1;
 
-    let new_size = self.n.fetch_add(padded, Ordering::AcqRel) + padded;
+    let res = self
+      .n
+      .fetch_update(Ordering::Release, Ordering::Acquire, |orig| {
+        if orig + padded + overflow as u64 > self.cap as u64 {
+          return None;
+        }
+        Some(orig + padded)
+      });
 
-    if new_size + overflow as u64 > self.cap as u64 {
-      return Err(ArenaError);
+    match res {
+      Ok(new_size) => {
+        // Return the aligned offset.
+        let new_size = new_size + padded;
+        let offset = (new_size as u32 - size) & !(align - 1);
+        Ok((offset, padded as u32))
+      }
+      Err(_) => Err(ArenaError),
     }
-
-    // Return the aligned offset.
-    let offset = (new_size as u32 - size) & !(align - 1);
-
-    Ok((offset, padded as u32))
   }
 
   /// ## Safety:

@@ -70,17 +70,19 @@ fn full_in(l: impl FnOnce(usize) -> SkipSet) {
   let l = l(1000);
   let mut found_arena_full = false;
 
+  let mut full_at = 0;
   for i in 0..100 {
     if let Err(e) = l.insert(0, &make_int_key(i)) {
       assert!(matches!(e, Error::Full(_)));
       found_arena_full = true;
+      full_at = i;
       break;
     }
   }
 
   assert!(found_arena_full);
 
-  let e = l.insert(0, "someval".as_bytes()).unwrap_err();
+  let e = l.insert(0, &make_int_key(full_at + 1)).unwrap_err();
 
   assert!(matches!(e, Error::Full(_)));
 }

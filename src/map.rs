@@ -5,7 +5,7 @@ use core::{
 
 use crate::Trailer;
 
-use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT, PROBABILITIES};
+use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
 
 mod node;
 use node::{Node, NodePtr};
@@ -522,7 +522,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 impl<T: Trailer, C> SkipMap<T, C> {
   #[allow(clippy::type_complexity)]
   fn new_node(&self, key: &[u8], trailer: T, value: &[u8]) -> Result<(NodePtr<T>, u32), Error> {
-    let height = Self::random_height();
+    let height = super::random_height();
     let nd = Node::new_node_ptr(&self.arena, height, key, trailer, value)?;
 
     // Try to increase self.height via CAS.
@@ -540,34 +540,6 @@ impl<T: Trailer, C> SkipMap<T, C> {
       }
     }
     Ok((nd, height))
-  }
-
-  #[cfg(feature = "std")]
-  #[inline]
-  fn random_height() -> u32 {
-    use rand::{thread_rng, Rng};
-    let mut rng = thread_rng();
-    let rnd: u32 = rng.gen();
-    let mut h = 1;
-
-    while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
-      h += 1;
-    }
-    h as u32
-  }
-
-  #[cfg(not(feature = "std"))]
-  #[inline]
-  fn random_height() -> u32 {
-    use rand::{rngs::OsRng, Rng};
-
-    let rnd: u32 = OsRng.gen();
-    let mut h = 1;
-
-    while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
-      h += 1;
-    }
-    h as u32
   }
 }
 

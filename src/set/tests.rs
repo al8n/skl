@@ -55,7 +55,7 @@ fn test_empty() {
 fn test_empty_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_empty_mmap_mut");
-  empty_in(SkipSet::mmap_mut(1000, p, true).unwrap());
+  empty_in(SkipSet::mmap_mut(p, 1000, true).unwrap());
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn test_full() {
 fn test_full_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_full_mmap_mut");
-  full_in(|n| SkipSet::mmap_mut(n, p, true).unwrap());
+  full_in(|n| SkipSet::mmap_mut(p, n, true).unwrap());
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn test_basic() {
 fn test_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_basic_mmap_mut");
-  basic_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  basic_in(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn test_iter_all_versions_mvcc_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_iter_all_versions_mvcc_mmap_mut");
-  iter_all_versions_mvcc(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versions_mvcc(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -377,7 +377,7 @@ fn test_get_mvcc() {
 fn test_get_mvcc_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_get_mvcc_mmap_mut");
-  get_mvcc(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  get_mvcc(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -465,7 +465,7 @@ fn test_gt() {
 fn test_gt_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_gt_mmap_mut");
-  gt_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  gt_in(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -551,7 +551,7 @@ fn test_ge() {
 fn test_ge_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_ge_mmap_mut");
-  ge_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  ge_in(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -663,7 +663,7 @@ fn test_le() {
 fn test_le_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_le_mmap_mut");
-  gt_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  gt_in(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -757,7 +757,7 @@ fn test_lt() {
 fn test_lt_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_lt_mmap_mut");
-  lt_in(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  lt_in(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -798,7 +798,7 @@ fn test_basic_large_testcases_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_basic_large_testcases_mmap_mut");
-  let l = Arc::new(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  let l = Arc::new(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
   test_basic_large_testcases_in(l);
 }
 
@@ -851,7 +851,7 @@ fn test_concurrent_basic() {
 fn test_concurrent_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_concurrent_basic_mmap_mut");
-  let l = Arc::new(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  let l = Arc::new(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
   test_concurrent_basic_runner(l);
 }
 
@@ -902,7 +902,7 @@ fn test_concurrent_basic_big_keys_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_concurrent_basic_big_keys_mmap_mut");
-  test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::mmap_mut(120 << 20, p, true).unwrap()));
+  test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::mmap_mut(p, 120 << 20, true).unwrap()));
 }
 
 #[test]
@@ -963,7 +963,7 @@ fn test_concurrent_one_key() {
 fn test_concurrent_one_key_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_concurrent_one_key_mmap_mut");
-  concurrent_one_key(Arc::new(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap()));
+  concurrent_one_key(Arc::new(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap()));
 }
 
 #[test]
@@ -1005,7 +1005,7 @@ fn test_iter_all_versionsator_next_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_iter_all_versionsator_next_mmap_mut");
-  iter_all_versionsator_next(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_next(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1052,7 +1052,7 @@ fn test_range_next() {
 fn test_range_next_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_range_next_mmap_mut");
-  iter_all_versionsator_next(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_next(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1095,7 +1095,7 @@ fn test_iter_all_versionsator_prev_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_iter_all_versionsator_prev_mmap_mut");
-  iter_all_versionsator_prev(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_prev(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1142,7 +1142,7 @@ fn test_range_prev() {
 fn test_range_prev_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_range_prev_mmap_mut");
-  range_prev(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  range_prev(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1206,7 +1206,7 @@ fn test_iter_all_versionsator_seek_ge_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_iter_all_versionsator_seek_ge_mmap_mut");
-  iter_all_versionsator_seek_ge(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_seek_ge(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1262,7 +1262,7 @@ fn test_iter_all_versionsator_seek_lt_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_iter_all_versionsator_seek_lt_mmap_mut");
-  iter_all_versionsator_seek_lt(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_seek_lt(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1360,7 +1360,7 @@ fn test_range() {
 fn test_range_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_range_mmap_mut");
-  range(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  range(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1406,7 +1406,7 @@ fn test_iter_latest() {
 fn test_iter_latest_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_iter_latest_mmap_mut");
-  iter_latest(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_latest(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1452,7 +1452,7 @@ fn test_range_latest() {
 fn test_range_latest_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_range_latest_mmap_mut");
-  range_latest(SkipSet::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  range_latest(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1469,7 +1469,7 @@ fn test_reopen_mmap() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap");
   {
-    let l = SkipSet::mmap_mut(ARENA_SIZE, &p, true).unwrap();
+    let l = SkipSet::mmap_mut(&p, ARENA_SIZE, true).unwrap();
     for i in 0..1000 {
       l.insert(0, &key(i)).unwrap();
     }
@@ -1493,7 +1493,7 @@ fn test_reopen_mmap2() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipset2");
   {
-    let l = SkipSet::mmap_mut_with_comparator(ARENA_SIZE, &p, true, Ascend).unwrap();
+    let l = SkipSet::mmap_mut_with_comparator(&p, ARENA_SIZE, true, Ascend).unwrap();
     for i in 0..1000 {
       l.insert(0, &key(i)).unwrap();
     }

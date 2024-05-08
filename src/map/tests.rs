@@ -64,7 +64,7 @@ fn test_empty() {
 fn test_empty_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_empty_mmap_mut");
-  empty_in(SkipMap::mmap_mut(1000, p, true).unwrap());
+  empty_in(SkipMap::mmap_mut(p, 1000, true).unwrap());
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn test_full() {
 fn test_full_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_full_mmap_mut");
-  full_in(|n| SkipMap::mmap_mut(n, p, true).unwrap());
+  full_in(|n| SkipMap::mmap_mut(p, n, true).unwrap());
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn test_basic() {
 fn test_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_basic_mmap_mut");
-  basic_in(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  basic_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -316,7 +316,7 @@ fn test_iter_all_versions_mvcc_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versions_mvcc_mmap_mut");
-  iter_all_versions_mvcc(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versions_mvcc(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -412,7 +412,7 @@ fn test_get_mvcc() {
 fn test_get_mvcc_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_get_mvcc_mmap_mut");
-  get_mvcc(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  get_mvcc(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -512,7 +512,7 @@ fn test_gt() {
 fn test_gt_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_gt_mmap_mut");
-  gt_in(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  gt_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -610,7 +610,7 @@ fn test_ge() {
 fn test_ge_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_ge_mmap_mut");
-  ge_in(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  ge_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -722,7 +722,7 @@ fn test_le() {
 fn test_le_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_le_mmap_mut");
-  gt_in(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  gt_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -816,7 +816,7 @@ fn test_lt() {
 fn test_lt_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_lt_mmap_mut");
-  lt_in(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  lt_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -858,7 +858,7 @@ fn test_basic_large_testcases_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_basic_large_testcases_mmap_mut");
-  let l = Arc::new(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  let l = Arc::new(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
   test_basic_large_testcases_in(l);
 }
 
@@ -911,7 +911,7 @@ fn test_concurrent_basic() {
 fn test_concurrent_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_concurrent_basic_mmap_mut");
-  let l = Arc::new(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  let l = Arc::new(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
   test_concurrent_basic_runner(l);
 }
 
@@ -962,7 +962,7 @@ fn test_concurrent_basic_big_values_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_concurrent_basic_big_values_mmap_mut");
-  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::mmap_mut(120 << 20, p, true).unwrap()));
+  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::mmap_mut(p, 120 << 20, true).unwrap()));
 }
 
 #[test]
@@ -1031,7 +1031,7 @@ fn test_concurrent_one_key() {
 fn test_concurrent_one_key_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_concurrent_one_key_mmap_mut");
-  concurrent_one_key(Arc::new(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap()));
+  concurrent_one_key(Arc::new(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap()));
 }
 
 #[test]
@@ -1074,7 +1074,7 @@ fn test_iter_all_versionsator_next_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_next_mmap_mut");
-  iter_all_versionsator_next(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_next(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1122,7 +1122,7 @@ fn test_range_next() {
 fn test_range_next_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_next_mmap_mut");
-  iter_all_versionsator_next(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_next(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1165,7 +1165,7 @@ fn test_iter_all_versionsator_prev_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_prev_mmap_mut");
-  iter_all_versionsator_prev(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_prev(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1213,7 +1213,7 @@ fn test_range_prev() {
 fn test_range_prev_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_prev_mmap_mut");
-  range_prev(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  range_prev(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1286,7 +1286,7 @@ fn test_iter_all_versionsator_seek_ge_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_seek_ge_mmap_mut");
-  iter_all_versionsator_seek_ge(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_seek_ge(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1346,7 +1346,7 @@ fn test_iter_all_versionsator_seek_lt_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_seek_lt_mmap_mut");
-  iter_all_versionsator_seek_lt(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_all_versionsator_seek_lt(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1454,7 +1454,7 @@ fn test_range() {
 fn test_range_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_mmap_mut");
-  range(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  range(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1504,7 +1504,7 @@ fn test_iter_latest() {
 fn test_iter_latest_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_iter_latest_mmap_mut");
-  iter_latest(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  iter_latest(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1554,7 +1554,7 @@ fn test_range_latest() {
 fn test_range_latest_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_latest_mmap_mut");
-  range_latest(SkipMap::mmap_mut(ARENA_SIZE, p, true).unwrap());
+  range_latest(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
 }
 
 #[test]
@@ -1571,7 +1571,7 @@ fn test_reopen_mmap() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap");
   {
-    let l = SkipMap::mmap_mut(ARENA_SIZE, &p, true).unwrap();
+    let l = SkipMap::mmap_mut(&p, ARENA_SIZE, true).unwrap();
     for i in 0..1000 {
       l.insert(0, &key(i), &new_value(i)).unwrap();
     }
@@ -1596,7 +1596,7 @@ fn test_reopen_mmap2() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap2");
   {
-    let l = SkipMap::mmap_mut_with_comparator(ARENA_SIZE, &p, true, Ascend).unwrap();
+    let l = SkipMap::mmap_mut_with_comparator(&p, ARENA_SIZE, true, Ascend).unwrap();
     for i in 0..1000 {
       l.insert(0, &key(i), &new_value(i)).unwrap();
     }

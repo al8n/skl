@@ -137,11 +137,11 @@ impl SkipSet {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_mut<P: AsRef<std::path::Path>>(
-    cap: usize,
     path: P,
+    cap: usize,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Self::mmap_mut_with_comparator(cap, path, lock, Ascend)
+    Self::mmap_mut_with_comparator(path, cap, lock, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
@@ -186,8 +186,8 @@ impl<T, C> SkipSet<T, C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(not(all(feature = "memmap", target_family = "wasm")))))]
   pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
-    cap: usize,
     path: P,
+    cap: usize,
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {

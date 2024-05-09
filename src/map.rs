@@ -336,6 +336,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
+      if node.trailer.version() > version {
+        return None;
+      }
+
       Some(EntryRef {
         map: self,
         key: node_key,

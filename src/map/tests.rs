@@ -179,6 +179,19 @@ fn basic_in(mut l: SkipMap) {
 
   assert!(l.get_or_insert(2, b"c", &[]).unwrap().is_none());
 
+  {
+    #[allow(clippy::clone_on_copy)]
+    let a1 = l.get(1, b"a").unwrap().clone();
+    let a2 = l.get(2, b"a").unwrap();
+    assert!(a1 > a2);
+    let b1 = l.get(1, b"b").unwrap();
+    let b2 = l.get(2, b"b").unwrap();
+    assert!(b1 > b2);
+    let mut arr = [a1, a2, b1, b2];
+    arr.sort();
+    assert_eq!(arr, [a2, a1, b2, b1]);
+  }
+
   l.clear().unwrap();
 
   {

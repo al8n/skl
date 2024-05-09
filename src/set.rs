@@ -329,6 +329,10 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
         return None;
       }
 
+      if node.trailer.version() > version {
+        return None;
+      }
+
       Some(EntryRef {
         set: self,
         key: node_key,

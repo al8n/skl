@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.8.2
+
+- Make the result of `seek_upper_bound` and `seek_lower_bound` reference to `'a`
+
 ## 0.8.1
 
 - Add `entry` method for `MapIterator` and `SetIterator` to support access the last yield entry of the iterator.

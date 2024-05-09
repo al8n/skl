@@ -91,7 +91,7 @@ where
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<EntryRef<T, C>> {
+  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<EntryRef<'a, T, C>> {
     match upper {
       Bound::Included(key) => self.seek_le(key).map(|n| {
         let ent = EntryRef::from_node(n, self.set);
@@ -109,7 +109,7 @@ where
 
   /// Moves the iterator to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<EntryRef<T, C>> {
+  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<EntryRef<'a, T, C>> {
     match lower {
       Bound::Included(key) => self.seek_ge(key).map(|n| {
         let ent = EntryRef::from_node(n, self.set);
@@ -363,7 +363,7 @@ where
 
   /// Seeks position at the first entry in set. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
-  fn first(&mut self) -> Option<EntryRef<T, C>> {
+  fn first(&mut self) -> Option<EntryRef<'a, T, C>> {
     self.nd = self.set.first_in(self.version)?;
 
     loop {
@@ -397,7 +397,7 @@ where
 
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
-  fn last(&mut self) -> Option<EntryRef<T, C>> {
+  fn last(&mut self) -> Option<EntryRef<'a, T, C>> {
     self.nd = self.set.last_in(self.version)?;
 
     loop {

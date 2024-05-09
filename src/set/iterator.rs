@@ -67,7 +67,7 @@ where
   }
 }
 
-impl<'a, Q, R, T, C> SetIterator<'a, T, C, Q, R> {
+impl<'a, Q: ?Sized, R, T, C> SetIterator<'a, T, C, Q, R> {
   /// Returns the bounds of the iterator.
   #[inline]
   pub const fn bounds(&self) -> &R {

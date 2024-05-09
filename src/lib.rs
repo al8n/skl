@@ -152,6 +152,7 @@ impl std::error::Error for TooLarge {}
 
 /// An occupied value in the skiplist.
 #[must_use = "occupied value must be fully filled with bytes."]
+#[derive(Debug)]
 pub struct OccupiedValue<'a> {
   value: &'a mut [u8],
   len: usize,
@@ -221,28 +222,13 @@ impl<'a> core::ops::DerefMut for OccupiedValue<'a> {
 
 impl<'a> Drop for OccupiedValue<'a> {
   fn drop(&mut self) {
-    if self.len != self.cap {
-      #[cfg(feature = "std")]
-      {
-        panic!(
-          "OccupiedValue was not fully filled with bytes, capacity is {}, remaining is {}",
-          self.cap,
-          self.cap - self.len
-        );
-      }
-
-      #[cfg(not(feature = "std"))]
-      {
-        struct Abort;
-        impl Drop for Abort {
-          fn drop(&mut self) {
-            panic!();
-          }
-        }
-        let _a = Abort;
-        panic!("OccupiedValue was not fully filled with bytes.");
-      }
-    }
+    assert_eq!(
+      self.len,
+      self.cap,
+      "OccupiedValue was not fully filled with bytes, capacity is {}, remaining is {}",
+      self.cap,
+      self.cap - self.len
+    );
   }
 }
 

@@ -44,7 +44,7 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }
-either = { version = "1", optional = true, default-features = false }
+either = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 
 fs4 = { version = "0.8", optional = true }

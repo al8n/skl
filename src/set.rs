@@ -37,7 +37,7 @@ pub struct SkipSet<T = u64, C = Ascend> {
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
-  testing: bool,
+  yield_now: bool,
 
   ro: bool,
   cmp: C,
@@ -106,6 +106,13 @@ impl<T, C> SkipSet<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.arena.flush_async()
+  }
+
+  #[cfg(all(test, feature = "std"))]
+  #[inline]
+  pub(crate) fn with_yield_now(mut self) -> Self {
+    self.yield_now = true;
+    self
   }
 }
 
@@ -285,7 +292,7 @@ impl<T, C> SkipSet<T, C> {
       tail,
       ro,
       #[cfg(all(test, feature = "std"))]
-      testing: false,
+      yield_now: false,
       cmp,
     }
   }
@@ -369,59 +376,15 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     }
   }
 
-  /// Gets or inserts a new entry.
+  /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
   ///
-  /// # Success
-  ///
-  /// - Returns `Ok(Some(&[u8]))` if the key exists.
-  /// - Returns `Ok(None)` if the key does not exist, and successfully inserts the key and value.
-  ///
-  /// As a low-level crate, users are expected to handle the error cases themselves.
-  ///
-  /// # Errors
-  ///
-  /// - Returns `Err(Error::Duplicated)`, if the key already exists.
-  /// - Returns `Err(Error::Full)`, if there isn't enough room in the arena.
-  pub fn get_or_insert<'a, 'b: 'a>(
+  /// - Returns `Ok(None)` if the key was successfully inserted.
+  /// - Returns `Ok(Some(_))` if the key with the same trailer already exists.
+  pub fn insert<'a, 'b: 'a>(
     &'a self,
     trailer: T,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
-    if self.ro {
-      return Err(Error::Readonly);
-    }
-
-    let ins = &mut Default::default();
-
-    unsafe {
-      let (_, curr) = self.find_splice(trailer.version(), key, ins, true);
-      if let Some(curr) = curr {
-        if curr.is_null() {
-          return self.insert_in(trailer, key, ins).map(|_| None);
-        }
-
-        return Ok(Some({
-          let nd = curr.as_ptr();
-          EntryRef {
-            set: self,
-            key: nd.get_key(&self.arena),
-            trailer: nd.trailer,
-          }
-        }));
-      }
-      self.insert_in(trailer, key, ins).map(|_| None)
-    }
-  }
-
-  /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
-  ///
-  /// As a low-level crate, users are expected to handle the error cases themselves.
-  ///
-  /// # Errors
-  ///
-  /// - Returns `Error::Duplicated`, if the key already exists.
-  /// - Returns `Error::Full`, if there isn't enough room in the arena.
-  pub fn insert<'a, 'b: 'a>(&'a self, trailer: T, key: &'b [u8]) -> Result<(), Error> {
     if self.ro {
       return Err(Error::Readonly);
     }
@@ -635,14 +598,25 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     }
   }
 
-  fn insert_in(&self, trailer: T, key: &[u8], ins: &mut Inserter<T>) -> Result<(), Error> {
+  fn insert_in(
+    &self,
+    trailer: T,
+    key: &[u8],
+    ins: &mut Inserter<T>,
+  ) -> Result<Option<EntryRef<'_, T, C>>, Error> {
     // Safety: a fresh new Inserter, so safe here
-    if unsafe { self.find_splice(trailer.version(), key, ins, false).0 } {
-      return Err(Error::Duplicated);
+    unsafe {
+      let (found, ptr) = self.find_splice(trailer.version(), key, ins, true);
+      if found {
+        return Ok(Some(EntryRef::from_node(
+          ptr.expect("the NodePtr cannot be `None` when we found"),
+          self,
+        )));
+      }
     }
 
     #[cfg(all(test, feature = "std"))]
-    if self.testing {
+    if self.yield_now {
       // Add delay to make it easier to test race between this thread
       // and another thread that sees the intermediate state between
       // finding the splice and using it.
@@ -726,7 +700,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
               // Managed to insert nd between prev and next, so update the next
               // node's prev link and go to the next level.
               #[cfg(all(test, feature = "std"))]
-              if self.testing {
+              if self.yield_now {
                 // Add delay to make it easier to test race between this thread
                 // and another thread that sees the intermediate state between
                 // setting next and setting prev.
@@ -754,7 +728,11 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
                   panic!("how can another thread have inserted a node at a non-base level?");
                 }
 
-                return Err(Error::Duplicated);
+                return Ok(Some(EntryRef::from_node(
+                  fr.curr
+                    .expect("the current should not be `None` when we found"),
+                  self,
+                )));
               }
 
               invalid_date_splice = true;
@@ -779,7 +757,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
       }
     }
     self.arena.len.fetch_add(1, Ordering::AcqRel);
-    Ok(())
+    Ok(None)
   }
 
   unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {

@@ -1,14 +1,8 @@
 use core::{mem, ptr};
 
-use crate::{
-  sync::{Link, Ordering},
-  Trailer,
-};
+use crate::sync::Link;
 
-use super::{
-  super::arena::{Arena, ArenaError},
-  Error, MAX_HEIGHT,
-};
+use super::{super::arena::ArenaError, *};
 
 #[derive(Debug)]
 pub(crate) struct NodePtr<T> {
@@ -166,30 +160,30 @@ impl<T> Node<T> {
 }
 
 impl<T: Trailer> Node<T> {
-  pub(super) fn new_node_ptr(
-    arena: &Arena,
+  pub(super) fn new_node_ptr<'a, 'b: 'a, E>(
+    arena: &'a Arena,
     height: u32,
-    key: &[u8],
+    key: &'b [u8],
     trailer: T,
-    value: &[u8],
-  ) -> Result<NodePtr<T>, Error> {
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+  ) -> Result<NodePtr<T>, Either<E, Error>> {
     if height < 1 || height > MAX_HEIGHT as u32 {
       panic!("height cannot be less than one or greater than the max height");
     }
 
     let key_size = key.len();
     if key_size as u64 > u32::MAX as u64 {
-      return Err(Error::KeyTooLarge(key_size as u64));
+      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
     }
 
-    let value_size = value.len();
     if value_size as u64 > u32::MAX as u64 {
-      return Err(Error::ValueTooLarge(value_size as u64));
+      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
     }
 
     let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
     if entry_size > u32::MAX as u64 {
-      return Err(Error::EntryTooLarge(entry_size));
+      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
     }
 
     // Compute the amount of the tower that will never be used, since the height
@@ -197,11 +191,13 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, alloc_size) = arena.alloc(
-      node_size + key_size as u32 + value_size as u32,
-      Self::alignment(),
-      unused_size,
-    )?;
+    let (node_offset, alloc_size) = arena
+      .alloc(
+        node_size + key_size as u32 + value_size,
+        Self::alignment(),
+        unused_size,
+      )
+      .map_err(|e| Either::Right(e.into()))?;
 
     unsafe {
       // Safety: we have check the offset is valid
@@ -212,10 +208,14 @@ impl<T: Trailer> Node<T> {
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
       node.height = height as u16;
-      node.value_size = value_size as u32;
+      node.value_size = value_size;
       node.alloc_size = alloc_size;
       node.get_key_mut(arena).copy_from_slice(key);
-      node.get_value_mut(arena).copy_from_slice(value);
+      f(OccupiedValue::new(
+        value_size as usize,
+        node.get_value_mut(arena),
+      ))
+      .map_err(Either::Left)?;
       Ok(NodePtr::new(ptr, node_offset))
     }
   }

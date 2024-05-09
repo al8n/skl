@@ -1,13 +1,15 @@
 use core::{
   cmp,
+  convert::Infallible,
   ops::{Bound, RangeBounds},
 };
 
-use crate::Trailer;
+use crate::{OccupiedValue, Trailer};
 
 use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
 
 mod node;
+use either::Either;
 use node::{Node, NodePtr};
 mod error;
 pub use error::Error;
@@ -37,7 +39,7 @@ pub struct SkipMap<T = u64, C = Ascend> {
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
-  testing: bool,
+  yield_now: bool,
 
   ro: bool,
 
@@ -107,6 +109,13 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.arena.flush_async()
+  }
+
+  #[cfg(all(test, feature = "std"))]
+  #[inline]
+  pub(crate) fn with_yield_now(mut self) -> Self {
+    self.yield_now = true;
+    self
   }
 }
 
@@ -291,7 +300,7 @@ impl<T, C> SkipMap<T, C> {
       tail,
       ro,
       #[cfg(all(test, feature = "std"))]
-      testing: false,
+      yield_now: false,
       cmp,
     }
   }
@@ -377,20 +386,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
   }
 
-  /// Gets or inserts a new entry.
+  /// Inserts a new key-value pair if it does not yet exist.
   ///
-  /// # Success
-  ///
-  /// - Returns `Ok(Some(&[u8]))` if the key exists.
-  /// - Returns `Ok(None)` if the key does not exist, and successfully inserts the key and value.
-  ///
-  /// As a low-level crate, users are expected to handle the error cases themselves.
-  ///
-  /// # Errors
-  ///
-  /// - Returns `Err(Error::Duplicated)`, if the key already exists.
-  /// - Returns `Err(Error::Full)`, if there isn't enough room in the arena.
-  pub fn get_or_insert<'a, 'b: 'a>(
+  /// - Returns `Ok(None)` if the key was successfully inserted.
+  /// - Returns `Ok(Some(_))` if the key with the same trailer already exists.
+  pub fn insert<'a, 'b: 'a>(
     &'a self,
     trailer: T,
     key: &'b [u8],
@@ -400,48 +400,72 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
-    let ins = &mut Default::default();
-
-    unsafe {
-      let (_, curr) = self.find_splice(trailer.version(), key, ins, true);
-      if let Some(curr) = curr {
-        if curr.is_null() {
-          return self.insert_in(trailer, key, value, ins).map(|_| None);
-        }
-
-        return Ok(Some({
-          let nd = curr.as_ptr();
-          EntryRef {
-            map: self,
-            key: nd.get_key(&self.arena),
-            trailer: nd.trailer,
-            value: nd.get_value(&self.arena),
-          }
-        }));
-      }
-      self.insert_in(trailer, key, value, ins).map(|_| None)
-    }
+    self
+      .insert_in::<Infallible>(
+        trailer,
+        key,
+        value.len() as u32,
+        |mut buf| {
+          let _ = buf.write(value);
+          Ok(())
+        },
+        &mut Inserter::default(),
+      )
+      .map_err(|e| e.expect_right("must be map::Error"))
   }
 
   /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
   ///
-  /// As a low-level crate, users are expected to handle the error cases themselves.
+  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
+  /// at this moment.
   ///
-  /// # Errors
+  /// A placeholder value will be inserted, and you can update the value later by calling [`OccupiedValue::insert`].
   ///
-  /// - Returns `Error::Duplicated`, if the key already exists.
-  /// - Returns `Error::Full`, if there isn't enough room in the arena.
-  pub fn insert<'a, 'b: 'a>(
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// struct Person {
+  ///   id: u32,
+  ///   name: String,
+  /// }
+  ///
+  /// impl Person {
+  ///   fn encoded_size(&self) -> usize {
+  ///     4 + self.name.len()
+  ///   }
+  /// }
+  ///
+  ///
+  /// let alice = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let encoded_size = alice.encoded_size();
+  ///
+  /// let l = SkipMap::new(1000).unwrap();
+  ///
+  /// l.insert_with::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
+  ///   val.write(&alice.id.to_le_bytes()).unwrap();
+  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   Ok(())
+  /// })
+  /// .unwrap();
+  /// ```
+  pub fn insert_with<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
     key: &'b [u8],
-    value: &'b [u8],
-  ) -> Result<(), Error> {
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
-      return Err(Error::Readonly);
+      return Err(Either::Right(Error::Readonly));
     }
 
-    self.insert_in(trailer, key, value, &mut Inserter::default())
+    self.insert_in(trailer, key, value_size, f, &mut Inserter::default())
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -516,9 +540,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 // --------------------------------Private Methods--------------------------------
 impl<T: Trailer, C> SkipMap<T, C> {
   #[allow(clippy::type_complexity)]
-  fn new_node(&self, key: &[u8], trailer: T, value: &[u8]) -> Result<(NodePtr<T>, u32), Error> {
+  fn new_node<'a, 'b: 'a, E>(
+    &'a self,
+    key: &'b [u8],
+    trailer: T,
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+  ) -> Result<(NodePtr<T>, u32), Either<E, Error>> {
     let height = super::random_height();
-    let nd = Node::new_node_ptr(&self.arena, height, key, trailer, value)?;
+    let nd = Node::new_node_ptr(&self.arena, height, key, trailer, value_size, f)?;
 
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
@@ -650,27 +680,34 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
   }
 
-  fn insert_in(
-    &self,
+  fn insert_in<'a, 'b: 'a, E>(
+    &'a self,
     trailer: T,
-    key: &[u8],
-    value: &[u8],
+    key: &'b [u8],
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
     ins: &mut Inserter<T>,
-  ) -> Result<(), Error> {
+  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     // Safety: a fresh new Inserter, so safe here
-    if unsafe { self.find_splice(trailer.version(), key, ins, false).0 } {
-      return Err(Error::Duplicated);
+    unsafe {
+      let (found, ptr) = self.find_splice(trailer.version(), key, ins, true);
+      if found {
+        return Ok(Some(EntryRef::from_node(
+          ptr.expect("the NodePtr cannot be `None` when we found"),
+          self,
+        )));
+      }
     }
 
     #[cfg(all(test, feature = "std"))]
-    if self.testing {
+    if self.yield_now {
       // Add delay to make it easier to test race between this thread
       // and another thread that sees the intermediate state between
       // finding the splice and using it.
       std::thread::yield_now();
     }
 
-    let (nd, height) = self.new_node(key, trailer, value)?;
+    let (nd, height) = self.new_node(key, trailer, value_size, f)?;
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -747,7 +784,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               // Managed to insert nd between prev and next, so update the next
               // node's prev link and go to the next level.
               #[cfg(all(test, feature = "std"))]
-              if self.testing {
+              if self.yield_now {
                 // Add delay to make it easier to test race between this thread
                 // and another thread that sees the intermediate state between
                 // setting next and setting prev.
@@ -775,7 +812,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   panic!("how can another thread have inserted a node at a non-base level?");
                 }
 
-                return Err(Error::Duplicated);
+                return Ok(Some(EntryRef::from_node(
+                  fr.curr
+                    .expect("the current should not be `None` when we found"),
+                  self,
+                )));
               }
 
               invalid_date_splice = true;
@@ -800,7 +841,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     }
     self.arena.len.fetch_add(1, Ordering::AcqRel);
-    Ok(())
+    Ok(None)
   }
 
   unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {

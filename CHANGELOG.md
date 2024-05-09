@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.8.0
+
+- Make `SkipMap::insert` and `SkipSet::insert` returns current value if key and trailer already exist.
+- Add `SkipMap::insert_with` method to support insert an occupied key first then write the value semantic.
+
 ## 0.7.0
 
 - Implement `Iterator` for `MapIterator` and `SetIterator`.

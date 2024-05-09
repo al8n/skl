@@ -175,9 +175,9 @@ fn basic_in(mut l: SkipMap) {
     assert_eq!(ent.trailer().version(), 1);
   }
 
-  l.get_or_insert(2, b"b", &[]).unwrap().unwrap();
+  l.insert(2, b"b", &[]).unwrap().unwrap();
 
-  assert!(l.get_or_insert(2, b"c", &[]).unwrap().is_none());
+  assert!(l.insert(2, b"c", &[]).unwrap().is_none());
 
   {
     #[allow(clippy::clone_on_copy)]
@@ -921,7 +921,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipMap>) {
 #[test]
 #[cfg(feature = "std")]
 fn test_concurrent_basic() {
-  let l = Arc::new(SkipMap::new(ARENA_SIZE).unwrap());
+  let l = Arc::new(SkipMap::new(ARENA_SIZE).unwrap().with_yield_now());
   test_concurrent_basic_runner(l);
 }
 
@@ -931,7 +931,11 @@ fn test_concurrent_basic() {
 fn test_concurrent_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_concurrent_basic_mmap_mut");
-  let l = Arc::new(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let l = Arc::new(
+    SkipMap::mmap_mut(p, ARENA_SIZE, true)
+      .unwrap()
+      .with_yield_now(),
+  );
   test_concurrent_basic_runner(l);
 }
 
@@ -939,7 +943,9 @@ fn test_concurrent_basic_mmap_mut() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_mmap_anon() {
-  test_concurrent_basic_runner(Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap()));
+  test_concurrent_basic_runner(Arc::new(
+    SkipMap::mmap_anon(ARENA_SIZE).unwrap().with_yield_now(),
+  ));
 }
 
 #[cfg(feature = "std")]
@@ -971,7 +977,9 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
 #[cfg(feature = "std")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_values() {
-  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::new(120 << 20).unwrap()));
+  test_concurrent_basic_big_values_runner(Arc::new(
+    SkipMap::new(120 << 20).unwrap().with_yield_now(),
+  ));
 }
 
 #[test]
@@ -982,14 +990,20 @@ fn test_concurrent_basic_big_values_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_concurrent_basic_big_values_mmap_mut");
-  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::mmap_mut(p, 120 << 20, true).unwrap()));
+  test_concurrent_basic_big_values_runner(Arc::new(
+    SkipMap::mmap_mut(p, 120 << 20, true)
+      .unwrap()
+      .with_yield_now(),
+  ));
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_values_mmap_anon() {
-  test_concurrent_basic_big_values_runner(Arc::new(SkipMap::mmap_anon(120 << 20).unwrap()));
+  test_concurrent_basic_big_values_runner(Arc::new(
+    SkipMap::mmap_anon(120 << 20).unwrap().with_yield_now(),
+  ));
 }
 
 #[cfg(feature = "std")]
@@ -1042,7 +1056,7 @@ fn concurrent_one_key(l: Arc<SkipMap>) {
 #[test]
 #[cfg(feature = "std")]
 fn test_concurrent_one_key() {
-  concurrent_one_key(Arc::new(SkipMap::new(ARENA_SIZE).unwrap()));
+  concurrent_one_key(Arc::new(SkipMap::new(ARENA_SIZE).unwrap().with_yield_now()));
 }
 
 #[test]
@@ -1051,14 +1065,20 @@ fn test_concurrent_one_key() {
 fn test_concurrent_one_key_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_concurrent_one_key_mmap_mut");
-  concurrent_one_key(Arc::new(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap()));
+  concurrent_one_key(Arc::new(
+    SkipMap::mmap_mut(p, ARENA_SIZE, true)
+      .unwrap()
+      .with_yield_now(),
+  ));
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_one_key_mmap_anon() {
-  concurrent_one_key(Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap()));
+  concurrent_one_key(Arc::new(
+    SkipMap::mmap_anon(ARENA_SIZE).unwrap().with_yield_now(),
+  ));
 }
 
 fn iter_all_versionsator_next(l: SkipMap) {
@@ -1632,4 +1652,96 @@ fn test_reopen_mmap2() {
     assert_eq!(ent.trailer().version(), 0);
     assert_eq!(ent.key(), k);
   }
+}
+
+struct Person {
+  id: u32,
+  name: String,
+}
+
+impl Person {
+  fn encoded_size(&self) -> usize {
+    4 + self.name.len()
+  }
+}
+
+fn insert_with_panic(l: SkipMap) {
+  let alice = Person {
+    id: 1,
+    name: "Alice".to_string(),
+  };
+
+  let encoded_size = alice.encoded_size();
+
+  l.insert_with::<()>(1, b"alice", encoded_size as u32, |mut val| {
+    val.write(&alice.id.to_le_bytes()).unwrap();
+    Ok(())
+  })
+  .unwrap();
+}
+
+#[test]
+#[should_panic]
+fn test_insert_with_panic() {
+  insert_with_panic(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+#[should_panic]
+fn test_insert_with_panic_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipmap_insert_with_mmap_mut");
+  insert_with_panic(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+#[should_panic]
+fn test_insert_with_panic_mmap_anon() {
+  insert_with_panic(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+}
+
+fn insert_with(l: SkipMap) {
+  let alice = Person {
+    id: 1,
+    name: "Alice".to_string(),
+  };
+
+  let encoded_size = alice.encoded_size();
+
+  l.insert_with::<()>(1, b"alice", encoded_size as u32, |mut val| {
+    assert_eq!(val.capacity(), encoded_size);
+    assert!(val.is_empty());
+    val.write(&alice.id.to_le_bytes()).unwrap();
+    assert_eq!(val.len(), 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
+    val.write(alice.name.as_bytes()).unwrap();
+    assert_eq!(val.len(), encoded_size);
+    Ok(())
+  })
+  .unwrap();
+}
+
+#[test]
+fn test_insert_with() {
+  insert_with(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_insert_with_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipmap_insert_with_mmap_mut");
+  insert_with(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_insert_with_mmap_anon() {
+  insert_with(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
 }

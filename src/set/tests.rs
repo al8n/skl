@@ -157,9 +157,9 @@ fn basic_in(mut l: SkipSet) {
     assert_eq!(ent.trailer().version(), 1);
   }
 
-  l.get_or_insert(2, b"b").unwrap().unwrap();
+  l.insert(2, b"b").unwrap().unwrap();
 
-  assert!(l.get_or_insert(2, b"c").unwrap().is_none());
+  assert!(l.insert(2, b"c").unwrap().is_none());
 
   {
     #[allow(clippy::clone_on_copy)]
@@ -859,7 +859,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipSet>) {
 #[test]
 #[cfg(feature = "std")]
 fn test_concurrent_basic() {
-  let l = Arc::new(SkipSet::new(ARENA_SIZE).unwrap());
+  let l = Arc::new(SkipSet::new(ARENA_SIZE).unwrap().with_yield_now());
   test_concurrent_basic_runner(l);
 }
 
@@ -869,7 +869,11 @@ fn test_concurrent_basic() {
 fn test_concurrent_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_concurrent_basic_mmap_mut");
-  let l = Arc::new(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let l = Arc::new(
+    SkipSet::mmap_mut(p, ARENA_SIZE, true)
+      .unwrap()
+      .with_yield_now(),
+  );
   test_concurrent_basic_runner(l);
 }
 
@@ -877,7 +881,9 @@ fn test_concurrent_basic_mmap_mut() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_mmap_anon() {
-  test_concurrent_basic_runner(Arc::new(SkipSet::mmap_anon(ARENA_SIZE).unwrap()));
+  test_concurrent_basic_runner(Arc::new(
+    SkipSet::mmap_anon(ARENA_SIZE).unwrap().with_yield_now(),
+  ));
 }
 
 #[cfg(feature = "std")]
@@ -909,7 +915,9 @@ fn test_concurrent_basic_big_keys_runner(l: Arc<SkipSet>) {
 #[cfg(feature = "std")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_keys() {
-  test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::new(120 << 20).unwrap()));
+  test_concurrent_basic_big_keys_runner(Arc::new(
+    SkipSet::new(120 << 20).unwrap().with_yield_now(),
+  ));
 }
 
 #[test]
@@ -920,14 +928,20 @@ fn test_concurrent_basic_big_keys_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipset_concurrent_basic_big_keys_mmap_mut");
-  test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::mmap_mut(p, 120 << 20, true).unwrap()));
+  test_concurrent_basic_big_keys_runner(Arc::new(
+    SkipSet::mmap_mut(p, 120 << 20, true)
+      .unwrap()
+      .with_yield_now(),
+  ));
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_keys_mmap_anon() {
-  test_concurrent_basic_big_keys_runner(Arc::new(SkipSet::mmap_anon(120 << 20).unwrap()));
+  test_concurrent_basic_big_keys_runner(Arc::new(
+    SkipSet::mmap_anon(120 << 20).unwrap().with_yield_now(),
+  ));
 }
 
 #[cfg(feature = "std")]
@@ -972,7 +986,7 @@ fn concurrent_one_key(l: Arc<SkipSet>) {
 #[test]
 #[cfg(feature = "std")]
 fn test_concurrent_one_key() {
-  concurrent_one_key(Arc::new(SkipSet::new(ARENA_SIZE).unwrap()));
+  concurrent_one_key(Arc::new(SkipSet::new(ARENA_SIZE).unwrap().with_yield_now()));
 }
 
 #[test]
@@ -981,14 +995,20 @@ fn test_concurrent_one_key() {
 fn test_concurrent_one_key_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipset_concurrent_one_key_mmap_mut");
-  concurrent_one_key(Arc::new(SkipSet::mmap_mut(p, ARENA_SIZE, true).unwrap()));
+  concurrent_one_key(Arc::new(
+    SkipSet::mmap_mut(p, ARENA_SIZE, true)
+      .unwrap()
+      .with_yield_now(),
+  ));
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_one_key_mmap_anon() {
-  concurrent_one_key(Arc::new(SkipSet::mmap_anon(ARENA_SIZE).unwrap()));
+  concurrent_one_key(Arc::new(
+    SkipSet::mmap_anon(ARENA_SIZE).unwrap().with_yield_now(),
+  ));
 }
 
 fn iter_all_versionsator_next(l: SkipSet) {

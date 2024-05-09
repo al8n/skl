@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.8.2"
+version = "0.8.3"
 edition = "2021"
 rust-version = "1.56.0"
 repository = "https://github.com/al8n/skl-rs"

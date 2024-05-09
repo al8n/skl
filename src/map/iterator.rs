@@ -76,7 +76,7 @@ impl<'a, Q, R, T, C> MapIterator<'a, T, C, Q, R> {
 
   /// Returns the entry at the current position of the iterator.
   #[inline]
-  pub const fn entry(&self) -> Option<&EntryRef<T, C>> {
+  pub const fn entry(&self) -> Option<&EntryRef<'a, T, C>> {
     self.last.as_ref()
   }
 }

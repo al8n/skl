@@ -1,8 +1,13 @@
 # CHANGELOG
 
+## 0.8.3
+
+- Make the result of `MapIterator::entry` and `SetIterator::entry` reference to `'a`
+
 ## 0.8.2
 
-- Make the result of `seek_upper_bound` and `seek_lower_bound` reference to `'a`
+- Make the result of `MapIterator::seek_upper_bound` and `MapIterator::seek_lower_bound` reference to `'a`
+- Make the result of `SetIterator::seek_upper_bound` and `SetIterator::seek_lower_bound` reference to `'a`
 
 ## 0.8.1
 

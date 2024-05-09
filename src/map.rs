@@ -419,7 +419,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// A placeholder value will be inserted, and you can update the value later by calling [`OccupiedValue::insert`].
+  /// A placeholder value will be inserted, and you with get an [`OccupiedValue`],
+  /// and you must fully fill the value with bytes later by in the closure.
   ///
   /// # Example
   ///

@@ -130,6 +130,108 @@ impl Comparator for Descend {
   }
 }
 
+/// Returns when the bytes are too large to be written to the occupied value.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TooLarge {
+  remaining: usize,
+  write: usize,
+}
+
+impl core::fmt::Display for TooLarge {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    write!(
+      f,
+      "OccupiedValue does not have enough space (remaining {}, want {})",
+      self.remaining, self.write
+    )
+  }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for TooLarge {}
+
+/// An occupied value in the skiplist.
+#[must_use = "occupied value must be fully filled with bytes."]
+#[derive(Debug)]
+pub struct OccupiedValue<'a> {
+  value: &'a mut [u8],
+  len: usize,
+  cap: usize,
+}
+
+impl<'a> OccupiedValue<'a> {
+  /// Write bytes to the occupied value.
+  pub fn write(&mut self, bytes: &[u8]) -> Result<(), TooLarge> {
+    let len = bytes.len();
+    let remaining = self.cap - self.len;
+    if len > remaining {
+      return Err(TooLarge {
+        remaining,
+        write: len,
+      });
+    }
+
+    self.value[self.len..self.len + len].copy_from_slice(bytes);
+    self.len += len;
+    Ok(())
+  }
+
+  /// Returns the capacity of the occupied value.
+  #[inline]
+  pub const fn capacity(&self) -> usize {
+    self.cap
+  }
+
+  /// Returns the length of the occupied value.
+  #[inline]
+  pub const fn len(&self) -> usize {
+    self.len
+  }
+
+  /// Returns `true` if the occupied value is empty.
+  #[inline]
+  pub const fn is_empty(&self) -> bool {
+    self.len == 0
+  }
+
+  /// Returns the remaining space of the occupied value.
+  #[inline]
+  pub const fn remaining(&self) -> usize {
+    self.cap - self.len
+  }
+
+  #[inline]
+  fn new(cap: usize, value: &'a mut [u8]) -> Self {
+    Self { value, len: 0, cap }
+  }
+}
+
+impl<'a> core::ops::Deref for OccupiedValue<'a> {
+  type Target = [u8];
+
+  fn deref(&self) -> &Self::Target {
+    &self.value[..self.len]
+  }
+}
+
+impl<'a> core::ops::DerefMut for OccupiedValue<'a> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.value[..self.len]
+  }
+}
+
+impl<'a> Drop for OccupiedValue<'a> {
+  fn drop(&mut self) {
+    assert_eq!(
+      self.len,
+      self.cap,
+      "OccupiedValue was not fully filled with bytes, capacity is {}, remaining is {}",
+      self.cap,
+      self.cap - self.len
+    );
+  }
+}
+
 /// A trait for extra information that can be stored with entry in the skiplist.
 pub trait Trailer: Copy {
   /// Returns the version of the trailer.

@@ -2,43 +2,6 @@ use core::ops::RangeFull;
 
 use super::*;
 
-/// A range over the skipmap. The current state of the iterator can be cloned by
-/// simply value copying the struct.
-pub struct MapRange<'a, T, C, Q: ?Sized = &'static str, R = RangeFull>(MapIterator<'a, T, C, Q, R>);
-
-impl<'a, T, C, Q, R> Clone for MapRange<'a, T, C, Q, R>
-where
-  R: Clone,
-  Q: Clone,
-  T: Clone,
-{
-  fn clone(&self) -> Self {
-    Self(self.0.clone())
-  }
-}
-
-impl<'a, T, C, Q, R> Copy for MapRange<'a, T, C, Q, R>
-where
-  R: Copy,
-  Q: Copy,
-  T: Copy,
-{
-}
-
-impl<'a, T, C, Q, R> core::ops::Deref for MapRange<'a, T, C, Q, R> {
-  type Target = MapIterator<'a, T, C, Q, R>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl<'a, T, C, Q, R> core::ops::DerefMut for MapRange<'a, T, C, Q, R> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
-  }
-}
-
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
 pub struct MapIterator<'a, T, C, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
@@ -91,13 +54,8 @@ where
   Q: ?Sized + PartialOrd<&'a [u8]>,
 {
   #[inline]
-  pub(super) fn range(
-    version: u64,
-    map: &'a SkipMap<T, C>,
-    r: R,
-    all_versions: bool,
-  ) -> MapRange<'a, T, C, Q, R> {
-    MapRange(Self {
+  pub(super) fn range(version: u64, map: &'a SkipMap<T, C>, r: R, all_versions: bool) -> Self {
+    Self {
       map,
       nd: map.head,
       version,
@@ -105,7 +63,7 @@ where
       last: None,
       all_versions,
       _phantom: core::marker::PhantomData,
-    })
+    }
   }
 }
 

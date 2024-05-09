@@ -26,8 +26,8 @@ pub mod map;
 pub mod set;
 
 pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, MapRange, SkipMap};
-pub use set::{SetIterator, SetRange, SkipSet};
+pub use map::{MapIterator, SkipMap};
+pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
 const NODE_ALIGNMENT_FACTOR: usize = mem::align_of::<u64>();

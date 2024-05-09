@@ -454,7 +454,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapRange<'a, T, C, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapIterator<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
@@ -469,7 +469,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     range: R,
-  ) -> iterator::MapRange<'a, T, C, Q, R>
+  ) -> iterator::MapIterator<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,

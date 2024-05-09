@@ -299,21 +299,17 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T>> {
-    self
-      .first_in(version)
-      .map(|n| EntryRef::from_node(n, &self.arena))
+  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
+    self.first_in(version).map(|n| EntryRef::from_node(n, self))
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T>> {
-    self
-      .last_in(version)
-      .map(|n| EntryRef::from_node(n, &self.arena))
+  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
+    self.last_in(version).map(|n| EntryRef::from_node(n, self))
   }
 
   /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -323,6 +319,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
 
       if eq {
         return Some(EntryRef {
+          set: self,
           key: node_key,
           trailer: node.trailer,
         });
@@ -333,6 +330,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
       }
 
       Some(EntryRef {
+        set: self,
         key: node_key,
         trailer: node.trailer,
       })
@@ -345,14 +343,10 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     &'a self,
     version: u64,
     upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
+  ) -> Option<EntryRef<'a, T, C>> {
     match upper {
-      Bound::Included(key) => self
-        .le(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Excluded(key) => self
-        .lt(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Included(key) => self.le(version, key).map(|n| EntryRef::from_node(n, self)),
+      Bound::Excluded(key) => self.lt(version, key).map(|n| EntryRef::from_node(n, self)),
       Bound::Unbounded => self.last(version),
     }
   }
@@ -363,14 +357,10 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     &'a self,
     version: u64,
     lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
+  ) -> Option<EntryRef<'a, T, C>> {
     match lower {
-      Bound::Included(key) => self
-        .ge(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
-      Bound::Excluded(key) => self
-        .gt(version, key)
-        .map(|n| EntryRef::from_node(n, &self.arena)),
+      Bound::Included(key) => self.ge(version, key).map(|n| EntryRef::from_node(n, self)),
+      Bound::Excluded(key) => self.gt(version, key).map(|n| EntryRef::from_node(n, self)),
       Bound::Unbounded => self.first(version),
     }
   }
@@ -392,7 +382,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     &'a self,
     trailer: T,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
     if self.ro {
       return Err(Error::Readonly);
     }
@@ -409,6 +399,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
         return Ok(Some({
           let nd = curr.as_ptr();
           EntryRef {
+            set: self,
             key: nd.get_key(&self.arena),
             trailer: nd.trailer,
           }
@@ -448,7 +439,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::SetRange<'a, T, C, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::SetIterator<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
@@ -463,7 +454,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     &'a self,
     version: u64,
     range: R,
-  ) -> iterator::SetRange<'a, T, C, Q, R>
+  ) -> iterator::SetIterator<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,

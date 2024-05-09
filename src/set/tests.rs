@@ -26,8 +26,8 @@ fn make_int_key(i: usize) -> std::vec::Vec<u8> {
 fn empty_in(l: SkipSet) {
   let mut it = l.iter_all_versions(0);
 
-  assert!(it.first().is_none());
-  assert!(it.last().is_none());
+  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
   assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
   assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
   assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
@@ -164,9 +164,9 @@ fn basic_in(mut l: SkipSet) {
   l.clear();
 
   {
-    let mut it = l.iter_all_versions(0);
-    assert!(it.first().is_none());
-    assert!(it.last().is_none());
+    let it = l.iter_all_versions(0);
+    assert!(it.min().is_none());
+    assert!(it.max().is_none());
   }
   assert!(l.is_empty());
 
@@ -233,33 +233,33 @@ fn iter_all_versions_mvcc(l: SkipSet) {
   assert_eq!(num, 4);
 
   let mut it = l.iter_all_versions(0);
-  assert!(it.first().is_none());
-  assert!(it.last().is_none());
+  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
 
   let mut it = l.iter_all_versions(1);
-  let ent = it.first().unwrap();
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.trailer().version(), 1);
 
-  let ent = it.last().unwrap();
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.trailer().version(), 1);
 
   let mut it = l.iter_all_versions(2);
-  let ent = it.first().unwrap();
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.trailer().version(), 1);
 
-  let ent = it.last().unwrap();
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.trailer().version(), 1);
 
   let mut it = l.iter_all_versions(3);
-  let ent = it.first().unwrap();
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.trailer().version(), 3);
 
-  let ent = it.last().unwrap();
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.trailer().version(), 3);
 
@@ -984,7 +984,7 @@ fn iter_all_versionsator_next(l: SkipSet) {
   }
 
   let mut it = l.iter_all_versions(0);
-  let mut ent = it.first().unwrap();
+  let mut ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   for i in 0..N {
     assert_eq!(ent.key(), make_int_key(i));
     if i != N - 1 {
@@ -1027,7 +1027,7 @@ fn range_next(l: SkipSet) {
 
   let upper = make_int_key(50);
   let mut it = l.range(0, ..=upper.as_slice());
-  let mut ent = it.first();
+  let mut ent = it.seek_lower_bound(Bound::Unbounded);
   for i in 0..N {
     if i <= 50 {
       {
@@ -1073,16 +1073,16 @@ fn iter_all_versionsator_prev(l: SkipSet) {
   }
 
   let mut it = l.iter_all_versions(0);
-  let mut ent = it.last().unwrap();
+  let mut ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   for i in (0..N).rev() {
     assert_eq!(ent.key(), make_int_key(i));
 
     if i != 0 {
-      ent = it.prev().unwrap();
+      ent = it.next_back().unwrap();
     }
   }
 
-  assert!(it.prev().is_none());
+  assert!(it.next_back().is_none());
 }
 
 #[test]
@@ -1117,21 +1117,21 @@ fn range_prev(l: SkipSet) {
 
   let lower = make_int_key(50);
   let mut it = l.range(0, lower.as_slice()..);
-  let mut ent = it.last();
+  let mut ent = it.seek_upper_bound(Bound::Unbounded);
   for i in (0..N).rev() {
     if i >= 50 {
       {
         let ent = ent.unwrap();
         assert_eq!(ent.key(), make_int_key(i));
       }
-      ent = it.prev();
+      ent = it.next_back();
     } else {
       assert!(ent.is_none());
-      ent = it.prev();
+      ent = it.next_back();
     }
   }
 
-  assert!(it.prev().is_none());
+  assert!(it.next_back().is_none());
 }
 
 #[test]
@@ -1349,7 +1349,7 @@ fn range(l: SkipSet) {
     .seek_upper_bound(Bound::Excluded(&make_int_key(4)))
     .unwrap();
   assert_eq!(ent.key(), make_int_key(3));
-  assert!(it.prev().is_none());
+  assert!(it.next_back().is_none());
 }
 
 #[test]

@@ -1656,7 +1656,7 @@ fn test_reopen_mmap2() {
 
 struct Person {
   id: u32,
-  name: String,
+  name: std::string::String,
 }
 
 impl Person {
@@ -1665,10 +1665,11 @@ impl Person {
   }
 }
 
+#[cfg(feature = "std")]
 fn insert_with_panic(l: SkipMap) {
   let alice = Person {
     id: 1,
-    name: "Alice".to_string(),
+    name: std::string::String::from("Alice"),
   };
 
   let encoded_size = alice.encoded_size();
@@ -1681,6 +1682,7 @@ fn insert_with_panic(l: SkipMap) {
 }
 
 #[test]
+#[cfg(feature = "std")]
 #[should_panic]
 fn test_insert_with_panic() {
   insert_with_panic(SkipMap::new(ARENA_SIZE).unwrap());
@@ -1707,7 +1709,7 @@ fn test_insert_with_panic_mmap_anon() {
 fn insert_with(l: SkipMap) {
   let alice = Person {
     id: 1,
-    name: "Alice".to_string(),
+    name: std::string::String::from("Alice"),
   };
 
   let encoded_size = alice.encoded_size();

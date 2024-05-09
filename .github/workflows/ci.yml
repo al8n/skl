@@ -66,8 +66,10 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install Rust
         run: rustup update 1.56.0 && rustup default 1.56.0
-      - name: Check
-        run: . ci/test-stable.sh check
+      - name: Check no_std
+        run: cargo check --no-default-features --features alloc
+      - name: Check std
+        run: cargo check --no-default-features --features std
 
   # Stable
   stable:

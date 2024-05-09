@@ -73,6 +73,12 @@ impl<'a, Q, R, T, C> MapIterator<'a, T, C, Q, R> {
   pub const fn bounds(&self) -> &R {
     &self.range
   }
+
+  /// Returns the entry at the current position of the iterator.
+  #[inline]
+  pub const fn entry(&self) -> Option<&EntryRef<T, C>> {
+    self.last.as_ref()
+  }
 }
 
 impl<'a, Q, R, T, C> MapIterator<'a, T, C, Q, R>

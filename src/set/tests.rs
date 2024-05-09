@@ -155,6 +155,10 @@ fn basic_in(mut l: SkipSet) {
     let ent = it.next().unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.trailer().version(), 1);
+
+    let ent = it.entry().unwrap();
+    assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.trailer().version(), 1);
   }
 
   l.insert(2, b"b").unwrap().unwrap();

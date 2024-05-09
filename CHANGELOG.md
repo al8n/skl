@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.8.1
+
+- Add `entry` method for `MapIterator` and `SetIterator` to support access the last yield entry of the iterator.
+
 ## 0.8.0
 
 - Make `SkipMap::insert` and `SkipSet::insert` return the current value if the key and trailer already exist.

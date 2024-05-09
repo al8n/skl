@@ -2,8 +2,8 @@
 
 ## 0.8.0
 
-- Make `SkipMap::insert` and `SkipSet::insert` returns current value if key and trailer already exist.
-- Add `SkipMap::insert_with` method to support insert an occupied key first then write the value semantic.
+- Make `SkipMap::insert` and `SkipSet::insert` return the current value if the key and trailer already exist.
+- Add the `SkipMap::insert_with` method to support inserting an occupied key first, then write the value in the closure semantic.
 
 ## 0.7.0
 

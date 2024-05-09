@@ -35,8 +35,8 @@ fn make_value(i: usize) -> std::vec::Vec<u8> {
 fn empty_in(l: SkipMap) {
   let mut it = l.iter_all_versions(0);
 
-  assert!(it.first().is_none());
-  assert!(it.last().is_none());
+  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
   assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
   assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
   assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
@@ -183,8 +183,8 @@ fn basic_in(mut l: SkipMap) {
 
   {
     let mut it = l.iter_all_versions(0);
-    assert!(it.first().is_none());
-    assert!(it.last().is_none());
+    assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+    assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
   }
   assert!(l.is_empty());
 
@@ -251,38 +251,38 @@ fn iter_all_versions_mvcc(l: SkipMap) {
   assert_eq!(num, 4);
 
   let mut it = l.iter_all_versions(0);
-  assert!(it.first().is_none());
-  assert!(it.last().is_none());
+  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
 
   let mut it = l.iter_all_versions(1);
-  let ent = it.first().unwrap();
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.trailer().version(), 1);
 
-  let ent = it.last().unwrap();
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.trailer().version(), 1);
 
   let mut it = l.iter_all_versions(2);
-  let ent = it.first().unwrap();
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
   assert_eq!(ent.trailer().version(), 1);
 
-  let ent = it.last().unwrap();
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
   assert_eq!(ent.trailer().version(), 1);
 
   let mut it = l.iter_all_versions(3);
-  let ent = it.first().unwrap();
+  let ent = it.min().unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
   assert_eq!(ent.trailer().version(), 3);
 
-  let ent = it.last().unwrap();
+  let ent = it.max().unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c2");
   assert_eq!(ent.trailer().version(), 3);
@@ -1054,7 +1054,7 @@ fn iter_all_versionsator_next(l: SkipMap) {
   }
 
   let mut it = l.iter_all_versions(0);
-  let mut ent = it.first().unwrap();
+  let mut ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   for i in 0..N {
     assert_eq!(ent.key(), make_int_key(i));
     assert_eq!(ent.value(), make_value(i));
@@ -1098,7 +1098,7 @@ fn range_next(l: SkipMap) {
 
   let upper = make_int_key(50);
   let mut it = l.range(0, ..=upper.as_slice());
-  let mut ent = it.first();
+  let mut ent = it.seek_lower_bound(Bound::Unbounded);
   for i in 0..N {
     if i <= 50 {
       {
@@ -1145,20 +1145,20 @@ fn iter_all_versionsator_prev(l: SkipMap) {
   }
 
   let mut it = l.iter_all_versions(0);
-  let mut ent = it.last().unwrap();
+  let mut ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   for i in (0..N).rev() {
     assert_eq!(ent.key(), make_int_key(i));
     assert_eq!(ent.value(), make_value(i));
     if i != 0 {
-      ent = it.prev().unwrap();
+      ent = it.next_back().unwrap();
     }
   }
 
-  assert!(it.prev().is_none());
+  assert!(it.next_back().is_none());
 }
 
 #[test]
-fn test_iter_all_versionsator_prev() {
+fn test_iter_all_versionsator_next_back() {
   iter_all_versionsator_prev(SkipMap::new(ARENA_SIZE).unwrap());
 }
 
@@ -1189,7 +1189,7 @@ fn range_prev(l: SkipMap) {
 
   let lower = make_int_key(50);
   let mut it = l.range(0, lower.as_slice()..);
-  let mut ent = it.last();
+  let mut ent = it.seek_upper_bound(Bound::Unbounded);
   for i in (0..N).rev() {
     if i >= 50 {
       {
@@ -1197,18 +1197,18 @@ fn range_prev(l: SkipMap) {
         assert_eq!(ent.key(), make_int_key(i));
         assert_eq!(ent.value(), make_value(i));
       }
-      ent = it.prev();
+      ent = it.next_back();
     } else {
       assert!(ent.is_none());
-      ent = it.prev();
+      ent = it.next_back();
     }
   }
 
-  assert!(it.prev().is_none());
+  assert!(it.next_back().is_none());
 }
 
 #[test]
-fn test_range_prev() {
+fn test_range_next_back() {
   range_prev(SkipMap::new(ARENA_SIZE).unwrap());
 }
 
@@ -1445,7 +1445,7 @@ fn range(l: SkipMap) {
   assert_eq!(ent.key(), make_int_key(3));
   assert_eq!(ent.value(), make_value(3));
 
-  assert!(it.prev().is_none());
+  assert!(it.next_back().is_none());
 }
 
 #[test]

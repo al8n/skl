@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.8.4
+
+- Relax `MapIterator` and `SetIterator` trait bound
+- Add `SkipMap::max_version` and `SkipSet::max_version` to access the max version of the `SkipMap` or `SkipSet`.
+- Add checksum and max version in overhead for memmory mapped backend `SkipMap` or `SkipSet`.
+- Use CAS instead of `fetch_update` in `Arena::alloc`.
+
 ## 0.8.3
 
 - Make the result of `MapIterator::entry` and `SetIterator::entry` reference to `'a`

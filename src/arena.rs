@@ -13,10 +13,30 @@ use std::boxed::Box;
 use crossbeam_utils::CachePadded;
 
 mod shared;
-use shared::Shared;
+use shared::{Shared, SharedMeta};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const MMAP_OVERHEAD: usize = mem::size_of::<u64>();
+const HEIGHT_ENCODED_SIZE: usize = mem::size_of::<u8>();
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+const LEN_ENCODED_SIZE: usize = mem::size_of::<u32>();
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+const MAX_VERSION_ENCODED_SIZE: usize = mem::size_of::<u64>();
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+const CHECKSUM_ENCODED_SIZE: usize = mem::size_of::<u32>();
+
+/// The overhead of the memory-mapped file.
+///
+/// ```text
+/// +---------------+------------+--------------------+-----------------+
+/// | 8-bit height | 32-bit len | 64-bit max version | 32-bit checksum |
+/// +---------------+------------+--------------------+-----------------+
+/// ```
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+const MMAP_OVERHEAD: usize =
+  HEIGHT_ENCODED_SIZE + LEN_ENCODED_SIZE + MAX_VERSION_ENCODED_SIZE + CHECKSUM_ENCODED_SIZE;
 
 /// An error indicating that the arena is full
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -39,6 +59,7 @@ pub struct Arena {
   /// Current height. 1 <= height <= kMaxHeight. CAS.
   pub(super) height: CachePadded<AtomicU32>,
   pub(super) len: AtomicU32,
+  pub(super) max_version: AtomicU64,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -86,8 +107,6 @@ impl Arena {
         mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
       ),
       None,
-      None,
-      None,
     )
   }
 
@@ -101,7 +120,7 @@ impl Arena {
   ) -> std::io::Result<Self> {
     let n = n.saturating_add(MMAP_OVERHEAD);
     Shared::mmap_mut(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), path, lock)
-      .map(|shared| Self::new(shared, None, None, None))
+      .map(|shared| Self::new(shared, None))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -111,15 +130,14 @@ impl Arena {
     path: P,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Shared::mmap(min_cap + MMAP_OVERHEAD, path, lock).map(|(allocated, height, num, shared)| {
-      Self::new(shared, Some(allocated), Some(height), Some(num))
-    })
+    Shared::mmap(min_cap + MMAP_OVERHEAD, path, lock)
+      .map(|(meta, shared)| Self::new(shared, Some(meta)))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_anonymous_mmap(n: usize, min_cap: usize) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(min_cap)).map(|shared| Self::new(shared, None, None, None))
+    Shared::new_mmaped_anon(n.max(min_cap)).map(|shared| Self::new(shared, None))
   }
 
   #[inline]
@@ -153,12 +171,7 @@ impl Arena {
   }
 
   #[inline]
-  fn new(
-    mut shared: Shared,
-    allocated: Option<u64>,
-    height: Option<u32>,
-    len: Option<u32>,
-  ) -> Self {
+  fn new(mut shared: Shared, meta: Option<SharedMeta>) -> Self {
     // Safety:
     // The ptr is always non-null, we just initialized it.
     // And this ptr is only deallocated when the arena is dropped.
@@ -167,16 +180,29 @@ impl Arena {
       .as_mut_ptr()
       .map(|p| unsafe { NonNull::new_unchecked(p) })
       .unwrap_or_else(NonNull::dangling);
+
+    let (height, allocated, len, max_version) = match meta {
+      Some(meta) => (meta.height, meta.allocated, meta.len, meta.max_version),
+      None => {
+        let height = 1;
+        let len = 0;
+        let max_version = 0;
+        let allocated = 1;
+        (height, allocated, len, max_version)
+      }
+    };
+
     Self {
       cap: shared.cap(),
       inner: AtomicPtr::new(Box::into_raw(Box::new(shared)) as _),
       write_data_ptr,
       read_data_ptr,
-      height: CachePadded::new(AtomicU32::new(height.unwrap_or(1))),
-      len: AtomicU32::new(len.unwrap_or(0)),
+      height: CachePadded::new(AtomicU32::new(height as u32)),
+      len: AtomicU32::new(len),
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
-      n: CachePadded::new(AtomicU64::new(allocated.unwrap_or(1))),
+      n: CachePadded::new(AtomicU64::new(allocated)),
+      max_version: AtomicU64::new(max_version),
     }
   }
 
@@ -208,23 +234,33 @@ impl Arena {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = size as u64 + align as u64 - 1;
 
-    let res = self
-      .n
-      .fetch_update(Ordering::Release, Ordering::Acquire, |orig| {
-        if orig + padded + overflow as u64 > self.cap as u64 {
-          return None;
-        }
-        Some(orig + padded)
-      });
+    let mut current_allocated = self.n.load(Ordering::Acquire);
+    if current_allocated + padded + overflow as u64 > self.cap as u64 {
+      return Err(ArenaError);
+    }
 
-    match res {
-      Ok(new_size) => {
-        // Return the aligned offset.
-        let new_size = new_size + padded;
-        let offset = (new_size as u32 - size) & !(align - 1);
-        Ok((offset, padded as u32))
+    loop {
+      let want = current_allocated + padded;
+      match self.n.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          // Return the aligned offset.
+          let new_size = current + padded;
+          let offset = (new_size as u32 - size) & !(align - 1);
+          return Ok((offset, padded as u32));
+        }
+        Err(x) => {
+          if x + padded + overflow as u64 > self.cap as u64 {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
       }
-      Err(_) => Err(ArenaError),
     }
   }
 
@@ -315,9 +351,10 @@ impl Drop for Arena {
         // Relaxed is enough here as we're in a drop, no one else can
         // access this memory anymore.
         shared.unmount(
-          self.height.load(Ordering::Acquire),
+          self.height.load(Ordering::Acquire) as u8,
           self.len.load(Ordering::Acquire),
           self.n.load(Ordering::Acquire),
+          self.max_version.load(Ordering::Acquire),
         );
       });
     }

@@ -86,6 +86,13 @@ enum SharedBackend {
   AnonymousMmap(memmap2::MmapMut),
 }
 
+pub(super) struct SharedMeta {
+  pub(super) height: u8,
+  pub(super) len: u32,
+  pub(super) max_version: u64,
+  pub(super) allocated: u64,
+}
+
 pub(super) struct Shared {
   pub(super) refs: AtomicUsize,
   cap: usize,
@@ -142,7 +149,7 @@ impl Shared {
     min_cap: usize,
     path: P,
     lock: bool,
-  ) -> std::io::Result<(u64, u32, u32, Self)> {
+  ) -> std::io::Result<(SharedMeta, Self)> {
     use fs4::FileExt;
 
     let file = std::fs::OpenOptions::new().read(true).open(path.as_ref())?;
@@ -162,14 +169,39 @@ impl Shared {
       memmap2::MmapOptions::new()
         .len(allocated as usize)
         .map(&file)
-        .map(|mmap| {
+        .and_then(|mmap| {
           let len = mmap.len();
-          let height = u32::from_le_bytes(mmap[len - 8..len - 4].try_into().unwrap());
-          let num = u32::from_le_bytes(mmap[len - 4..len].try_into().unwrap());
-          (
-            allocated,
-            height,
-            num,
+          let cks = crc32fast::hash(&mmap[..len - CHECKSUM_ENCODED_SIZE]);
+          let cks2 = u32::from_le_bytes(mmap[len - CHECKSUM_ENCODED_SIZE..len].try_into().unwrap());
+          if cks != cks2 {
+            return Err(std::io::Error::new(
+              std::io::ErrorKind::InvalidData,
+              "checksum mismatch",
+            ));
+          }
+
+          let mut overhead_offset = len - MMAP_OVERHEAD;
+          let height = mmap[overhead_offset];
+          overhead_offset += HEIGHT_ENCODED_SIZE;
+          let len = u32::from_le_bytes(
+            mmap[overhead_offset..overhead_offset + LEN_ENCODED_SIZE]
+              .try_into()
+              .unwrap(),
+          );
+          overhead_offset += LEN_ENCODED_SIZE;
+          let max_version = u64::from_le_bytes(
+            mmap[overhead_offset..overhead_offset + MAX_VERSION_ENCODED_SIZE]
+              .try_into()
+              .unwrap(),
+          );
+
+          Ok((
+            SharedMeta {
+              height,
+              len,
+              max_version,
+              allocated,
+            },
             Self {
               cap: allocated as usize,
               backend: SharedBackend::Mmap {
@@ -179,7 +211,7 @@ impl Shared {
               },
               refs: AtomicUsize::new(1),
             },
-          )
+          ))
         })
     }
   }
@@ -247,7 +279,7 @@ impl Shared {
   ///
   /// ## Safety:
   /// - This method must be invoked in the drop impl of `Arena`.
-  pub(super) unsafe fn unmount(&mut self, _height: u32, _len: u32, _size: u64) {
+  pub(super) unsafe fn unmount(&mut self, _height: u8, _len: u32, _size: u64, _max_version: u64) {
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     match &self.backend {
       SharedBackend::MmapMut { buf, file, lock } => {
@@ -258,10 +290,16 @@ impl Shared {
         // in Drop impls, c.f. https://github.com/rust-lang/lang-team/issues/97
         {
           let mmap = &mut **buf;
-          let size = _size as usize;
-          mmap[size..size + mem::size_of::<u32>()].copy_from_slice(&_height.to_le_bytes());
-          mmap[size + mem::size_of::<u32>()..size + MMAP_OVERHEAD]
-            .copy_from_slice(&_len.to_le_bytes());
+          let mut cur = _size as usize;
+          mmap[cur] = _height;
+          cur += HEIGHT_ENCODED_SIZE;
+          mmap[cur..cur + LEN_ENCODED_SIZE].copy_from_slice(&_len.to_le_bytes());
+          cur += LEN_ENCODED_SIZE;
+          mmap[cur..cur + MAX_VERSION_ENCODED_SIZE].copy_from_slice(&_max_version.to_le_bytes());
+          cur += MAX_VERSION_ENCODED_SIZE;
+
+          let h = crc32fast::hash(&mmap[..cur]);
+          mmap[cur..cur + CHECKSUM_ENCODED_SIZE].copy_from_slice(&h.to_le_bytes());
           let _ = mmap.flush();
         }
 

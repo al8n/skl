@@ -86,6 +86,12 @@ impl<T, C> SkipSet<T, C> {
     self.len() == 0
   }
 
+  /// Returns the maximum version of all entries in the map.
+  #[inline]
+  pub fn max_version(&self) -> u64 {
+    self.arena.max_version.load(Ordering::Acquire)
+  }
+
   /// Flushes outstanding memory map modifications to disk.
   ///
   /// When this method returns with a non-error result,
@@ -389,7 +395,33 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
       return Err(Error::Readonly);
     }
 
-    self.insert_in(trailer, key, &mut Inserter::default())
+    let version = trailer.version();
+    self
+      .insert_in(trailer, key, &mut Inserter::default())
+      .map(|ent| {
+        // Update the max version.
+        if ent.is_none() {
+          let mut current = self.arena.max_version.load(Ordering::Acquire);
+          loop {
+            match self.arena.max_version.compare_exchange_weak(
+              current,
+              version,
+              Ordering::SeqCst,
+              Ordering::Acquire,
+            ) {
+              Ok(_) => break,
+              Err(v) => {
+                if v < version {
+                  current = v;
+                } else {
+                  break;
+                }
+              }
+            }
+          }
+        }
+        ent
+      })
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.

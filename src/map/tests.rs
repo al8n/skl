@@ -124,6 +124,7 @@ fn basic_in(mut l: SkipMap) {
   l.insert(0, b"key1", &make_value(1)).unwrap();
   l.insert(0, b"key3", &make_value(3)).unwrap();
   l.insert(0, b"key2", &make_value(2)).unwrap();
+  assert_eq!(l.comparator(), &Ascend);
 
   {
     let mut it = l.iter_all_versions(0);

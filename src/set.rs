@@ -86,6 +86,12 @@ impl<T, C> SkipSet<T, C> {
     self.len() == 0
   }
 
+  /// Returns the comparator used to compare keys.
+  #[inline]
+  pub const fn comparator(&self) -> &C {
+    &self.cmp
+  }
+
   /// Returns the maximum version of all entries in the map.
   #[inline]
   pub fn max_version(&self) -> u64 {

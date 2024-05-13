@@ -91,7 +91,7 @@ pub trait Comparator {
 }
 
 /// Ascend is a comparator that compares byte slices in ascending order.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Ascend;
 
 impl Comparator for Ascend {
@@ -111,7 +111,7 @@ impl Comparator for Ascend {
 }
 
 /// Descend is a comparator that compares byte slices in descending order.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Descend;
 
 impl Comparator for Descend {

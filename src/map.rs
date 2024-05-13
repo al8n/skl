@@ -95,6 +95,12 @@ impl<T, C> SkipMap<T, C> {
     self.arena.max_version.load(Ordering::Acquire)
   }
 
+  /// Returns the comparator used to compare keys.
+  #[inline]
+  pub const fn comparator(&self) -> &C {
+    &self.cmp
+  }
+
   /// Flushes outstanding memory map modifications to disk.
   ///
   /// When this method returns with a non-error result,

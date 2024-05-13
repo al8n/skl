@@ -113,6 +113,7 @@ fn basic_in(mut l: SkipSet) {
   l.insert(0, b"key1").unwrap();
   l.insert(0, b"key3").unwrap();
   l.insert(0, b"key2").unwrap();
+  assert_eq!(l.comparator(), &Ascend);
 
   {
     let mut it = l.iter_all_versions(0);

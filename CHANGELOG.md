@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.8.5
+
+- Add accessor to `Comparator`.
+
 ## 0.8.4
 
 - Relax `MapIterator` and `SetIterator` trait bound

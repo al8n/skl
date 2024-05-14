@@ -90,6 +90,7 @@ pub(super) struct SharedMeta {
   pub(super) height: u8,
   pub(super) len: u32,
   pub(super) max_version: u64,
+  pub(super) min_version: u64,
   pub(super) allocated: u64,
 }
 
@@ -171,6 +172,13 @@ impl Shared {
         .map(&file)
         .and_then(|mmap| {
           let len = mmap.len();
+          if len < MMAP_OVERHEAD {
+            return Err(std::io::Error::new(
+              std::io::ErrorKind::InvalidData,
+              "file size is less than the minimum capacity",
+            ));
+          }
+
           let cks = crc32fast::hash(&mmap[..len - CHECKSUM_ENCODED_SIZE]);
           let cks2 = u32::from_le_bytes(mmap[len - CHECKSUM_ENCODED_SIZE..len].try_into().unwrap());
           if cks != cks2 {
@@ -194,12 +202,19 @@ impl Shared {
               .try_into()
               .unwrap(),
           );
+          overhead_offset += MAX_VERSION_ENCODED_SIZE;
+          let min_version = u64::from_le_bytes(
+            mmap[overhead_offset..overhead_offset + MIN_VERSION_ENCODED_SIZE]
+              .try_into()
+              .unwrap(),
+          );
 
           Ok((
             SharedMeta {
               height,
               len,
               max_version,
+              min_version,
               allocated,
             },
             Self {
@@ -279,7 +294,14 @@ impl Shared {
   ///
   /// ## Safety:
   /// - This method must be invoked in the drop impl of `Arena`.
-  pub(super) unsafe fn unmount(&mut self, _height: u8, _len: u32, _size: u64, _max_version: u64) {
+  pub(super) unsafe fn unmount(
+    &mut self,
+    _height: u8,
+    _len: u32,
+    _size: u64,
+    _max_version: u64,
+    _min_version: u64,
+  ) {
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     match &self.backend {
       SharedBackend::MmapMut { buf, file, lock } => {
@@ -297,6 +319,8 @@ impl Shared {
           cur += LEN_ENCODED_SIZE;
           mmap[cur..cur + MAX_VERSION_ENCODED_SIZE].copy_from_slice(&_max_version.to_le_bytes());
           cur += MAX_VERSION_ENCODED_SIZE;
+          mmap[cur..cur + MIN_VERSION_ENCODED_SIZE].copy_from_slice(&_min_version.to_le_bytes());
+          cur += MIN_VERSION_ENCODED_SIZE;
 
           let h = crc32fast::hash(&mmap[..cur]);
           mmap[cur..cur + CHECKSUM_ENCODED_SIZE].copy_from_slice(&h.to_le_bytes());

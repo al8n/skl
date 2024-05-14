@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.8.6
+
+- Add `SkipMap::min_version` and `SkipSet::min_version` to access the min version of the `SkipMap` or `SkipSet`.
+- Fix `max_version` is not be updated when using `SkipMap::insert_with`.
+
 ## 0.8.5
 
 - Add accessor to `Comparator`.

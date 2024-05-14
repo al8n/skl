@@ -1533,24 +1533,32 @@ fn test_reopen_mmap() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_reopen_mmap2() {
+  use rand::seq::SliceRandom;
+
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipset2");
   {
     let l = SkipSet::mmap_mut_with_comparator(&p, ARENA_SIZE, true, Ascend).unwrap();
-    for i in 0..1000 {
+    let mut data = (0..1000).collect::<Vec<usize>>();
+    data.shuffle(&mut rand::thread_rng());
+    for i in data {
       l.insert(i as u64, &key(i)).unwrap();
     }
     l.flush_async().unwrap();
     assert_eq!(l.max_version(), 999);
+    assert_eq!(l.min_version(), 0);
   }
 
   let l = SkipSet::<u64, Ascend>::mmap_with_comparator(&p, false, Ascend).unwrap();
   assert_eq!(1000, l.len());
-  for i in 0..1000 {
+  let mut data = (0..1000).collect::<Vec<usize>>();
+  data.shuffle(&mut rand::thread_rng());
+  for i in data {
     let k = key(i);
     let ent = l.get(i as u64, &k).unwrap();
     assert_eq!(ent.trailer().version(), i as u64);
     assert_eq!(ent.key(), k);
   }
   assert_eq!(l.max_version(), 999);
+  assert_eq!(l.min_version(), 0);
 }

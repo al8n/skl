@@ -25,18 +25,24 @@ const LEN_ENCODED_SIZE: usize = mem::size_of::<u32>();
 const MAX_VERSION_ENCODED_SIZE: usize = mem::size_of::<u64>();
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+const MIN_VERSION_ENCODED_SIZE: usize = mem::size_of::<u64>();
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 const CHECKSUM_ENCODED_SIZE: usize = mem::size_of::<u32>();
 
 /// The overhead of the memory-mapped file.
 ///
 /// ```text
-/// +---------------+------------+--------------------+-----------------+
-/// | 8-bit height | 32-bit len | 64-bit max version | 32-bit checksum |
-/// +---------------+------------+--------------------+-----------------+
+/// +---------------+------------+--------------------+--------------------+-----------------+
+/// | 8-bit height  | 32-bit len | 64-bit max version | 64-bit min version | 32-bit checksum |
+/// +---------------+------------+--------------------+--------------------+-----------------+
 /// ```
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const MMAP_OVERHEAD: usize =
-  HEIGHT_ENCODED_SIZE + LEN_ENCODED_SIZE + MAX_VERSION_ENCODED_SIZE + CHECKSUM_ENCODED_SIZE;
+const MMAP_OVERHEAD: usize = HEIGHT_ENCODED_SIZE
+  + LEN_ENCODED_SIZE
+  + MAX_VERSION_ENCODED_SIZE
+  + MIN_VERSION_ENCODED_SIZE
+  + CHECKSUM_ENCODED_SIZE;
 
 /// An error indicating that the arena is full
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -60,6 +66,7 @@ pub struct Arena {
   pub(super) height: CachePadded<AtomicU32>,
   pub(super) len: AtomicU32,
   pub(super) max_version: AtomicU64,
+  pub(super) min_version: AtomicU64,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -95,6 +102,46 @@ impl Arena {
   #[inline]
   pub fn remaining(&self) -> usize {
     self.cap.saturating_sub(self.size())
+  }
+
+  pub(crate) fn update_max_version(&self, version: u64) {
+    let mut current = self.max_version.load(Ordering::Acquire);
+
+    loop {
+      if version <= current {
+        return;
+      }
+
+      match self.max_version.compare_exchange_weak(
+        current,
+        version,
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+      ) {
+        Ok(_) => break,
+        Err(v) => current = v,
+      }
+    }
+  }
+
+  pub(crate) fn update_min_version(&self, version: u64) {
+    let mut current = self.min_version.load(Ordering::Acquire);
+
+    loop {
+      if version >= current {
+        return;
+      }
+
+      match self.min_version.compare_exchange_weak(
+        current,
+        version,
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+      ) {
+        Ok(_) => break,
+        Err(v) => current = v,
+      }
+    }
   }
 }
 
@@ -181,14 +228,21 @@ impl Arena {
       .map(|p| unsafe { NonNull::new_unchecked(p) })
       .unwrap_or_else(NonNull::dangling);
 
-    let (height, allocated, len, max_version) = match meta {
-      Some(meta) => (meta.height, meta.allocated, meta.len, meta.max_version),
+    let (height, allocated, len, max_version, min_version) = match meta {
+      Some(meta) => (
+        meta.height,
+        meta.allocated,
+        meta.len,
+        meta.max_version,
+        meta.min_version,
+      ),
       None => {
         let height = 1;
         let len = 0;
         let max_version = 0;
+        let min_version = 0;
         let allocated = 1;
-        (height, allocated, len, max_version)
+        (height, allocated, len, max_version, min_version)
       }
     };
 
@@ -203,6 +257,7 @@ impl Arena {
       // of nil pointer.
       n: CachePadded::new(AtomicU64::new(allocated)),
       max_version: AtomicU64::new(max_version),
+      min_version: AtomicU64::new(min_version),
     }
   }
 
@@ -355,6 +410,7 @@ impl Drop for Arena {
           self.len.load(Ordering::Acquire),
           self.n.load(Ordering::Acquire),
           self.max_version.load(Ordering::Acquire),
+          self.min_version.load(Ordering::Acquire),
         );
       });
     }

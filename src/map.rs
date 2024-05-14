@@ -95,6 +95,12 @@ impl<T, C> SkipMap<T, C> {
     self.arena.max_version.load(Ordering::Acquire)
   }
 
+  /// Returns the minimum version of all entries in the map.
+  #[inline]
+  pub fn min_version(&self) -> u64 {
+    self.arena.min_version.load(Ordering::Acquire)
+  }
+
   /// Returns the comparator used to compare keys.
   #[inline]
   pub const fn comparator(&self) -> &C {
@@ -412,7 +418,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
-    let version = trailer.version();
     self
       .insert_in::<Infallible>(
         trailer,
@@ -424,30 +429,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         },
         &mut Inserter::default(),
       )
-      .map(|ent| {
-        // Update the max version.
-        if ent.is_none() {
-          let mut current = self.arena.max_version.load(Ordering::Acquire);
-          loop {
-            match self.arena.max_version.compare_exchange_weak(
-              current,
-              version,
-              Ordering::SeqCst,
-              Ordering::Acquire,
-            ) {
-              Ok(_) => break,
-              Err(v) => {
-                if v < version {
-                  current = v;
-                } else {
-                  break;
-                }
-              }
-            }
-          }
-        }
-        ent
-      })
       .map_err(|e| e.expect_right("must be map::Error"))
   }
 
@@ -726,9 +707,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
     ins: &mut Inserter<T>,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+    let version = trailer.version();
     // Safety: a fresh new Inserter, so safe here
     unsafe {
-      let (found, ptr) = self.find_splice(trailer.version(), key, ins, true);
+      let (found, ptr) = self.find_splice(version, key, ins, true);
       if found {
         return Ok(Some(EntryRef::from_node(
           ptr.expect("the NodePtr cannot be `None` when we found"),
@@ -879,6 +861,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     }
     self.arena.len.fetch_add(1, Ordering::AcqRel);
+    self.arena.update_max_version(version);
+    self.arena.update_min_version(version);
     Ok(None)
   }
 

@@ -23,7 +23,7 @@ mod tests;
 // mod loom;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
-/// and backward iteration. Keys and values are immutable once added to the skipmap and
+/// and backward iteration. Keys and values are immutable once added to the skipset and
 /// deletion is not supported. Instead, higher-level code is expected to add new
 /// entries that shadow existing entries and perform deletion via tombstones. It
 /// is up to the user to process these shadow entries and tombstones
@@ -74,13 +74,13 @@ impl<T, C> SkipSet<T, C> {
     self.arena.remaining()
   }
 
-  /// Returns the number of entries in the skipmap.
+  /// Returns the number of entries in the skipset.
   #[inline]
   pub fn len(&self) -> usize {
     self.arena.len.load(Ordering::Acquire) as usize
   }
 
-  /// Returns true if the skipmap is empty.
+  /// Returns true if the skipset is empty.
   #[inline]
   pub fn is_empty(&self) -> bool {
     self.len() == 0
@@ -92,10 +92,16 @@ impl<T, C> SkipSet<T, C> {
     &self.cmp
   }
 
-  /// Returns the maximum version of all entries in the map.
+  /// Returns the maximum version of all entries in the set.
   #[inline]
   pub fn max_version(&self) -> u64 {
     self.arena.max_version.load(Ordering::Acquire)
+  }
+
+  /// Returns the minimum version of all entries in the set.
+  #[inline]
+  pub fn min_version(&self) -> u64 {
+    self.arena.min_version.load(Ordering::Acquire)
   }
 
   /// Flushes outstanding memory map modifications to disk.
@@ -129,7 +135,7 @@ impl<T, C> SkipSet<T, C> {
 }
 
 impl SkipSet {
-  /// Create a new skipmap according to the given capacity
+  /// Create a new skipset according to the given capacity
   ///
   /// **Note:** The capacity stands for how many memory allocated,
   /// it does not mean the skiplist can store `cap` entries.
@@ -153,10 +159,10 @@ impl SkipSet {
     Self::with_comparator(cap, Ascend)
   }
 
-  /// Create a new skipmap according to the given capacity, and mmaped to a file.
+  /// Create a new skipset according to the given capacity, and mmaped to a file.
   ///
   /// **Note:** The capacity stands for how many memory mmaped,
-  /// it does not mean the skipmap can store `cap` entries.
+  /// it does not mean the skipset can store `cap` entries.
   ///
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -169,7 +175,7 @@ impl SkipSet {
     Self::mmap_mut_with_comparator(path, cap, lock, Ascend)
   }
 
-  /// Open an exist file and mmap it to create skipmap.
+  /// Open an exist file and mmap it to create skipset.
   ///
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -178,7 +184,7 @@ impl SkipSet {
     Self::mmap_with_comparator(path, lock, Ascend)
   }
 
-  /// Create a new skipmap according to the given capacity, and mmap anon.
+  /// Create a new skipset according to the given capacity, and mmap anon.
   ///
   /// **What the difference between this method and [`SkipSet::new`]?**
   ///
@@ -401,33 +407,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
       return Err(Error::Readonly);
     }
 
-    let version = trailer.version();
-    self
-      .insert_in(trailer, key, &mut Inserter::default())
-      .map(|ent| {
-        // Update the max version.
-        if ent.is_none() {
-          let mut current = self.arena.max_version.load(Ordering::Acquire);
-          loop {
-            match self.arena.max_version.compare_exchange_weak(
-              current,
-              version,
-              Ordering::SeqCst,
-              Ordering::Acquire,
-            ) {
-              Ok(_) => break,
-              Err(v) => {
-                if v < version {
-                  current = v;
-                } else {
-                  break;
-                }
-              }
-            }
-          }
-        }
-        ent
-      })
+    self.insert_in(trailer, key, &mut Inserter::default())
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -642,6 +622,8 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     key: &[u8],
     ins: &mut Inserter<T>,
   ) -> Result<Option<EntryRef<'_, T, C>>, Error> {
+    let version = trailer.version();
+
     // Safety: a fresh new Inserter, so safe here
     unsafe {
       let (found, ptr) = self.find_splice(trailer.version(), key, ins, true);
@@ -795,6 +777,8 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
       }
     }
     self.arena.len.fetch_add(1, Ordering::AcqRel);
+    self.arena.update_max_version(version);
+    self.arena.update_min_version(version);
     Ok(None)
   }
 

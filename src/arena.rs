@@ -1,7 +1,4 @@
-use crate::{
-  sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, Ordering},
-  NODE_ALIGNMENT_FACTOR,
-};
+use crate::sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use core::{
   mem,
   ptr::{self, NonNull},
@@ -13,36 +10,37 @@ use std::boxed::Box;
 use crossbeam_utils::CachePadded;
 
 mod shared;
-use shared::{Shared, SharedMeta};
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const HEIGHT_ENCODED_SIZE: usize = mem::size_of::<u8>();
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const LEN_ENCODED_SIZE: usize = mem::size_of::<u32>();
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const MAX_VERSION_ENCODED_SIZE: usize = mem::size_of::<u64>();
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const MIN_VERSION_ENCODED_SIZE: usize = mem::size_of::<u64>();
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const CHECKSUM_ENCODED_SIZE: usize = mem::size_of::<u32>();
+use shared::Shared;
 
 /// The overhead of the memory-mapped file.
 ///
 /// ```text
-/// +---------------+------------+--------------------+--------------------+-----------------+
-/// | 8-bit height  | 32-bit len | 64-bit max version | 64-bit min version | 32-bit checksum |
-/// +---------------+------------+--------------------+--------------------+-----------------+
+/// +---------------+------------+--------------------+--------------------+
+/// | 32-bit height  | 32-bit len | 64-bit max version | 64-bit min version |
+/// +---------------+------------+--------------------+--------------------+
 /// ```
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-const MMAP_OVERHEAD: usize = HEIGHT_ENCODED_SIZE
-  + LEN_ENCODED_SIZE
-  + MAX_VERSION_ENCODED_SIZE
-  + MIN_VERSION_ENCODED_SIZE
-  + CHECKSUM_ENCODED_SIZE;
+const MMAP_OVERHEAD: usize = mem::size_of::<Header>();
+
+#[derive(Debug)]
+#[repr(C)]
+pub(super) struct Header {
+  /// Current height. 1 <= height <= kMaxHeight. CAS.
+  height: AtomicU32,
+  len: AtomicU32,
+  max_version: AtomicU64,
+  min_version: AtomicU64,
+}
+
+impl Default for Header {
+  fn default() -> Self {
+    Self {
+      height: AtomicU32::new(1),
+      len: AtomicU32::new(0),
+      max_version: AtomicU64::new(0),
+      min_version: AtomicU64::new(0),
+    }
+  }
+}
 
 /// An error indicating that the arena is full
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -61,12 +59,9 @@ impl std::error::Error for ArenaError {}
 pub struct Arena {
   write_data_ptr: NonNull<u8>,
   read_data_ptr: *const u8,
+  header_ptr: *const Header,
+  data_offset: u64,
   n: CachePadded<AtomicU64>,
-  /// Current height. 1 <= height <= kMaxHeight. CAS.
-  pub(super) height: CachePadded<AtomicU32>,
-  pub(super) len: AtomicU32,
-  pub(super) max_version: AtomicU64,
-  pub(super) min_version: AtomicU64,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -76,10 +71,13 @@ impl core::fmt::Debug for Arena {
     let allocated = self.size();
     // Safety:
     // The ptr is always non-null, we only deallocate it when the arena is dropped.
-    let data = unsafe { slice::from_raw_parts(self.read_data_ptr, allocated) };
+    let data =
+      unsafe { slice::from_raw_parts(self.read_data_ptr, allocated - self.data_offset as usize) };
+    let header = self.header();
     f.debug_struct("Arena")
       .field("cap", &self.cap)
       .field("allocated", &allocated)
+      .field("header", header)
       .field("data", &data)
       .finish()
   }
@@ -104,19 +102,53 @@ impl Arena {
     self.cap.saturating_sub(self.size())
   }
 
-  pub(crate) fn update_max_version(&self, version: u64) {
-    let mut current = self.max_version.load(Ordering::Acquire);
+  /// Returns the height of the arena.
+  #[inline]
+  pub fn height(&self) -> u32 {
+    self.header().height.load(Ordering::Acquire)
+  }
+
+  /// Returns the length of the arena.
+  #[inline]
+  pub(super) fn len(&self) -> u32 {
+    self.header().len.load(Ordering::Acquire)
+  }
+
+  /// Returns the max version of the arena.
+  #[inline]
+  pub fn max_version(&self) -> u64 {
+    self.header().max_version.load(Ordering::Acquire)
+  }
+
+  /// Returns the min version of the arena.
+  #[inline]
+  pub fn min_version(&self) -> u64 {
+    self.header().min_version.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  pub(super) const fn atomic_height(&self) -> &AtomicU32 {
+    &self.header().height
+  }
+
+  #[inline]
+  pub(super) fn incr_len(&self) {
+    self.header().len.fetch_add(1, Ordering::Release);
+  }
+
+  pub(super) fn update_max_version(&self, version: u64) {
+    let mut current = self.header().max_version.load(Ordering::Acquire);
 
     loop {
       if version <= current {
         return;
       }
 
-      match self.max_version.compare_exchange_weak(
+      match self.header().max_version.compare_exchange_weak(
         current,
         version,
         Ordering::SeqCst,
-        Ordering::SeqCst,
+        Ordering::Acquire,
       ) {
         Ok(_) => break,
         Err(v) => current = v,
@@ -124,35 +156,48 @@ impl Arena {
     }
   }
 
-  pub(crate) fn update_min_version(&self, version: u64) {
-    let mut current = self.min_version.load(Ordering::Acquire);
+  pub(super) fn update_min_version(&self, version: u64) {
+    let mut current = self.header().min_version.load(Ordering::Acquire);
 
     loop {
       if version >= current {
         return;
       }
 
-      match self.min_version.compare_exchange_weak(
+      match self.header().min_version.compare_exchange_weak(
         current,
         version,
         Ordering::SeqCst,
-        Ordering::SeqCst,
+        Ordering::Acquire,
       ) {
         Ok(_) => break,
         Err(v) => current = v,
       }
     }
   }
+
+  #[inline]
+  pub(super) const fn header(&self) -> &Header {
+    // Safety:
+    // The header is always non-null, we only deallocate it when the arena is dropped.
+    unsafe { &*self.header_ptr }
+  }
+
+  #[inline]
+  pub(crate) fn clear(&self) {
+    let header = self.header();
+    header.len.store(0, Ordering::Release);
+    header.height.store(1, Ordering::Release);
+    header.max_version.store(0, Ordering::Release);
+    header.min_version.store(0, Ordering::Release);
+  }
 }
 
 impl Arena {
   #[inline]
-  pub(super) fn new_vec(n: usize, min_cap: usize) -> Self {
+  pub(super) fn new_vec(n: usize, min_cap: usize, alignment: usize) -> Self {
     Self::new(
-      Shared::new_vec(
-        n.max(min_cap),
-        mem::align_of::<u64>().max(NODE_ALIGNMENT_FACTOR),
-      ),
+      Shared::new_vec(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), alignment),
       None,
     )
   }
@@ -160,38 +205,50 @@ impl Arena {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn mmap_mut<P: AsRef<std::path::Path>>(
+    path: P,
     n: usize,
     min_cap: usize,
-    path: P,
+    alignment: usize,
     lock: bool,
   ) -> std::io::Result<Self> {
     let n = n.saturating_add(MMAP_OVERHEAD);
-    Shared::mmap_mut(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), path, lock)
-      .map(|shared| Self::new(shared, None))
+    Shared::mmap_mut(
+      n.max(min_cap.saturating_add(MMAP_OVERHEAD)),
+      path,
+      alignment,
+      lock,
+    )
+    .map(|shared| Self::new(shared, None))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn mmap<P: AsRef<std::path::Path>>(
-    min_cap: usize,
     path: P,
+    min_cap: usize,
+    alignment: usize,
     lock: bool,
   ) -> std::io::Result<Self> {
-    Shared::mmap(min_cap + MMAP_OVERHEAD, path, lock)
-      .map(|(meta, shared)| Self::new(shared, Some(meta)))
+    Shared::mmap(min_cap.saturating_add(MMAP_OVERHEAD), alignment, path, lock)
+      .map(|(allocated, shared)| Self::new(shared, Some(allocated)))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
-  pub(super) fn new_anonymous_mmap(n: usize, min_cap: usize) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(min_cap)).map(|shared| Self::new(shared, None))
+  pub(super) fn new_anonymous_mmap(
+    n: usize,
+    min_cap: usize,
+    alignment: usize,
+  ) -> std::io::Result<Self> {
+    Shared::new_mmaped_anon(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), alignment)
+      .map(|shared| Self::new(shared, None))
   }
 
   #[inline]
   fn head_offset(&self, max_node_size: u32, align: u32) -> u32 {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = max_node_size as u64 + align as u64 - 1;
-    let new_size = 1 + padded;
+    let new_size = 1 + self.data_offset + padded;
 
     // Return the aligned offset.
     (new_size as u32 - max_node_size) & !(align - 1)
@@ -218,46 +275,29 @@ impl Arena {
   }
 
   #[inline]
-  fn new(mut shared: Shared, meta: Option<SharedMeta>) -> Self {
+  fn new(mut shared: Shared, allocated: Option<u64>) -> Self {
     // Safety:
     // The ptr is always non-null, we just initialized it.
     // And this ptr is only deallocated when the arena is dropped.
     let read_data_ptr = shared.as_ptr();
+    let header_ptr = shared.header_ptr();
     let write_data_ptr = shared
       .as_mut_ptr()
       .map(|p| unsafe { NonNull::new_unchecked(p) })
       .unwrap_or_else(NonNull::dangling);
-
-    let (height, allocated, len, max_version, min_version) = match meta {
-      Some(meta) => (
-        meta.height,
-        meta.allocated,
-        meta.len,
-        meta.max_version,
-        meta.min_version,
-      ),
-      None => {
-        let height = 1;
-        let len = 0;
-        let max_version = 0;
-        let min_version = 0;
-        let allocated = 1;
-        (height, allocated, len, max_version, min_version)
-      }
-    };
+    let data_offset = shared.data_offset as u64;
+    let allocated = allocated.unwrap_or(1u64 + data_offset);
 
     Self {
       cap: shared.cap(),
       inner: AtomicPtr::new(Box::into_raw(Box::new(shared)) as _),
       write_data_ptr,
       read_data_ptr,
-      height: CachePadded::new(AtomicU32::new(height as u32)),
-      len: AtomicU32::new(len),
+      header_ptr,
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
       n: CachePadded::new(AtomicU64::new(allocated)),
-      max_version: AtomicU64::new(max_version),
-      min_version: AtomicU64::new(min_version),
+      data_offset,
     }
   }
 
@@ -405,13 +445,7 @@ impl Drop for Arena {
 
         // Relaxed is enough here as we're in a drop, no one else can
         // access this memory anymore.
-        shared.unmount(
-          self.height.load(Ordering::Acquire) as u8,
-          self.len.load(Ordering::Acquire),
-          self.n.load(Ordering::Acquire),
-          self.max_version.load(Ordering::Acquire),
-          self.min_version.load(Ordering::Acquire),
-        );
+        shared.unmount(self.n.load(Ordering::Acquire));
       });
     }
   }
@@ -420,10 +454,10 @@ impl Drop for Arena {
 #[test]
 #[cfg(test)]
 fn test_debug() {
-  let arena = Arena::new_vec(1024, 1024);
+  let arena = Arena::new_vec(1024, 1024, 8);
   assert_eq!(
     std::format!("{:?}", arena),
-    "Arena { cap: 1024, allocated: 1, data: [0] }"
+    "Arena { cap: 1048, allocated: 25, header: Header { height: 1, len: 0, max_version: 0, min_version: 0 }, data: [0] }"
   );
 
   let err = ArenaError;

@@ -53,7 +53,7 @@ impl<T, C> SkipSet<T, C> {
   /// have ever been allocated as part of this skiplist.
   #[inline]
   pub fn height(&self) -> u32 {
-    self.arena.height.load(Ordering::Acquire)
+    self.arena.height()
   }
 
   /// Returns the number of bytes that have allocated from the arena.
@@ -77,7 +77,7 @@ impl<T, C> SkipSet<T, C> {
   /// Returns the number of entries in the skipset.
   #[inline]
   pub fn len(&self) -> usize {
-    self.arena.len.load(Ordering::Acquire) as usize
+    self.arena.len() as usize
   }
 
   /// Returns true if the skipset is empty.
@@ -95,13 +95,13 @@ impl<T, C> SkipSet<T, C> {
   /// Returns the maximum version of all entries in the set.
   #[inline]
   pub fn max_version(&self) -> u64 {
-    self.arena.max_version.load(Ordering::Acquire)
+    self.arena.max_version()
   }
 
   /// Returns the minimum version of all entries in the set.
   #[inline]
   pub fn min_version(&self) -> u64 {
-    self.arena.min_version.load(Ordering::Acquire)
+    self.arena.min_version()
   }
 
   /// Flushes outstanding memory map modifications to disk.
@@ -209,7 +209,7 @@ impl SkipSet {
 impl<T, C> SkipSet<T, C> {
   /// Like [`SkipSet::new`], but with a custom comparator.
   pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
-    let arena = Arena::new_vec(cap, Node::<T>::min_cap());
+    let arena = Arena::new_vec(cap, Node::<T>::min_cap(), Node::<T>::alignment() as usize);
     Self::new_in(arena, cmp, false)
   }
 
@@ -222,7 +222,13 @@ impl<T, C> SkipSet<T, C> {
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::mmap_mut(cap, Node::<T>::min_cap(), path, lock)?;
+    let arena = Arena::mmap_mut(
+      path,
+      cap,
+      Node::<T>::min_cap(),
+      Node::<T>::alignment() as usize,
+      lock,
+    )?;
     Self::new_in(arena, cmp, false)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
@@ -235,7 +241,12 @@ impl<T, C> SkipSet<T, C> {
     lock: bool,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::mmap(Node::<T>::min_cap(), path, lock)?;
+    let arena = Arena::mmap(
+      path,
+      Node::<T>::min_cap(),
+      Node::<T>::alignment() as usize,
+      lock,
+    )?;
     Self::new_in(arena, cmp, true)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
@@ -244,7 +255,8 @@ impl<T, C> SkipSet<T, C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
-    let arena = Arena::new_anonymous_mmap(cap, Node::<T>::min_cap())?;
+    let arena =
+      Arena::new_anonymous_mmap(cap, Node::<T>::min_cap(), Node::<T>::alignment() as usize)?;
     Self::new_in(arena, cmp, false)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
@@ -270,8 +282,7 @@ impl<T, C> SkipSet<T, C> {
 
     self.head = head;
     self.tail = tail;
-    self.arena.height.store(1, Ordering::Release);
-    self.arena.len.store(0, Ordering::Release);
+    self.arena.clear();
   }
 
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
@@ -489,7 +500,7 @@ impl<T: Trailer, C> SkipSet<T, C> {
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
     while height > list_height {
-      match self.arena.height.compare_exchange_weak(
+      match self.arena.atomic_height().compare_exchange_weak(
         list_height,
         height,
         Ordering::SeqCst,
@@ -776,7 +787,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
         ins.spl[i].prev = nd;
       }
     }
-    self.arena.len.fetch_add(1, Ordering::AcqRel);
+    self.arena.incr_len();
     self.arena.update_max_version(version);
     self.arena.update_min_version(version);
     Ok(None)

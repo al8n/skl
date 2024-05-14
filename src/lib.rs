@@ -16,7 +16,7 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::{cmp, mem, ops::RangeBounds};
+use core::{cmp, ops::RangeBounds};
 
 mod arena;
 /// A map implementation based on skiplist
@@ -30,7 +30,6 @@ pub use map::{MapIterator, SkipMap};
 pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
-const NODE_ALIGNMENT_FACTOR: usize = mem::align_of::<u64>();
 
 #[cfg(feature = "std")]
 fn random_height() -> u32 {

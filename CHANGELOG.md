@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.9.0
+
+- Make file backed mmap `Skip*` still work when aborting.
+- Remove checksum validation, users should take care of data integrity by themselves.
+
 ## 0.8.6
 
 - Add `SkipMap::min_version` and `SkipSet::min_version` to access the min version of the `SkipMap` or `SkipSet`.

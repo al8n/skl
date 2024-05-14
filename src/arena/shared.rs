@@ -327,8 +327,9 @@ impl Shared {
 
         // relaxed ordering is enough here as we're in a drop, no one else can
         // access this memory anymore.
-        if _size != self.cap as u64 {
-          let _ = file.set_len(_size);
+        let actual_size = _size + MMAP_OVERHEAD as u64;
+        if actual_size != self.cap as u64 {
+          let _ = file.set_len(actual_size);
         }
 
         if *lock {

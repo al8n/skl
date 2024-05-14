@@ -1611,8 +1611,8 @@ fn test_range_latest_mmap_anon() {
 }
 
 #[test]
-// #[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
 fn test_reopen_mmap() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap");
@@ -1625,7 +1625,6 @@ fn test_reopen_mmap() {
   }
 
   let l = SkipMap::mmap(&p, false).unwrap();
-  println!("{:?}", l.arena.header());
   assert_eq!(1000, l.len());
   for i in 0..1000 {
     let k = key(i);

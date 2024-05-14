@@ -299,13 +299,11 @@ impl<T, C> SkipMap<T, C> {
       let head = NodePtr::new(ptr, offset);
       let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
       let tail = NodePtr::new(ptr, offset);
-      std::println!("head: {:?}, tail: {:?}", head.offset, tail.offset);
       return Ok(Self::construct(arena, head, tail, ro, cmp));
     }
 
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
-    std::println!("head: {:?}, tail: {:?}", head.offset, tail.offset);
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.

@@ -11,7 +11,13 @@ pub fn new_value(i: usize) -> Vec<u8> {
 fn main() {
   const N: usize = 1000;
 
-  let l = Arc::new(SkipMap::mmap_mut("test.wal", 1 << 20, true).unwrap());
+  let mmap_options = skl::MmapOptions::default();
+  let open_options = skl::OpenOptions::default()
+    .create_new(Some(1 << 20))
+    .read(true)
+    .write(true);
+
+  let l = Arc::new(SkipMap::mmap_mut("test.wal", open_options, mmap_options).unwrap());
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();

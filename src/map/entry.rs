@@ -37,10 +37,19 @@ impl<'a, T, C> EntryRef<'a, T, C> {
     self.value
   }
 
-  /// Returns the version of the entry
+  /// Returns the trailer of the entry
   #[inline]
   pub const fn trailer(&self) -> &T {
     &self.trailer
+  }
+
+  /// Returns the version of the entry
+  #[inline]
+  pub fn version(&self) -> u64
+  where
+    T: Trailer,
+  {
+    self.trailer.version()
   }
 }
 
@@ -64,7 +73,7 @@ impl<'a, T: Trailer, C: Comparator> PartialEq for EntryRef<'a, T, C> {
       .map
       .cmp
       .compare(self.key, other.key)
-      .then_with(|| self.trailer.version().cmp(&other.trailer.version()))
+      .then_with(|| self.version().cmp(&other.version()))
       .is_eq()
   }
 }
@@ -79,12 +88,10 @@ impl<'a, T: Trailer, C: Comparator> PartialOrd for EntryRef<'a, T, C> {
 
 impl<'a, T: Trailer, C: Comparator> Ord for EntryRef<'a, T, C> {
   fn cmp(&self, other: &Self) -> cmp::Ordering {
-    self.map.cmp.compare(self.key, other.key).then_with(|| {
-      self
-        .trailer
-        .version()
-        .cmp(&other.trailer.version())
-        .reverse()
-    })
+    self
+      .map
+      .cmp
+      .compare(self.key, other.key)
+      .then_with(|| self.version().cmp(&other.version()).reverse())
   }
 }

@@ -6,6 +6,9 @@ use core::{
 
 use crate::{OccupiedValue, Trailer};
 
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+use super::{invalid_data, MmapOptions, OpenOptions};
+
 use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
 
 mod node;
@@ -50,13 +53,27 @@ pub struct SkipMap<T = u64, C = Ascend> {
 unsafe impl<T: Send, C: Comparator + Send> Send for SkipMap<T, C> {}
 unsafe impl<T: Sync, C: Comparator + Sync> Sync for SkipMap<T, C> {}
 
+impl<T, C: Clone> Clone for SkipMap<T, C> {
+  fn clone(&self) -> Self {
+    Self {
+      arena: self.arena.clone(),
+      head: self.head,
+      tail: self.tail,
+      ro: self.ro,
+      #[cfg(all(test, feature = "std"))]
+      yield_now: self.yield_now,
+      cmp: self.cmp.clone(),
+    }
+  }
+}
+
 // --------------------------------Public Methods--------------------------------
 impl<T, C> SkipMap<T, C> {
   /// Returns the height of the highest tower within any of the nodes that
   /// have ever been allocated as part of this skiplist.
   #[inline]
   pub fn height(&self) -> u32 {
-    self.arena.height.load(Ordering::Acquire)
+    self.arena.height()
   }
 
   /// Returns the number of bytes that have allocated from the arena.
@@ -80,7 +97,7 @@ impl<T, C> SkipMap<T, C> {
   /// Returns the number of entries in the skipmap.
   #[inline]
   pub fn len(&self) -> usize {
-    self.arena.len.load(Ordering::Acquire) as usize
+    self.arena.len() as usize
   }
 
   /// Returns true if the skipmap is empty.
@@ -92,13 +109,13 @@ impl<T, C> SkipMap<T, C> {
   /// Returns the maximum version of all entries in the map.
   #[inline]
   pub fn max_version(&self) -> u64 {
-    self.arena.max_version.load(Ordering::Acquire)
+    self.arena.max_version()
   }
 
   /// Returns the minimum version of all entries in the map.
   #[inline]
   pub fn min_version(&self) -> u64 {
-    self.arena.min_version.load(Ordering::Acquire)
+    self.arena.min_version()
   }
 
   /// Returns the comparator used to compare keys.
@@ -172,10 +189,10 @@ impl SkipMap {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_mut<P: AsRef<std::path::Path>>(
     path: P,
-    cap: usize,
-    lock: bool,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
   ) -> std::io::Result<Self> {
-    Self::mmap_mut_with_comparator(path, cap, lock, Ascend)
+    Self::mmap_mut_with_comparator(path, open_options, mmap_options, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
@@ -183,8 +200,12 @@ impl SkipMap {
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
-    Self::mmap_with_comparator(path, lock, Ascend)
+  pub fn mmap<P: AsRef<std::path::Path>>(
+    path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+  ) -> std::io::Result<Self> {
+    Self::mmap_with_comparator(path, open_options, mmap_options, Ascend)
   }
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
@@ -204,15 +225,15 @@ impl SkipMap {
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
-    Self::mmap_anon_with_comparator(cap, Ascend)
+  pub fn mmap_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::mmap_anon_with_comparator(mmap_options, Ascend)
   }
 }
 
 impl<T, C> SkipMap<T, C> {
   /// Like [`SkipMap::new`], but with a custom comparator.
   pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
-    let arena = Arena::new_vec(cap, Node::<T>::min_cap());
+    let arena = Arena::new_vec(cap, Node::<T>::min_cap(), Node::<T>::alignment() as usize);
     Self::new_in(arena, cmp, false)
   }
 
@@ -221,13 +242,14 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
-    cap: usize,
-    lock: bool,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::mmap_mut(cap, Node::<T>::min_cap(), path, lock)?;
-    Self::new_in(arena, cmp, false)
-      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    let alignment = Node::<T>::alignment() as usize;
+    let min_cap = Node::<T>::min_cap();
+    let arena = Arena::mmap_mut(path, open_options, mmap_options, min_cap, alignment)?;
+    Self::new_in(arena, cmp, false).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::mmap`], but with a custom comparator.
@@ -235,25 +257,31 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
-    lock: bool,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::mmap(Node::<T>::min_cap(), path, lock)?;
-    Self::new_in(arena, cmp, true)
-      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    let alignment = Node::<T>::alignment() as usize;
+    let min_cap = Node::<T>::min_cap();
+    let arena = Arena::mmap(path, open_options, mmap_options, min_cap, alignment)?;
+    Self::new_in(arena, cmp, true).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::mmap_anon`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
-    let arena = Arena::new_anonymous_mmap(cap, Node::<T>::min_cap())?;
-    Self::new_in(arena, cmp, false)
-      .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+  pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
+    let alignment = Node::<T>::alignment() as usize;
+    let min_cap = Node::<T>::min_cap();
+    let arena = Arena::new_anonymous_mmap(mmap_options, min_cap, alignment)?;
+    Self::new_in(arena, cmp, false).map_err(invalid_data)
   }
 
   /// Clear the skiplist to empty and re-initialize.
-  pub fn clear(&mut self) -> Result<(), Error> {
+  ///
+  /// # Safety
+  /// This mehod is not concurrency safe, invokers must ensure that no other threads are accessing the skipmap.
+  pub unsafe fn clear(&mut self) -> Result<(), Error> {
     if self.ro {
       return Err(Error::Readonly);
     }
@@ -277,8 +305,7 @@ impl<T, C> SkipMap<T, C> {
 
     self.head = head;
     self.tail = tail;
-    self.arena.height.store(1, Ordering::Release);
-    self.arena.len.store(0, Ordering::Release);
+    self.arena.clear();
     Ok(())
   }
 
@@ -288,7 +315,6 @@ impl<T, C> SkipMap<T, C> {
       let head = NodePtr::new(ptr, offset);
       let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
       let tail = NodePtr::new(ptr, offset);
-
       return Ok(Self::construct(arena, head, tail, ro, cmp));
     }
 
@@ -418,17 +444,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
+    let copy = |mut buf: OccupiedValue| {
+      let _ = buf.write(value);
+      Ok(())
+    };
+    let val_len = value.len() as u32;
+
     self
-      .insert_in::<Infallible>(
-        trailer,
-        key,
-        value.len() as u32,
-        |mut buf| {
-          let _ = buf.write(value);
-          Ok(())
-        },
-        &mut Inserter::default(),
-      )
+      .insert_in::<Infallible>(trailer, key, val_len, copy, &mut Inserter::default())
       .map_err(|e| e.expect_right("must be map::Error"))
   }
 
@@ -572,7 +595,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
     while height > list_height {
-      match self.arena.height.compare_exchange_weak(
+      match self.arena.atomic_height().compare_exchange_weak(
         list_height,
         height,
         Ordering::SeqCst,
@@ -860,7 +883,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         ins.spl[i].prev = nd;
       }
     }
-    self.arena.len.fetch_add(1, Ordering::AcqRel);
+    self.arena.incr_len();
     self.arena.update_max_version(version);
     self.arena.update_min_version(version);
     Ok(None)

@@ -126,8 +126,8 @@ impl<T> Node<T> {
   #[inline]
   pub(super) const fn alignment() -> u32 {
     let alignment = mem::align_of::<T>();
-    let alignment = if alignment < mem::size_of::<u32>() {
-      mem::size_of::<u32>()
+    let alignment = if alignment < mem::align_of::<u64>() {
+      mem::align_of::<u64>()
     } else {
       alignment
     };

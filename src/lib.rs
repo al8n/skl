@@ -16,7 +16,7 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::{cmp, mem, ops::RangeBounds};
+use core::{cmp, ops::RangeBounds};
 
 mod arena;
 /// A map implementation based on skiplist
@@ -25,12 +25,22 @@ pub mod map;
 /// A set implementation based on skiplist
 pub mod set;
 
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+mod options;
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+pub use options::{MmapOptions, OpenOptions};
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::Error {
+  std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+}
+
 pub use arena::{Arena, ArenaError};
 pub use map::{MapIterator, SkipMap};
 pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
-const NODE_ALIGNMENT_FACTOR: usize = mem::align_of::<u64>();
 
 #[cfg(feature = "std")]
 fn random_height() -> u32 {
@@ -268,6 +278,8 @@ mod sync {
 
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
+  #[cfg(not(loom))]
+  pub(crate) use std::boxed::Box;
   #[cfg(all(not(loom), test))]
   pub(crate) use std::sync::Arc;
 

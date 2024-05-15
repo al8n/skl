@@ -129,7 +129,7 @@ impl OpenOptions {
   /// If a file is opened with both read and append access, beware that after
   /// opening, and after every write, the position for reading may be set at the
   /// end of the file. So, before writing, save the current position (using
-  /// <code>[seek]\([SeekFrom]::[Current]\(opts))</code>), and restore it before the next read.
+  /// <code>[seek]\([SeekFrom](std::io::SeekFrom)::[Current]\(opts))</code>), and restore it before the next read.
   ///
   /// ## Note
   ///
@@ -180,7 +180,7 @@ impl OpenOptions {
   /// In order for the file to be created, [`OpenOptions::write`] or
   /// [`OpenOptions::append`] access must be used.
   ///
-  /// See also [`std::fs::write()`][self::write] for a simple function to
+  /// See also [`std::fs::write()`][std::fs::write] for a simple function to
   /// create a file with some given data.
   ///
   /// # Examples

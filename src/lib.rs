@@ -25,6 +25,12 @@ pub mod map;
 /// A set implementation based on skiplist
 pub mod set;
 
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+mod options;
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+pub use options::{MmapOptions, OpenOptions};
+
 pub use arena::{Arena, ArenaError};
 pub use map::{MapIterator, SkipMap};
 pub use set::{SetIterator, SkipSet};

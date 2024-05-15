@@ -65,14 +65,21 @@ fn test_empty() {
 fn test_empty_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_empty_mmap_mut");
-  empty_in(SkipMap::mmap_mut(p, 1000, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(1000))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+
+  empty_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_empty_mmap_anon() {
-  empty_in(SkipMap::mmap_anon(1000).unwrap());
+  let mmap_options = MmapOptions::default().len(1000);
+  empty_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn full_in(l: impl FnOnce(usize) -> SkipMap) {
@@ -109,14 +116,25 @@ fn test_full() {
 fn test_full_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_full_mmap_mut");
-  full_in(|n| SkipMap::mmap_mut(p, n, true).unwrap());
+
+  full_in(|n| {
+    let open_options = OpenOptions::default()
+      .create_new(Some(n as u64))
+      .read(true)
+      .write(true);
+    let mmap_options = MmapOptions::default();
+    SkipMap::mmap_mut(p, open_options, mmap_options).unwrap()
+  });
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_full_mmap_anon() {
-  full_in(|n| SkipMap::mmap_anon(n).unwrap());
+  full_in(|n| {
+    let mmap_options = MmapOptions::default().len(n);
+    SkipMap::mmap_anon(mmap_options).unwrap()
+  });
 }
 
 fn basic_in(mut l: SkipMap) {
@@ -200,8 +218,11 @@ fn basic_in(mut l: SkipMap) {
     assert_eq!(arr, [a2, a1, b2, b1]);
   }
 
-  l.clear().unwrap();
+  unsafe {
+    l.clear().unwrap();
+  }
 
+  let l = l.clone();
   {
     let mut it = l.iter_all_versions(0);
     assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
@@ -227,14 +248,20 @@ fn test_basic() {
 fn test_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_basic_mmap_mut");
-  basic_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  basic_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_basic_mmap_anon() {
-  basic_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  basic_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn iter_all_versions_mvcc(l: SkipMap) {
@@ -342,14 +369,20 @@ fn test_iter_all_versions_mvcc_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versions_mvcc_mmap_mut");
-  iter_all_versions_mvcc(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_all_versions_mvcc(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versions_mvcc_mmap_anon() {
-  iter_all_versions_mvcc(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_all_versions_mvcc(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn ordering() {
@@ -438,14 +471,20 @@ fn test_get_mvcc() {
 fn test_get_mvcc_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_get_mvcc_mmap_mut");
-  get_mvcc(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  get_mvcc(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_get_mvcc_mmap_anon() {
-  get_mvcc(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  get_mvcc(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn gt_in(l: SkipMap) {
@@ -538,14 +577,20 @@ fn test_gt() {
 fn test_gt_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_gt_mmap_mut");
-  gt_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  gt_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_gt_mmap_anon() {
-  gt_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  gt_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn ge_in(l: SkipMap) {
@@ -636,14 +681,20 @@ fn test_ge() {
 fn test_ge_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_ge_mmap_mut");
-  ge_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  ge_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_ge_mmap_anon() {
-  ge_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  ge_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn le_in(l: SkipMap) {
@@ -748,14 +799,20 @@ fn test_le() {
 fn test_le_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_le_mmap_mut");
-  gt_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  gt_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_le_mmap_anon() {
-  gt_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  gt_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn lt_in(l: SkipMap) {
@@ -842,14 +899,20 @@ fn test_lt() {
 fn test_lt_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_lt_mmap_mut");
-  lt_in(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  lt_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_lt_mmap_anon() {
-  lt_in(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  lt_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn test_basic_large_testcases_in(l: Arc<SkipMap>) {
@@ -884,7 +947,12 @@ fn test_basic_large_testcases_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_basic_large_testcases_mmap_mut");
-  let l = Arc::new(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  let l = Arc::new(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
   test_basic_large_testcases_in(l);
 }
 
@@ -892,7 +960,8 @@ fn test_basic_large_testcases_mmap_mut() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_basic_large_testcases_mmap_anon() {
-  let l = Arc::new(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  let l = Arc::new(SkipMap::mmap_anon(mmap_options).unwrap());
   test_basic_large_testcases_in(l);
 }
 
@@ -937,8 +1006,13 @@ fn test_concurrent_basic() {
 fn test_concurrent_basic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_concurrent_basic_mmap_mut");
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
   let l = Arc::new(
-    SkipMap::mmap_mut(p, ARENA_SIZE, true)
+    SkipMap::mmap_mut(p, open_options, mmap_options)
       .unwrap()
       .with_yield_now(),
   );
@@ -949,8 +1023,9 @@ fn test_concurrent_basic_mmap_mut() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_mmap_anon() {
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
   test_concurrent_basic_runner(Arc::new(
-    SkipMap::mmap_anon(ARENA_SIZE).unwrap().with_yield_now(),
+    SkipMap::mmap_anon(mmap_options).unwrap().with_yield_now(),
   ));
 }
 
@@ -996,8 +1071,13 @@ fn test_concurrent_basic_big_values_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_concurrent_basic_big_values_mmap_mut");
+  let open_options = OpenOptions::default()
+    .create_new(Some(120 << 20))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
   test_concurrent_basic_big_values_runner(Arc::new(
-    SkipMap::mmap_mut(p, 120 << 20, true)
+    SkipMap::mmap_mut(p, open_options, mmap_options)
       .unwrap()
       .with_yield_now(),
   ));
@@ -1007,8 +1087,9 @@ fn test_concurrent_basic_big_values_mmap_mut() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_big_values_mmap_anon() {
+  let mmap_options = MmapOptions::default().len(120 << 20);
   test_concurrent_basic_big_values_runner(Arc::new(
-    SkipMap::mmap_anon(120 << 20).unwrap().with_yield_now(),
+    SkipMap::mmap_anon(mmap_options).unwrap().with_yield_now(),
   ));
 }
 
@@ -1071,8 +1152,13 @@ fn test_concurrent_one_key() {
 fn test_concurrent_one_key_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_concurrent_one_key_mmap_mut");
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
   concurrent_one_key(Arc::new(
-    SkipMap::mmap_mut(p, ARENA_SIZE, true)
+    SkipMap::mmap_mut(p, open_options, mmap_options)
       .unwrap()
       .with_yield_now(),
   ));
@@ -1082,8 +1168,9 @@ fn test_concurrent_one_key_mmap_mut() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_one_key_mmap_anon() {
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
   concurrent_one_key(Arc::new(
-    SkipMap::mmap_anon(ARENA_SIZE).unwrap().with_yield_now(),
+    SkipMap::mmap_anon(mmap_options).unwrap().with_yield_now(),
   ));
 }
 
@@ -1120,14 +1207,20 @@ fn test_iter_all_versionsator_next_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_next_mmap_mut");
-  iter_all_versionsator_next(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_all_versionsator_next(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versionsator_next_mmap_anon() {
-  iter_all_versionsator_next(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_all_versionsator_next(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn range_next(l: SkipMap) {
@@ -1168,14 +1261,20 @@ fn test_range_next() {
 fn test_range_next_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_next_mmap_mut");
-  iter_all_versionsator_next(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_all_versionsator_next(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_next_mmap_anon() {
-  iter_all_versionsator_next(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_all_versionsator_next(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn iter_all_versionsator_prev(l: SkipMap) {
@@ -1211,14 +1310,20 @@ fn test_iter_all_versionsator_prev_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_prev_mmap_mut");
-  iter_all_versionsator_prev(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_all_versionsator_prev(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versionsator_prev_mmap_anon() {
-  iter_all_versionsator_prev(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_all_versionsator_prev(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn range_prev(l: SkipMap) {
@@ -1259,14 +1364,20 @@ fn test_range_next_back() {
 fn test_range_prev_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_prev_mmap_mut");
-  range_prev(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  range_prev(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_prev_mmap_anon() {
-  range_prev(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  range_prev(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn iter_all_versionsator_seek_ge(l: SkipMap) {
@@ -1332,14 +1443,20 @@ fn test_iter_all_versionsator_seek_ge_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_seek_ge_mmap_mut");
-  iter_all_versionsator_seek_ge(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_all_versionsator_seek_ge(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versionsator_seek_ge_mmap_anon() {
-  iter_all_versionsator_seek_ge(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_all_versionsator_seek_ge(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn iter_all_versionsator_seek_lt(l: SkipMap) {
@@ -1392,14 +1509,20 @@ fn test_iter_all_versionsator_seek_lt_mmap_mut() {
   let p = dir
     .path()
     .join("test_skipmap_iter_all_versionsator_seek_lt_mmap_mut");
-  iter_all_versionsator_seek_lt(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_all_versionsator_seek_lt(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versionsator_seek_lt_mmap_anon() {
-  iter_all_versionsator_seek_lt(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_all_versionsator_seek_lt(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn range(l: SkipMap) {
@@ -1500,14 +1623,20 @@ fn test_range() {
 fn test_range_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_mmap_mut");
-  range(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  range(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_mmap_anon() {
-  range(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  range(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn iter_latest(l: SkipMap) {
@@ -1550,14 +1679,20 @@ fn test_iter_latest() {
 fn test_iter_latest_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_iter_latest_mmap_mut");
-  iter_latest(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  iter_latest(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_latest_mmap_anon() {
-  iter_latest(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  iter_latest(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn range_latest(l: SkipMap) {
@@ -1600,14 +1735,20 @@ fn test_range_latest() {
 fn test_range_latest_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_range_latest_mmap_mut");
-  range_latest(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  range_latest(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_latest_mmap_anon() {
-  range_latest(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  range_latest(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 #[test]
@@ -1617,14 +1758,21 @@ fn test_reopen_mmap() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap");
   {
-    let l = SkipMap::mmap_mut(&p, ARENA_SIZE, true).unwrap();
+    let open_options = OpenOptions::default()
+      .create_new(Some(ARENA_SIZE as u64))
+      .read(true)
+      .write(true);
+    let mmap_options = MmapOptions::default();
+    let l = SkipMap::mmap_mut(&p, open_options, mmap_options).unwrap();
     for i in 0..1000 {
       l.insert(0, &key(i), &new_value(i)).unwrap();
     }
     l.flush().unwrap();
   }
 
-  let l = SkipMap::mmap(&p, false).unwrap();
+  let open_options = OpenOptions::default().read(true).lock_shared(true);
+  let mmap_options = MmapOptions::default();
+  let l = SkipMap::mmap(&p, open_options, mmap_options).unwrap();
   assert_eq!(1000, l.len());
   for i in 0..1000 {
     let k = key(i);
@@ -1644,7 +1792,12 @@ fn test_reopen_mmap2() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap2");
   {
-    let l = SkipMap::mmap_mut_with_comparator(&p, ARENA_SIZE, true, Ascend).unwrap();
+    let open_options = OpenOptions::default()
+      .create_new(Some(ARENA_SIZE as u64))
+      .read(true)
+      .write(true);
+    let mmap_options = MmapOptions::default();
+    let l = SkipMap::mmap_mut_with_comparator(&p, open_options, mmap_options, Ascend).unwrap();
     let mut data = (0..1000).collect::<Vec<usize>>();
     data.shuffle(&mut rand::thread_rng());
     for i in data {
@@ -1655,7 +1808,10 @@ fn test_reopen_mmap2() {
     assert_eq!(l.min_version(), 0);
   }
 
-  let l = SkipMap::<u64, Ascend>::mmap_with_comparator(&p, false, Ascend).unwrap();
+  let open_options = OpenOptions::default().read(true);
+  let mmap_options = MmapOptions::default();
+  let l =
+    SkipMap::<u64, Ascend>::mmap_with_comparator(&p, open_options, mmap_options, Ascend).unwrap();
   assert_eq!(1000, l.len());
   let mut data = (0..1000).collect::<Vec<usize>>();
   data.shuffle(&mut rand::thread_rng());
@@ -1711,7 +1867,12 @@ fn test_insert_with_panic() {
 fn test_insert_with_panic_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_insert_with_mmap_mut");
-  insert_with_panic(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  insert_with_panic(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
@@ -1719,7 +1880,8 @@ fn test_insert_with_panic_mmap_mut() {
 #[cfg_attr(miri, ignore)]
 #[should_panic]
 fn test_insert_with_panic_mmap_anon() {
-  insert_with_panic(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  insert_with_panic(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn insert_with(l: SkipMap) {
@@ -1762,12 +1924,18 @@ fn test_insert_with() {
 fn test_insert_with_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("test_skipmap_insert_with_mmap_mut");
-  insert_with(SkipMap::mmap_mut(p, ARENA_SIZE, true).unwrap());
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  insert_with(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_insert_with_mmap_anon() {
-  insert_with(SkipMap::mmap_anon(ARENA_SIZE).unwrap());
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  insert_with(SkipMap::mmap_anon(mmap_options).unwrap());
 }

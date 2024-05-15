@@ -7,7 +7,8 @@ use core::{
 #[allow(unused_imports)]
 use std::boxed::Box;
 
-use crossbeam_utils::CachePadded;
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+use crate::{MmapOptions, OpenOptions};
 
 mod shared;
 use shared::Shared;
@@ -15,9 +16,9 @@ use shared::Shared;
 /// The overhead of the memory-mapped file.
 ///
 /// ```text
-/// +---------------+------------+--------------------+--------------------+
-/// | 32-bit height  | 32-bit len | 64-bit max version | 64-bit min version |
-/// +---------------+------------+--------------------+--------------------+
+/// +----------------+------------+--------------------+--------------------+---------------------+
+/// | 32-bit height  | 32-bit len | 64-bit max version | 64-bit min version | 64-bit allocated    |
+/// +----------------+------------+--------------------+--------------------+---------------------+
 /// ```
 const MMAP_OVERHEAD: usize = mem::size_of::<Header>();
 
@@ -29,15 +30,19 @@ pub(super) struct Header {
   len: AtomicU32,
   max_version: AtomicU64,
   min_version: AtomicU64,
+  allocated: AtomicU64,
 }
 
-impl Default for Header {
-  fn default() -> Self {
+impl Header {
+  fn new(size: u64) -> Self {
     Self {
       height: AtomicU32::new(1),
       len: AtomicU32::new(0),
       max_version: AtomicU64::new(0),
       min_version: AtomicU64::new(0),
+      // Don't store data at position 0 in order to reserve offset=0 as a kind
+      // of nil pointer.
+      allocated: AtomicU64::new(size + 1),
     }
   }
 }
@@ -61,7 +66,6 @@ pub struct Arena {
   read_data_ptr: *const u8,
   header_ptr: *const Header,
   data_offset: u64,
-  n: CachePadded<AtomicU64>,
   inner: AtomicPtr<()>,
   cap: usize,
 }
@@ -76,10 +80,55 @@ impl core::fmt::Debug for Arena {
     let header = self.header();
     f.debug_struct("Arena")
       .field("cap", &self.cap)
-      .field("allocated", &allocated)
       .field("header", header)
       .field("data", &data)
       .finish()
+  }
+}
+
+impl Clone for Arena {
+  fn clone(&self) -> Self {
+    unsafe {
+      let shared: *mut Shared = self.inner.load(Ordering::Relaxed).cast();
+
+      let old_size = (*shared).refs.fetch_add(1, Ordering::Release);
+      if old_size > usize::MAX >> 1 {
+        abort();
+      }
+
+      // Safety:
+      // The ptr is always non-null, and the data is only deallocated when the
+      // last Arena is dropped.
+      Self {
+        write_data_ptr: self.write_data_ptr,
+        read_data_ptr: self.read_data_ptr,
+        header_ptr: self.header_ptr,
+        data_offset: self.data_offset,
+        inner: AtomicPtr::new(shared as _),
+        cap: self.cap,
+      }
+    }
+  }
+}
+
+#[inline(never)]
+#[cold]
+fn abort() -> ! {
+  #[cfg(feature = "std")]
+  {
+    std::process::abort()
+  }
+
+  #[cfg(not(feature = "std"))]
+  {
+    struct Abort;
+    impl Drop for Abort {
+      fn drop(&mut self) {
+        panic!();
+      }
+    }
+    let _a = Abort;
+    panic!("abort");
   }
 }
 
@@ -87,7 +136,7 @@ impl Arena {
   /// Returns the number of bytes allocated by the arena.
   #[inline]
   pub fn size(&self) -> usize {
-    self.n.load(Ordering::Acquire) as usize
+    self.header().allocated.load(Ordering::Acquire) as usize
   }
 
   /// Returns the capacity of the arena.
@@ -196,52 +245,51 @@ impl Arena {
 impl Arena {
   #[inline]
   pub(super) fn new_vec(n: usize, min_cap: usize, alignment: usize) -> Self {
-    Self::new(
-      Shared::new_vec(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), alignment),
-      None,
-    )
+    Self::new(Shared::new_vec(
+      n.max(min_cap.saturating_add(MMAP_OVERHEAD)),
+      alignment,
+    ))
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn mmap_mut<P: AsRef<std::path::Path>>(
     path: P,
-    n: usize,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
     min_cap: usize,
     alignment: usize,
-    lock: bool,
   ) -> std::io::Result<Self> {
-    let n = n.saturating_add(MMAP_OVERHEAD);
-    Shared::mmap_mut(
-      n.max(min_cap.saturating_add(MMAP_OVERHEAD)),
-      path,
-      alignment,
-      lock,
-    )
-    .map(|shared| Self::new(shared, None))
+    let min_cap = min_cap.saturating_add(MMAP_OVERHEAD);
+    Shared::mmap_mut(path, open_options, mmap_options, min_cap, alignment).map(Self::new)
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn mmap<P: AsRef<std::path::Path>>(
     path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
     min_cap: usize,
     alignment: usize,
-    lock: bool,
   ) -> std::io::Result<Self> {
-    Shared::mmap(min_cap.saturating_add(MMAP_OVERHEAD), alignment, path, lock)
-      .map(|(allocated, shared)| Self::new(shared, Some(allocated)))
+    let min_cap = min_cap.saturating_add(MMAP_OVERHEAD);
+    Shared::mmap(path, open_options, mmap_options, min_cap, alignment).map(Self::new)
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[inline]
   pub(super) fn new_anonymous_mmap(
-    n: usize,
+    mmap_options: MmapOptions,
     min_cap: usize,
     alignment: usize,
   ) -> std::io::Result<Self> {
-    Shared::new_mmaped_anon(n.max(min_cap.saturating_add(MMAP_OVERHEAD)), alignment)
-      .map(|shared| Self::new(shared, None))
+    Shared::new_mmaped_anon(
+      mmap_options,
+      min_cap.saturating_add(MMAP_OVERHEAD),
+      alignment,
+    )
+    .map(Self::new)
   }
 
   #[inline]
@@ -275,7 +323,7 @@ impl Arena {
   }
 
   #[inline]
-  fn new(mut shared: Shared, allocated: Option<u64>) -> Self {
+  fn new(mut shared: Shared) -> Self {
     // Safety:
     // The ptr is always non-null, we just initialized it.
     // And this ptr is only deallocated when the arena is dropped.
@@ -286,7 +334,6 @@ impl Arena {
       .map(|p| unsafe { NonNull::new_unchecked(p) })
       .unwrap_or_else(NonNull::dangling);
     let data_offset = shared.data_offset as u64;
-    let allocated = allocated.unwrap_or(1u64 + data_offset);
 
     Self {
       cap: shared.cap(),
@@ -294,9 +341,6 @@ impl Arena {
       write_data_ptr,
       read_data_ptr,
       header_ptr,
-      // Don't store data at position 0 in order to reserve offset=0 as a kind
-      // of nil pointer.
-      n: CachePadded::new(AtomicU64::new(allocated)),
       data_offset,
     }
   }
@@ -329,14 +373,15 @@ impl Arena {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = size as u64 + align as u64 - 1;
 
-    let mut current_allocated = self.n.load(Ordering::Acquire);
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
     if current_allocated + padded + overflow as u64 > self.cap as u64 {
       return Err(ArenaError);
     }
 
     loop {
       let want = current_allocated + padded;
-      match self.n.compare_exchange_weak(
+      match header.allocated.compare_exchange_weak(
         current_allocated,
         want,
         Ordering::SeqCst,
@@ -445,7 +490,7 @@ impl Drop for Arena {
 
         // Relaxed is enough here as we're in a drop, no one else can
         // access this memory anymore.
-        shared.unmount(self.n.load(Ordering::Acquire));
+        shared.unmount();
       });
     }
   }
@@ -457,7 +502,7 @@ fn test_debug() {
   let arena = Arena::new_vec(1024, 1024, 8);
   assert_eq!(
     std::format!("{:?}", arena),
-    "Arena { cap: 1048, allocated: 25, header: Header { height: 1, len: 0, max_version: 0, min_version: 0 }, data: [0] }"
+    "Arena { cap: 1056, header: Header { height: 1, len: 0, max_version: 0, min_version: 0, allocated: 33 }, data: [0] }"
   );
 
   let err = ArenaError;

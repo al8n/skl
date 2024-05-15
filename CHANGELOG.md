@@ -2,8 +2,10 @@
 
 ## 0.9.0
 
-- Make file backed mmap `Skip*` still work when aborting.
+- Make file backed mmap `SkipMap` and `SkipSet` still can be reopened even last time the program was aborted.
 - Remove checksum validation, users should take care of data integrity by themselves.
+- Support `Clone` directly, no need to use `Arc` wrapper anymore.
+- Add `OpenOptions` and `MmapOptions` to support better controls on file mmap backed `SkipMap` and `SkipSet`.
 
 ## 0.8.6
 

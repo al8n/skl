@@ -6,6 +6,9 @@ use core::{
 
 use crate::{OccupiedValue, Trailer};
 
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+use super::{MmapOptions, OpenOptions};
+
 use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
 
 mod node;
@@ -49,6 +52,20 @@ pub struct SkipMap<T = u64, C = Ascend> {
 // Safety: SkipMap is Sync and Send
 unsafe impl<T: Send, C: Comparator + Send> Send for SkipMap<T, C> {}
 unsafe impl<T: Sync, C: Comparator + Sync> Sync for SkipMap<T, C> {}
+
+impl<T, C: Clone> Clone for SkipMap<T, C> {
+  fn clone(&self) -> Self {
+    Self {
+      arena: self.arena.clone(),
+      head: self.head,
+      tail: self.tail,
+      ro: self.ro,
+      #[cfg(all(test, feature = "std"))]
+      yield_now: self.yield_now,
+      cmp: self.cmp.clone(),
+    }
+  }
+}
 
 // --------------------------------Public Methods--------------------------------
 impl<T, C> SkipMap<T, C> {
@@ -172,10 +189,10 @@ impl SkipMap {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_mut<P: AsRef<std::path::Path>>(
     path: P,
-    cap: usize,
-    lock: bool,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
   ) -> std::io::Result<Self> {
-    Self::mmap_mut_with_comparator(path, cap, lock, Ascend)
+    Self::mmap_mut_with_comparator(path, open_options, mmap_options, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
@@ -183,8 +200,12 @@ impl SkipMap {
   /// `lock`: whether to lock the underlying file or not
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap<P: AsRef<std::path::Path>>(path: P, lock: bool) -> std::io::Result<Self> {
-    Self::mmap_with_comparator(path, lock, Ascend)
+  pub fn mmap<P: AsRef<std::path::Path>>(
+    path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+  ) -> std::io::Result<Self> {
+    Self::mmap_with_comparator(path, open_options, mmap_options, Ascend)
   }
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
@@ -204,8 +225,8 @@ impl SkipMap {
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon(cap: usize) -> std::io::Result<Self> {
-    Self::mmap_anon_with_comparator(cap, Ascend)
+  pub fn mmap_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::mmap_anon_with_comparator(mmap_options, Ascend)
   }
 }
 
@@ -221,16 +242,16 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
-    cap: usize,
-    lock: bool,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
     let arena = Arena::mmap_mut(
       path,
-      cap,
+      open_options,
+      mmap_options,
       Node::<T>::min_cap(),
       Node::<T>::alignment() as usize,
-      lock,
     )?;
     Self::new_in(arena, cmp, false)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
@@ -241,14 +262,16 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
-    lock: bool,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
     let arena = Arena::mmap(
       path,
+      open_options,
+      mmap_options,
       Node::<T>::min_cap(),
       Node::<T>::alignment() as usize,
-      lock,
     )?;
     Self::new_in(arena, cmp, true)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
@@ -257,15 +280,21 @@ impl<T, C> SkipMap<T, C> {
   /// Like [`SkipMap::mmap_anon`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon_with_comparator(cap: usize, cmp: C) -> std::io::Result<Self> {
-    let arena =
-      Arena::new_anonymous_mmap(cap, Node::<T>::min_cap(), Node::<T>::alignment() as usize)?;
+  pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
+    let arena = Arena::new_anonymous_mmap(
+      mmap_options,
+      Node::<T>::min_cap(),
+      Node::<T>::alignment() as usize,
+    )?;
     Self::new_in(arena, cmp, false)
       .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
   }
 
   /// Clear the skiplist to empty and re-initialize.
-  pub fn clear(&mut self) -> Result<(), Error> {
+  ///
+  /// # Safety
+  /// This mehod is not concurrency safe, invokers must ensure that no other threads are accessing the skipmap.
+  pub unsafe fn clear(&mut self) -> Result<(), Error> {
     if self.ro {
       return Err(Error::Readonly);
     }

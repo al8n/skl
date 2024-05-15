@@ -7,7 +7,10 @@ fn main() {
   let p = dir.path().join("test_mmap");
   {
     const N: usize = 10;
-    let l = Arc::new(SkipMap::mmap_mut(&p, 1 << 20, true).unwrap());
+
+    let open_options = OpenOptions::default().create_new(Some(1 << 20)).read(true);
+    let mmap_options = MmapOptions::default();
+    let l = Arc::new(SkipMap::mmap_mut(&p, open_options, mmap_options).unwrap());
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -29,7 +32,10 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = Arc::new(SkipMap::<u64>::mmap(&p, false).unwrap());
+
+    let open_options = OpenOptions::default().read(true);
+    let mmap_options = MmapOptions::default();
+    let l = Arc::new(SkipMap::<u64>::mmap(&p, open_options, mmap_options).unwrap());
     assert_eq!(N2, l.len());
     for i in 0..N2 {
       let l = l.clone();

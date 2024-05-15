@@ -8,7 +8,10 @@ fn main() {
   {
     const N: usize = 10;
 
-    let open_options = OpenOptions::default().create_new(Some(1 << 20)).read(true);
+    let open_options = OpenOptions::default()
+      .create_new(Some(1 << 20))
+      .read(true)
+      .write(true);
     let mmap_options = MmapOptions::default();
     let l = Arc::new(SkipMap::mmap_mut(&p, open_options, mmap_options).unwrap());
     for i in 0..N {

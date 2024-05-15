@@ -136,10 +136,10 @@ impl OpenOptions {
   /// This function doesn't create the file if it doesn't exist. Use the
   /// [`OpenOptions::create`] method to do so.
   ///
-  /// [`write()`]: Write::write "io::Write::write"
-  /// [`flush()`]: Write::flush "io::Write::flush"
-  /// [seek]: Seek::seek "io::Seek::seek"
-  /// [Current]: SeekFrom::Current "io::SeekFrom::Current"
+  /// [`write()`]: std::io::Write::write "io::Write::write"
+  /// [`flush()`]: std::io::Write::flush "io::Write::flush"
+  /// [seek]: std::io::Seek::seek "io::Seek::seek"
+  /// [Current]: std::io::SeekFrom::Current "io::SeekFrom::Current"
   ///
   /// # Examples
   ///

@@ -1,11 +1,12 @@
+#[allow(unused_imports)]
+use crate::sync::Box;
 use crate::sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, Ordering};
+
 use core::{
   mem,
   ptr::{self, NonNull},
   slice,
 };
-#[allow(unused_imports)]
-use std::boxed::Box;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use crate::{MmapOptions, OpenOptions};

@@ -273,6 +273,8 @@ mod sync {
 
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
+  #[cfg(not(loom))]
+  pub(crate) use std::boxed::Box;
   #[cfg(all(not(loom), test))]
   pub(crate) use std::sync::Arc;
 

@@ -86,21 +86,26 @@ impl<T> NodePtr<T> {
 pub(super) struct Node<T> {
   pub(super) trailer: T,
 
+  // Immutable. No need to lock to access key.
+  pub(super) key_offset: u32,
+  // Immutable. No need to lock to access key.
+  pub(super) key_size: u16,
+  pub(super) height: u16,
+
   // A byte slice is 24 bytes. We are trying to save space here.
   /// Multiple parts of the value are encoded as a single uint64 so that it
   /// can be atomically loaded and stored:
   ///   value offset: u32 (bits 0-31)
   ///   value size  : u32 (bits 32-63)
   pub(super) value: AtomicU64,
-  // Immutable. No need to lock to access key.
-  pub(super) key_offset: u32,
-  // Immutable. No need to lock to access key.
-  pub(super) key_size: u16,
-  pub(super) height: u16,
+
   // // Immutable. No need to lock to access value.
   // pub(super) value_size: u32,
   // // Immutable. No need to lock to access
   // pub(super) alloc_size: u32,
+
+  // pub(super) trailer: PhantomData<T>,
+
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will
@@ -247,20 +252,24 @@ impl<T: Trailer> Node<T> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
-      node.value = AtomicU64::new(encode_value(
-        node_offset + node_size + key_size as u32,
-        value_size,
-      ));
+      std::println!("version {} node offset {node_offset} key {key:?} val offset {} val size {}", trailer.version(), node_offset + 
+      node_size + key_size as u32, value_size);
       node.trailer = trailer;
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
       node.height = height as u16;
+      node.value = AtomicU64::new(encode_value(
+        node_offset + node_size + key_size as u32,
+        value_size,
+      ));
       node.get_key_mut(arena).copy_from_slice(key);
       f(OccupiedValue::new(
         value_size as usize,
         node.get_value_mut(arena),
       ))
       .map_err(Either::Left)?;
+
+      std::println!("{:?}", arena);
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -330,6 +339,7 @@ impl<T> Node<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   pub(super) unsafe fn get_value<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> Option<&'b [u8]> {
+    std::println!("{}", self.value.load(Ordering::Acquire));
     let (offset, val_size) = decode_value(self.value.load(Ordering::Acquire));
     if offset == 0 && val_size == 0 {
       return None;

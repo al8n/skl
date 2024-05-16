@@ -1945,3 +1945,136 @@ fn test_insert_with_mmap_anon() {
   let mmap_options = MmapOptions::default().len(ARENA_SIZE);
   insert_with(SkipMap::mmap_anon(mmap_options).unwrap());
 }
+
+fn upsert_in(l: SkipMap) {
+  let k = 0u64.to_le_bytes();
+  for i in 0..100 {
+    let v = new_value(i);
+    let old = l.upsert(0, &k, &v).unwrap();
+    if let Some(old) = old {
+      assert_eq!(old.key(), k);
+      assert_eq!(old.value(), new_value(i - 1));
+    }
+  }
+
+  let ent = l.get(0, &k).unwrap();
+  assert_eq!(ent.key(), k);
+  assert_eq!(ent.value(), new_value(99));
+}
+
+#[test]
+fn test_upsert_in() {
+  upsert_in(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_upsert_in_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipmap_upsert_in_mmap_mut");
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  upsert_in(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_upsert_in_mmap_anon() {
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  upsert_in(SkipMap::mmap_anon(mmap_options).unwrap());
+}
+
+fn upsert_with(l: SkipMap) {
+  let alice = Person {
+    id: 1,
+    name: std::string::String::from("Alice"),
+  };
+
+  let encoded_size = alice.encoded_size() as u32;
+
+  l.upsert_with::<()>(1, b"alice", encoded_size, |mut val| {
+    assert_eq!(val.capacity(), encoded_size as usize);
+    assert!(val.is_empty());
+    val.write(&alice.id.to_le_bytes()).unwrap();
+    assert_eq!(val.len(), 4);
+    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(&*val, alice.id.to_le_bytes());
+    val[..4].copy_from_slice(&alice.id.to_be_bytes());
+    assert_eq!(&*val, alice.id.to_be_bytes());
+    val.write(alice.name.as_bytes()).unwrap();
+    assert_eq!(val.len(), encoded_size as usize);
+    let err = val.write(&[1]).unwrap_err();
+    assert_eq!(
+      std::string::ToString::to_string(&err),
+      "OccupiedValue does not have enough space (remaining 0, want 1)"
+    );
+    Ok(())
+  })
+  .unwrap();
+
+  let alice2 = Person {
+    id: 2,
+    name: std::string::String::from("Alice"),
+  };
+
+  let old = l
+    .upsert_with::<()>(1, b"alice", encoded_size, |mut val| {
+      assert_eq!(val.capacity(), encoded_size as usize);
+      assert!(val.is_empty());
+      val.write(&alice2.id.to_le_bytes()).unwrap();
+      assert_eq!(val.len(), 4);
+      assert_eq!(val.remaining(), encoded_size as usize - 4);
+      assert_eq!(&*val, alice2.id.to_le_bytes());
+      val[..4].copy_from_slice(&alice2.id.to_be_bytes());
+      assert_eq!(&*val, alice2.id.to_be_bytes());
+      val.write(alice2.name.as_bytes()).unwrap();
+      assert_eq!(val.len(), encoded_size as usize);
+      let err = val.write(&[1]).unwrap_err();
+      assert_eq!(
+        std::string::ToString::to_string(&err),
+        "OccupiedValue does not have enough space (remaining 0, want 1)"
+      );
+      Ok(())
+    })
+    .unwrap()
+    .unwrap();
+
+  assert_eq!(old.key(), b"alice");
+  assert!(old.value().starts_with(&alice.id.to_be_bytes()));
+
+  let ent = l.get(1, b"alice").unwrap();
+  assert_eq!(ent.key(), b"alice");
+  assert!(ent.value().starts_with(&alice2.id.to_be_bytes()));
+}
+
+#[test]
+fn test_upsert_with() {
+  upsert_with(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_upsert_with_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipmap_insert_with_mmap_mut");
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  upsert_with(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_upsert_with_mmap_anon() {
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  upsert_with(SkipMap::mmap_anon(mmap_options).unwrap());
+}

@@ -2,7 +2,9 @@
 
 ## 0.10.0
 
-- Add `upsert` and `upsert_with` method to allow users update the old value when the key and version are the same.
+- Add `upsert` and `upsert_with` methods to allow users update the old value when the key and version are the same.
+- Add `remove` method to allow users remove the entry with the key but require version is not equal.
+- Add `upremove` method to allow users remove the entry with same key and version.
 
 ## 0.9.0
 

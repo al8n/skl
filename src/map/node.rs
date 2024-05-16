@@ -1,6 +1,6 @@
 use core::{mem, ptr};
 
-use crate::sync::Link;
+use crate::sync::{AtomicU64, Link};
 
 use super::{super::arena::ArenaError, *};
 
@@ -87,17 +87,20 @@ pub(super) struct Node<T> {
   pub(super) trailer: T,
 
   // A byte slice is 24 bytes. We are trying to save space here.
-
+  /// Multiple parts of the value are encoded as a single uint64 so that it
+  /// can be atomically loaded and stored:
+  ///   value offset: u32 (bits 0-31)
+  ///   value size  : u32 (bits 32-63)
+  pub(super) value: AtomicU64,
   // Immutable. No need to lock to access key.
   pub(super) key_offset: u32,
   // Immutable. No need to lock to access key.
   pub(super) key_size: u16,
   pub(super) height: u16,
-
-  // Immutable. No need to lock to access value.
-  pub(super) value_size: u32,
-  // Immutable. No need to lock to access
-  pub(super) alloc_size: u32,
+  // // Immutable. No need to lock to access value.
+  // pub(super) value_size: u32,
+  // // Immutable. No need to lock to access
+  // pub(super) alloc_size: u32,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will
@@ -142,19 +145,54 @@ impl<T> Node<T> {
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let (node_offset, alloc_size) = arena.alloc(Self::max_node_size(), Self::alignment(), 0)?;
+    let node_offset = arena.alloc(Self::max_node_size(), Self::alignment(), 0)?;
 
     // Safety: we have check the offset is valid
     unsafe {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
+      node.value = AtomicU64::new(encode_value(node_offset + Self::MAX_NODE_SIZE as u32, 0));
       node.key_offset = 0;
       node.key_size = 0;
-      node.value_size = 0;
       node.height = MAX_HEIGHT as u16;
-      node.alloc_size = alloc_size;
       Ok(NodePtr::new(ptr, node_offset))
+    }
+  }
+
+  #[inline]
+  pub(super) fn set_value<'a, E>(
+    &self,
+    arena: &'a Arena,
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+  ) -> Result<(), Either<E, Error>> {
+    let offset = Self::new_value(arena, value_size, f)?;
+    self
+      .value
+      .store(encode_value(offset, value_size), Ordering::Release);
+    Ok(())
+  }
+
+  fn new_value<'a, E>(
+    arena: &'a Arena,
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+  ) -> Result<u32, Either<E, Error>> {
+    if value_size as u64 > u32::MAX as u64 {
+      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
+    }
+
+    let value_offset = arena
+      .alloc_value(value_size)
+      .map_err(|e: ArenaError| Either::Right(e.into()))?;
+
+    // Safety: we have check the offset is valid
+    unsafe {
+      let ptr = arena.get_pointer_mut(value_offset as usize);
+      let val = core::slice::from_raw_parts_mut(ptr, value_size as usize);
+      f(OccupiedValue::new(value_size as usize, val)).map_err(Either::Left)?;
+      Ok(value_offset)
     }
   }
 }
@@ -191,7 +229,7 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, alloc_size) = arena
+    let node_offset = arena
       .alloc(
         node_size + key_size as u32 + value_size,
         Self::alignment(),
@@ -204,12 +242,14 @@ impl<T: Trailer> Node<T> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
+      node.value = AtomicU64::new(encode_value(
+        node_offset + node_size + key_size as u32,
+        value_size,
+      ));
       node.trailer = trailer;
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
       node.height = height as u16;
-      node.value_size = value_size;
-      node.alloc_size = alloc_size;
       node.get_key_mut(arena).copy_from_slice(key);
       f(OccupiedValue::new(
         value_size as usize,
@@ -240,11 +280,13 @@ impl<T> Node<T> {
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
-  pub(super) unsafe fn get_value<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> &'b [u8] {
-    arena.get_bytes(
-      self.key_offset as usize + self.key_size as usize,
-      self.value_size as usize,
-    )
+  pub(super) unsafe fn get_value<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> Option<&'b [u8]> {
+    let (offset, val_size) = decode_value(self.value.load(Ordering::Acquire));
+    if offset == 0 && val_size == 0 {
+      return None;
+    }
+
+    Some(arena.get_bytes(offset as usize, val_size as usize))
   }
 
   /// ## Safety
@@ -252,11 +294,21 @@ impl<T> Node<T> {
   /// - The caller must ensure that the node is allocated by the arena.
   #[allow(clippy::mut_from_ref)]
   pub(super) unsafe fn get_value_mut<'a, 'b: 'a>(&'a mut self, arena: &'b Arena) -> &'b mut [u8] {
-    arena.get_bytes_mut(
-      self.key_offset as usize + self.key_size as usize,
-      self.value_size as usize,
-    )
+    let (offset, val_size) = decode_value(self.value.load(Ordering::Acquire));
+    arena.get_bytes_mut(offset as usize, val_size as usize)
   }
+}
+
+#[inline]
+const fn encode_value(offset: u32, val_size: u32) -> u64 {
+  (val_size as u64) << 32 | offset as u64
+}
+
+#[inline]
+const fn decode_value(value: u64) -> (u32, u32) {
+  let offset = value as u32;
+  let val_size = (value >> 32) as u32;
+  (offset, val_size)
 }
 
 #[cfg(test)]

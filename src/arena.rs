@@ -361,12 +361,7 @@ impl Arena {
   }
 
   #[inline]
-  pub(super) fn alloc(
-    &self,
-    size: u32,
-    align: u32,
-    overflow: u32,
-  ) -> Result<(u32, u32), ArenaError> {
+  pub(super) fn alloc(&self, size: u32, align: u32, overflow: u32) -> Result<u32, ArenaError> {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = size as u64 + align as u64 - 1;
 
@@ -388,10 +383,41 @@ impl Arena {
           // Return the aligned offset.
           let new_size = current + padded;
           let offset = (new_size as u32 - size) & !(align - 1);
-          return Ok((offset, padded as u32));
+          return Ok(offset);
         }
         Err(x) => {
           if x + padded + overflow as u64 > self.cap as u64 {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
+      }
+    }
+  }
+
+  #[inline]
+  pub(super) fn alloc_value(&self, size: u32) -> Result<u32, ArenaError> {
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
+    if current_allocated > self.cap as u64 {
+      return Err(ArenaError);
+    }
+
+    loop {
+      let want = current_allocated + size as u64;
+      match header.allocated.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          // Return the offset.
+          return Ok(current as u32);
+        }
+        Err(x) => {
+          if x + size as u64 > self.cap as u64 {
             return Err(ArenaError);
           }
 

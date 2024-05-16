@@ -8,7 +8,7 @@ pub struct EntryRef<'a, T, C> {
   pub(super) map: &'a SkipMap<T, C>,
   pub(super) key: &'a [u8],
   pub(super) trailer: T,
-  pub(super) value: &'a [u8],
+  pub(super) value: Option<&'a [u8]>,
 }
 
 impl<'a, T: Clone, C> Clone for EntryRef<'a, T, C> {
@@ -34,13 +34,22 @@ impl<'a, T, C> EntryRef<'a, T, C> {
   /// Returns the reference to the value
   #[inline]
   pub const fn value(&self) -> &[u8] {
-    self.value
+    match self.value {
+      Some(value) => value,
+      None => &[],
+    }
   }
 
   /// Returns the trailer of the entry
   #[inline]
   pub const fn trailer(&self) -> &T {
     &self.trailer
+  }
+
+  /// Returns if the entry is marked as removed
+  #[inline]
+  pub fn is_removed(&self) -> bool {
+    self.value.is_none()
   }
 
   /// Returns the version of the entry

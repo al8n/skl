@@ -99,9 +99,6 @@ pub(super) struct Node<T> {
   // Immutable. No need to lock to access key.
   pub(super) key_size: u32,
   pub(super) height: u16,
-
-  // Immutable. No need to lock to access
-  pub(super) alloc_size: u32,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will
@@ -146,7 +143,7 @@ impl<T> Node<T> {
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let (node_offset, alloc_size) = arena.alloc(Self::max_node_size(), Self::alignment(), 0)?;
+    let node_offset = arena.alloc(Self::max_node_size(), Self::alignment(), 0)?;
 
     // Safety: we have check the offset is valid
     unsafe {
@@ -156,7 +153,6 @@ impl<T> Node<T> {
       node.key_offset = 0;
       node.key_size = 0;
       node.height = MAX_HEIGHT as u16;
-      node.alloc_size = alloc_size;
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -188,8 +184,7 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, alloc_size) =
-      arena.alloc(node_size + key_size as u32, Self::alignment(), unused_size)?;
+    let node_offset = arena.alloc(node_size + key_size as u32, Self::alignment(), unused_size)?;
 
     unsafe {
       // Safety: we have check the offset is valid
@@ -200,7 +195,6 @@ impl<T: Trailer> Node<T> {
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u32;
       node.height = height as u16;
-      node.alloc_size = alloc_size;
       node.get_key_mut(arena).copy_from_slice(key);
       Ok(NodePtr::new(ptr, node_offset))
     }

@@ -608,7 +608,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
   }
 
-  fn insert_in<'a, 'b: 'a, E>(
+  fn update<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
     key: &'b [u8],

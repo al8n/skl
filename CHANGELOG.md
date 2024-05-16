@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.10.0
+
+- Add `upsert` and `upsert_with` method to allow users update the old value when the key and version are the same.
+
 ## 0.9.0
 
 - Make file backed mmap `SkipMap` and `SkipSet` still can be reopened even last time the program was aborted.

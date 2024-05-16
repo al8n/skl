@@ -754,7 +754,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
-    let mut invalid_date_splice = false;
+    let mut invalid_data_splice = false;
 
     for i in 0..(height as usize) {
       let mut prev = ins.spl[i].prev;
@@ -862,7 +862,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 )));
               }
 
-              invalid_date_splice = true;
+              invalid_data_splice = true;
               prev = fr.splice.prev;
               next = fr.splice.next;
             }
@@ -873,7 +873,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
     // If we had to recompute the splice for a level, invalidate the entire
     // cached splice.
-    if invalid_date_splice {
+    if invalid_data_splice {
       ins.height = 0;
     } else {
       // The splice was valid. We inserted a node between spl[i].prev and

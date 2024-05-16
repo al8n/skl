@@ -28,14 +28,14 @@
   
     ```toml
     [dependencies]
-    skl = "0.9"
+    skl = "0.10"
     ```
 
 - Enable memory map backend
 
     ```toml
     [dependencies]
-    skl = { version = "0.9", features = ["memmap"] }
+    skl = { version = "0.10", features = ["memmap"] }
     ```
 
 ## Features

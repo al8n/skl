@@ -42,6 +42,14 @@ pub use set::{SetIterator, SkipSet};
 
 const MAX_HEIGHT: usize = 20;
 
+bitflags::bitflags! {
+  struct Op: u8 {
+    const INSERT = 0b0001;
+    const UPSERT = 0b0010;
+    const REMOVE = 0b0100;
+  }
+}
+
 #[cfg(feature = "std")]
 fn random_height() -> u32 {
   use rand::{thread_rng, Rng};
@@ -159,6 +167,11 @@ impl core::fmt::Display for TooLarge {
 
 #[cfg(feature = "std")]
 impl std::error::Error for TooLarge {}
+
+#[cold]
+fn null(_: OccupiedValue) -> Result<(), core::convert::Infallible> {
+  Ok(())
+}
 
 /// An occupied value in the skiplist.
 #[must_use = "occupied value must be fully filled with bytes."]

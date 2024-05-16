@@ -34,7 +34,7 @@ required-features = ["memmap"]
 default = ["std"]
 alloc = []
 memmap = ["memmap2", "fs4", "std"]
-std = ["rand/default", "either/default"]
+std = ["bitflags/std", "rand/default", "either/default"]
 
 [target.'cfg(loom)'.dependencies]
 loom = "0.7"
@@ -43,6 +43,7 @@ loom = "0.7"
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
+bitflags = { version = "2", default-features = false }
 crossbeam-utils = { version = "0.8", default-features = false }
 either = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }

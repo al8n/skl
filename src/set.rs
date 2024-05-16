@@ -433,7 +433,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
       return Err(Error::Readonly);
     }
 
-    self.insert_in(trailer, key, &mut Inserter::default())
+    self.update(trailer, key, &mut Inserter::default())
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -642,7 +642,7 @@ impl<T: Trailer, C: Comparator> SkipSet<T, C> {
     }
   }
 
-  fn insert_in(
+  fn update(
     &self,
     trailer: T,
     key: &[u8],

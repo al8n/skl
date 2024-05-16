@@ -161,6 +161,11 @@ impl<T> Node<T> {
   }
 
   #[inline]
+  pub(super) fn remove_value(&self) {
+    self.value.store(0, Ordering::Release);
+  }
+
+  #[inline]
   pub(super) fn set_value<'a, E>(
     &self,
     arena: &'a Arena,
@@ -256,6 +261,50 @@ impl<T: Trailer> Node<T> {
         node.get_value_mut(arena),
       ))
       .map_err(Either::Left)?;
+      Ok(NodePtr::new(ptr, node_offset))
+    }
+  }
+
+  pub(super) fn new_remove_node_ptr<'a, 'b: 'a, E>(
+    arena: &'a Arena,
+    height: u32,
+    key: &'b [u8],
+    trailer: T,
+  ) -> Result<NodePtr<T>, Either<E, Error>> {
+    if height < 1 || height > MAX_HEIGHT as u32 {
+      panic!("height cannot be less than one or greater than the max height");
+    }
+
+    let key_size = key.len();
+    if key_size as u64 > u32::MAX as u64 {
+      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
+    }
+
+    let entry_size = (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+    if entry_size > u32::MAX as u64 {
+      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
+    }
+
+    // Compute the amount of the tower that will never be used, since the height
+    // is less than maxHeight.
+    let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
+    let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
+
+    let node_offset = arena
+      .alloc(node_size + key_size as u32, Self::alignment(), unused_size)
+      .map_err(|e| Either::Right(e.into()))?;
+
+    unsafe {
+      // Safety: we have check the offset is valid
+      let ptr = arena.get_pointer_mut(node_offset as usize);
+      // Safety: the node is well aligned
+      let node = &mut *(ptr as *mut Node<T>);
+      node.value = AtomicU64::new(0);
+      node.trailer = trailer;
+      node.key_offset = node_offset + node_size;
+      node.key_size = key_size as u16;
+      node.height = height as u16;
+      node.get_key_mut(arena).copy_from_slice(key);
       Ok(NodePtr::new(ptr, node_offset))
     }
   }

@@ -329,7 +329,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
-  /// Unlike [`upsert`](SkipMap::upsert), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert`](SkipMap::insert), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -355,7 +355,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Inserts a new key if it does not yet exist.
-  /// Unlike [`upsert_with`](SkipMap::upsert_with), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with`](SkipMap::insert_with), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.

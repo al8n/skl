@@ -242,7 +242,6 @@ impl<T, C> SkipMap<T, C> {
   }
 }
 
-
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// Returns true if the key exists in the map.
   #[inline]

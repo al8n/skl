@@ -1179,7 +1179,8 @@ fn iter_all_versionsator_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(0);
@@ -1228,7 +1229,8 @@ fn range_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let upper = make_int_key(50);
@@ -1282,7 +1284,8 @@ fn iter_all_versionsator_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(0);
@@ -1331,7 +1334,8 @@ fn range_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let lower = make_int_key(50);
@@ -1386,7 +1390,8 @@ fn iter_all_versionsator_seek_ge(l: SkipMap) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(0, &make_int_key(v), &make_value(v)).unwrap();
+    l.get_or_insert(0, &make_int_key(v), &make_value(v))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(0);
@@ -1465,7 +1470,8 @@ fn iter_all_versionsator_seek_lt(l: SkipMap) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(0, &make_int_key(v), &make_value(v)).unwrap();
+    l.get_or_insert(0, &make_int_key(v), &make_value(v))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(0);
@@ -1528,7 +1534,8 @@ fn test_iter_all_versionsator_seek_lt_mmap_anon() {
 
 fn range(l: SkipMap) {
   for i in 1..10 {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let k3 = make_int_key(3);
@@ -1644,7 +1651,8 @@ fn iter_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   for i in 50..N {
@@ -1700,7 +1708,8 @@ fn range_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i)).unwrap();
+    l.get_or_insert(0, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   for i in 50..N {

@@ -4,14 +4,14 @@ use crate::sync::Link;
 
 use super::{super::arena::ArenaError, *};
 
-#[cfg(feature = "atomic")]
+#[cfg(all(feature = "atomic", feature = "std"))]
 mod align4vp;
-#[cfg(feature = "atomic")]
+#[cfg(all(feature = "atomic", feature = "std"))]
 pub(super) use align4vp::ValuePointer;
 
-#[cfg(not(feature = "atomic"))]
+#[cfg(not(all(feature = "atomic", feature = "std")))]
 mod align8vp;
-#[cfg(not(feature = "atomic"))]
+#[cfg(not(all(feature = "atomic", feature = "std")))]
 pub(super) use align8vp::ValuePointer;
 
 #[derive(Debug)]
@@ -92,8 +92,8 @@ impl<T> NodePtr<T> {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "atomic", repr(C, align(4)))]
-#[cfg_attr(not(feature = "atomic"), repr(C, align(8)))]
+#[cfg_attr(all(feature = "atomic", feature = "std"), repr(C, align(4)))]
+#[cfg_attr(not(all(feature = "atomic", feature = "std")), repr(C, align(8)))]
 pub(super) struct Node<T> {
   // A byte slice is 24 bytes. We are trying to save space here.
   /// Multiple parts of the value are encoded as a single uint64 so that it
@@ -107,10 +107,6 @@ pub(super) struct Node<T> {
   pub(super) key_size: u16,
   pub(super) height: u16,
   pub(super) trailer: PhantomData<T>,
-  // // Immutable. No need to lock to access value.
-  // pub(super) value_size: u32,
-  // // Immutable. No need to lock to access
-  // pub(super) alloc_size: u32,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will

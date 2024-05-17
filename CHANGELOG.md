@@ -2,8 +2,9 @@
 
 ## 0.10.0
 
-- Add `get_or_insert` and `get_or_insert_with` methods.
-- Add `remove` and `get_or_remove` methods.
+- Add `compare_insert`, `compare_insert_weak`, `get_or_insert` and `get_or_insert_with` methods.
+- Add `remove`, `compare_remove`, `compare_remove_weak`, and `get_or_remove` methods.
+- Add an ordered double end linked list to track holes.
 
 ## 0.9.0
 

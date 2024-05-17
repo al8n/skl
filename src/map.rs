@@ -72,17 +72,15 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
 impl<T, C> SkipMap<T, C> {
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
     if ro {
-      let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
+      let (ptr, offset) = arena.head_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
       let head = NodePtr::new(ptr, offset);
-      let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
+      let (ptr, offset) = arena.tail_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
       let tail = NodePtr::new(ptr, offset);
-      std::println!("ro head: {:?}, tail: {:?}", head.offset, tail.offset);
       return Ok(Self::construct(arena, head, tail, ro, cmp));
     }
 
     let head = Node::new_empty_node_ptr(&arena)?;
     let tail = Node::new_empty_node_ptr(&arena)?;
-    std::println!("head: {:?}, tail: {:?}", head.offset, tail.offset);
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -422,7 +420,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
         // level == 0. Can't descend further. Let's return something that makes sense.
         if !less {
-          std::println!("herejjj");
           return (None, false);
         }
 
@@ -481,7 +478,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
           // Try to return x. Make sure it is not a head node.
           if x.ptr == self.head.ptr {
-            std::println!("here");
             return (None, false);
           }
 

@@ -1762,30 +1762,8 @@ fn test_range_latest_mmap_anon() {
 }
 
 #[test]
-// #[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
-fn test_xxx() {
-
-    let l = SkipMap::new(ARENA_SIZE).unwrap();
-    for i in 0..3 {
-      l.get_or_insert(0, &key(i), &new_value(i)).unwrap();
-    }
-    l.flush().unwrap();
-
-  assert_eq!(3, l.len());
-  for i in 0..3 {
-    let k = key(i);
-    println!("{}", i);
-    let ent = l.get(0, &k).unwrap();
-    assert_eq!(new_value(i), ent.value());
-    assert_eq!(ent.trailer().version(), 0);
-    assert_eq!(ent.key(), k);
-  }
-}
-
-#[test]
-// #[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
 fn test_reopen_mmap() {
   let dir = tempfile::tempdir().unwrap();
   let p = dir.path().join("reopen_skipmap");
@@ -1797,7 +1775,7 @@ fn test_reopen_mmap() {
       .lock_exclusive(true);
     let mmap_options = MmapOptions::default();
     let l = SkipMap::mmap_mut(&p, open_options, mmap_options).unwrap();
-    for i in 0..2 {
+    for i in 0..1000 {
       l.get_or_insert(0, &key(i), &new_value(i)).unwrap();
     }
     l.flush().unwrap();
@@ -1809,8 +1787,8 @@ fn test_reopen_mmap() {
     .shrink_on_drop(true);
   let mmap_options = MmapOptions::default();
   let l = SkipMap::mmap(&p, open_options, mmap_options).unwrap();
-  assert_eq!(2, l.len());
-  for i in 0..2 {
+  assert_eq!(1000, l.len());
+  for i in 0..1000 {
     let k = key(i);
     println!("{}", i);
     let ent = l.get(0, &k).unwrap();

@@ -463,7 +463,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let n = n?;
       let node = n.as_ptr();
       let node_key = node.get_key(&self.arena);
-      std::println!("{node_key:?}");
       let (trailer, value) = node.get_value_and_trailer(&self.arena);
       if eq {
         return value.map(|val| EntryRef {

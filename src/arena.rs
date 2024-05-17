@@ -290,29 +290,35 @@ impl Arena {
   }
 
   #[inline]
-  fn head_offset(&self, max_node_size: u32, align: u32) -> u32 {
+  fn head_offset<T>(&self, max_node_size: u32, align: u32) -> (u32, u32) {
+    let trailer_size = mem::size_of::<T>();
+    let trailer_align = mem::align_of::<T>();
+
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = max_node_size as u64 + align as u64 - 1;
-    let new_size = 1 + self.data_offset + padded;
+    let trailer_padded = trailer_size as u64 + trailer_align as u64 - 1;
+    let allocated = 1 + self.data_offset + padded;
 
     // Return the aligned offset.
-    (new_size as u32 - max_node_size) & !(align - 1)
+    let node_offset = (allocated as u32 - max_node_size) & !(align - 1);
+    let total_allocated = allocated + trailer_padded;
+    (node_offset, total_allocated as u32)
   }
 
-  pub(super) fn head_ptr(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
+  pub(super) fn head_ptr<T>(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
     // Safety: this method is only invoked when we want a readonly,
     // in readonly mode, we must have the head_ptr valid.
-    let offset = self.head_offset(max_node_size, align);
+    let (offset, _) = self.head_offset::<T>(max_node_size, align);
     (unsafe { self.get_pointer(offset as usize) }, offset)
   }
 
-  pub(super) fn tail_ptr(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
+  pub(super) fn tail_ptr<T>(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = max_node_size as u64 + align as u64 - 1;
-    let new_size = self.head_offset(max_node_size, align) as u64 + padded + max_node_size as u64;
+    let (_, current_allocated) = self.head_offset::<T>(max_node_size, align);
 
-    // Return the aligned offset.
-    let offset = (new_size as u32 - max_node_size) & !(align - 1);
+    let allocated = current_allocated as u64 + padded;
+    let offset = (allocated as u32 - max_node_size) & !(align - 1);
 
     // Safety: this method is only invoked when we want a readonly,
     // in readonly mode, we must have the head_ptr valid.
@@ -390,7 +396,6 @@ impl Arena {
           let allocated_for_trailer = allocated + trailer_padded;
           let value_offset = (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
 
-          std::println!("node_offset: {}, node_size: {}, node_end: {allocated}, trailer_offset: {}, value_offset: {}, total_allocated: {}", node_offset, allocated - node_offset as u64, value_offset, value_offset + trailer_size as u32, allocated_for_trailer + value_size as u64);
           return Ok((node_offset, value_offset));
         }
         Err(x) => {

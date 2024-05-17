@@ -364,19 +364,18 @@ impl Arena {
   pub(super) fn alloc<T>(&self, size: u32, value_size: u32, align: u32, overflow: u32) -> Result<(u32, u32), ArenaError> {
     let trailer_size = mem::size_of::<T>();
     let trailer_align = mem::align_of::<T>();
-    let value_and_trailer_size = value_size + trailer_size as u32;
 
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = size as u64 + align as u64 - 1;
-    let value_and_trailer_padded = value_and_trailer_size as u64 + trailer_align as u64 - 1;
+    let trailer_padded = trailer_size as u64 + trailer_align as u64 - 1;
     let header = self.header();
     let mut current_allocated = header.allocated.load(Ordering::Acquire);
-    if current_allocated + padded + overflow as u64 + value_and_trailer_padded > self.cap as u64 {
+    if current_allocated + padded + overflow as u64 + trailer_padded + value_size as u64 > self.cap as u64 {
       return Err(ArenaError);
     }
 
     loop {
-      let want = current_allocated + padded + value_and_trailer_padded;
+      let want = current_allocated + padded + trailer_padded + value_size as u64;
       match header.allocated.compare_exchange_weak(
         current_allocated,
         want,
@@ -388,14 +387,14 @@ impl Arena {
           let allocated = current + padded;
           let node_offset = (allocated as u32 - size) & !(align - 1);
 
-          let allocated_with_val_and_trailer = allocated + value_and_trailer_padded;
-          let value_offset = (allocated_with_val_and_trailer as u32 - value_and_trailer_size) & !(trailer_align as u32 - 1);
+          let allocated_for_trailer = allocated + trailer_padded;
+          let value_offset = (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
 
-          std::println!("node_offset: {}, node_size: {}, value_offset: {}, value_size: {}", node_offset, allocated - node_offset as u64, value_offset, allocated_with_val_and_trailer - value_offset as u64);
+          std::println!("node_offset: {}, node_size: {}, node_end: {allocated}, trailer_offset: {}, value_offset: {}, total_allocated: {}", node_offset, allocated - node_offset as u64, value_offset, value_offset + trailer_size as u32, allocated_for_trailer + value_size as u64);
           return Ok((node_offset, value_offset));
         }
         Err(x) => {
-          if x + padded + overflow as u64 + value_and_trailer_padded > self.cap as u64 {
+          if x + padded + overflow as u64 + trailer_padded + value_size as u64 > self.cap as u64 {
             return Err(ArenaError);
           }
 

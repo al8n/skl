@@ -184,7 +184,12 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, _) = arena.alloc::<T>(node_size + key_size as u32, 0, Self::alignment(), unused_size)?;
+    let (node_offset, _) = arena.alloc::<T>(
+      node_size + key_size as u32,
+      0,
+      Self::alignment(),
+      unused_size,
+    )?;
 
     unsafe {
       // Safety: we have check the offset is valid

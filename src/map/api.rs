@@ -459,7 +459,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
-      
+
       let n = n?;
       let node = n.as_ptr();
       let node_key = node.get_key(&self.arena);

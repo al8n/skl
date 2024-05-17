@@ -44,6 +44,8 @@ impl ValuePointer {
       offset: inner.offset,
       len: u32::MAX,
     };
-    let _ = self.0.compare_exchange(inner, new_inner, Ordering::SeqCst, Ordering::Relaxed);
+    let _ = self
+      .0
+      .compare_exchange(inner, new_inner, Ordering::SeqCst, Ordering::Relaxed);
   }
 }

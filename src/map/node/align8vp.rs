@@ -39,7 +39,9 @@ impl ValuePointer {
     let old = self.0.load(Ordering::Acquire);
     let (offset, _) = decode_value(old);
     let new = encode_value(offset, u32::MAX);
-    let _ = self.0.compare_exchange(old, new, Ordering::SeqCst, Ordering::Relaxed);
+    let _ = self
+      .0
+      .compare_exchange(old, new, Ordering::SeqCst, Ordering::Relaxed);
   }
 }
 

@@ -107,7 +107,6 @@ pub(super) struct Node<T> {
   pub(super) key_size: u16,
   pub(super) height: u16,
   pub(super) trailer: PhantomData<T>,
-
   // // Immutable. No need to lock to access value.
   // pub(super) value_size: u32,
   // // Immutable. No need to lock to access
@@ -294,7 +293,8 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, value_offset) = arena.alloc::<T>(node_size + key_size as u32, 0, Self::ALIGN, unused_size)?;
+    let (node_offset, value_offset) =
+      arena.alloc::<T>(node_size + key_size as u32, 0, Self::ALIGN, unused_size)?;
 
     unsafe {
       // Safety: we have check the offset is valid
@@ -366,7 +366,10 @@ impl<T: Copy> Node<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  pub(super) unsafe fn get_value_and_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> (T, Option<&'b [u8]>) {
+  pub(super) unsafe fn get_value_and_trailer<'a, 'b: 'a>(
+    &'a self,
+    arena: &'b Arena,
+  ) -> (T, Option<&'b [u8]>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_pointer(offset as usize);
     let trailer = ptr::read(ptr as *const T);
@@ -374,7 +377,10 @@ impl<T: Copy> Node<T> {
       return (trailer, None);
     }
 
-    (trailer, Some(arena.get_bytes(offset as usize + mem::size_of::<T>(), len as usize)))
+    (
+      trailer,
+      Some(arena.get_bytes(offset as usize + mem::size_of::<T>(), len as usize)),
+    )
   }
 }
 

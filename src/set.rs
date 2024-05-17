@@ -303,9 +303,11 @@ impl<T, C> SkipSet<T, C> {
 
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
     if ro {
-      let (ptr, offset) = arena.head_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let (ptr, offset) =
+        arena.head_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
       let head = NodePtr::new(ptr, offset);
-      let (ptr, offset) = arena.tail_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let (ptr, offset) =
+        arena.tail_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
       let tail = NodePtr::new(ptr, offset);
 
       return Ok(Self::construct(arena, head, tail, ro, cmp));

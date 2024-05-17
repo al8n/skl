@@ -367,7 +367,13 @@ impl Arena {
   }
 
   #[inline]
-  pub(super) fn alloc<T>(&self, size: u32, value_size: u32, align: u32, overflow: u32) -> Result<(u32, u32), ArenaError> {
+  pub(super) fn alloc<T>(
+    &self,
+    size: u32,
+    value_size: u32,
+    align: u32,
+    overflow: u32,
+  ) -> Result<(u32, u32), ArenaError> {
     let trailer_size = mem::size_of::<T>();
     let trailer_align = mem::align_of::<T>();
 
@@ -376,7 +382,9 @@ impl Arena {
     let trailer_padded = trailer_size as u64 + trailer_align as u64 - 1;
     let header = self.header();
     let mut current_allocated = header.allocated.load(Ordering::Acquire);
-    if current_allocated + padded + overflow as u64 + trailer_padded + value_size as u64 > self.cap as u64 {
+    if current_allocated + padded + overflow as u64 + trailer_padded + value_size as u64
+      > self.cap as u64
+    {
       return Err(ArenaError);
     }
 
@@ -394,7 +402,8 @@ impl Arena {
           let node_offset = (allocated as u32 - size) & !(align - 1);
 
           let allocated_for_trailer = allocated + trailer_padded;
-          let value_offset = (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
+          let value_offset =
+            (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
 
           return Ok((node_offset, value_offset));
         }

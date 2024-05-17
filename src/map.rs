@@ -646,7 +646,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         let old = EntryRef::from_node(node_ptr, self);
 
         if upsert {
-          node_ptr.as_ptr().set_value(&self.arena, trailer, value_size, f)?;
+          node_ptr
+            .as_ptr()
+            .set_value(&self.arena, trailer, value_size, f)?;
         }
 
         return Ok(if old.is_removed() { None } else { Some(old) });
@@ -772,7 +774,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 let old = EntryRef::from_node(node_ptr, self);
 
                 if upsert {
-                  node_ptr.as_ptr().set_value(&self.arena, trailer, value_size, f)?;
+                  node_ptr
+                    .as_ptr()
+                    .set_value(&self.arena, trailer, value_size, f)?;
                 }
 
                 return Ok(if old.is_removed() { None } else { Some(old) });

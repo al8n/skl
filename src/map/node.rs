@@ -1,8 +1,18 @@
 use core::{mem, ptr};
 
-use crate::sync::{AtomicU64, Link};
+use crate::sync::Link;
 
 use super::{super::arena::ArenaError, *};
+
+#[cfg(feature = "atomic")]
+mod align4vp;
+#[cfg(feature = "atomic")]
+pub(super) use align4vp::ValuePointer;
+
+#[cfg(not(feature = "atomic"))]
+mod align8vp;
+#[cfg(not(feature = "atomic"))]
+pub(super) use align8vp::ValuePointer;
 
 #[derive(Debug)]
 pub(crate) struct NodePtr<T> {
@@ -91,7 +101,7 @@ pub(super) struct Node<T> {
   /// can be atomically loaded and stored:
   ///   value offset: u32 (bits 0-31)
   ///   value size  : u32 (bits 32-63)
-  pub(super) value: AtomicU64,
+  pub(super) value: ValuePointer,
   // Immutable. No need to lock to access key.
   pub(super) key_offset: u32,
   // Immutable. No need to lock to access key.
@@ -152,7 +162,7 @@ impl<T> Node<T> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
-      node.value = AtomicU64::new(encode_value(node_offset + Self::MAX_NODE_SIZE as u32, 0));
+      node.value = ValuePointer::new(node_offset + Self::MAX_NODE_SIZE as u32, 0);
       node.key_offset = 0;
       node.key_size = 0;
       node.height = MAX_HEIGHT as u16;
@@ -168,15 +178,13 @@ impl<T> Node<T> {
     f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
   ) -> Result<(), Either<E, Error>> {
     let offset = Self::new_value(arena, value_size, f)?;
-    self
-      .value
-      .store(encode_value(offset, value_size), Ordering::Release);
+    self.value.store(offset, value_size, Ordering::Release);
     Ok(())
   }
 
   #[inline]
   pub(super) fn clear_value(&self) {
-    self.value.store(encode_value(0, 0), Ordering::Release);
+    self.value.store(0, u32::MAX, Ordering::Release);
   }
 
   fn new_value<'a, E>(
@@ -247,10 +255,7 @@ impl<T: Trailer> Node<T> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
-      node.value = AtomicU64::new(encode_value(
-        node_offset + node_size + key_size as u32,
-        value_size,
-      ));
+      node.value = ValuePointer::new(node_offset + node_size + key_size as u32, value_size);
       node.trailer = trailer;
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
@@ -297,7 +302,7 @@ impl<T: Trailer> Node<T> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
-      node.value = AtomicU64::new(encode_value(0, 0));
+      node.value = ValuePointer::remove(node_offset + node_size + key_size as u32);
       node.trailer = trailer;
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
@@ -328,12 +333,12 @@ impl<T> Node<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   pub(super) unsafe fn get_value<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> Option<&'b [u8]> {
-    let (offset, val_size) = decode_value(self.value.load(Ordering::Acquire));
-    if offset == 0 && val_size == 0 {
+    let (offset, len) = self.value.load(Ordering::Acquire);
+    if len == u32::MAX {
       return None;
     }
 
-    Some(arena.get_bytes(offset as usize, val_size as usize))
+    Some(arena.get_bytes(offset as usize, len as usize))
   }
 
   /// ## Safety
@@ -341,21 +346,9 @@ impl<T> Node<T> {
   /// - The caller must ensure that the node is allocated by the arena.
   #[allow(clippy::mut_from_ref)]
   pub(super) unsafe fn get_value_mut<'a, 'b: 'a>(&'a mut self, arena: &'b Arena) -> &'b mut [u8] {
-    let (offset, val_size) = decode_value(self.value.load(Ordering::Acquire));
-    arena.get_bytes_mut(offset as usize, val_size as usize)
+    let (offset, len) = self.value.load(Ordering::Acquire);
+    arena.get_bytes_mut(offset as usize, len as usize)
   }
-}
-
-#[inline]
-const fn encode_value(offset: u32, val_size: u32) -> u64 {
-  (val_size as u64) << 32 | offset as u64
-}
-
-#[inline]
-const fn decode_value(value: u64) -> (u32, u32) {
-  let offset = value as u32;
-  let val_size = (value >> 32) as u32;
-  (offset, val_size)
 }
 
 #[cfg(test)]

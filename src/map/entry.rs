@@ -66,10 +66,11 @@ impl<'a, T: Copy, C> EntryRef<'a, T, C> {
   pub(super) fn from_node(node: NodePtr<T>, map: &'a SkipMap<T, C>) -> EntryRef<'a, T, C> {
     unsafe {
       let node = node.as_ptr();
+      let (trailer, value) = node.get_value_and_trailer(&map.arena);
       EntryRef {
         key: node.get_key(&map.arena),
-        trailer: node.trailer,
-        value: node.get_value(&map.arena),
+        trailer,
+        value,
         map,
       }
     }

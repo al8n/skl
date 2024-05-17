@@ -72,9 +72,9 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
 impl<T, C> SkipMap<T, C> {
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
     if ro {
-      let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
       let head = NodePtr::new(ptr, offset);
-      let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
       let tail = NodePtr::new(ptr, offset);
       return Ok(Self::construct(arena, head, tail, ro, cmp));
     }
@@ -313,7 +313,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is greater than the given version, we should return.
-      let version_cmp = curr_node.trailer.version().cmp(&version);
+      let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
       if version_cmp == cmp::Ordering::Greater {
         return None;
       }
@@ -332,7 +332,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return Some(curr);
       }
 
-      let version_cmp = prev_node.trailer.version().cmp(&version);
+      let version_cmp = prev_node.get_trailer(&self.arena).version().cmp(&version);
 
       if version_cmp == cmp::Ordering::Equal {
         return Some(prev);
@@ -354,7 +354,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
-      let version_cmp = curr_node.trailer.version().cmp(&version);
+      let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
         return Some(curr);
       }
@@ -369,7 +369,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
       let next_node = next.as_ptr();
       let next_key = next_node.get_key(&self.arena);
-      let version_cmp = next_node.trailer.version().cmp(&version);
+      let version_cmp = next_node.get_trailer(&self.arena).version().cmp(&version);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
@@ -436,7 +436,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let cmp = self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.trailer.version().cmp(&version));
+        .then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -582,7 +582,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       match self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.trailer.version().cmp(&version))
+        .then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version))
       {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
@@ -623,7 +623,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       cmp::Ordering::Less => true,
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
-        matches!(version.cmp(&nd.trailer.version()), cmp::Ordering::Less)
+        matches!(version.cmp(&nd.get_trailer(&self.arena).version()), cmp::Ordering::Less)
       }
     }
   }
@@ -646,7 +646,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         let old = EntryRef::from_node(node_ptr, self);
 
         if upsert {
-          node_ptr.as_ptr().set_value(&self.arena, value_size, f)?;
+          node_ptr.as_ptr().set_value(&self.arena, trailer, value_size, f)?;
         }
 
         return Ok(if old.is_removed() { None } else { Some(old) });
@@ -772,7 +772,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 let old = EntryRef::from_node(node_ptr, self);
 
                 if upsert {
-                  node_ptr.as_ptr().set_value(&self.arena, value_size, f)?;
+                  node_ptr.as_ptr().set_value(&self.arena, trailer, value_size, f)?;
                 }
 
                 return Ok(if old.is_removed() { None } else { Some(old) });

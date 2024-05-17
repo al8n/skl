@@ -143,7 +143,7 @@ impl<T> Node<T> {
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let node_offset = arena.alloc(Self::max_node_size(), Self::alignment(), 0)?;
+    let (node_offset, _) = arena.alloc::<T>(Self::max_node_size(), 0, Self::alignment(), 0)?;
 
     // Safety: we have check the offset is valid
     unsafe {
@@ -184,7 +184,7 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let node_offset = arena.alloc(node_size + key_size as u32, Self::alignment(), unused_size)?;
+    let (node_offset, _) = arena.alloc::<T>(node_size + key_size as u32, 0, Self::alignment(), unused_size)?;
 
     unsafe {
       // Safety: we have check the offset is valid

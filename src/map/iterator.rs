@@ -137,7 +137,12 @@ where
         }
 
         let node = self.nd.as_ptr();
-        if node.trailer.version() > self.version {
+        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+        if trailer.version() > self.version {
+          continue;
+        }
+
+        if !self.all_versions && value.is_none() {
           continue;
         }
 
@@ -155,8 +160,8 @@ where
           let ent = EntryRef {
             map: self.map,
             key: nk,
-            trailer: node.trailer,
-            value: node.get_value(&self.map.arena),
+            trailer,
+            value,
           };
           self.last = Some(ent);
           return Some(ent);
@@ -177,7 +182,12 @@ where
         }
 
         let node = self.nd.as_ptr();
-        if node.trailer.version() > self.version {
+        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+        if trailer.version() > self.version {
+          continue;
+        }
+
+        if !self.all_versions && value.is_none() {
           continue;
         }
 
@@ -195,8 +205,8 @@ where
           let ent = EntryRef {
             map: self.map,
             key: nk,
-            trailer: node.trailer,
-            value: node.get_value(&self.map.arena),
+            trailer,
+            value,
           };
           self.last = Some(ent);
           return Some(ent);
@@ -376,8 +386,14 @@ where
       unsafe {
         let node = self.nd.as_ptr();
         let nk = node.get_key(&self.map.arena);
+        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
 
-        if node.trailer.version() > self.version {
+        if trailer.version() > self.version {
+          self.nd = self.map.get_next(self.nd, 0);
+          continue;
+        }
+
+        if !self.all_versions && value.is_none() {
           self.nd = self.map.get_next(self.nd, 0);
           continue;
         }
@@ -386,8 +402,8 @@ where
           let ent = EntryRef {
             map: self.map,
             key: nk,
-            trailer: node.trailer,
-            value: node.get_value(&self.map.arena),
+            trailer,
+            value,
           };
           self.last = Some(ent);
           return Some(ent);
@@ -410,7 +426,14 @@ where
         }
 
         let node = self.nd.as_ptr();
-        if node.trailer.version() > self.version {
+        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+
+        if trailer.version() > self.version {
+          self.nd = self.map.get_prev(self.nd, 0);
+          continue;
+        }
+
+        if !self.all_versions && value.is_none() {
           self.nd = self.map.get_prev(self.nd, 0);
           continue;
         }
@@ -420,8 +443,8 @@ where
           let ent = EntryRef {
             map: self.map,
             key: nk,
-            trailer: node.trailer,
-            value: node.get_value(&self.map.arena),
+            trailer,
+            value,
           };
           return Some(ent);
         }

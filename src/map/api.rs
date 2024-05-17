@@ -165,7 +165,7 @@ impl SkipMap {
 impl<T, C> SkipMap<T, C> {
   /// Like [`SkipMap::new`], but with a custom comparator.
   pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
-    let arena = Arena::new_vec(cap, Node::<T>::min_cap(), Node::<T>::alignment() as usize);
+    let arena = Arena::new_vec(cap, Node::<T>::min_cap(), Node::<T>::ALIGN as usize);
     Self::new_in(arena, cmp, false)
   }
 
@@ -178,7 +178,7 @@ impl<T, C> SkipMap<T, C> {
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::alignment() as usize;
+    let alignment = Node::<T>::ALIGN as usize;
     let min_cap = Node::<T>::min_cap();
     let arena = Arena::mmap_mut(path, open_options, mmap_options, min_cap, alignment)?;
     Self::new_in(arena, cmp, false).map_err(invalid_data)
@@ -193,7 +193,7 @@ impl<T, C> SkipMap<T, C> {
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::alignment() as usize;
+    let alignment = Node::<T>::ALIGN as usize;
     let min_cap = Node::<T>::min_cap();
     let arena = Arena::mmap(path, open_options, mmap_options, min_cap, alignment)?;
     Self::new_in(arena, cmp, true).map_err(invalid_data)
@@ -203,7 +203,7 @@ impl<T, C> SkipMap<T, C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
-    let alignment = Node::<T>::alignment() as usize;
+    let alignment = Node::<T>::ALIGN as usize;
     let min_cap = Node::<T>::min_cap();
     let arena = Arena::new_anonymous_mmap(mmap_options, min_cap, alignment)?;
     Self::new_in(arena, cmp, false).map_err(invalid_data)
@@ -459,16 +459,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
-
+      
       let n = n?;
       let node = n.as_ptr();
       let node_key = node.get_key(&self.arena);
-
+      std::println!("{node_key:?}");
+      let (trailer, value) = node.get_value_and_trailer(&self.arena);
       if eq {
-        return node.get_value(&self.arena).map(|val| EntryRef {
+        return value.map(|val| EntryRef {
           map: self,
           key: node_key,
-          trailer: node.trailer,
+          trailer,
           value: Some(val),
         });
       }
@@ -477,14 +478,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
-      if node.trailer.version() > version {
+      if trailer.version() > version {
         return None;
       }
 
-      node.get_value(&self.arena).map(|val| EntryRef {
+      value.map(|val| EntryRef {
         map: self,
         key: node_key,
-        trailer: node.trailer,
+        trailer,
         value: Some(val),
       })
     }

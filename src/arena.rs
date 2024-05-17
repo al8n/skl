@@ -361,13 +361,95 @@ impl Arena {
   }
 
   #[inline]
-  pub(super) fn alloc(&self, size: u32, align: u32, overflow: u32) -> Result<u32, ArenaError> {
+  pub(super) fn alloc<T>(&self, size: u32, value_size: u32, align: u32, overflow: u32) -> Result<(u32, u32), ArenaError> {
+    let trailer_size = mem::size_of::<T>();
+    let trailer_align = mem::align_of::<T>();
+    let value_and_trailer_size = value_size + trailer_size as u32;
+
     // Pad the allocation with enough bytes to ensure the requested alignment.
+    let padded = size as u64 + align as u64 - 1;
+    let value_and_trailer_padded = value_and_trailer_size as u64 + trailer_align as u64 - 1;
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
+    if current_allocated + padded + overflow as u64 + value_and_trailer_padded > self.cap as u64 {
+      return Err(ArenaError);
+    }
+
+    loop {
+      let want = current_allocated + padded + value_and_trailer_padded;
+      match header.allocated.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          // Return the aligned offset.
+          let allocated = current + padded;
+          let node_offset = (allocated as u32 - size) & !(align - 1);
+
+          let allocated_with_val_and_trailer = allocated + value_and_trailer_padded;
+          let value_offset = (allocated_with_val_and_trailer as u32 - value_and_trailer_size) & !(trailer_align as u32 - 1);
+
+          std::println!("node_offset: {}, node_size: {}, value_offset: {}, value_size: {}", node_offset, allocated - node_offset as u64, value_offset, allocated_with_val_and_trailer - value_offset as u64);
+          return Ok((node_offset, value_offset));
+        }
+        Err(x) => {
+          if x + padded + overflow as u64 + value_and_trailer_padded > self.cap as u64 {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
+      }
+    }
+  }
+
+  // #[inline]
+  // pub(super) fn alloc_node_only(&self, size: u32, align: u32, overflow: u32) -> Result<u32, ArenaError> {
+  //   // Pad the allocation with enough bytes to ensure the requested alignment.
+  //   let padded = size as u64 + align as u64 - 1;
+  //   let header = self.header();
+  //   let mut current_allocated = header.allocated.load(Ordering::Acquire);
+  //   if current_allocated + padded + overflow as u64 > self.cap as u64 {
+  //     return Err(ArenaError);
+  //   }
+
+  //   loop {
+  //     let want = current_allocated + padded;
+  //     match header.allocated.compare_exchange_weak(
+  //       current_allocated,
+  //       want,
+  //       Ordering::SeqCst,
+  //       Ordering::Acquire,
+  //     ) {
+  //       Ok(current) => {
+  //         // Return the aligned offset.
+  //         let allocated = current + padded;
+  //         let node_offset = (allocated as u32 - size) & !(align - 1);
+  //         return Ok(node_offset);
+  //       }
+  //       Err(x) => {
+  //         if x + padded + overflow as u64 > self.cap as u64 {
+  //           return Err(ArenaError);
+  //         }
+
+  //         current_allocated = x;
+  //       }
+  //     }
+  //   }
+  // }
+
+  #[inline]
+  pub(super) fn alloc_value<T>(&self, size: u32) -> Result<u32, ArenaError> {
+    let trailer_size = mem::size_of::<T>();
+    let align = mem::align_of::<T>();
+    let size = size + trailer_size as u32;
     let padded = size as u64 + align as u64 - 1;
 
     let header = self.header();
     let mut current_allocated = header.allocated.load(Ordering::Acquire);
-    if current_allocated + padded + overflow as u64 > self.cap as u64 {
+    if current_allocated + padded > self.cap as u64 {
       return Err(ArenaError);
     }
 
@@ -381,43 +463,12 @@ impl Arena {
       ) {
         Ok(current) => {
           // Return the aligned offset.
-          let new_size = current + padded;
-          let offset = (new_size as u32 - size) & !(align - 1);
-          return Ok(offset);
+          let allocated = current + padded;
+          let value_offset = (allocated as u32 - size) & !(align as u32 - 1);
+          return Ok(value_offset as u32);
         }
         Err(x) => {
-          if x + padded + overflow as u64 > self.cap as u64 {
-            return Err(ArenaError);
-          }
-
-          current_allocated = x;
-        }
-      }
-    }
-  }
-
-  #[inline]
-  pub(super) fn alloc_value(&self, size: u32) -> Result<u32, ArenaError> {
-    let header = self.header();
-    let mut current_allocated = header.allocated.load(Ordering::Acquire);
-    if current_allocated > self.cap as u64 {
-      return Err(ArenaError);
-    }
-
-    loop {
-      let want = current_allocated + size as u64;
-      match header.allocated.compare_exchange_weak(
-        current_allocated,
-        want,
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      ) {
-        Ok(current) => {
-          // Return the offset.
-          return Ok(current as u32);
-        }
-        Err(x) => {
-          if x + size as u64 > self.cap as u64 {
+          if x + padded > self.cap as u64 {
             return Err(ArenaError);
           }
 

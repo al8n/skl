@@ -36,4 +36,14 @@ impl ValuePointer {
   pub(crate) fn store(&self, offset: u32, len: u32, ordering: Ordering) {
     self.0.store(Inner { offset, len }, ordering);
   }
+
+  #[inline]
+  pub(crate) fn mark_remove(&self) {
+    let inner = self.0.load(Ordering::Acquire);
+    let new_inner = Inner {
+      offset: inner.offset,
+      len: u32::MAX,
+    };
+    let _ = self.0.compare_exchange(inner, new_inner, Ordering::SeqCst, Ordering::Relaxed);
+  }
 }

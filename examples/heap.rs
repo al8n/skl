@@ -11,7 +11,7 @@ pub fn new_value(i: usize) -> Vec<u8> {
 
 fn main() {
   const N: usize = 1000;
-  let l = Arc::new(SkipMap::new(1 << 20).unwrap());
+  let l = SkipMap::new(1 << 20).unwrap();
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();

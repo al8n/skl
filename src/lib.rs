@@ -19,11 +19,15 @@ extern crate std;
 use core::{cmp, ops::RangeBounds};
 
 mod arena;
+
+mod align8vp;
+use align8vp::Pointer;
+
 /// A map implementation based on skiplist
 pub mod map;
 
-/// A set implementation based on skiplist
-pub mod set;
+mod types;
+pub use types::*;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 mod options;
@@ -36,9 +40,8 @@ fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::
   std::io::Error::new(std::io::ErrorKind::InvalidData, e)
 }
 
-pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, SkipMap};
-pub use set::{SetIterator, SkipSet};
+pub use arena::ArenaError;
+pub use map::{AllVersionsIter, SkipMap};
 
 const MAX_HEIGHT: usize = 20;
 
@@ -89,7 +92,7 @@ const PROBABILITIES: [u32; MAX_HEIGHT] = {
 
 /// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation
-pub trait Comparator {
+pub trait Comparator: core::fmt::Debug {
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
 
@@ -140,120 +143,30 @@ impl Comparator for Descend {
   }
 }
 
-/// Returns when the bytes are too large to be written to the occupied value.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct TooLarge {
-  remaining: usize,
-  write: usize,
-}
-
-impl core::fmt::Display for TooLarge {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    write!(
-      f,
-      "OccupiedValue does not have enough space (remaining {}, want {})",
-      self.remaining, self.write
-    )
-  }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for TooLarge {}
-
-/// An occupied value in the skiplist.
-#[must_use = "occupied value must be fully filled with bytes."]
-#[derive(Debug)]
-pub struct OccupiedValue<'a> {
-  value: &'a mut [u8],
-  len: usize,
-  cap: usize,
-}
-
-impl<'a> OccupiedValue<'a> {
-  /// Write bytes to the occupied value.
-  pub fn write(&mut self, bytes: &[u8]) -> Result<(), TooLarge> {
-    let len = bytes.len();
-    let remaining = self.cap - self.len;
-    if len > remaining {
-      return Err(TooLarge {
-        remaining,
-        write: len,
-      });
-    }
-
-    self.value[self.len..self.len + len].copy_from_slice(bytes);
-    self.len += len;
-    Ok(())
-  }
-
-  /// Returns the capacity of the occupied value.
-  #[inline]
-  pub const fn capacity(&self) -> usize {
-    self.cap
-  }
-
-  /// Returns the length of the occupied value.
-  #[inline]
-  pub const fn len(&self) -> usize {
-    self.len
-  }
-
-  /// Returns `true` if the occupied value is empty.
-  #[inline]
-  pub const fn is_empty(&self) -> bool {
-    self.len == 0
-  }
-
-  /// Returns the remaining space of the occupied value.
-  #[inline]
-  pub const fn remaining(&self) -> usize {
-    self.cap - self.len
-  }
-
-  #[inline]
-  fn new(cap: usize, value: &'a mut [u8]) -> Self {
-    Self { value, len: 0, cap }
-  }
-}
-
-impl<'a> core::ops::Deref for OccupiedValue<'a> {
-  type Target = [u8];
-
-  fn deref(&self) -> &Self::Target {
-    &self.value[..self.len]
-  }
-}
-
-impl<'a> core::ops::DerefMut for OccupiedValue<'a> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.value[..self.len]
-  }
-}
-
-impl<'a> Drop for OccupiedValue<'a> {
-  fn drop(&mut self) {
-    assert_eq!(
-      self.len,
-      self.cap,
-      "OccupiedValue was not fully filled with bytes, capacity is {}, remaining is {}",
-      self.cap,
-      self.cap - self.len
-    );
-  }
-}
-
 /// A trait for extra information that can be stored with entry in the skiplist.
-pub trait Trailer: Copy {
+///
+/// # Safety
+/// The implementors must ensure that they can be reconstructed from a byte slice directly.
+/// e.g. struct includes `*const T` cannot be used as the trailer, because the pointer cannot be reconstructed from a byte slice directly.
+pub unsafe trait Trailer: Copy + core::fmt::Debug {
   /// Returns the version of the trailer.
   fn version(&self) -> u64;
 }
 
-impl Trailer for u64 {
+unsafe impl Trailer for u64 {
   /// Returns the version of the trailer.
   #[inline]
   fn version(&self) -> u64 {
     *self
   }
+}
+
+mod alloc {
+  #[cfg(not(loom))]
+  pub(crate) use std::alloc::{alloc_zeroed, dealloc, Layout};
+
+  #[cfg(loom)]
+  pub(crate) use loom::alloc::{alloc_zeroed, dealloc, Layout};
 }
 
 mod sync {
@@ -278,16 +191,15 @@ mod sync {
 
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
-  #[cfg(not(loom))]
-  pub(crate) use std::boxed::Box;
-  #[cfg(all(not(loom), test))]
-  pub(crate) use std::sync::Arc;
 
   #[cfg(loom)]
-  pub(crate) use loom::sync::{atomic::*, Arc};
+  pub(crate) use loom::sync::atomic::*;
 
   #[cfg(loom)]
   pub(crate) trait AtomicMut<T> {}
+
+  #[cfg(loom)]
+  impl<T> AtomicMut<T> for AtomicPtr<T> {}
 
   #[cfg(not(loom))]
   pub(crate) trait AtomicMut<T> {

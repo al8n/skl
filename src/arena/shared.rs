@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::sync::AtomicUsize;
+use crate::{alloc::*, sync::AtomicUsize};
 
 #[derive(Debug)]
 struct AlignedVec {
@@ -14,7 +14,7 @@ impl Drop for AlignedVec {
   fn drop(&mut self) {
     if self.cap != 0 {
       unsafe {
-        std::alloc::dealloc(self.ptr.as_ptr(), self.layout());
+        dealloc(self.ptr.as_ptr(), self.layout());
       }
     }
   }
@@ -29,17 +29,14 @@ impl AlignedVec {
       align - 1
     );
     let ptr = unsafe {
-      let layout = std::alloc::Layout::from_size_align_unchecked(capacity, align);
-      let ptr = std::alloc::alloc(layout);
+      let layout = Layout::from_size_align_unchecked(capacity, align);
+      let ptr = alloc_zeroed(layout);
       if ptr.is_null() {
         std::alloc::handle_alloc_error(layout);
       }
       ptr::NonNull::new_unchecked(ptr)
     };
 
-    unsafe {
-      core::ptr::write_bytes(ptr.as_ptr(), 0, capacity);
-    }
     Self {
       ptr,
       cap: capacity,
@@ -156,13 +153,18 @@ impl Shared {
     min_cap: usize,
     alignment: usize,
   ) -> std::io::Result<Self> {
-    let file = open_options.open(path.as_ref())?;
+    let (create_new, file) = open_options.open(path.as_ref())?;
 
     unsafe {
-      mmap_options.map_mut(&file).and_then(|mmap| {
+      mmap_options.map_mut(&file).and_then(|mut mmap| {
         let cap = mmap.len();
         if cap < min_cap {
           return Err(invalid_data(TooSmall::new(cap, min_cap)));
+        }
+
+        if create_new {
+          // initialize the memory with 0
+          ptr::write_bytes(mmap.as_mut_ptr(), 0, cap);
         }
 
         let data_offset = data_offset(alignment);
@@ -193,7 +195,15 @@ impl Shared {
     min_cap: usize,
     alignment: usize,
   ) -> std::io::Result<Self> {
-    let file = open_options.open(path.as_ref())?;
+    if !path.as_ref().exists() {
+      return Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "file not found",
+      ));
+    }
+
+    let (_, file) = open_options.open(path.as_ref())?;
+
     unsafe {
       mmap_options.map(&file).and_then(|mmap| {
         let len = mmap.len();
@@ -336,12 +346,6 @@ impl Shared {
       } => {
         use fs4::FileExt;
 
-        // Any errors during unmapping/closing are ignored as the only way
-        // to report them would be through panicking which is highly discouraged
-        // in Drop impls, c.f. https://github.com/rust-lang/lang-team/issues/97
-        let mmap = &mut **buf;
-        let _ = mmap.flush();
-
         // we must trigger the drop of the mmap
         let used = if *shrink_on_drop {
           let header_ptr = self.header_ptr().cast::<Header>();
@@ -358,6 +362,8 @@ impl Shared {
             let _ = file.set_len(used);
           }
         }
+
+        let _ = file.sync_all();
 
         if *lock {
           let _ = file.unlock();
@@ -388,6 +394,7 @@ impl Shared {
         if let Some(used) = used {
           if used < self.cap as u64 {
             let _ = file.set_len(used);
+            let _ = file.sync_all();
           }
         }
 
@@ -402,7 +409,7 @@ impl Shared {
   }
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(all(test, feature = "std", not(loom)))]
 mod tests {
   use super::*;
 

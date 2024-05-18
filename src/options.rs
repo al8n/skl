@@ -315,7 +315,7 @@ impl OpenOptions {
     self
   }
 
-  pub(crate) fn open<P: AsRef<Path>>(&self, path: P) -> io::Result<File> {
+  pub(crate) fn open<P: AsRef<Path>>(&self, path: P) -> io::Result<(bool, File)> {
     if let Some(size) = self.create_new {
       return self.opts.open(path).and_then(|f| {
         if self.lock_exclusive {
@@ -324,7 +324,7 @@ impl OpenOptions {
           f.lock_shared()?;
         }
 
-        f.set_len(size).map(|_| f)
+        f.set_len(size).map(|_| (true, f))
       });
     }
 
@@ -336,7 +336,7 @@ impl OpenOptions {
           } else if self.lock_shared {
             f.lock_shared()?;
           }
-          Ok(f)
+          Ok((false, f))
         })
       } else {
         self.opts.open(path).and_then(|f| {
@@ -346,7 +346,7 @@ impl OpenOptions {
             f.lock_shared()?;
           }
 
-          f.set_len(size).map(|_| f)
+          f.set_len(size).map(|_| (true, f))
         })
       };
     }
@@ -357,7 +357,7 @@ impl OpenOptions {
       } else if self.lock_shared {
         f.lock_shared()?;
       }
-      Ok(f)
+      Ok((false, f))
     })
   }
 
@@ -372,7 +372,7 @@ impl OpenOptions {
   }
 }
 
-/// A memory map options for file backed [`SkipMap`](super::SkipMap) and [`SkipSet`](super::SkipSet),
+/// A memory map options for file backed [`SkipMap`](super::SkipMap),
 /// providing advanced options and flags for specifying memory map behavior.
 #[derive(Clone, Debug)]
 pub struct MmapOptions(Mmap2Options);

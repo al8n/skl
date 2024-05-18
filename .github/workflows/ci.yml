@@ -165,17 +165,17 @@ jobs:
       - name: build & valgrind (vec backend)
         run: |
           cargo build --bin test-vec --target-dir .
-          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./debug/test-vec
+          valgrind --error-exitcode=1 --leak-check=full --track-origins=yes --show-leak-kinds=all ./debug/test-vec
         working-directory: integration
       - name: build & valgrind (mmap backend)
         run: |
           cargo build --bin test-mmap --target-dir .
-          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./debug/test-mmap 
+          valgrind --error-exitcode=1 --leak-check=full --track-origins=yes --show-leak-kinds=all ./debug/test-mmap 
         working-directory: integration
       - name: build & valgrind (mmap-anon backend)
         run: |
           cargo build --bin test-mmap-anon --target-dir .
-          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./debug/test-mmap-anon 
+          valgrind --error-exitcode=1 --leak-check=full --track-origins=yes --show-leak-kinds=all ./debug/test-mmap-anon 
         working-directory: integration
       
  

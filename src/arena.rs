@@ -35,6 +35,10 @@ pub(super) struct Header {
   /// Current height. 1 <= height <= kMaxHeight. CAS.
   height: AtomicU32,
   len: AtomicU32,
+
+  // Reserved for segmented list.
+  segmented_head_ptr: AtomicU32,
+  segmented_tail_ptr: AtomicU32,
 }
 
 impl Header {
@@ -47,6 +51,8 @@ impl Header {
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
       allocated: AtomicU64::new(size + 1),
+      segmented_head_ptr: AtomicU32::new(0),
+      segmented_tail_ptr: AtomicU32::new(0),
     }
   }
 }
@@ -369,7 +375,7 @@ impl Arena {
     }
   }
 
-  #[inline]
+  #[cfg(not(feature = "unaligned"))]
   pub(super) fn alloc<T>(
     &self,
     size: u32,
@@ -421,7 +427,53 @@ impl Arena {
     }
   }
 
-  #[inline]
+  #[cfg(feature = "unaligned")]
+  pub(super) fn alloc<T>(
+    &self,
+    size: u32,
+    value_size: u32,
+    _align: u32,
+    overflow: u32,
+  ) -> Result<(u32, u32), ArenaError> {
+    let trailer_size = mem::size_of::<T>();
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
+    if current_allocated + size as u64 + overflow as u64 + trailer_size as u64 + value_size as u64
+      > self.cap as u64
+    {
+      return Err(ArenaError);
+    }
+
+    loop {
+      let want = current_allocated + size as u64 + trailer_size as u64 + value_size as u64;
+      match header.allocated.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          // Return the unaligned offset.
+          let node_offset = current as u32;
+          let allocated_for_trailer = current + size as u64;
+          let value_offset = allocated_for_trailer as u32;
+          std::println!("node_offset: {}, value_offset: {}", node_offset, value_offset);
+          return Ok((node_offset, value_offset));
+        }
+        Err(x) => {
+          if x + size as u64 + overflow as u64 + trailer_size as u64 + value_size as u64
+            > self.cap as u64
+          {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
+      }
+    }
+  }
+
+  #[cfg(not(feature = "unaligned"))]
   pub(super) fn alloc_value<T>(&self, size: u32) -> Result<u32, ArenaError> {
     let trailer_size = mem::size_of::<T>();
     let align = mem::align_of::<T>();
@@ -450,6 +502,39 @@ impl Arena {
         }
         Err(x) => {
           if x + padded > self.cap as u64 {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
+      }
+    }
+  }
+
+  #[cfg(feature = "unaligned")]
+  pub(super) fn alloc_value<T>(&self, size: u32) -> Result<u32, ArenaError> {
+    let trailer_size = mem::size_of::<T>();
+    let size = size as u64 + trailer_size as u64;
+
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
+    if current_allocated + size > self.cap as u64 {
+      return Err(ArenaError);
+    }
+
+    loop {
+      let want = current_allocated + size;
+      match header.allocated.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          return Ok((current + size) as u32);
+        }
+        Err(x) => {
+          if x + size > self.cap as u64 {
             return Err(ArenaError);
           }
 

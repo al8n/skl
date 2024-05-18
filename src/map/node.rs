@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, mem, ptr};
 
-use crate::{sync::Link, Pointer};
+use crate::{sync::*, Pointer};
 
 use super::{super::arena::ArenaError, *};
 
@@ -48,7 +48,15 @@ impl<T> NodePtr<T> {
   pub(super) unsafe fn tower(&self, arena: &Arena, idx: usize) -> &Link {
     let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
     let tower_ptr = arena.get_pointer(tower_ptr_offset);
-    &*tower_ptr.cast()
+    #[cfg(not(feature = "unaligned"))]
+    {
+      &*tower_ptr.cast()
+    }
+    
+    #[cfg(feature = "unaligned")]
+    {
+      &*(tower_ptr as *const Link)
+    }
   }
 
   #[inline]
@@ -61,7 +69,15 @@ impl<T> NodePtr<T> {
   ) {
     let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
     let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
-    *tower_ptr = Link::new(next_offset, prev_offset);
+    #[cfg(not(feature = "unaligned"))]
+    {
+      *tower_ptr = Link::new(next_offset, prev_offset);
+    }
+
+    #[cfg(feature = "unaligned")]
+    {
+      ptr::write_unaligned(tower_ptr, Link::new(next_offset, prev_offset));
+    }
   }
 
   /// ## Safety
@@ -69,7 +85,17 @@ impl<T> NodePtr<T> {
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
   pub(super) unsafe fn next_offset(&self, arena: &Arena, idx: usize) -> u32 {
-    self.tower(arena, idx).next_offset.load(Ordering::Acquire)
+    #[cfg(not(feature = "unaligned"))]
+    {
+      self.tower(arena, idx).next_offset.load(Ordering::Acquire)
+    }
+
+    #[cfg(feature = "unaligned")]
+    {
+      let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
+      let tower_ptr = arena.get_pointer_mut(tower_ptr_offset) as *const AtomicU32;
+      ptr::read_unaligned(tower_ptr).load(Ordering::Acquire)
+    }
   }
 
   /// ## Safety
@@ -77,7 +103,69 @@ impl<T> NodePtr<T> {
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
   pub(super) unsafe fn prev_offset(&self, arena: &Arena, idx: usize) -> u32 {
-    self.tower(arena, idx).prev_offset.load(Ordering::Acquire)
+    #[cfg(not(feature = "unaligned"))]
+    {
+      self.tower(arena, idx).prev_offset.load(Ordering::Acquire)
+    }
+
+    #[cfg(feature = "unaligned")]
+    {
+      let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
+      let tower_ptr = arena.get_pointer_mut(tower_ptr_offset + mem::size_of::<AtomicU32>()) as *const AtomicU32;
+      ptr::read_unaligned(tower_ptr).load(Ordering::Acquire)
+    }
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
+  pub(super) unsafe fn cas_prev_offset(
+    &self,
+    arena: &Arena,
+    idx: usize,
+    current: u32,
+    new: u32,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<u32, u32> {
+    #[cfg(not(feature = "unaligned"))]
+    {
+      self.tower(arena, idx).prev_offset.compare_exchange(current, new, success, failure)
+    }
+
+    #[cfg(feature = "unaligned")]
+    {
+      let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
+      let tower_ptr = arena.get_pointer_mut(tower_ptr_offset + mem::size_of::<AtomicU32>()) as *const AtomicU32;
+      ptr::read_unaligned(tower_ptr).compare_exchange(current, new, success, failure)
+    }
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
+  pub(super) unsafe fn cas_next_offset_weak(
+    &self,
+    arena: &Arena,
+    idx: usize,
+    current: u32,
+    new: u32,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<u32, u32> {
+    #[cfg(not(feature = "unaligned"))]
+    {
+      self.tower(arena, idx).next_offset.compare_exchange_weak(current, new, success, failure)
+    }
+
+    #[cfg(feature = "unaligned")]
+    {
+      let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
+      let tower_ptr = arena.get_pointer_mut(tower_ptr_offset) as *const AtomicU32;
+      ptr::read_unaligned(tower_ptr).compare_exchange(current, new, success, failure)
+    }
   }
 }
 
@@ -138,12 +226,34 @@ impl<T> Node<T> {
       let ptr = arena.get_pointer_mut(node_offset as usize);
       // Safety: the node is well aligned
       let node = &mut *(ptr as *mut Node<T>);
-      let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
-      ptr::write_bytes(trailer_ptr, 0, 1);
+      let trailer_ptr = arena.get_pointer_mut(value_offset as usize);
+      #[cfg(not(feature = "unaligned"))]
+      {
+        ptr::write_bytes(trailer_ptr as *mut T, 0, 1);
+      }
+
+      #[cfg(feature = "unaligned")]
+      {
+        core::slice::from_raw_parts_mut(trailer_ptr, mem::size_of::<T>()).fill(0);
+      }
+
       node.value = Pointer::new(value_offset, 0);
       node.key_offset = 0;
       node.key_size = 0;
       node.height = MAX_HEIGHT as u16;
+
+      #[cfg(not(feature = "unaligned"))]
+      ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, MAX_HEIGHT);
+
+      #[cfg(feature = "unaligned")]
+      {
+        let tower_offset = ptr.add(mem::size_of::<Node<T>>());
+        for tower in 0..MAX_HEIGHT {
+          let tower_ptr = tower_offset.add(tower * Link::SIZE);
+          ptr::write_unaligned(tower_ptr as *mut Link, Link::new(0, 0));
+        }
+      }
+      
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -188,7 +298,11 @@ impl<T> Node<T> {
     unsafe {
       let ptr = arena.get_pointer_mut(value_offset as usize);
       let trailer_ptr = ptr as *mut T;
+      #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
+      #[cfg(feature = "unaligned")]
+      ptr::write_unaligned(trailer_ptr, trailer);
+
       let val = core::slice::from_raw_parts_mut(ptr.add(mem::size_of::<T>()), value_size as usize);
       f(OccupiedValue::new(value_size as usize, val)).map_err(Either::Left)?;
       Ok(value_offset)
@@ -248,14 +362,30 @@ impl<T: Trailer> Node<T> {
       node.height = height as u16;
       node.get_key_mut(arena).copy_from_slice(key);
 
+      #[cfg(not(feature = "unaligned"))]
+      ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+
+      #[cfg(feature = "unaligned")]
+      {
+        let tower_offset = ptr.add(mem::size_of::<Node<T>>());
+        for tower in 0..height as usize {
+          let tower_ptr = tower_offset.add(tower * Link::SIZE);
+          ptr::write_unaligned(tower_ptr as *mut Link, Link::new(0, 0));
+        }
+      }
+
       let ptr = arena.get_pointer_mut(value_offset as usize);
       let trailer_ptr = ptr as *mut T;
+      #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
+      #[cfg(feature = "unaligned")]
+      ptr::write_unaligned(trailer_ptr, trailer);
       f(OccupiedValue::new(
         value_size as usize,
         node.get_value_mut(arena),
       ))
       .map_err(Either::Left)?;
+
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -298,10 +428,26 @@ impl<T: Trailer> Node<T> {
       node.key_size = key_size as u16;
       node.height = height as u16;
       node.get_key_mut(arena).copy_from_slice(key);
+      #[cfg(not(feature = "unaligned"))]
+      ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+
+      #[cfg(feature = "unaligned")]
+      {
+        let tower_offset = ptr.add(mem::size_of::<Node<T>>());
+        for tower in 0..height as usize {
+          let tower_ptr = tower_offset.add(tower * Link::SIZE);
+          ptr::write_unaligned(tower_ptr as *mut Link, Link::new(0, 0));
+        }
+      }
 
       let ptr = arena.get_pointer_mut(value_offset as usize);
       let trailer_ptr = ptr as *mut T;
+      #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
+      #[cfg(feature = "unaligned")]
+      ptr::write_unaligned(trailer_ptr, trailer);
+
+      
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -355,7 +501,13 @@ impl<T: Copy> Node<T> {
   pub(super) unsafe fn get_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> T {
     let (offset, _) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_pointer(offset as usize);
-    ptr::read(ptr as *const T)
+    #[cfg(not(feature = "unaligned"))]
+    {
+      ptr::read(ptr as *const T)
+    }
+
+    #[cfg(feature = "unaligned")]
+    ptr::read_unaligned(ptr as *const T)
   }
 
   /// ## Safety
@@ -368,7 +520,13 @@ impl<T: Copy> Node<T> {
     offset: u32,
   ) -> T {
     let ptr = arena.get_pointer(offset as usize);
-    ptr::read(ptr as *const T)
+    #[cfg(not(feature = "unaligned"))]
+    {
+      ptr::read(ptr as *const T)
+    }
+
+    #[cfg(feature = "unaligned")]
+    ptr::read_unaligned(ptr as *const T)
   }
 
   /// ## Safety
@@ -381,7 +539,11 @@ impl<T: Copy> Node<T> {
   ) -> (T, Option<&'b [u8]>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_pointer(offset as usize);
+    #[cfg(not(feature = "unaligned"))]
     let trailer = ptr::read(ptr as *const T);
+    #[cfg(feature = "unaligned")]
+    let trailer = ptr::read_unaligned(ptr as *const T);
+
     if len == u32::MAX {
       return (trailer, None);
     }

@@ -3,9 +3,8 @@
 ## 0.10.0
 
 - Remove `SkipSet`.
-- Add `compare_insert`, `insert`, `get_or_insert` and `get_or_insert_with` methods.
+- Add `insert`, `get_or_insert` and `get_or_insert_with` methods.
 - Add `compare_remove` and `get_or_remove` methods.
-- Add an ordered double end linked list to track holes.
 
 ## 0.9.0
 
@@ -67,3 +66,4 @@
 ### 0.11.0
 
 - Add `unaligned` feature, which does not apply pad for each allocation from ARENA.
+- Add an ordered double end linked list to track holes.

@@ -19,11 +19,12 @@ extern crate std;
 use core::{cmp, ops::RangeBounds};
 
 mod arena;
+
+mod align8vp;
+use align8vp::Pointer;
+
 /// A map implementation based on skiplist
 pub mod map;
-
-/// A set implementation based on skiplist
-pub mod set;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 mod options;
@@ -36,9 +37,8 @@ fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::
   std::io::Error::new(std::io::ErrorKind::InvalidData, e)
 }
 
-pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, SkipMap};
-pub use set::{SetIterator, SkipSet};
+pub use arena::ArenaError;
+pub use map::{AllVersionsIter, SkipMap};
 
 const MAX_HEIGHT: usize = 20;
 
@@ -151,7 +151,7 @@ impl core::fmt::Display for TooLarge {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     write!(
       f,
-      "OccupiedValue does not have enough space (remaining {}, want {})",
+      "VacantValue does not have enough space (remaining {}, want {})",
       self.remaining, self.write
     )
   }
@@ -163,13 +163,13 @@ impl std::error::Error for TooLarge {}
 /// An occupied value in the skiplist.
 #[must_use = "occupied value must be fully filled with bytes."]
 #[derive(Debug)]
-pub struct OccupiedValue<'a> {
+pub struct VacantValue<'a> {
   value: &'a mut [u8],
   len: usize,
   cap: usize,
 }
 
-impl<'a> OccupiedValue<'a> {
+impl<'a> VacantValue<'a> {
   /// Write bytes to the occupied value.
   pub fn write(&mut self, bytes: &[u8]) -> Result<(), TooLarge> {
     let len = bytes.len();
@@ -216,7 +216,7 @@ impl<'a> OccupiedValue<'a> {
   }
 }
 
-impl<'a> core::ops::Deref for OccupiedValue<'a> {
+impl<'a> core::ops::Deref for VacantValue<'a> {
   type Target = [u8];
 
   fn deref(&self) -> &Self::Target {
@@ -224,36 +224,96 @@ impl<'a> core::ops::Deref for OccupiedValue<'a> {
   }
 }
 
-impl<'a> core::ops::DerefMut for OccupiedValue<'a> {
+impl<'a> core::ops::DerefMut for VacantValue<'a> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.value[..self.len]
   }
 }
 
-impl<'a> Drop for OccupiedValue<'a> {
-  fn drop(&mut self) {
-    assert_eq!(
-      self.len,
-      self.cap,
-      "OccupiedValue was not fully filled with bytes, capacity is {}, remaining is {}",
-      self.cap,
-      self.cap - self.len
-    );
+impl<'a> PartialEq<[u8]> for VacantValue<'a> {
+  fn eq(&self, other: &[u8]) -> bool {
+    self.value[..self.len].eq(other)
+  }
+}
+
+impl<'a> PartialEq<VacantValue<'a>> for [u8] {
+  fn eq(&self, other: &VacantValue<'a>) -> bool {
+    self.eq(&other.value[..other.len])
+  }
+}
+
+impl<'a> PartialEq<[u8]> for &VacantValue<'a> {
+  fn eq(&self, other: &[u8]) -> bool {
+    self.value[..self.len].eq(other)
+  }
+}
+
+impl<'a> PartialEq<&VacantValue<'a>> for [u8] {
+  fn eq(&self, other: &&VacantValue<'a>) -> bool {
+    self.eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.value[..self.len].eq(other.as_slice())
+  }
+}
+
+impl<'a, const N: usize> PartialEq<VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &VacantValue<'a>) -> bool {
+    self.as_slice().eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<&VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &&VacantValue<'a>) -> bool {
+    self.as_slice().eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for &VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.value[..self.len].eq(other.as_slice())
+  }
+}
+
+impl<'a, const N: usize> PartialEq<&mut VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &&mut VacantValue<'a>) -> bool {
+    self.as_slice().eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.value[..self.len].eq(other.as_slice())
   }
 }
 
 /// A trait for extra information that can be stored with entry in the skiplist.
-pub trait Trailer: Copy {
+///
+/// # Safety
+/// The implementors must ensure that they can be reconstructed from a byte slice directly.
+/// e.g. struct includes `*const T` cannot be used as the trailer, because the pointer cannot be reconstructed from a byte slice directly.
+pub unsafe trait Trailer: Copy + core::fmt::Debug {
   /// Returns the version of the trailer.
   fn version(&self) -> u64;
 }
 
-impl Trailer for u64 {
+unsafe impl Trailer for u64 {
   /// Returns the version of the trailer.
   #[inline]
   fn version(&self) -> u64 {
     *self
   }
+}
+
+mod alloc {
+  #[cfg(not(loom))]
+  pub(crate) use std::alloc::{alloc_zeroed, dealloc, Layout};
+
+  #[cfg(loom)]
+  pub(crate) use loom::alloc::{alloc_zeroed, dealloc, Layout};
 }
 
 mod sync {
@@ -278,16 +338,15 @@ mod sync {
 
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
-  #[cfg(not(loom))]
-  pub(crate) use std::boxed::Box;
-  #[cfg(all(not(loom), test))]
-  pub(crate) use std::sync::Arc;
 
   #[cfg(loom)]
-  pub(crate) use loom::sync::{atomic::*, Arc};
+  pub(crate) use loom::sync::atomic::*;
 
   #[cfg(loom)]
   pub(crate) trait AtomicMut<T> {}
+
+  #[cfg(loom)]
+  impl<T> AtomicMut<T> for AtomicPtr<T> {}
 
   #[cfg(not(loom))]
   pub(crate) trait AtomicMut<T> {

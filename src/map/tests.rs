@@ -2197,3 +2197,60 @@ fn test_remove_mmap_anon() {
   let mmap_options = MmapOptions::default().len(ARENA_SIZE);
   remove(SkipMap::mmap_anon(mmap_options).unwrap());
 }
+
+fn remove2(l: SkipMap) {
+  for i in 0..100 {
+    let v = new_value(i);
+    l.insert(0, &key(i), &v).unwrap();
+  }
+
+  for i in 0..100 {
+    let k = key(i);
+    let old = l
+      .compare_remove(1, &k, Ordering::SeqCst, Ordering::Acquire)
+      .unwrap()
+      .unwrap_left();
+    assert!(old.is_none());
+
+    let old = l
+      .compare_remove(0, &k, Ordering::SeqCst, Ordering::Acquire)
+      .unwrap()
+      .unwrap_left()
+      .unwrap();
+    assert_eq!(old.key(), k);
+    assert_eq!(old.value(), new_value(i));
+  }
+
+  for i in 0..100 {
+    let k = key(i);
+    let ent = l.get(0, &k);
+    assert!(ent.is_none());
+  }
+}
+
+#[test]
+fn test_remove2() {
+  remove2(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_remove2_mmap_mut() {
+  let dir = tempfile::tempdir().unwrap();
+  let p = dir.path().join("test_skipmap_remove2_mmap_mut");
+  let open_options = OpenOptions::default()
+    .create_new(Some(ARENA_SIZE as u64))
+    .read(true)
+    .write(true);
+  let mmap_options = MmapOptions::default();
+  remove2(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_remove2_mmap_anon() {
+  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
+  remove2(SkipMap::mmap_anon(mmap_options).unwrap());
+}

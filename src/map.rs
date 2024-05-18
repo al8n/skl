@@ -719,7 +719,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               // Ok, case #1 is true, so help the other thread along by
               // updating the next node's prev link.
               let _ = next.cas_prev_offset(
-                &self.arena, i,
+                &self.arena,
+                i,
                 next_prev_offset,
                 prev_offset,
                 Ordering::SeqCst,
@@ -728,7 +729,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
             }
           }
 
-          match prev.cas_next_offset_weak(&self.arena, i,
+          match prev.cas_next_offset_weak(
+            &self.arena,
+            i,
             next.offset,
             nd.offset,
             Ordering::SeqCst,
@@ -746,7 +749,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               }
 
               let _ = next.cas_prev_offset(
-                &self.arena, i,
+                &self.arena,
+                i,
                 prev_offset,
                 nd.offset,
                 Ordering::SeqCst,
@@ -931,7 +935,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               // Ok, case #1 is true, so help the other thread along by
               // updating the next node's prev link.
               let _ = next.cas_prev_offset(
-                &self.arena, i,
+                &self.arena,
+                i,
                 next_prev_offset,
                 prev_offset,
                 Ordering::SeqCst,
@@ -941,7 +946,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           }
 
           match prev.cas_next_offset_weak(
-            &self.arena, i,
+            &self.arena,
+            i,
             next.offset,
             nd.offset,
             Ordering::SeqCst,
@@ -959,7 +965,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               }
 
               let _ = next.cas_prev_offset(
-                &self.arena, i,
+                &self.arena,
+                i,
                 prev_offset,
                 nd.offset,
                 Ordering::SeqCst,

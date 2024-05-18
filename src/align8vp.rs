@@ -36,9 +36,7 @@ impl Pointer {
     use core::ptr;
 
     let ptr = &self.0 as *const AtomicU64;
-    unsafe {
-      decode_value(ptr::read_unaligned(ptr).load(ordering))
-    }
+    unsafe { decode_value(ptr::read_unaligned(ptr).load(ordering)) }
   }
 
   #[inline]

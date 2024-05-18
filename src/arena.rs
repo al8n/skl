@@ -457,7 +457,6 @@ impl Arena {
           let node_offset = current as u32;
           let allocated_for_trailer = current + size as u64;
           let value_offset = allocated_for_trailer as u32;
-          std::println!("node_offset: {}, value_offset: {}", node_offset, value_offset);
           return Ok((node_offset, value_offset));
         }
         Err(x) => {

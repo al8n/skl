@@ -52,7 +52,7 @@ impl<T> NodePtr<T> {
     {
       &*tower_ptr.cast()
     }
-    
+
     #[cfg(feature = "unaligned")]
     {
       &*(tower_ptr as *const Link)
@@ -111,7 +111,8 @@ impl<T> NodePtr<T> {
     #[cfg(feature = "unaligned")]
     {
       let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
-      let tower_ptr = arena.get_pointer_mut(tower_ptr_offset + mem::size_of::<AtomicU32>()) as *const AtomicU32;
+      let tower_ptr =
+        arena.get_pointer_mut(tower_ptr_offset + mem::size_of::<AtomicU32>()) as *const AtomicU32;
       ptr::read_unaligned(tower_ptr).load(Ordering::Acquire)
     }
   }
@@ -131,13 +132,17 @@ impl<T> NodePtr<T> {
   ) -> Result<u32, u32> {
     #[cfg(not(feature = "unaligned"))]
     {
-      self.tower(arena, idx).prev_offset.compare_exchange(current, new, success, failure)
+      self
+        .tower(arena, idx)
+        .prev_offset
+        .compare_exchange(current, new, success, failure)
     }
 
     #[cfg(feature = "unaligned")]
     {
       let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
-      let tower_ptr = arena.get_pointer_mut(tower_ptr_offset + mem::size_of::<AtomicU32>()) as *const AtomicU32;
+      let tower_ptr =
+        arena.get_pointer_mut(tower_ptr_offset + mem::size_of::<AtomicU32>()) as *const AtomicU32;
       ptr::read_unaligned(tower_ptr).compare_exchange(current, new, success, failure)
     }
   }
@@ -157,7 +162,10 @@ impl<T> NodePtr<T> {
   ) -> Result<u32, u32> {
     #[cfg(not(feature = "unaligned"))]
     {
-      self.tower(arena, idx).next_offset.compare_exchange_weak(current, new, success, failure)
+      self
+        .tower(arena, idx)
+        .next_offset
+        .compare_exchange_weak(current, new, success, failure)
     }
 
     #[cfg(feature = "unaligned")]
@@ -253,7 +261,7 @@ impl<T> Node<T> {
           ptr::write_unaligned(tower_ptr as *mut Link, Link::new(0, 0));
         }
       }
-      
+
       Ok(NodePtr::new(ptr, node_offset))
     }
   }
@@ -280,7 +288,7 @@ impl<T> Node<T> {
     self.value.compare_remove(success, failure)
   }
 
-  fn new_value<'a, E>(
+  pub(super) fn new_value<'a, E>(
     arena: &'a Arena,
     trailer: T,
     value_size: u32,
@@ -447,7 +455,6 @@ impl<T: Trailer> Node<T> {
       #[cfg(feature = "unaligned")]
       ptr::write_unaligned(trailer_ptr, trailer);
 
-      
       Ok(NodePtr::new(ptr, node_offset))
     }
   }

@@ -11,6 +11,8 @@ use super::{invalid_data, MmapOptions, OpenOptions};
 
 use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
 
+mod api;
+
 mod node;
 use either::Either;
 use node::{Node, NodePtr};
@@ -24,8 +26,8 @@ pub use iterator::*;
 #[cfg(all(test, not(loom)))]
 mod tests;
 
-// #[cfg(all(test, loom))]
-// mod loom;
+#[cfg(all(test, loom))]
+mod loom;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration. Keys and values are immutable once added to the skipmap and
@@ -67,253 +69,12 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
   }
 }
 
-// --------------------------------Public Methods--------------------------------
 impl<T, C> SkipMap<T, C> {
-  /// Returns the height of the highest tower within any of the nodes that
-  /// have ever been allocated as part of this skiplist.
-  #[inline]
-  pub fn height(&self) -> u32 {
-    self.arena.height()
-  }
-
-  /// Returns the number of bytes that have allocated from the arena.
-  #[inline]
-  pub fn size(&self) -> usize {
-    self.arena.size()
-  }
-
-  /// Returns the number of remaining bytes can be allocated by the arena.
-  #[inline]
-  pub fn remaining(&self) -> usize {
-    self.arena.remaining()
-  }
-
-  /// Returns the capacity of the arena.
-  #[inline]
-  pub const fn capacity(&self) -> usize {
-    self.arena.capacity()
-  }
-
-  /// Returns the number of entries in the skipmap.
-  #[inline]
-  pub fn len(&self) -> usize {
-    self.arena.len() as usize
-  }
-
-  /// Returns true if the skipmap is empty.
-  #[inline]
-  pub fn is_empty(&self) -> bool {
-    self.len() == 0
-  }
-
-  /// Returns the maximum version of all entries in the map.
-  #[inline]
-  pub fn max_version(&self) -> u64 {
-    self.arena.max_version()
-  }
-
-  /// Returns the minimum version of all entries in the map.
-  #[inline]
-  pub fn min_version(&self) -> u64 {
-    self.arena.min_version()
-  }
-
-  /// Returns the comparator used to compare keys.
-  #[inline]
-  pub const fn comparator(&self) -> &C {
-    &self.cmp
-  }
-
-  /// Flushes outstanding memory map modifications to disk.
-  ///
-  /// When this method returns with a non-error result,
-  /// all outstanding changes to a file-backed memory map are guaranteed to be durably stored.
-  /// The file's metadata (including last modification timestamp) may not be updated.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn flush(&self) -> std::io::Result<()> {
-    self.arena.flush()
-  }
-
-  /// Asynchronously flushes outstanding memory map modifications to disk.
-  ///
-  /// This method initiates flushing modified pages to durable storage, but it will not wait for
-  /// the operation to complete before returning. The file's metadata (including last
-  /// modification timestamp) may not be updated.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn flush_async(&self) -> std::io::Result<()> {
-    self.arena.flush_async()
-  }
-
-  #[cfg(all(test, feature = "std"))]
-  #[inline]
-  pub(crate) fn with_yield_now(mut self) -> Self {
-    self.yield_now = true;
-    self
-  }
-}
-
-impl SkipMap {
-  /// Create a new skipmap according to the given capacity
-  ///
-  /// **Note:** The capacity stands for how many memory allocated,
-  /// it does not mean the skiplist can store `cap` entries.
-  ///
-  ///
-  ///
-  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
-  ///
-  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///   Even if we are working with raw pointers with `Box::into_raw`,
-  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///   especially if you're frequently accessing or modifying it.
-  ///
-  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
-  ///   If you require very large contiguous memory regions, `mmap` might be more suitable because
-  ///   it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
-  pub fn new(cap: usize) -> Result<Self, Error> {
-    Self::with_comparator(cap, Ascend)
-  }
-
-  /// Create a new skipmap according to the given capacity, and mmaped to a file.
-  ///
-  /// **Note:** The capacity stands for how many memory mmaped,
-  /// it does not mean the skipmap can store `cap` entries.
-  ///
-  /// `lock`: whether to lock the underlying file or not
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_mut<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::mmap_mut_with_comparator(path, open_options, mmap_options, Ascend)
-  }
-
-  /// Open an exist file and mmap it to create skipmap.
-  ///
-  /// `lock`: whether to lock the underlying file or not
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::mmap_with_comparator(path, open_options, mmap_options, Ascend)
-  }
-
-  /// Create a new skipmap according to the given capacity, and mmap anon.
-  ///
-  /// **What the difference between this method and [`SkipMap::new`]?**
-  ///
-  /// 1. This method will use mmap anonymous to require memory from the OS directly.
-  ///   If you require very large contiguous memory regions, this method might be more suitable because
-  ///   it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///   Even if we are working with raw pointers with `Box::into_raw`,
-  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///   especially if you're frequently accessing or modifying it.
-  ///
-  /// [`SkipMap::new`]: #method.new
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::mmap_anon_with_comparator(mmap_options, Ascend)
-  }
-}
-
-impl<T, C> SkipMap<T, C> {
-  /// Like [`SkipMap::new`], but with a custom comparator.
-  pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
-    let arena = Arena::new_vec(cap, Node::<T>::min_cap(), Node::<T>::alignment() as usize);
-    Self::new_in(arena, cmp, false)
-  }
-
-  /// Like [`SkipMap::mmap_mut`], but with a custom comparator.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_mut_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::alignment() as usize;
-    let min_cap = Node::<T>::min_cap();
-    let arena = Arena::mmap_mut(path, open_options, mmap_options, min_cap, alignment)?;
-    Self::new_in(arena, cmp, false).map_err(invalid_data)
-  }
-
-  /// Like [`SkipMap::mmap`], but with a custom comparator.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::alignment() as usize;
-    let min_cap = Node::<T>::min_cap();
-    let arena = Arena::mmap(path, open_options, mmap_options, min_cap, alignment)?;
-    Self::new_in(arena, cmp, true).map_err(invalid_data)
-  }
-
-  /// Like [`SkipMap::mmap_anon`], but with a custom comparator.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
-    let alignment = Node::<T>::alignment() as usize;
-    let min_cap = Node::<T>::min_cap();
-    let arena = Arena::new_anonymous_mmap(mmap_options, min_cap, alignment)?;
-    Self::new_in(arena, cmp, false).map_err(invalid_data)
-  }
-
-  /// Clear the skiplist to empty and re-initialize.
-  ///
-  /// # Safety
-  /// This mehod is not concurrency safe, invokers must ensure that no other threads are accessing the skipmap.
-  pub unsafe fn clear(&mut self) -> Result<(), Error> {
-    if self.ro {
-      return Err(Error::Readonly);
-    }
-
-    let head = Node::new_empty_node_ptr(&self.arena)
-      .expect("arena is not large enough to hold the head node");
-    let tail = Node::new_empty_node_ptr(&self.arena)
-      .expect("arena is not large enough to hold the tail node");
-
-    // Safety:
-    // We will always allocate enough space for the head node and the tail node.
-    unsafe {
-      // Link all head/tail levels together.
-      for i in 0..MAX_HEIGHT {
-        let head_link = head.tower(&self.arena, i);
-        let tail_link = tail.tower(&self.arena, i);
-        head_link.next_offset.store(tail.offset, Ordering::Relaxed);
-        tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
-      }
-    }
-
-    self.head = head;
-    self.tail = tail;
-    self.arena.clear();
-    Ok(())
-  }
-
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
     if ro {
-      let (ptr, offset) = arena.head_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let (ptr, offset) = arena.head_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
       let head = NodePtr::new(ptr, offset);
-      let (ptr, offset) = arena.tail_ptr(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::alignment());
+      let (ptr, offset) = arena.tail_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
       let tail = NodePtr::new(ptr, offset);
       return Ok(Self::construct(arena, head, tail, ro, cmp));
     }
@@ -350,236 +111,6 @@ impl<T, C> SkipMap<T, C> {
   }
 }
 
-impl<T: Trailer, C: Comparator> SkipMap<T, C> {
-  /// Returns true if the key exists in the map.
-  #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> bool {
-    self.get(version, key).is_some()
-  }
-
-  /// Returns the first entry in the map.
-  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
-    self.first_in(version).map(|n| EntryRef::from_node(n, self))
-  }
-
-  /// Returns the last entry in the map.
-  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
-    self.last_in(version).map(|n| EntryRef::from_node(n, self))
-  }
-
-  /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T, C>> {
-    unsafe {
-      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
-
-      let n = n?;
-      let node = n.as_ptr();
-      let node_key = node.get_key(&self.arena);
-
-      if eq {
-        return Some(EntryRef {
-          map: self,
-          key: node_key,
-          trailer: node.trailer,
-          value: node.get_value(&self.arena),
-        });
-      }
-
-      if !matches!(self.cmp.compare(key, node_key), cmp::Ordering::Equal) {
-        return None;
-      }
-
-      if node.trailer.version() > version {
-        return None;
-      }
-
-      Some(EntryRef {
-        map: self,
-        key: node_key,
-        trailer: node.trailer,
-        value: node.get_value(&self.arena),
-      })
-    }
-  }
-
-  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
-    version: u64,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T, C>> {
-    match upper {
-      Bound::Included(key) => self.le(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Excluded(key) => self.lt(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Unbounded => self.last(version),
-    }
-  }
-
-  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
-  /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
-    version: u64,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T, C>> {
-    match lower {
-      Bound::Included(key) => self.ge(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Excluded(key) => self.gt(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Unbounded => self.first(version),
-    }
-  }
-
-  /// Inserts a new key-value pair if it does not yet exist.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(_))` if the key with the same trailer already exists.
-  pub fn insert<'a, 'b: 'a>(
-    &'a self,
-    trailer: T,
-    key: &'b [u8],
-    value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
-    if self.ro {
-      return Err(Error::Readonly);
-    }
-
-    let copy = |mut buf: OccupiedValue| {
-      let _ = buf.write(value);
-      Ok(())
-    };
-    let val_len = value.len() as u32;
-
-    self
-      .insert_in::<Infallible>(trailer, key, val_len, copy, &mut Inserter::default())
-      .map_err(|e| e.expect_right("must be map::Error"))
-  }
-
-  /// Inserts a new key if it does not yet exist. Returns `Ok(())` if the key was successfully inserted.
-  ///
-  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder value will be inserted first, then you will get an [`OccupiedValue`],
-  /// and you must fully fill the value with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipMap;
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipMap::new(1000).unwrap();
-  ///
-  /// l.insert_with::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// })
-  /// .unwrap();
-  /// ```
-  pub fn insert_with<'a, 'b: 'a, E>(
-    &'a self,
-    trailer: T,
-    key: &'b [u8],
-    value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    if self.ro {
-      return Err(Either::Right(Error::Readonly));
-    }
-
-    self.insert_in(trailer, key, value_size, f, &mut Inserter::default())
-  }
-
-  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
-  #[inline]
-  pub const fn iter(&self, version: u64) -> iterator::MapIterator<T, C> {
-    iterator::MapIterator::new(version, self, false)
-  }
-
-  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
-  #[inline]
-  pub const fn iter_all_versions(&self, version: u64) -> iterator::MapIterator<T, C> {
-    iterator::MapIterator::new(version, self, true)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapIterator<'a, T, C, Q, R>
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    iterator::MapIterator::range(version, self, range, false)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range_all_versions<'a, Q, R>(
-    &'a self,
-    version: u64,
-    range: R,
-  ) -> iterator::MapIterator<'a, T, C, Q, R>
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    iterator::MapIterator::range(version, self, range, true)
-  }
-}
-
-// --------------------------------Crate Level Methods--------------------------------
-impl<T: Trailer, C: Comparator> SkipMap<T, C> {
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  pub(crate) unsafe fn get_prev(&self, nd: NodePtr<T>, height: usize) -> NodePtr<T> {
-    if nd.is_null() {
-      return NodePtr::NULL;
-    }
-
-    let offset = nd.prev_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr, offset)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  pub(crate) unsafe fn get_next(&self, nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
-    if nptr.is_null() {
-      return NodePtr::NULL;
-    }
-    let offset = nptr.next_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr, offset)
-  }
-}
-
-// --------------------------------Private Methods--------------------------------
 impl<T: Trailer, C> SkipMap<T, C> {
   #[allow(clippy::type_complexity)]
   fn new_node<'a, 'b: 'a, E>(
@@ -608,9 +139,61 @@ impl<T: Trailer, C> SkipMap<T, C> {
     }
     Ok((nd, height))
   }
+
+  fn new_remove_node<'a, 'b: 'a>(
+    &'a self,
+    key: &'b [u8],
+    trailer: T,
+  ) -> Result<(NodePtr<T>, u32), Error> {
+    let height = super::random_height();
+    let nd = Node::new_remove_node_ptr(&self.arena, height, key, trailer)?;
+
+    // Try to increase self.height via CAS.
+    let mut list_height = self.height();
+    while height > list_height {
+      match self.arena.atomic_height().compare_exchange_weak(
+        list_height,
+        height,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        // Successfully increased skiplist.height.
+        Ok(_) => break,
+        Err(h) => list_height = h,
+      }
+    }
+    Ok((nd, height))
+  }
 }
 
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  unsafe fn get_prev(&self, nd: NodePtr<T>, height: usize) -> NodePtr<T> {
+    if nd.is_null() {
+      return NodePtr::NULL;
+    }
+
+    let offset = nd.prev_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  unsafe fn get_next(&self, nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
+    if nptr.is_null() {
+      return NodePtr::NULL;
+    }
+    let offset = nptr.next_offset(&self.arena, height);
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr, offset)
+  }
+
   /// Returns the first entry in the map.
   fn first_in(&self, version: u64) -> Option<NodePtr<T>> {
     // Safety: head node was definitely allocated by self.arena
@@ -722,173 +305,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
   }
 
-  fn insert_in<'a, 'b: 'a, E>(
-    &'a self,
-    trailer: T,
-    key: &'b [u8],
-    value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
-    ins: &mut Inserter<T>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    let version = trailer.version();
-    // Safety: a fresh new Inserter, so safe here
-    unsafe {
-      let (found, ptr) = self.find_splice(version, key, ins, true);
-      if found {
-        return Ok(Some(EntryRef::from_node(
-          ptr.expect("the NodePtr cannot be `None` when we found"),
-          self,
-        )));
-      }
-    }
-
-    #[cfg(all(test, feature = "std"))]
-    if self.yield_now {
-      // Add delay to make it easier to test race between this thread
-      // and another thread that sees the intermediate state between
-      // finding the splice and using it.
-      std::thread::yield_now();
-    }
-
-    let (nd, height) = self.new_node(key, trailer, value_size, f)?;
-    // We always insert from the base level and up. After you add a node in base
-    // level, we cannot create a node in the level above because it would have
-    // discovered the node in the base level.
-    let mut invalid_date_splice = false;
-
-    for i in 0..(height as usize) {
-      let mut prev = ins.spl[i].prev;
-      let mut next = ins.spl[i].next;
-
-      if prev.is_null() {
-        // New node increased the height of the skiplist, so assume that the
-        // new level has not yet been populated.
-        if !next.is_null() {
-          panic!("next is expected to be nil, since prev is nil");
-        }
-
-        prev = self.head;
-        next = self.tail;
-      }
-
-      // +----------------+     +------------+     +----------------+
-      // |      prev      |     |     nd     |     |      next      |
-      // | prevNextOffset |---->|            |     |                |
-      // |                |<----| prevOffset |     |                |
-      // |                |     | nextOffset |---->|                |
-      // |                |     |            |<----| nextPrevOffset |
-      // +----------------+     +------------+     +----------------+
-      //
-      // 1. Initialize prevOffset and nextOffset to point to prev and next.
-      // 2. CAS prevNextOffset to repoint from next to nd.
-      // 3. CAS nextPrevOffset to repoint from prev to nd.
-      unsafe {
-        loop {
-          let prev_offset = prev.offset;
-          let next_offset = next.offset;
-          nd.write_tower(&self.arena, i, prev_offset, next_offset);
-
-          // Check whether next has an updated link to prev. If it does not,
-          // that can mean one of two things:
-          //   1. The thread that added the next node hasn't yet had a chance
-          //      to add the prev link (but will shortly).
-          //   2. Another thread has added a new node between prev and next.
-          //
-          // Safety: we already check next is not null
-          let next_prev_offset = next.prev_offset(&self.arena, i);
-          if next_prev_offset != prev_offset {
-            // Determine whether #1 or #2 is true by checking whether prev
-            // is still pointing to next. As long as the atomic operations
-            // have at least acquire/release semantics (no need for
-            // sequential consistency), this works, as it is equivalent to
-            // the "publication safety" pattern.
-            let prev_next_offset = prev.next_offset(&self.arena, i);
-            if prev_next_offset == next_offset {
-              // Ok, case #1 is true, so help the other thread along by
-              // updating the next node's prev link.
-              let link = next.tower(&self.arena, i);
-              let _ = link.prev_offset.compare_exchange(
-                next_prev_offset,
-                prev_offset,
-                Ordering::SeqCst,
-                Ordering::Acquire,
-              );
-            }
-          }
-
-          let prev_link = prev.tower(&self.arena, i);
-          match prev_link.next_offset.compare_exchange_weak(
-            next.offset,
-            nd.offset,
-            Ordering::SeqCst,
-            Ordering::Acquire,
-          ) {
-            Ok(_) => {
-              // Managed to insert nd between prev and next, so update the next
-              // node's prev link and go to the next level.
-              #[cfg(all(test, feature = "std"))]
-              if self.yield_now {
-                // Add delay to make it easier to test race between this thread
-                // and another thread that sees the intermediate state between
-                // setting next and setting prev.
-                std::thread::yield_now();
-              }
-
-              let next_link = next.tower(&self.arena, i);
-              let _ = next_link.prev_offset.compare_exchange(
-                prev_offset,
-                nd.offset,
-                Ordering::SeqCst,
-                Ordering::Acquire,
-              );
-
-              break;
-            }
-            Err(_) => {
-              // CAS failed. We need to recompute prev and next. It is unlikely to
-              // be helpful to try to use a different level as we redo the search,
-              // because it is unlikely that lots of nodes are inserted between prev
-              // and next.
-              let fr = self.find_splice_for_level(trailer.version(), key, i, prev);
-              if fr.found {
-                if i != 0 {
-                  panic!("how can another thread have inserted a node at a non-base level?");
-                }
-
-                return Ok(Some(EntryRef::from_node(
-                  fr.curr
-                    .expect("the current should not be `None` when we found"),
-                  self,
-                )));
-              }
-
-              invalid_date_splice = true;
-              prev = fr.splice.prev;
-              next = fr.splice.next;
-            }
-          }
-        }
-      }
-    }
-
-    // If we had to recompute the splice for a level, invalidate the entire
-    // cached splice.
-    if invalid_date_splice {
-      ins.height = 0;
-    } else {
-      // The splice was valid. We inserted a node between spl[i].prev and
-      // spl[i].next. Optimistically update spl[i].prev for use in a subsequent
-      // call to add.
-      for i in 0..(height as usize) {
-        ins.spl[i].prev = nd;
-      }
-    }
-    self.arena.incr_len();
-    self.arena.update_max_version(version);
-    self.arena.update_min_version(version);
-    Ok(None)
-  }
-
   unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {
     let mut prev = self.get_prev(curr, 0);
 
@@ -896,7 +312,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is greater than the given version, we should return.
-      let version_cmp = curr_node.trailer.version().cmp(&version);
+      let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
       if version_cmp == cmp::Ordering::Greater {
         return None;
       }
@@ -915,7 +331,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return Some(curr);
       }
 
-      let version_cmp = prev_node.trailer.version().cmp(&version);
+      let version_cmp = prev_node.get_trailer(&self.arena).version().cmp(&version);
 
       if version_cmp == cmp::Ordering::Equal {
         return Some(prev);
@@ -937,7 +353,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let curr_node = curr.as_ptr();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
-      let version_cmp = curr_node.trailer.version().cmp(&version);
+      let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
         return Some(curr);
       }
@@ -952,7 +368,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
       let next_node = next.as_ptr();
       let next_key = next_node.get_key(&self.arena);
-      let version_cmp = next_node.trailer.version().cmp(&version);
+      let version_cmp = next_node.get_trailer(&self.arena).version().cmp(&version);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
@@ -1019,7 +435,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let cmp = self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.trailer.version().cmp(&version));
+        .then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -1160,14 +576,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
       // offset is not zero, so we can safely dereference the next node ptr.
       let next_node = next.as_ptr();
-
-      let (key_offset, key_size) = (next_node.key_offset, next_node.key_size);
-      let next_key = self.arena.get_bytes(key_offset as usize, key_size as usize);
+      let next_key = next_node.get_key(&self.arena);
 
       match self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.trailer.version().cmp(&version))
+        .then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version))
       {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
@@ -1208,9 +622,438 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       cmp::Ordering::Less => true,
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
-        matches!(version.cmp(&nd.trailer.version()), cmp::Ordering::Less)
+        matches!(version.cmp(&nd.get_trailer(&self.arena).version()), cmp::Ordering::Less)
       }
     }
+  }
+
+  fn update<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+    value_size: u32,
+    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E> + Copy,
+    ins: &mut Inserter<T>,
+    upsert: bool,
+  ) -> Result<Option<VersionedEntryRef<'a, T, C>>, Either<E, Error>> {
+    let version = trailer.version();
+    // Safety: a fresh new Inserter, so safe here
+    unsafe {
+      let (found, ptr) = self.find_splice(version, key, ins, true);
+      if found {
+        let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
+        let old = VersionedEntryRef::from_node(node_ptr, self);
+
+        if upsert {
+          node_ptr
+            .as_ptr()
+            .set_value(&self.arena, trailer, value_size, f)?;
+        }
+
+        return Ok(if old.is_removed() { None } else { Some(old) });
+      }
+    }
+
+    #[cfg(all(test, feature = "std"))]
+    if self.yield_now {
+      // Add delay to make it easier to test race between this thread
+      // and another thread that sees the intermediate state between
+      // finding the splice and using it.
+      std::thread::yield_now();
+    }
+
+    let (nd, height) = self.new_node(key, trailer, value_size, f)?;
+    // We always insert from the base level and up. After you add a node in base
+    // level, we cannot create a node in the level above because it would have
+    // discovered the node in the base level.
+    let mut invalid_data_splice = false;
+
+    for i in 0..(height as usize) {
+      let mut prev = ins.spl[i].prev;
+      let mut next = ins.spl[i].next;
+
+      if prev.is_null() {
+        // New node increased the height of the skiplist, so assume that the
+        // new level has not yet been populated.
+        if !next.is_null() {
+          panic!("next is expected to be nil, since prev is nil");
+        }
+
+        prev = self.head;
+        next = self.tail;
+      }
+
+      // +----------------+     +------------+     +----------------+
+      // |      prev      |     |     nd     |     |      next      |
+      // | prevNextOffset |---->|            |     |                |
+      // |                |<----| prevOffset |     |                |
+      // |                |     | nextOffset |---->|                |
+      // |                |     |            |<----| nextPrevOffset |
+      // +----------------+     +------------+     +----------------+
+      //
+      // 1. Initialize prevOffset and nextOffset to point to prev and next.
+      // 2. CAS prevNextOffset to repoint from next to nd.
+      // 3. CAS nextPrevOffset to repoint from prev to nd.
+      unsafe {
+        loop {
+          let prev_offset = prev.offset;
+          let next_offset = next.offset;
+          nd.write_tower(&self.arena, i, prev_offset, next_offset);
+
+          // Check whether next has an updated link to prev. If it does not,
+          // that can mean one of two things:
+          //   1. The thread that added the next node hasn't yet had a chance
+          //      to add the prev link (but will shortly).
+          //   2. Another thread has added a new node between prev and next.
+          //
+          // Safety: we already check next is not null
+          let next_prev_offset = next.prev_offset(&self.arena, i);
+          if next_prev_offset != prev_offset {
+            // Determine whether #1 or #2 is true by checking whether prev
+            // is still pointing to next. As long as the atomic operations
+            // have at least acquire/release semantics (no need for
+            // sequential consistency), this works, as it is equivalent to
+            // the "publication safety" pattern.
+            let prev_next_offset = prev.next_offset(&self.arena, i);
+            if prev_next_offset == next_offset {
+              // Ok, case #1 is true, so help the other thread along by
+              // updating the next node's prev link.
+              let _ = next.cas_prev_offset(
+                &self.arena,
+                i,
+                next_prev_offset,
+                prev_offset,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+              );
+            }
+          }
+
+          match prev.cas_next_offset_weak(
+            &self.arena,
+            i,
+            next.offset,
+            nd.offset,
+            Ordering::SeqCst,
+            Ordering::Acquire,
+          ) {
+            Ok(_) => {
+              // Managed to insert nd between prev and next, so update the next
+              // node's prev link and go to the next level.
+              #[cfg(all(test, feature = "std"))]
+              if self.yield_now {
+                // Add delay to make it easier to test race between this thread
+                // and another thread that sees the intermediate state between
+                // setting next and setting prev.
+                std::thread::yield_now();
+              }
+
+              let _ = next.cas_prev_offset(
+                &self.arena,
+                i,
+                prev_offset,
+                nd.offset,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+              );
+
+              break;
+            }
+            Err(_) => {
+              // CAS failed. We need to recompute prev and next. It is unlikely to
+              // be helpful to try to use a different level as we redo the search,
+              // because it is unlikely that lots of nodes are inserted between prev
+              // and next.
+              let fr = self.find_splice_for_level(trailer.version(), key, i, prev);
+              if fr.found {
+                if i != 0 {
+                  panic!("how can another thread have inserted a node at a non-base level?");
+                }
+
+                let node_ptr = fr
+                  .curr
+                  .expect("the current should not be `None` when we found");
+                let old = VersionedEntryRef::from_node(node_ptr, self);
+
+                if upsert {
+                  node_ptr
+                    .as_ptr()
+                    .set_value(&self.arena, trailer, value_size, f)?;
+                }
+
+                return Ok(if old.is_removed() { None } else { Some(old) });
+              }
+
+              invalid_data_splice = true;
+              prev = fr.splice.prev;
+              next = fr.splice.next;
+            }
+          }
+        }
+      }
+    }
+
+    // If we had to recompute the splice for a level, invalidate the entire
+    // cached splice.
+    if invalid_data_splice {
+      ins.height = 0;
+    } else {
+      // The splice was valid. We inserted a node between spl[i].prev and
+      // spl[i].next. Optimistically update spl[i].prev for use in a subsequent
+      // call to add.
+      for i in 0..(height as usize) {
+        ins.spl[i].prev = nd;
+      }
+    }
+    self.arena.incr_len();
+    self.arena.update_max_version(version);
+    self.arena.update_min_version(version);
+    Ok(None)
+  }
+
+  fn remove_in<'a, 'b: 'a>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+    ins: &mut Inserter<T>,
+    success: Ordering,
+    failure: Ordering,
+    upsert: bool,
+  ) -> Result<
+    Either<
+      Option<VersionedEntryRef<'a, T, C>>,
+      Result<VersionedEntryRef<'a, T, C>, VersionedEntryRef<'a, T, C>>,
+    >,
+    Error,
+  > {
+    let version = trailer.version();
+    // Safety: a fresh new Inserter, so safe here
+    unsafe {
+      let (found, ptr) = self.find_splice(version, key, ins, true);
+      if found {
+        let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
+        let old = VersionedEntryRef::from_node(node_ptr, self);
+
+        if upsert {
+          let node = node_ptr.as_ptr();
+
+          return match node.clear_value(success, failure) {
+            Ok((offset, len)) => {
+              let trailer = node.get_trailer_by_offset(&self.arena, offset);
+              let value = node.get_value_by_offset(&self.arena, offset, len);
+              Ok(Either::Right(Ok(VersionedEntryRef {
+                map: self,
+                key,
+                trailer,
+                value,
+                ptr: node_ptr,
+              })))
+            }
+            Err((offset, len)) => {
+              let trailer = node.get_trailer_by_offset(&self.arena, offset);
+              let value = node.get_value_by_offset(&self.arena, offset, len);
+              Ok(Either::Right(Err(VersionedEntryRef {
+                map: self,
+                key,
+                trailer,
+                value,
+                ptr: node_ptr,
+              })))
+            }
+          };
+        };
+
+        return Ok(if old.is_removed() {
+          Either::Left(None)
+        } else {
+          Either::Left(Some(old))
+        });
+      }
+    }
+
+    #[cfg(all(test, feature = "std"))]
+    if self.yield_now {
+      // Add delay to make it easier to test race between this thread
+      // and another thread that sees the intermediate state between
+      // finding the splice and using it.
+      std::thread::yield_now();
+    }
+
+    let (nd, height) = self.new_remove_node(key, trailer)?;
+
+    // We always insert from the base level and up. After you add a node in base
+    // level, we cannot create a node in the level above because it would have
+    // discovered the node in the base level.
+    let mut invalid_data_splice = false;
+
+    for i in 0..(height as usize) {
+      let mut prev = ins.spl[i].prev;
+      let mut next = ins.spl[i].next;
+
+      if prev.is_null() {
+        // New node increased the height of the skiplist, so assume that the
+        // new level has not yet been populated.
+        if !next.is_null() {
+          panic!("next is expected to be nil, since prev is nil");
+        }
+
+        prev = self.head;
+        next = self.tail;
+      }
+
+      // +----------------+     +------------+     +----------------+
+      // |      prev      |     |     nd     |     |      next      |
+      // | prevNextOffset |---->|            |     |                |
+      // |                |<----| prevOffset |     |                |
+      // |                |     | nextOffset |---->|                |
+      // |                |     |            |<----| nextPrevOffset |
+      // +----------------+     +------------+     +----------------+
+      //
+      // 1. Initialize prevOffset and nextOffset to point to prev and next.
+      // 2. CAS prevNextOffset to repoint from next to nd.
+      // 3. CAS nextPrevOffset to repoint from prev to nd.
+      unsafe {
+        loop {
+          let prev_offset = prev.offset;
+          let next_offset = next.offset;
+          nd.write_tower(&self.arena, i, prev_offset, next_offset);
+
+          // Check whether next has an updated link to prev. If it does not,
+          // that can mean one of two things:
+          //   1. The thread that added the next node hasn't yet had a chance
+          //      to add the prev link (but will shortly).
+          //   2. Another thread has added a new node between prev and next.
+          //
+          // Safety: we already check next is not null
+          let next_prev_offset = next.prev_offset(&self.arena, i);
+          if next_prev_offset != prev_offset {
+            // Determine whether #1 or #2 is true by checking whether prev
+            // is still pointing to next. As long as the atomic operations
+            // have at least acquire/release semantics (no need for
+            // sequential consistency), this works, as it is equivalent to
+            // the "publication safety" pattern.
+            let prev_next_offset = prev.next_offset(&self.arena, i);
+            if prev_next_offset == next_offset {
+              // Ok, case #1 is true, so help the other thread along by
+              // updating the next node's prev link.
+              let _ = next.cas_prev_offset(
+                &self.arena,
+                i,
+                next_prev_offset,
+                prev_offset,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+              );
+            }
+          }
+
+          match prev.cas_next_offset_weak(
+            &self.arena,
+            i,
+            next.offset,
+            nd.offset,
+            Ordering::SeqCst,
+            Ordering::Acquire,
+          ) {
+            Ok(_) => {
+              // Managed to insert nd between prev and next, so update the next
+              // node's prev link and go to the next level.
+              #[cfg(all(test, feature = "std"))]
+              if self.yield_now {
+                // Add delay to make it easier to test race between this thread
+                // and another thread that sees the intermediate state between
+                // setting next and setting prev.
+                std::thread::yield_now();
+              }
+
+              let _ = next.cas_prev_offset(
+                &self.arena,
+                i,
+                prev_offset,
+                nd.offset,
+                Ordering::SeqCst,
+                Ordering::Acquire,
+              );
+
+              break;
+            }
+            Err(_) => {
+              // CAS failed. We need to recompute prev and next. It is unlikely to
+              // be helpful to try to use a different level as we redo the search,
+              // because it is unlikely that lots of nodes are inserted between prev
+              // and next.
+              let fr = self.find_splice_for_level(trailer.version(), key, i, prev);
+              if fr.found {
+                if i != 0 {
+                  panic!("how can another thread have inserted a node at a non-base level?");
+                }
+
+                let node_ptr = fr
+                  .curr
+                  .expect("the current should not be `None` when we found");
+                let old = VersionedEntryRef::from_node(node_ptr, self);
+
+                if upsert {
+                  let node = node_ptr.as_ptr();
+
+                  return match node.clear_value(success, failure) {
+                    Ok((offset, len)) => {
+                      let trailer = node.get_trailer_by_offset(&self.arena, offset);
+                      let value = node.get_value_by_offset(&self.arena, offset, len);
+                      Ok(Either::Right(Ok(VersionedEntryRef {
+                        map: self,
+                        key,
+                        trailer,
+                        value,
+                        ptr: node_ptr,
+                      })))
+                    }
+                    Err((offset, len)) => {
+                      let trailer = node.get_trailer_by_offset(&self.arena, offset);
+                      let value = node.get_value_by_offset(&self.arena, offset, len);
+                      Ok(Either::Right(Err(VersionedEntryRef {
+                        map: self,
+                        key,
+                        trailer,
+                        value,
+                        ptr: node_ptr,
+                      })))
+                    }
+                  };
+                }
+
+                return Ok(if old.is_removed() {
+                  Either::Left(None)
+                } else {
+                  Either::Left(Some(old))
+                });
+              }
+
+              invalid_data_splice = true;
+              prev = fr.splice.prev;
+              next = fr.splice.next;
+            }
+          }
+        }
+      }
+    }
+
+    // If we had to recompute the splice for a level, invalidate the entire
+    // cached splice.
+    if invalid_data_splice {
+      ins.height = 0;
+    } else {
+      // The splice was valid. We inserted a node between spl[i].prev and
+      // spl[i].next. Optimistically update spl[i].prev for use in a subsequent
+      // call to add.
+      for i in 0..(height as usize) {
+        ins.spl[i].prev = nd;
+      }
+    }
+    self.arena.incr_len();
+    self.arena.update_max_version(version);
+    self.arena.update_min_version(version);
+    Ok(Either::Left(None))
   }
 }
 

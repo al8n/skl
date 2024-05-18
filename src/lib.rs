@@ -19,11 +19,12 @@ extern crate std;
 use core::{cmp, ops::RangeBounds};
 
 mod arena;
+
+mod align8vp;
+use align8vp::Pointer;
+
 /// A map implementation based on skiplist
 pub mod map;
-
-/// A set implementation based on skiplist
-pub mod set;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 mod options;
@@ -36,9 +37,8 @@ fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::
   std::io::Error::new(std::io::ErrorKind::InvalidData, e)
 }
 
-pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, SkipMap};
-pub use set::{SetIterator, SkipSet};
+pub use arena::ArenaError;
+pub use map::{AllVersionsIter, SkipMap};
 
 const MAX_HEIGHT: usize = 20;
 
@@ -243,17 +243,29 @@ impl<'a> Drop for OccupiedValue<'a> {
 }
 
 /// A trait for extra information that can be stored with entry in the skiplist.
-pub trait Trailer: Copy {
+///
+/// # Safety
+/// The implementors must ensure that they can be reconstructed from a byte slice directly.
+/// e.g. struct includes `*const T` cannot be used as the trailer, because the pointer cannot be reconstructed from a byte slice directly.
+pub unsafe trait Trailer: Copy + core::fmt::Debug {
   /// Returns the version of the trailer.
   fn version(&self) -> u64;
 }
 
-impl Trailer for u64 {
+unsafe impl Trailer for u64 {
   /// Returns the version of the trailer.
   #[inline]
   fn version(&self) -> u64 {
     *self
   }
+}
+
+mod alloc {
+  #[cfg(not(loom))]
+  pub(crate) use std::alloc::{alloc_zeroed, dealloc, Layout};
+
+  #[cfg(loom)]
+  pub(crate) use loom::alloc::{alloc_zeroed, dealloc, Layout};
 }
 
 mod sync {
@@ -278,16 +290,15 @@ mod sync {
 
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
-  #[cfg(not(loom))]
-  pub(crate) use std::boxed::Box;
-  #[cfg(all(not(loom), test))]
-  pub(crate) use std::sync::Arc;
 
   #[cfg(loom)]
-  pub(crate) use loom::sync::{atomic::*, Arc};
+  pub(crate) use loom::sync::atomic::*;
 
   #[cfg(loom)]
   pub(crate) trait AtomicMut<T> {}
+
+  #[cfg(loom)]
+  impl<T> AtomicMut<T> for AtomicPtr<T> {}
 
   #[cfg(not(loom))]
   pub(crate) trait AtomicMut<T> {

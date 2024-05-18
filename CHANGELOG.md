@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.10.0
+
+- Remove `SkipSet`.
+- Add `insert`, `get_or_insert` and `get_or_insert_with` methods.
+- Add `compare_remove` and `get_or_remove` methods.
+
 ## 0.9.0
 
 - Make file backed mmap `SkipMap` and `SkipSet` still can be reopened even last time the program was aborted.
@@ -57,4 +63,7 @@
 
 ## UNRELEASED
 
-FEATURES
+### 0.11.0
+
+- Add `unaligned` feature, which does not apply pad for each allocation from ARENA.
+- Add an ordered double end linked list to track holes.

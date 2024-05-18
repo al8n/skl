@@ -1,6 +1,9 @@
+use crate::sync::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 #[allow(unused_imports)]
-use crate::sync::Box;
-use crate::sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, Ordering};
+use std::boxed::Box;
+
+#[cfg(not(loom))]
+use crate::sync::AtomicMut;
 
 use core::{
   mem,
@@ -32,6 +35,10 @@ pub(super) struct Header {
   /// Current height. 1 <= height <= kMaxHeight. CAS.
   height: AtomicU32,
   len: AtomicU32,
+
+  // Reserved for segmented list.
+  segmented_head_ptr: AtomicU32,
+  segmented_tail_ptr: AtomicU32,
 }
 
 impl Header {
@@ -44,6 +51,8 @@ impl Header {
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
       allocated: AtomicU64::new(size + 1),
+      segmented_head_ptr: AtomicU32::new(0),
+      segmented_tail_ptr: AtomicU32::new(0),
     }
   }
 }
@@ -290,29 +299,35 @@ impl Arena {
   }
 
   #[inline]
-  fn head_offset(&self, max_node_size: u32, align: u32) -> u32 {
+  fn head_offset<T>(&self, max_node_size: u32, align: u32) -> (u32, u32) {
+    let trailer_size = mem::size_of::<T>();
+    let trailer_align = mem::align_of::<T>();
+
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = max_node_size as u64 + align as u64 - 1;
-    let new_size = 1 + self.data_offset + padded;
+    let trailer_padded = trailer_size as u64 + trailer_align as u64 - 1;
+    let allocated = 1 + self.data_offset + padded;
 
     // Return the aligned offset.
-    (new_size as u32 - max_node_size) & !(align - 1)
+    let node_offset = (allocated as u32 - max_node_size) & !(align - 1);
+    let total_allocated = allocated + trailer_padded;
+    (node_offset, total_allocated as u32)
   }
 
-  pub(super) fn head_ptr(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
+  pub(super) fn head_ptr<T>(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
     // Safety: this method is only invoked when we want a readonly,
     // in readonly mode, we must have the head_ptr valid.
-    let offset = self.head_offset(max_node_size, align);
+    let (offset, _) = self.head_offset::<T>(max_node_size, align);
     (unsafe { self.get_pointer(offset as usize) }, offset)
   }
 
-  pub(super) fn tail_ptr(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
+  pub(super) fn tail_ptr<T>(&self, max_node_size: u32, align: u32) -> (*const u8, u32) {
     // Pad the allocation with enough bytes to ensure the requested alignment.
     let padded = max_node_size as u64 + align as u64 - 1;
-    let new_size = self.head_offset(max_node_size, align) as u64 + padded + max_node_size as u64;
+    let (_, current_allocated) = self.head_offset::<T>(max_node_size, align);
 
-    // Return the aligned offset.
-    let offset = (new_size as u32 - max_node_size) & !(align - 1);
+    let allocated = current_allocated as u64 + padded;
+    let offset = (allocated as u32 - max_node_size) & !(align - 1);
 
     // Safety: this method is only invoked when we want a readonly,
     // in readonly mode, we must have the head_ptr valid.
@@ -360,19 +375,68 @@ impl Arena {
     }
   }
 
-  #[inline]
-  pub(super) fn alloc(
+  #[cfg(not(feature = "unaligned"))]
+  pub(super) fn alloc<T>(
     &self,
     size: u32,
+    value_size: u32,
     align: u32,
     overflow: u32,
   ) -> Result<(u32, u32), ArenaError> {
+    let trailer_size = mem::size_of::<T>();
+    let trailer_align = mem::align_of::<T>();
+
     // Pad the allocation with enough bytes to ensure the requested alignment.
+    let padded = size as u64 + align as u64 - 1;
+    let trailer_padded = trailer_size as u64 + trailer_align as u64 - 1;
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
+    if current_allocated + padded + overflow as u64 + trailer_padded + value_size as u64
+      > self.cap as u64
+    {
+      return Err(ArenaError);
+    }
+
+    loop {
+      let want = current_allocated + padded + trailer_padded + value_size as u64;
+      match header.allocated.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          // Return the aligned offset.
+          let allocated = current + padded;
+          let node_offset = (allocated as u32 - size) & !(align - 1);
+
+          let allocated_for_trailer = allocated + trailer_padded;
+          let value_offset =
+            (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
+
+          return Ok((node_offset, value_offset));
+        }
+        Err(x) => {
+          if x + padded + overflow as u64 + trailer_padded + value_size as u64 > self.cap as u64 {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
+      }
+    }
+  }
+
+  #[cfg(not(feature = "unaligned"))]
+  pub(super) fn alloc_value<T>(&self, size: u32) -> Result<u32, ArenaError> {
+    let trailer_size = mem::size_of::<T>();
+    let align = mem::align_of::<T>();
+    let size = size + trailer_size as u32;
     let padded = size as u64 + align as u64 - 1;
 
     let header = self.header();
     let mut current_allocated = header.allocated.load(Ordering::Acquire);
-    if current_allocated + padded + overflow as u64 > self.cap as u64 {
+    if current_allocated + padded > self.cap as u64 {
       return Err(ArenaError);
     }
 
@@ -386,12 +450,12 @@ impl Arena {
       ) {
         Ok(current) => {
           // Return the aligned offset.
-          let new_size = current + padded;
-          let offset = (new_size as u32 - size) & !(align - 1);
-          return Ok((offset, padded as u32));
+          let allocated = current + padded;
+          let value_offset = (allocated as u32 - size) & !(align as u32 - 1);
+          return Ok(value_offset);
         }
         Err(x) => {
-          if x + padded + overflow as u64 > self.cap as u64 {
+          if x + padded > self.cap as u64 {
             return Err(ArenaError);
           }
 
@@ -406,7 +470,7 @@ impl Arena {
   /// - The caller must make sure that `size` must be less than the capacity of the arena.
   /// - The caller must make sure that `offset + size` must be less than the capacity of the arena.
   #[inline]
-  pub(super) unsafe fn get_bytes(&self, offset: usize, size: usize) -> &[u8] {
+  pub(super) const unsafe fn get_bytes(&self, offset: usize, size: usize) -> &[u8] {
     if offset == 0 {
       return &[];
     }
@@ -433,7 +497,7 @@ impl Arena {
   /// ## Safety:
   /// - The caller must make sure that `offset` must be less than the capacity of the arena.
   #[inline]
-  pub(super) unsafe fn get_pointer(&self, offset: usize) -> *const u8 {
+  pub(super) const unsafe fn get_pointer(&self, offset: usize) -> *const u8 {
     if offset == 0 {
       return ptr::null();
     }
@@ -494,12 +558,12 @@ impl Drop for Arena {
 }
 
 #[test]
-#[cfg(test)]
+#[cfg(all(not(loom), test))]
 fn test_debug() {
   let arena = Arena::new_vec(1024, 1024, 8);
   assert_eq!(
     std::format!("{:?}", arena),
-    "Arena { cap: 1056, header: Header { max_version: 0, min_version: 0, allocated: 33, height: 1, len: 0 }, data: [0] }"
+    "Arena { cap: 1064, header: Header { max_version: 0, min_version: 0, allocated: 41, height: 1, len: 0, segmented_head_ptr: 0, segmented_tail_ptr: 0 }, data: [0] }"
   );
 
   let err = ArenaError;

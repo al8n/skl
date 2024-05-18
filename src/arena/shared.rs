@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::sync::AtomicUsize;
+use crate::{alloc::*, sync::AtomicUsize};
 
 #[derive(Debug)]
 struct AlignedVec {
@@ -14,7 +14,7 @@ impl Drop for AlignedVec {
   fn drop(&mut self) {
     if self.cap != 0 {
       unsafe {
-        std::alloc::dealloc(self.ptr.as_ptr(), self.layout());
+        dealloc(self.ptr.as_ptr(), self.layout());
       }
     }
   }
@@ -29,17 +29,14 @@ impl AlignedVec {
       align - 1
     );
     let ptr = unsafe {
-      let layout = std::alloc::Layout::from_size_align_unchecked(capacity, align);
-      let ptr = std::alloc::alloc(layout);
+      let layout = Layout::from_size_align_unchecked(capacity, align);
+      let ptr = alloc_zeroed(layout);
       if ptr.is_null() {
         std::alloc::handle_alloc_error(layout);
       }
       ptr::NonNull::new_unchecked(ptr)
     };
 
-    unsafe {
-      core::ptr::write_bytes(ptr.as_ptr(), 0, capacity);
-    }
     Self {
       ptr,
       cap: capacity,
@@ -402,7 +399,7 @@ impl Shared {
   }
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(all(test, feature = "std", not(loom)))]
 mod tests {
   use super::*;
 

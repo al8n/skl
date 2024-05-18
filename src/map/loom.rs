@@ -18,23 +18,23 @@ fn concurrent_write() {
   ::loom::model(|| {
     const N: usize = 2;
     let l = Arc::new(SkipMap::new(ARENA_SIZE).unwrap());
-    // let wg = Arc::new(());
-    // for i in 0..N {
-    //   let w = wg.clone();
-    //   let l = l.clone();
-    //   thread::spawn(move || {
-    //     l.insert(0, &key(i), &new_value(i)).unwrap();
-    //     drop(w);
-    //   });
-    // }
-    // while Arc::strong_count(&wg) > 1 {}
-    // for i in 0..N {
-    //   assert_eq!(
-    //     l.get(0, &key(i)).unwrap().value(),
-    //     new_value(i),
-    //     "broken: {i}"
-    //   );
-    // }
+    let wg = Arc::new(());
+    for i in 0..N {
+      let w = wg.clone();
+      let l = l.clone();
+      thread::spawn(move || {
+        l.insert(0, &key(i), &new_value(i)).unwrap();
+        drop(w);
+      });
+    }
+    while Arc::strong_count(&wg) > 1 {}
+    for i in 0..N {
+      assert_eq!(
+        l.get(0, &key(i)).unwrap().value(),
+        new_value(i),
+        "broken: {i}"
+      );
+    }
   });
 }
 
@@ -47,18 +47,18 @@ fn concurrent_read() {
     for i in 0..N {
       l.insert(0, &key(i), &new_value(i)).unwrap();
     }
-    // while Arc::strong_count(&wg) > 1 {}
-    // for i in 0..N {
-    //   let w = wg.clone();
-    //   let l = l.clone();
-    //   thread::spawn(move || {
-    //     assert_eq!(
-    //       l.get(0, &key(i)).unwrap().value(),
-    //       new_value(i),
-    //       "broken: {i}"
-    //     );
-    //     drop(w);
-    //   });
-    // }
+    while Arc::strong_count(&wg) > 1 {}
+    for i in 0..N {
+      let w = wg.clone();
+      let l = l.clone();
+      thread::spawn(move || {
+        assert_eq!(
+          l.get(0, &key(i)).unwrap().value(),
+          new_value(i),
+          "broken: {i}"
+        );
+        drop(w);
+      });
+    }
   });
 }

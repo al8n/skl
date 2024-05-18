@@ -32,10 +32,9 @@ required-features = ["memmap"]
 
 [features]
 default = ["std"]
-alloc = ["atomic"]
+alloc = []
 memmap = ["memmap2", "fs4", "std"]
-std = ["atomic?/default", "rand/default", "either/default"]
-atomic = ["dep:atomic", "bytemuck"]
+std = ["rand/default", "either/default"]
 
 [target.'cfg(loom)'.dependencies]
 loom = "0.7"
@@ -44,8 +43,6 @@ loom = "0.7"
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
-atomic = { version = "0.6", default-features = false, optional = true }
-bytemuck = { version = "1", default-features = false, features = ["derive"], optional = true }
 crossbeam-utils = { version = "0.8", default-features = false }
 either = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }

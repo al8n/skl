@@ -15,19 +15,13 @@ impl core::fmt::Debug for Pointer {
 
 impl Pointer {
   #[inline]
-  pub(crate) const fn new(offset: u32, len: u32) -> Self {
+  pub(crate) fn new(offset: u32, len: u32) -> Self {
     Self(AtomicU64::new(encode_value(offset, len)))
   }
 
   #[inline]
-  pub(crate) const fn remove(offset: u32) -> Self {
+  pub(crate) fn remove(offset: u32) -> Self {
     Self(AtomicU64::new(encode_value(offset, u32::MAX)))
-  }
-
-  #[inline]
-  pub(crate) fn is_removed(&self) -> bool {
-    let (_, len) = decode_value(self.0.load(Ordering::Acquire));
-    len == u32::MAX
   }
 
   #[inline]
@@ -41,13 +35,19 @@ impl Pointer {
   }
 
   #[inline]
-  pub(crate) fn compare_remove(&self) {
+  pub(crate) fn compare_remove(
+    &self,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<(u32, u32), (u32, u32)> {
     let old = self.0.load(Ordering::Acquire);
     let (offset, _) = decode_value(old);
     let new = encode_value(offset, u32::MAX);
-    let _ = self
+    self
       .0
-      .compare_exchange(old, new, Ordering::SeqCst, Ordering::Relaxed);
+      .compare_exchange(old, new, success, failure)
+      .map(decode_value)
+      .map_err(decode_value)
   }
 }
 

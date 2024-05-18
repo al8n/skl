@@ -64,4 +64,6 @@
 
 ## UNRELEASED
 
-FEATURES
+### 0.11.0
+
+- Add `unaligned` feature, which does not apply pad for each allocation from ARENA.

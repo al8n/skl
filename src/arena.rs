@@ -1,6 +1,9 @@
+use crate::sync::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 #[allow(unused_imports)]
-use crate::sync::Box;
-use crate::sync::{AtomicMut, AtomicPtr, AtomicU32, AtomicU64, Ordering};
+use std::boxed::Box;
+
+#[cfg(not(loom))]
+use crate::sync::AtomicMut;
 
 use core::{
   mem,
@@ -549,7 +552,7 @@ impl Drop for Arena {
 }
 
 #[test]
-#[cfg(test)]
+#[cfg(all(not(loom), test))]
 fn test_debug() {
   let arena = Arena::new_vec(1024, 1024, 8);
   assert_eq!(

@@ -20,14 +20,7 @@ use core::{cmp, ops::RangeBounds};
 
 mod arena;
 
-#[cfg(all(feature = "atomic", feature = "std"))]
-mod align4vp;
-#[cfg(all(feature = "atomic", feature = "std"))]
-use align4vp::Pointer;
-
-#[cfg(not(all(feature = "atomic", feature = "std")))]
 mod align8vp;
-#[cfg(not(all(feature = "atomic", feature = "std")))]
 use align8vp::Pointer;
 
 /// A map implementation based on skiplist
@@ -267,6 +260,14 @@ unsafe impl Trailer for u64 {
   }
 }
 
+mod alloc {
+  #[cfg(not(loom))]
+  pub(crate) use std::alloc::{alloc_zeroed, dealloc, Layout};
+
+  #[cfg(loom)]
+  pub(crate) use loom::alloc::{alloc_zeroed, dealloc, Layout};
+}
+
 mod sync {
   #[derive(Debug)]
   #[repr(C)]
@@ -289,16 +290,15 @@ mod sync {
 
   #[cfg(not(loom))]
   pub(crate) use core::sync::atomic::*;
-  #[cfg(not(loom))]
-  pub(crate) use std::boxed::Box;
-  #[cfg(all(not(loom), test))]
-  pub(crate) use std::sync::Arc;
 
   #[cfg(loom)]
-  pub(crate) use loom::sync::{atomic::*, Arc};
+  pub(crate) use loom::sync::atomic::*;
 
   #[cfg(loom)]
   pub(crate) trait AtomicMut<T> {}
+
+  #[cfg(loom)]
+  impl<T> AtomicMut<T> for AtomicPtr<T> {}
 
   #[cfg(not(loom))]
   pub(crate) trait AtomicMut<T> {

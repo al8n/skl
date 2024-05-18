@@ -1,6 +1,7 @@
 use super::*;
-use crate::{sync::Arc, Descend};
-use std::format;
+use crate::Descend;
+
+use std::{format, sync::Arc};
 
 #[cfg(feature = "std")]
 use wg::WaitGroup;

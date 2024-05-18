@@ -641,7 +641,7 @@ fn test_debug() {
   let arena = Arena::new_vec(1024, 1024, 8);
   assert_eq!(
     std::format!("{:?}", arena),
-    "Arena { cap: 1056, header: Header { max_version: 0, min_version: 0, allocated: 33, height: 1, len: 0 }, data: [0] }"
+    "Arena { cap: 1064, header: Header { max_version: 0, min_version: 0, allocated: 41, height: 1, len: 0, segmented_head_ptr: 0, segmented_tail_ptr: 0 }, data: [0] }"
   );
 
   let err = ArenaError;

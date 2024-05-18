@@ -372,7 +372,7 @@ impl OpenOptions {
   }
 }
 
-/// A memory map options for file backed [`SkipMap`](super::SkipMap) and [`SkipSet`](super::SkipSet),
+/// A memory map options for file backed [`SkipMap`](super::SkipMap),
 /// providing advanced options and flags for specifying memory map behavior.
 #[derive(Clone, Debug)]
 pub struct MmapOptions(Mmap2Options);

@@ -19,11 +19,19 @@ extern crate std;
 use core::{cmp, ops::RangeBounds};
 
 mod arena;
+
+#[cfg(all(feature = "atomic", feature = "std"))]
+mod align4vp;
+#[cfg(all(feature = "atomic", feature = "std"))]
+use align4vp::Pointer;
+
+#[cfg(not(all(feature = "atomic", feature = "std")))]
+mod align8vp;
+#[cfg(not(all(feature = "atomic", feature = "std")))]
+use align8vp::Pointer;
+
 /// A map implementation based on skiplist
 pub mod map;
-
-/// A set implementation based on skiplist
-pub mod set;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 mod options;
@@ -36,9 +44,8 @@ fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::
   std::io::Error::new(std::io::ErrorKind::InvalidData, e)
 }
 
-pub use arena::{Arena, ArenaError};
-pub use map::{MapIterator, SkipMap};
-pub use set::{SetIterator, SkipSet};
+pub use arena::ArenaError;
+pub use map::{AllVersionsIter, SkipMap};
 
 const MAX_HEIGHT: usize = 20;
 

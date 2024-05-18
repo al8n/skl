@@ -1,19 +1,19 @@
 use crate::sync::{AtomicU64, Ordering};
 
 #[repr(C, align(8))]
-pub(crate) struct ValuePointer(AtomicU64);
+pub(crate) struct Pointer(AtomicU64);
 
-impl core::fmt::Debug for ValuePointer {
+impl core::fmt::Debug for Pointer {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let (offset, len) = decode_value(self.0.load(Ordering::Relaxed));
-    f.debug_struct("ValuePointer")
+    f.debug_struct("Pointer")
       .field("offset", &offset)
       .field("len", &len)
       .finish()
   }
 }
 
-impl ValuePointer {
+impl Pointer {
   #[inline]
   pub(crate) const fn new(offset: u32, len: u32) -> Self {
     Self(AtomicU64::new(encode_value(offset, len)))
@@ -22,6 +22,12 @@ impl ValuePointer {
   #[inline]
   pub(crate) const fn remove(offset: u32) -> Self {
     Self(AtomicU64::new(encode_value(offset, u32::MAX)))
+  }
+
+  #[inline]
+  pub(crate) fn is_removed(&self) -> bool {
+    let (_, len) = decode_value(self.0.load(Ordering::Acquire));
+    len == u32::MAX
   }
 
   #[inline]
@@ -35,7 +41,7 @@ impl ValuePointer {
   }
 
   #[inline]
-  pub(crate) fn mark_remove(&self) {
+  pub(crate) fn compare_remove(&self) {
     let old = self.0.load(Ordering::Acquire);
     let (offset, _) = decode_value(old);
     let new = encode_value(offset, u32::MAX);

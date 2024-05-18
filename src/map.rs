@@ -140,7 +140,6 @@ impl<T: Trailer, C> SkipMap<T, C> {
     Ok((nd, height))
   }
 
-  #[allow(clippy::type_complexity)]
   fn new_remove_node<'a, 'b: 'a>(
     &'a self,
     key: &'b [u8],
@@ -636,14 +635,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E> + Copy,
     ins: &mut Inserter<T>,
     upsert: bool,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+  ) -> Result<Option<OptionEntryRef<'a, T, C>>, Either<E, Error>> {
     let version = trailer.version();
     // Safety: a fresh new Inserter, so safe here
     unsafe {
       let (found, ptr) = self.find_splice(version, key, ins, true);
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
-        let old = EntryRef::from_node(node_ptr, self);
+        let old = OptionEntryRef::from_node(node_ptr, self);
 
         if upsert {
           node_ptr
@@ -771,7 +770,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = EntryRef::from_node(node_ptr, self);
+                let old = OptionEntryRef::from_node(node_ptr, self);
 
                 if upsert {
                   node_ptr
@@ -814,21 +813,56 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     ins: &mut Inserter<T>,
+    success: Ordering,
+    failure: Ordering,
     upsert: bool,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
+  ) -> Result<
+    Either<
+      Option<OptionEntryRef<'a, T, C>>,
+      Result<OptionEntryRef<'a, T, C>, OptionEntryRef<'a, T, C>>,
+    >,
+    Error,
+  > {
     let version = trailer.version();
     // Safety: a fresh new Inserter, so safe here
     unsafe {
       let (found, ptr) = self.find_splice(version, key, ins, true);
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
-        let old = EntryRef::from_node(node_ptr, self);
+        let old = OptionEntryRef::from_node(node_ptr, self);
 
         if upsert {
-          node_ptr.as_ptr().clear_value();
-        }
+          let node = node_ptr.as_ptr();
 
-        return Ok(if old.is_removed() { None } else { Some(old) });
+          return match node.clear_value(success, failure) {
+            Ok((offset, len)) => {
+              let trailer = node.get_trailer_by_offset(&self.arena, offset);
+              let value = node.get_value_by_offset(&self.arena, offset, len);
+              Ok(Either::Right(Ok(OptionEntryRef {
+                map: self,
+                key,
+                trailer,
+                value,
+              })))
+            }
+            Err((offset, len)) => {
+              let trailer = node.get_trailer_by_offset(&self.arena, offset);
+              let value = node.get_value_by_offset(&self.arena, offset, len);
+              Ok(Either::Right(Err(OptionEntryRef {
+                map: self,
+                key,
+                trailer,
+                value,
+              })))
+            }
+          };
+        };
+
+        return Ok(if old.is_removed() {
+          Either::Left(None)
+        } else {
+          Either::Left(Some(old))
+        });
       }
     }
 
@@ -949,13 +983,40 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = EntryRef::from_node(node_ptr, self);
+                let old = OptionEntryRef::from_node(node_ptr, self);
 
                 if upsert {
-                  node_ptr.as_ptr().clear_value();
+                  let node = node_ptr.as_ptr();
+
+                  return match node.clear_value(success, failure) {
+                    Ok((offset, len)) => {
+                      let trailer = node.get_trailer_by_offset(&self.arena, offset);
+                      let value = node.get_value_by_offset(&self.arena, offset, len);
+                      Ok(Either::Right(Ok(OptionEntryRef {
+                        map: self,
+                        key,
+                        trailer,
+                        value,
+                      })))
+                    }
+                    Err((offset, len)) => {
+                      let trailer = node.get_trailer_by_offset(&self.arena, offset);
+                      let value = node.get_value_by_offset(&self.arena, offset, len);
+                      Ok(Either::Right(Err(OptionEntryRef {
+                        map: self,
+                        key,
+                        trailer,
+                        value,
+                      })))
+                    }
+                  };
                 }
 
-                return Ok(if old.is_removed() { None } else { Some(old) });
+                return Ok(if old.is_removed() {
+                  Either::Left(None)
+                } else {
+                  Either::Left(Some(old))
+                });
               }
 
               invalid_data_splice = true;
@@ -982,7 +1043,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.arena.incr_len();
     self.arena.update_max_version(version);
     self.arena.update_min_version(version);
-    Ok(None)
+    Ok(Either::Left(None))
   }
 }
 

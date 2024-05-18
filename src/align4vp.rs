@@ -1,4 +1,4 @@
-use super::Ordering;
+use super::sync::Ordering;
 use atomic::Atomic;
 
 #[derive(bytemuck::NoUninit, Copy, Clone, Debug)]
@@ -10,9 +10,9 @@ struct Inner {
 
 #[derive(Debug)]
 #[repr(C, align(4))]
-pub(crate) struct ValuePointer(Atomic<Inner>);
+pub(crate) struct Pointer(Atomic<Inner>);
 
-impl ValuePointer {
+impl Pointer {
   #[inline]
   pub(crate) const fn new(offset: u32, len: u32) -> Self {
     Self(Atomic::new(Inner { offset, len }))
@@ -38,14 +38,20 @@ impl ValuePointer {
   }
 
   #[inline]
-  pub(crate) fn mark_remove(&self) {
+  pub(crate) fn compare_remove(
+    &self,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<(u32, u32), (u32, u32)> {
     let inner = self.0.load(Ordering::Acquire);
     let new_inner = Inner {
       offset: inner.offset,
       len: u32::MAX,
     };
-    let _ = self
+    self
       .0
-      .compare_exchange(inner, new_inner, Ordering::SeqCst, Ordering::Relaxed);
+      .compare_exchange(inner, new_inner, success, failure)
+      .map(|inner| (inner.offset, inner.len))
+      .map_err(|inner| (inner.offset, inner.len))
   }
 }

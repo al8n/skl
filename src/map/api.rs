@@ -266,6 +266,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
     self
       .update::<Infallible>(trailer, key, val_len, copy, &mut Inserter::default(), true)
+      .map(|old| {
+        old.and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
       .map_err(|e| e.expect_right("must be map::Error"))
   }
 
@@ -325,7 +334,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Either::Right(Error::Readonly));
     }
 
-    self.update(trailer, key, value_size, f, &mut Inserter::default(), true)
+    self
+      .update(trailer, key, value_size, f, &mut Inserter::default(), true)
+      .map(|old| {
+        old.and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
@@ -351,6 +370,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
     self
       .update::<Infallible>(trailer, key, val_len, copy, &mut Inserter::default(), false)
+      .map(|old| {
+        old.and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
       .map_err(|e| e.expect_right("must be map::Error"))
   }
 
@@ -410,24 +438,78 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Either::Right(Error::Readonly));
     }
 
-    self.update(trailer, key, value_size, f, &mut Inserter::default(), false)
+    self
+      .update(trailer, key, value_size, f, &mut Inserter::default(), false)
+      .map(|old| {
+        old.and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
   }
 
-  /// Removes the key-value pair if it exists.
+  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
+  ///
   /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
   ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully removed.
-  pub fn remove<'a, 'b: 'a>(
+  ///
+  /// - Returns `Ok(Either::Left(None))`:
+  ///   - if the key with the given version does not exist in the skipmap.
+  ///   - if the key with the given version already exists and the entry is already removed.
+  /// - Returns `Ok(Either::Left(Some(old)))` if the key with the given version already exists and the entry is successfully removed.
+  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
+  /// and the entry is not successfully removed because of an update on this entry happens in another thread.
+  pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
     trailer: T,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
-    self.remove_in(trailer, key, &mut Inserter::default(), true)
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<Either<Option<EntryRef<'a, T, C>>, EntryRef<'a, T, C>>, Error> {
+    self
+      .remove_in(
+        trailer,
+        key,
+        &mut Inserter::default(),
+        success,
+        failure,
+        true,
+      )
+      .map(|res| match res {
+        Either::Left(old) => match old {
+          Some(old) => {
+            if old.is_removed() {
+              Either::Left(None)
+            } else {
+              Either::Left(Some(EntryRef(old)))
+            }
+          }
+          None => Either::Left(None),
+        },
+        Either::Right(res) => match res {
+          Ok(old) => {
+            if old.is_removed() {
+              Either::Left(None)
+            } else {
+              Either::Left(Some(EntryRef(old)))
+            }
+          }
+          Err(current) => {
+            if current.is_removed() {
+              Either::Left(None)
+            } else {
+              Either::Right(EntryRef(current))
+            }
+          }
+        },
+      })
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`remove`](SkipMap::remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -436,7 +518,28 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
-    self.remove_in(trailer, key, &mut Inserter::default(), false)
+    self
+      .remove_in(
+        trailer,
+        key,
+        &mut Inserter::default(),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+        false,
+      )
+      .map(|res| match res {
+        Either::Left(old) => match old {
+          Some(old) => {
+            if old.is_removed() {
+              None
+            } else {
+              Some(EntryRef(old))
+            }
+          }
+          None => None,
+        },
+        _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
+      })
   }
 
   /// Returns true if the key exists in the map.
@@ -447,12 +550,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Returns the first entry in the map.
   pub fn first(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
-    self.first_in(version).map(|n| EntryRef::from_node(n, self))
+    self.iter(version).seek_lower_bound(Bound::Unbounded)
   }
 
   /// Returns the last entry in the map.
   pub fn last(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
-    self.last_in(version).map(|n| EntryRef::from_node(n, self))
+    self.iter(version).seek_upper_bound(Bound::Unbounded)
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -465,11 +568,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let node_key = node.get_key(&self.arena);
       let (trailer, value) = node.get_value_and_trailer(&self.arena);
       if eq {
-        return value.map(|val| EntryRef {
-          map: self,
-          key: node_key,
-          trailer,
-          value: Some(val),
+        return value.map(|val| {
+          EntryRef(OptionEntryRef {
+            map: self,
+            key: node_key,
+            trailer,
+            value: Some(val),
+          })
         });
       }
 
@@ -481,11 +586,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
-      value.map(|val| EntryRef {
-        map: self,
-        key: node_key,
-        trailer,
-        value: Some(val),
+      value.map(|val| {
+        EntryRef(OptionEntryRef {
+          map: self,
+          key: node_key,
+          trailer,
+          value: Some(val),
+        })
       })
     }
   }
@@ -497,11 +604,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     version: u64,
     upper: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, T, C>> {
-    match upper {
-      Bound::Included(key) => self.le(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Excluded(key) => self.lt(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Unbounded => self.last(version),
-    }
+    self.iter(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -511,34 +614,30 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     version: u64,
     lower: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, T, C>> {
-    match lower {
-      Bound::Included(key) => self.ge(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Excluded(key) => self.gt(version, key).map(|n| EntryRef::from_node(n, self)),
-      Bound::Unbounded => self.first(version),
-    }
+    self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub const fn iter(&self, version: u64) -> iterator::MapIterator<T, C> {
-    iterator::MapIterator::new(version, self, false)
+  pub const fn iter(&self, version: u64) -> iterator::Iter<T, C> {
+    iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub const fn iter_all_versions(&self, version: u64) -> iterator::MapIterator<T, C> {
-    iterator::MapIterator::new(version, self, true)
+  pub const fn iter_all_versions(&self, version: u64) -> iterator::AllVersionsIter<T, C> {
+    iterator::AllVersionsIter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::MapIterator<'a, T, C, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::Iter<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::MapIterator::range(version, self, range, false)
+    iterator::Iter::range(version, self, range)
   }
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
@@ -547,12 +646,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     range: R,
-  ) -> iterator::MapIterator<'a, T, C, Q, R>
+  ) -> iterator::AllVersionsIter<'a, T, C, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::MapIterator::range(version, self, range, true)
+    iterator::AllVersionsIter::range(version, self, range, true)
   }
 }

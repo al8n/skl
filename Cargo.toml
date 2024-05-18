@@ -31,10 +31,10 @@ path = "examples/mmap_anon.rs"
 required-features = ["memmap"]
 
 [features]
-default = ["std", "atomic"]
+default = ["std"]
 alloc = ["atomic"]
 memmap = ["memmap2", "fs4", "std"]
-std = ["atomic/default", "rand/default", "either/default"]
+std = ["atomic?/default", "rand/default", "either/default"]
 atomic = ["dep:atomic", "bytemuck"]
 
 [target.'cfg(loom)'.dependencies]

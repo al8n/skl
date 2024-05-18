@@ -30,15 +30,6 @@ impl Pointer {
     decode_value(self.0.load(ordering))
   }
 
-  #[cfg(feature = "unaligned")]
-  #[inline]
-  pub(crate) fn load(&self, ordering: Ordering) -> (u32, u32) {
-    use core::ptr;
-
-    let ptr = &self.0 as *const AtomicU64;
-    unsafe { decode_value(ptr::read_unaligned(ptr).load(ordering)) }
-  }
-
   #[inline]
   pub(crate) fn store(&self, offset: u32, len: u32, ordering: Ordering) {
     self.0.store(encode_value(offset, len), ordering);

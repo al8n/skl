@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, mem, ptr};
 
-use crate::{sync::*, Pointer};
+use crate::{arena::AllocMeta, sync::*, Pointer};
 
 use super::{super::arena::ArenaError, *};
 
@@ -173,7 +173,11 @@ impl<T> Node<T> {
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
-    let (node_offset, value_offset) = arena.alloc::<T>(Self::max_node_size(), 0, Self::ALIGN, 0)?;
+    let AllocMeta {
+      node_offset,
+      value_offset,
+      allocated: _,
+    } = arena.alloc::<T>(Self::max_node_size(), 0, Self::ALIGN, 0)?;
 
     // Safety: we have check the offset is valid
     unsafe {
@@ -202,27 +206,44 @@ impl<T> Node<T> {
     arena: &'a Arena,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(), Either<E, Error>> {
     let offset = Self::new_value(arena, trailer, value_size, f)?;
-    self.value.store(offset, value_size, Ordering::Release);
+    let (_, old_size) = self.value.swap(offset, value_size);
+    // on success, which means that old value is removed, we need to incr the discard bytes
+    // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
+    if old_size != u32::MAX {
+      arena.incr_discard(old_size + mem::size_of::<T>() as u32);
+    }
+
     Ok(())
   }
 
   #[inline]
   pub(super) fn clear_value(
     &self,
+    arena: &Arena,
     success: Ordering,
     failure: Ordering,
   ) -> Result<(u32, u32), (u32, u32)> {
-    self.value.compare_remove(success, failure)
+    self
+      .value
+      .compare_remove(success, failure)
+      .map(|(offset, size)| {
+        // on success, which means that old value is removed, we need to incr the discard bytes
+        // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
+        if size != u32::MAX {
+          arena.incr_discard(size + mem::size_of::<T>() as u32);
+        }
+        (offset, size)
+      })
   }
 
   pub(super) fn new_value<'a, E>(
     arena: &'a Arena,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<u32, Either<E, Error>> {
     if value_size as u64 > u32::MAX as u64 {
       return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
@@ -240,9 +261,28 @@ impl<T> Node<T> {
       ptr::write(trailer_ptr, trailer);
 
       let val = core::slice::from_raw_parts_mut(ptr.add(mem::size_of::<T>()), value_size as usize);
-      f(OccupiedValue::new(value_size as usize, val)).map_err(Either::Left)?;
+      Self::fill_vacant_value(arena, value_size, val, f).map_err(Either::Left)?;
       Ok(value_offset)
     }
+  }
+
+  #[inline]
+  unsafe fn fill_vacant_value<'a, E>(
+    arena: &'a Arena,
+    value_size: u32,
+    buf: &'a mut [u8],
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+  ) -> Result<(), E> {
+    let mut oval = VacantValue::new(value_size as usize, buf);
+    f(&mut oval)?;
+    let remaining = oval.remaining();
+    if remaining != 0 {
+      #[cfg(feature = "tracing")]
+      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
+
+      arena.incr_discard(remaining as u32);
+    }
+    Ok(())
   }
 }
 
@@ -253,7 +293,7 @@ impl<T: Trailer> Node<T> {
     key: &'b [u8],
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<NodePtr<T>, Either<E, Error>> {
     if height < 1 || height > MAX_HEIGHT as u32 {
       panic!("height cannot be less than one or greater than the max height");
@@ -278,7 +318,11 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, value_offset) = arena
+    let AllocMeta {
+      node_offset,
+      value_offset,
+      allocated: _,
+    } = arena
       .alloc::<T>(
         node_size + key_size as u32,
         value_size,
@@ -305,11 +349,9 @@ impl<T: Trailer> Node<T> {
       let trailer_ptr = ptr as *mut T;
       #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
-      f(OccupiedValue::new(
-        value_size as usize,
-        node.get_value_mut(arena),
-      ))
-      .map_err(Either::Left)?;
+
+      Self::fill_vacant_value(arena, value_size, node.get_value_mut(arena), f)
+        .map_err(Either::Left)?;
 
       Ok(NodePtr::new(ptr, node_offset))
     }
@@ -340,8 +382,11 @@ impl<T: Trailer> Node<T> {
     let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
     let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let (node_offset, value_offset) =
-      arena.alloc::<T>(node_size + key_size as u32, 0, Self::ALIGN, unused_size)?;
+    let AllocMeta {
+      node_offset,
+      value_offset,
+      allocated,
+    } = arena.alloc::<T>(node_size + key_size as u32, 0, Self::ALIGN, unused_size)?;
 
     unsafe {
       // Safety: we have check the offset is valid
@@ -360,7 +405,7 @@ impl<T: Trailer> Node<T> {
       let trailer_ptr = ptr as *mut T;
       #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
-
+      arena.incr_discard(allocated);
       Ok(NodePtr::new(ptr, node_offset))
     }
   }

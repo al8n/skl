@@ -31,8 +31,8 @@ impl Pointer {
   }
 
   #[inline]
-  pub(crate) fn store(&self, offset: u32, len: u32, ordering: Ordering) {
-    self.0.store(encode_value(offset, len), ordering);
+  pub(crate) fn swap(&self, offset: u32, len: u32) -> (u32, u32) {
+    decode_value(self.0.swap(encode_value(offset, len), Ordering::AcqRel))
   }
 
   #[inline]

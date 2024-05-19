@@ -1862,7 +1862,7 @@ fn get_or_insert_with_panic(l: SkipMap) {
 
   let encoded_size = alice.encoded_size();
 
-  l.get_or_insert_with::<()>(1, b"alice", encoded_size as u32, |mut val| {
+  l.get_or_insert_with::<()>(1, b"alice", encoded_size as u32, |val| {
     val.write(&alice.id.to_le_bytes()).unwrap();
     Ok(())
   })
@@ -1908,7 +1908,7 @@ fn get_or_insert_with(l: SkipMap) {
 
   let encoded_size = alice.encoded_size() as u32;
 
-  l.get_or_insert_with::<()>(1, b"alice", encoded_size, |mut val| {
+  l.get_or_insert_with::<()>(1, b"alice", encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1922,7 +1922,7 @@ fn get_or_insert_with(l: SkipMap) {
     let err = val.write(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "OccupiedValue does not have enough space (remaining 0, want 1)"
+      "VacantValue does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   })
@@ -2007,21 +2007,21 @@ fn insert_with(l: SkipMap) {
 
   let encoded_size = alice.encoded_size() as u32;
 
-  l.insert_with::<()>(1, b"alice", encoded_size, |mut val| {
+  l.insert_with::<()>(1, b"alice", encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.write(&alice.id.to_le_bytes()).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
-    assert_eq!(&*val, alice.id.to_le_bytes());
+    assert_eq!(val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
-    assert_eq!(&*val, alice.id.to_be_bytes());
+    assert_eq!(val, alice.id.to_be_bytes());
     val.write(alice.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
     let err = val.write(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "OccupiedValue does not have enough space (remaining 0, want 1)"
+      "VacantValue does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   })
@@ -2033,7 +2033,7 @@ fn insert_with(l: SkipMap) {
   };
 
   let old = l
-    .insert_with::<()>(1, b"alice", encoded_size, |mut val| {
+    .insert_with::<()>(1, b"alice", encoded_size, |val| {
       assert_eq!(val.capacity(), encoded_size as usize);
       assert!(val.is_empty());
       val.write(&alice2.id.to_le_bytes()).unwrap();
@@ -2047,7 +2047,7 @@ fn insert_with(l: SkipMap) {
       let err = val.write(&[1]).unwrap_err();
       assert_eq!(
         std::string::ToString::to_string(&err),
-        "OccupiedValue does not have enough space (remaining 0, want 1)"
+        "VacantValue does not have enough space (remaining 0, want 1)"
       );
       Ok(())
     })

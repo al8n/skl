@@ -38,6 +38,12 @@ impl<T, C> SkipMap<T, C> {
     self.len() == 0
   }
 
+  /// Returns how many bytes are discarded by the ARENA.
+  #[inline]
+  pub fn discarded(&self) -> u32 {
+    self.arena.discard()
+  }
+
   /// Returns the maximum version of all entries in the map.
   #[inline]
   pub fn max_version(&self) -> u64 {
@@ -258,7 +264,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
-    let copy = |mut buf: OccupiedValue| {
+    let copy = |buf: &mut VacantValue| {
       let _ = buf.write(value);
       Ok(())
     };
@@ -284,7 +290,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// A placeholder value will be inserted first, then you will get an [`OccupiedValue`],
+  /// A placeholder value will be inserted first, then you will get an [`VacantValue`],
   /// and you must fully fill the value with bytes later in the closure.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
@@ -328,7 +334,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E> + Copy,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
       return Err(Either::Right(Error::Readonly));
@@ -362,7 +368,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
-    let copy = |mut buf: OccupiedValue| {
+    let copy = |buf: &mut VacantValue| {
       let _ = buf.write(value);
       Ok(())
     };
@@ -388,7 +394,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// A placeholder value will be get_or_inserted first, then you will get an [`OccupiedValue`],
+  /// A placeholder value will be get_or_inserted first, then you will get an [`VacantValue`],
   /// and you must fully fill the value with bytes later in the closure.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
@@ -432,7 +438,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E> + Copy,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
       return Err(Either::Right(Error::Readonly));

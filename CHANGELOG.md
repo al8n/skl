@@ -2,9 +2,12 @@
 
 ## 0.10.0
 
-- Remove `SkipSet`.
-- Add `insert`, `get_or_insert` and `get_or_insert_with` methods.
-- Add `compare_remove` and `get_or_remove` methods.
+- Remove `SkipSet`
+- Add `insert`, `get_or_insert` and `get_or_insert_with` methods
+- Add `compare_remove` and `get_or_remove` methods
+- Add `Entry` and `VersionedEntry`
+- Add discard states tracker and `discarded` method to let users know how many bytes in ARENA are discarded.
+- Do not panic when users do not fully fill `VacantValue`
 
 ## 0.9.0
 

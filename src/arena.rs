@@ -36,6 +36,8 @@ pub(super) struct Header {
   height: AtomicU32,
   len: AtomicU32,
 
+  discard: AtomicU32,
+
   // Reserved for segmented list.
   segmented_head_ptr: AtomicU32,
   segmented_tail_ptr: AtomicU32,
@@ -51,6 +53,7 @@ impl Header {
       // Don't store data at position 0 in order to reserve offset=0 as a kind
       // of nil pointer.
       allocated: AtomicU64::new(size + 1),
+      discard: AtomicU32::new(0),
       segmented_head_ptr: AtomicU32::new(0),
       segmented_tail_ptr: AtomicU32::new(0),
     }
@@ -191,8 +194,18 @@ impl Arena {
   }
 
   #[inline]
+  pub(super) fn discard(&self) -> u32 {
+    self.header().discard.load(Ordering::Acquire)
+  }
+
+  #[inline]
   pub(super) fn incr_len(&self) {
     self.header().len.fetch_add(1, Ordering::Release);
+  }
+
+  #[inline]
+  pub(super) fn incr_discard(&self, size: u32) {
+    self.header().discard.fetch_add(size, Ordering::Release);
   }
 
   pub(super) fn update_max_version(&self, version: u64) {
@@ -382,7 +395,7 @@ impl Arena {
     value_size: u32,
     align: u32,
     overflow: u32,
-  ) -> Result<(u32, u32), ArenaError> {
+  ) -> Result<AllocMeta, ArenaError> {
     let trailer_size = mem::size_of::<T>();
     let trailer_align = mem::align_of::<T>();
 
@@ -414,7 +427,11 @@ impl Arena {
           let value_offset =
             (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
 
-          return Ok((node_offset, value_offset));
+          return Ok(AllocMeta {
+            node_offset,
+            value_offset,
+            allocated: (padded + trailer_padded + value_size as u64) as u32,
+          });
         }
         Err(x) => {
           if x + padded + overflow as u64 + trailer_padded + value_size as u64 > self.cap as u64 {
@@ -555,6 +572,12 @@ impl Drop for Arena {
       });
     }
   }
+}
+
+pub(crate) struct AllocMeta {
+  pub(crate) node_offset: u32,
+  pub(crate) value_offset: u32,
+  pub(crate) allocated: u32,
 }
 
 #[test]

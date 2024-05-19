@@ -151,7 +151,7 @@ impl core::fmt::Display for TooLarge {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     write!(
       f,
-      "OccupiedValue does not have enough space (remaining {}, want {})",
+      "VacantValue does not have enough space (remaining {}, want {})",
       self.remaining, self.write
     )
   }
@@ -163,13 +163,13 @@ impl std::error::Error for TooLarge {}
 /// An occupied value in the skiplist.
 #[must_use = "occupied value must be fully filled with bytes."]
 #[derive(Debug)]
-pub struct OccupiedValue<'a> {
+pub struct VacantValue<'a> {
   value: &'a mut [u8],
   len: usize,
   cap: usize,
 }
 
-impl<'a> OccupiedValue<'a> {
+impl<'a> VacantValue<'a> {
   /// Write bytes to the occupied value.
   pub fn write(&mut self, bytes: &[u8]) -> Result<(), TooLarge> {
     let len = bytes.len();
@@ -216,7 +216,7 @@ impl<'a> OccupiedValue<'a> {
   }
 }
 
-impl<'a> core::ops::Deref for OccupiedValue<'a> {
+impl<'a> core::ops::Deref for VacantValue<'a> {
   type Target = [u8];
 
   fn deref(&self) -> &Self::Target {
@@ -224,21 +224,69 @@ impl<'a> core::ops::Deref for OccupiedValue<'a> {
   }
 }
 
-impl<'a> core::ops::DerefMut for OccupiedValue<'a> {
+impl<'a> core::ops::DerefMut for VacantValue<'a> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.value[..self.len]
   }
 }
 
-impl<'a> Drop for OccupiedValue<'a> {
-  fn drop(&mut self) {
-    assert_eq!(
-      self.len,
-      self.cap,
-      "OccupiedValue was not fully filled with bytes, capacity is {}, remaining is {}",
-      self.cap,
-      self.cap - self.len
-    );
+impl<'a> PartialEq<[u8]> for VacantValue<'a> {
+  fn eq(&self, other: &[u8]) -> bool {
+    self.value[..self.len].eq(other)
+  }
+}
+
+impl<'a> PartialEq<VacantValue<'a>> for [u8] {
+  fn eq(&self, other: &VacantValue<'a>) -> bool {
+    self.eq(&other.value[..other.len])
+  }
+}
+
+impl<'a> PartialEq<[u8]> for &VacantValue<'a> {
+  fn eq(&self, other: &[u8]) -> bool {
+    self.value[..self.len].eq(other)
+  }
+}
+
+impl<'a> PartialEq<&VacantValue<'a>> for [u8] {
+  fn eq(&self, other: &&VacantValue<'a>) -> bool {
+    self.eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.value[..self.len].eq(other.as_slice())
+  }
+}
+
+impl<'a, const N: usize> PartialEq<VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &VacantValue<'a>) -> bool {
+    self.as_slice().eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<&VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &&VacantValue<'a>) -> bool {
+    self.as_slice().eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for &VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.value[..self.len].eq(other.as_slice())
+  }
+}
+
+impl<'a, const N: usize> PartialEq<&mut VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &&mut VacantValue<'a>) -> bool {
+    self.as_slice().eq(&other.value[..other.len])
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.value[..self.len].eq(other.as_slice())
   }
 }
 

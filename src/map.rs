@@ -4,7 +4,7 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use crate::{OccupiedValue, Trailer};
+use crate::{Trailer, VacantValue};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use super::{invalid_data, MmapOptions, OpenOptions};
@@ -118,7 +118,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     key: &'b [u8],
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32), Either<E, Error>> {
     let height = super::random_height();
     let nd = Node::new_node_ptr(&self.arena, height, key, trailer, value_size, f)?;
@@ -632,7 +632,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     value_size: u32,
-    f: impl FnOnce(OccupiedValue<'a>) -> Result<(), E> + Copy,
+    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
     ins: &mut Inserter<T>,
     upsert: bool,
   ) -> Result<Option<VersionedEntryRef<'a, T, C>>, Either<E, Error>> {
@@ -837,7 +837,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         if upsert {
           let node = node_ptr.as_ptr();
 
-          return match node.clear_value(success, failure) {
+          return match node.clear_value(&self.arena, success, failure) {
             Ok((offset, len)) => {
               let trailer = node.get_trailer_by_offset(&self.arena, offset);
               let value = node.get_value_by_offset(&self.arena, offset, len);
@@ -996,7 +996,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 if upsert {
                   let node = node_ptr.as_ptr();
 
-                  return match node.clear_value(success, failure) {
+                  return match node.clear_value(&self.arena, success, failure) {
                     Ok((offset, len)) => {
                       let trailer = node.get_trailer_by_offset(&self.arena, offset);
                       let value = node.get_value_by_offset(&self.arena, offset, len);

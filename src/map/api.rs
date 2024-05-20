@@ -38,6 +38,12 @@ impl<T, C> SkipMap<T, C> {
     self.len() == 0
   }
 
+  /// Gets the number of pointers to this `SkipMap` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
+  #[inline]
+  pub fn refs(&self) -> usize {
+    self.arena.refs()
+  }
+
   /// Returns how many bytes are discarded by the ARENA.
   #[inline]
   pub fn discarded(&self) -> usize {

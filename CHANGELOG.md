@@ -9,6 +9,7 @@
 - Add discard states tracker and `discarded` method to let users know how many bytes in ARENA are discarded.
 - Rename `OccupiedValue` to `VacantBuffer` and do not panic when users do not fully fill `VacantBuffer`
 - Add `tracing`
+- Add `SkipMap::refs` API to allow users get how many references.
 
 ## 0.9.0
 

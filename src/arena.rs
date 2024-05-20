@@ -189,6 +189,15 @@ impl Arena {
   }
 
   #[inline]
+  pub fn refs(&self) -> usize {
+    unsafe {
+      let shared: *mut Shared = self.inner.load(Ordering::Relaxed).cast();
+
+      (*shared).refs.load(Ordering::Acquire)
+    }
+  }
+
+  #[inline]
   pub(super) const fn atomic_height(&self) -> &AtomicU32 {
     &self.header().height
   }

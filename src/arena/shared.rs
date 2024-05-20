@@ -153,13 +153,18 @@ impl Shared {
     min_cap: usize,
     alignment: usize,
   ) -> std::io::Result<Self> {
-    let file = open_options.open(path.as_ref())?;
+    let (create_new, file) = open_options.open(path.as_ref())?;
 
     unsafe {
-      mmap_options.map_mut(&file).and_then(|mmap| {
+      mmap_options.map_mut(&file).and_then(|mut mmap| {
         let cap = mmap.len();
         if cap < min_cap {
           return Err(invalid_data(TooSmall::new(cap, min_cap)));
+        }
+
+        if create_new {
+          // initialize the memory with 0
+          ptr::write_bytes(mmap.as_mut_ptr(), 0, cap);
         }
 
         let data_offset = data_offset(alignment);
@@ -190,7 +195,15 @@ impl Shared {
     min_cap: usize,
     alignment: usize,
   ) -> std::io::Result<Self> {
-    let file = open_options.open(path.as_ref())?;
+    if !path.as_ref().exists() {
+      return Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "file not found",
+      ));
+    }
+
+    let (_, file) = open_options.open(path.as_ref())?;
+
     unsafe {
       mmap_options.map(&file).and_then(|mmap| {
         let len = mmap.len();

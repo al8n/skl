@@ -291,7 +291,7 @@ impl<T> Node<T> {
           arena.incr_discard(allocated);
           Either::Left(e)
         })?;
-      Ok((value_offset, value_size as u32))
+      Ok((value_offset, value_size))
     }
   }
 

@@ -172,6 +172,7 @@ pub(crate) enum Key<'a, 'b: 'a> {
 }
 
 impl<'a, 'b: 'a> Key<'a, 'b> {
+  #[inline]
   pub(crate) fn on_fail(&self, arena: &crate::arena::Arena) {
     if let Self::Vacant(key) = self {
       arena.incr_discard(key.cap as u32);
@@ -180,6 +181,7 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
 }
 
 impl<'a, 'b: 'a> AsRef<[u8]> for Key<'a, 'b> {
+  #[inline]
   fn as_ref(&self) -> &[u8] {
     match self {
       Self::Occupied(key) => key,

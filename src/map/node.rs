@@ -170,6 +170,20 @@ impl<T> Node<T> {
     Node::<T>::MAX_NODE_SIZE as u32
   }
 
+  #[inline]
+  pub(super) fn size(&self) -> u32 {
+    let pad = (Self::SIZE + self.height as usize * Link::SIZE + self.key_size as usize) as u32
+      + Self::ALIGN
+      - 1;
+    let trailer_pad = (mem::size_of::<T>() + mem::align_of::<T>() - 1) as u32;
+    let (_, value_size) = self.value.load(Ordering::Acquire);
+    if value_size != u32::MAX {
+      pad + trailer_pad + value_size
+    } else {
+      pad + trailer_pad
+    }
+  }
+
   pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Compute the amount of the tower that will never be used, since the height
     // is less than maxHeight.
@@ -210,10 +224,16 @@ impl<T> Node<T> {
   ) -> Result<(), Either<E, Error>> {
     let offset = Self::new_value(arena, trailer, value_size, f)?;
     let (_, old_size) = self.value.swap(offset, value_size);
+
     // on success, which means that old value is removed, we need to incr the discard bytes
     // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
     if old_size != u32::MAX {
-      arena.incr_discard(old_size + mem::size_of::<T>() as u32);
+      let padded = Arena::pad_value_and_trailer::<T>(old_size);
+
+      arena.incr_discard(padded as u32);
+    } else {
+      let padded = Arena::pad_value_and_trailer::<T>(0);
+      arena.incr_discard(padded as u32);
     }
 
     Ok(())
@@ -233,7 +253,12 @@ impl<T> Node<T> {
         // on success, which means that old value is removed, we need to incr the discard bytes
         // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
         if size != u32::MAX {
-          arena.incr_discard(size + mem::size_of::<T>() as u32);
+          let padded = Arena::pad_value_and_trailer::<T>(size);
+
+          arena.incr_discard(padded as u32);
+        } else {
+          let padded = Arena::pad_value_and_trailer::<T>(0);
+          arena.incr_discard(padded as u32);
         }
         (offset, size)
       })

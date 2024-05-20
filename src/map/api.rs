@@ -8,16 +8,16 @@ impl<T, C> SkipMap<T, C> {
     self.arena.height()
   }
 
-  /// Returns the number of bytes that have allocated from the arena.
-  #[inline]
-  pub fn size(&self) -> usize {
-    self.arena.size()
-  }
-
   /// Returns the number of remaining bytes can be allocated by the arena.
   #[inline]
   pub fn remaining(&self) -> usize {
     self.arena.remaining()
+  }
+
+  /// Returns the number of bytes that have allocated from the arena.
+  #[inline]
+  pub fn allocated(&self) -> usize {
+    self.arena.size()
   }
 
   /// Returns the capacity of the arena.
@@ -40,8 +40,8 @@ impl<T, C> SkipMap<T, C> {
 
   /// Returns how many bytes are discarded by the ARENA.
   #[inline]
-  pub fn discarded(&self) -> u32 {
-    self.arena.discard()
+  pub fn discarded(&self) -> usize {
+    self.arena.discard() as usize
   }
 
   /// Returns the maximum version of all entries in the map.

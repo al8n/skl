@@ -205,6 +205,9 @@ impl Arena {
 
   #[inline]
   pub(super) fn incr_discard(&self, size: u32) {
+    #[cfg(feature = "tracing")]
+    tracing::trace!("ARENA discard {} bytes", size);
+
     self.header().discard.fetch_add(size, Ordering::Release);
   }
 
@@ -427,10 +430,16 @@ impl Arena {
           let value_offset =
             (allocated_for_trailer as u32 - trailer_size as u32) & !(trailer_align as u32 - 1);
 
+          #[cfg(feature = "tracing")]
+          tracing::trace!(
+            "ARENA allocates {} bytes for a node",
+            want - current_allocated
+          );
+
           return Ok(AllocMeta {
             node_offset,
             value_offset,
-            allocated: (padded + trailer_padded + value_size as u64) as u32,
+            allocated: (want - current_allocated) as u32,
           });
         }
         Err(x) => {
@@ -446,11 +455,7 @@ impl Arena {
 
   #[cfg(not(feature = "unaligned"))]
   pub(super) fn alloc_value<T>(&self, size: u32) -> Result<u32, ArenaError> {
-    let trailer_size = mem::size_of::<T>();
-    let align = mem::align_of::<T>();
-    let size = size + trailer_size as u32;
-    let padded = size as u64 + align as u64 - 1;
-
+    let padded = Self::pad_value_and_trailer::<T>(size);
     let header = self.header();
     let mut current_allocated = header.allocated.load(Ordering::Acquire);
     if current_allocated + padded > self.cap as u64 {
@@ -468,7 +473,9 @@ impl Arena {
         Ok(current) => {
           // Return the aligned offset.
           let allocated = current + padded;
-          let value_offset = (allocated as u32 - size) & !(align as u32 - 1);
+          let value_offset = (allocated as u32 - size) & !(mem::align_of::<T>() as u32 - 1);
+          #[cfg(feature = "tracing")]
+          tracing::trace!("ARENA allocates {} bytes for a value", padded);
           return Ok(value_offset);
         }
         Err(x) => {
@@ -480,6 +487,14 @@ impl Arena {
         }
       }
     }
+  }
+
+  #[inline]
+  pub(super) const fn pad_value_and_trailer<T>(value_size: u32) -> u64 {
+    let trailer_size = mem::size_of::<T>();
+    let align = mem::align_of::<T>();
+    let size = value_size + trailer_size as u32;
+    size as u64 + align as u64 - 1
   }
 
   /// ## Safety:
@@ -586,7 +601,7 @@ fn test_debug() {
   let arena = Arena::new_vec(1024, 1024, 8);
   assert_eq!(
     std::format!("{:?}", arena),
-    "Arena { cap: 1064, header: Header { max_version: 0, min_version: 0, allocated: 41, height: 1, len: 0, segmented_head_ptr: 0, segmented_tail_ptr: 0 }, data: [0] }"
+    "Arena { cap: 1072, header: Header { max_version: 0, min_version: 0, allocated: 49, height: 1, len: 0, discard: 0, segmented_head_ptr: 0, segmented_tail_ptr: 0 }, data: [0] }"
   );
 
   let err = ArenaError;

@@ -50,9 +50,9 @@ fn empty_in(l: SkipMap) {
   assert!(l.le(0, b"aaa").is_none());
   assert!(l.get(0, b"aaa").is_none());
   assert!(!l.contains_key(0, b"aaa"));
-  assert!(l.size() > 0);
+  assert!(l.allocated() > 0);
   assert!(l.capacity() > 0);
-  assert_eq!(l.remaining(), l.capacity() - l.size());
+  assert_eq!(l.remaining(), l.capacity() - l.allocated());
 }
 
 #[test]
@@ -1853,53 +1853,6 @@ impl Person {
   }
 }
 
-#[cfg(feature = "std")]
-fn get_or_insert_with_panic(l: SkipMap) {
-  let alice = Person {
-    id: 1,
-    name: std::string::String::from("Alice"),
-  };
-
-  let encoded_size = alice.encoded_size();
-
-  l.get_or_insert_with::<()>(1, b"alice", encoded_size as u32, |val| {
-    val.write(&alice.id.to_le_bytes()).unwrap();
-    Ok(())
-  })
-  .unwrap();
-}
-
-#[test]
-#[cfg(feature = "std")]
-#[should_panic]
-fn test_get_or_insert_with_panic() {
-  get_or_insert_with_panic(SkipMap::new(ARENA_SIZE).unwrap());
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-#[should_panic]
-fn test_get_or_insert_with_panic_mmap_mut() {
-  let dir = tempfile::tempdir().unwrap();
-  let p = dir.path().join("test_skipmap_get_or_insert_with_mmap_mut");
-  let open_options = OpenOptions::default()
-    .create_new(Some(ARENA_SIZE as u64))
-    .read(true)
-    .write(true);
-  let mmap_options = MmapOptions::default();
-  get_or_insert_with_panic(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-#[should_panic]
-fn test_get_or_insert_with_panic_mmap_anon() {
-  let mmap_options = MmapOptions::default().len(ARENA_SIZE);
-  get_or_insert_with_panic(SkipMap::mmap_anon(mmap_options).unwrap());
-}
-
 fn get_or_insert_with(l: SkipMap) {
   let alice = Person {
     id: 1,
@@ -2253,4 +2206,58 @@ fn test_remove2_mmap_mut() {
 fn test_remove2_mmap_anon() {
   let mmap_options = MmapOptions::default().len(ARENA_SIZE);
   remove2(SkipMap::mmap_anon(mmap_options).unwrap());
+}
+
+fn discard(l: SkipMap) {
+  let original_remaining = l.remaining();
+  let mut old_remaining = l.remaining();
+  let mut last = 0;
+  for i in 0..10 {
+    let v = new_value(i);
+    l.insert(i as u64, &key(0), &v).unwrap();
+
+    if i == 9 {
+      last = old_remaining - l.remaining();
+    } else {
+      old_remaining = l.remaining();
+    }
+  }
+
+  assert_eq!(l.discarded(), original_remaining - l.remaining() - last);
+}
+
+#[test]
+fn test_discard() {
+  discard(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+fn discard2(l: SkipMap) {
+  for i in 0..10 {
+    let v = new_value(i);
+    l.insert(i as u64, &key(0), &v).unwrap();
+  }
+  let mut allocated = l.remaining();
+  let discarded = l.discarded();
+  l.get_or_remove(10, &key(0)).unwrap();
+  allocated -= l.remaining();
+  assert_eq!(l.discarded(), allocated + discarded);
+}
+
+#[test]
+fn test_discard2() {
+  discard2(SkipMap::new(ARENA_SIZE).unwrap());
+}
+
+fn discard3(l: SkipMap) {
+  for i in 0..10 {
+    let v = new_value(i);
+    l.insert(0, &key(0), &v).unwrap();
+  }
+
+  assert_eq!(l.discarded(), 9 * 20);
+}
+
+#[test]
+fn test_discard3() {
+  discard3(SkipMap::new(ARENA_SIZE).unwrap());
 }

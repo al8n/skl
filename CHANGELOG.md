@@ -8,6 +8,7 @@
 - Add `Entry` and `VersionedEntry`
 - Add discard states tracker and `discarded` method to let users know how many bytes in ARENA are discarded.
 - Do not panic when users do not fully fill `VacantValue`
+- Add `tracing`
 
 ## 0.9.0
 

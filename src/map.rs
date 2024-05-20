@@ -793,6 +793,18 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     }
 
+    // Update discard tracker
+    unsafe {
+      let next = nd.next_offset(&self.arena, 0);
+      let ptr = self.arena.get_pointer(next as usize);
+      let next_node_ptr = NodePtr::<T>::new(ptr, next);
+      let next_node = next_node_ptr.as_ptr();
+      let next_node_key = next_node.get_key(&self.arena);
+      if self.cmp.compare(next_node_key, key) == cmp::Ordering::Equal {
+        self.arena.incr_discard(next_node.size());
+      }
+    }
+
     // If we had to recompute the splice for a level, invalidate the entire
     // cached splice.
     if invalid_data_splice {
@@ -1035,6 +1047,19 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
             }
           }
         }
+      }
+    }
+
+    // Update discard tracker
+    unsafe {
+      let next = nd.next_offset(&self.arena, 0);
+      let ptr = self.arena.get_pointer(next as usize);
+      let next_node_ptr = NodePtr::<T>::new(ptr, next);
+      let next_node = next_node_ptr.as_ptr();
+      let next_node_key = next_node.get_key(&self.arena);
+      let nk = nd.as_ptr().get_key(&self.arena);
+      if self.cmp.compare(next_node_key, nk) == cmp::Ordering::Equal {
+        self.arena.incr_discard(next_node.size());
       }
     }
 

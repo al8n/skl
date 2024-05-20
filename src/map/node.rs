@@ -137,7 +137,8 @@ pub(super) struct Node<T> {
   pub(super) key_offset: u32,
   // Immutable. No need to lock to access key.
   pub(super) key_size: u16,
-  pub(super) height: u16,
+  pub(super) height: u8,
+  pub(super) magic: u8,
   trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
@@ -205,7 +206,7 @@ impl<T> Node<T> {
       node.value = Pointer::new(value_offset, 0);
       node.key_offset = 0;
       node.key_size = 0;
-      node.height = MAX_HEIGHT as u16;
+      node.height = MAX_HEIGHT as u8;
 
       #[cfg(not(feature = "unaligned"))]
       ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, MAX_HEIGHT);
@@ -369,7 +370,7 @@ impl<T: Trailer> Node<T> {
       node.value = Pointer::new(value_offset, value_size);
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
-      node.height = height as u16;
+      node.height = height as u8;
       node.get_key_mut(arena).copy_from_slice(key);
 
       #[cfg(not(feature = "unaligned"))]
@@ -439,7 +440,7 @@ impl<T: Trailer> Node<T> {
       node.value = Pointer::new(value_offset, value_size);
       node.key_offset = key_offset;
       node.key_size = key_size;
-      node.height = height as u16;
+      node.height = height as u8;
 
       #[cfg(not(feature = "unaligned"))]
       ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
@@ -504,7 +505,7 @@ impl<T: Trailer> Node<T> {
       node.value = Pointer::remove(value_offset);
       node.key_offset = node_offset + node_size;
       node.key_size = key_size as u16;
-      node.height = height as u16;
+      node.height = height as u8;
       node.get_key_mut(arena).copy_from_slice(key);
       #[cfg(not(feature = "unaligned"))]
       ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);

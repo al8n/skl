@@ -132,37 +132,37 @@ impl<'a> PartialEq<&VacantBuffer<'a>> for [u8] {
 
 impl<'a, const N: usize> PartialEq<[u8; N]> for VacantBuffer<'a> {
   fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_slice())
+    self.value[..self.len].eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &VacantBuffer<'a>) -> bool {
-    self.as_slice().eq(&other.value[..other.len])
+    self.as_ref().eq(&other.value[..other.len])
   }
 }
 
 impl<'a, const N: usize> PartialEq<&VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &&VacantBuffer<'a>) -> bool {
-    self.as_slice().eq(&other.value[..other.len])
+    self.as_ref().eq(&other.value[..other.len])
   }
 }
 
 impl<'a, const N: usize> PartialEq<[u8; N]> for &VacantBuffer<'a> {
   fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_slice())
+    self.value[..self.len].eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<&mut VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &&mut VacantBuffer<'a>) -> bool {
-    self.as_slice().eq(&other.value[..other.len])
+    self.as_ref().eq(&other.value[..other.len])
   }
 }
 
 impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantBuffer<'a> {
   fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_slice())
+    self.value[..self.len].eq(other.as_ref())
   }
 }
 

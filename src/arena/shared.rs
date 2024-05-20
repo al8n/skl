@@ -346,12 +346,6 @@ impl Shared {
       } => {
         use fs4::FileExt;
 
-        // Any errors during unmapping/closing are ignored as the only way
-        // to report them would be through panicking which is highly discouraged
-        // in Drop impls, c.f. https://github.com/rust-lang/lang-team/issues/97
-        let mmap = &mut **buf;
-        let _ = mmap.flush();
-
         // we must trigger the drop of the mmap
         let used = if *shrink_on_drop {
           let header_ptr = self.header_ptr().cast::<Header>();
@@ -368,6 +362,8 @@ impl Shared {
             let _ = file.set_len(used);
           }
         }
+
+        let _ = file.sync_all();
 
         if *lock {
           let _ = file.unlock();
@@ -398,6 +394,7 @@ impl Shared {
         if let Some(used) = used {
           if used < self.cap as u64 {
             let _ = file.set_len(used);
+            let _ = file.sync_all();
           }
         }
 

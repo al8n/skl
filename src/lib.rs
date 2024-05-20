@@ -26,6 +26,9 @@ use align8vp::Pointer;
 /// A map implementation based on skiplist
 pub mod map;
 
+mod types;
+pub use types::*;
+
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 mod options;
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -137,156 +140,6 @@ impl Comparator for Descend {
     Q: ?Sized + PartialOrd<&'a [u8]>,
   {
     range.contains(&key)
-  }
-}
-
-/// Returns when the bytes are too large to be written to the occupied value.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct TooLarge {
-  remaining: usize,
-  write: usize,
-}
-
-impl core::fmt::Display for TooLarge {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    write!(
-      f,
-      "VacantValue does not have enough space (remaining {}, want {})",
-      self.remaining, self.write
-    )
-  }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for TooLarge {}
-
-/// An occupied value in the skiplist.
-#[must_use = "occupied value must be fully filled with bytes."]
-#[derive(Debug)]
-pub struct VacantValue<'a> {
-  value: &'a mut [u8],
-  len: usize,
-  cap: usize,
-}
-
-impl<'a> VacantValue<'a> {
-  /// Write bytes to the occupied value.
-  pub fn write(&mut self, bytes: &[u8]) -> Result<(), TooLarge> {
-    let len = bytes.len();
-    let remaining = self.cap - self.len;
-    if len > remaining {
-      return Err(TooLarge {
-        remaining,
-        write: len,
-      });
-    }
-
-    self.value[self.len..self.len + len].copy_from_slice(bytes);
-    self.len += len;
-    Ok(())
-  }
-
-  /// Returns the capacity of the occupied value.
-  #[inline]
-  pub const fn capacity(&self) -> usize {
-    self.cap
-  }
-
-  /// Returns the length of the occupied value.
-  #[inline]
-  pub const fn len(&self) -> usize {
-    self.len
-  }
-
-  /// Returns `true` if the occupied value is empty.
-  #[inline]
-  pub const fn is_empty(&self) -> bool {
-    self.len == 0
-  }
-
-  /// Returns the remaining space of the occupied value.
-  #[inline]
-  pub const fn remaining(&self) -> usize {
-    self.cap - self.len
-  }
-
-  #[inline]
-  fn new(cap: usize, value: &'a mut [u8]) -> Self {
-    Self { value, len: 0, cap }
-  }
-}
-
-impl<'a> core::ops::Deref for VacantValue<'a> {
-  type Target = [u8];
-
-  fn deref(&self) -> &Self::Target {
-    &self.value[..self.len]
-  }
-}
-
-impl<'a> core::ops::DerefMut for VacantValue<'a> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.value[..self.len]
-  }
-}
-
-impl<'a> PartialEq<[u8]> for VacantValue<'a> {
-  fn eq(&self, other: &[u8]) -> bool {
-    self.value[..self.len].eq(other)
-  }
-}
-
-impl<'a> PartialEq<VacantValue<'a>> for [u8] {
-  fn eq(&self, other: &VacantValue<'a>) -> bool {
-    self.eq(&other.value[..other.len])
-  }
-}
-
-impl<'a> PartialEq<[u8]> for &VacantValue<'a> {
-  fn eq(&self, other: &[u8]) -> bool {
-    self.value[..self.len].eq(other)
-  }
-}
-
-impl<'a> PartialEq<&VacantValue<'a>> for [u8] {
-  fn eq(&self, other: &&VacantValue<'a>) -> bool {
-    self.eq(&other.value[..other.len])
-  }
-}
-
-impl<'a, const N: usize> PartialEq<[u8; N]> for VacantValue<'a> {
-  fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_slice())
-  }
-}
-
-impl<'a, const N: usize> PartialEq<VacantValue<'a>> for [u8; N] {
-  fn eq(&self, other: &VacantValue<'a>) -> bool {
-    self.as_slice().eq(&other.value[..other.len])
-  }
-}
-
-impl<'a, const N: usize> PartialEq<&VacantValue<'a>> for [u8; N] {
-  fn eq(&self, other: &&VacantValue<'a>) -> bool {
-    self.as_slice().eq(&other.value[..other.len])
-  }
-}
-
-impl<'a, const N: usize> PartialEq<[u8; N]> for &VacantValue<'a> {
-  fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_slice())
-  }
-}
-
-impl<'a, const N: usize> PartialEq<&mut VacantValue<'a>> for [u8; N] {
-  fn eq(&self, other: &&mut VacantValue<'a>) -> bool {
-    self.as_slice().eq(&other.value[..other.len])
-  }
-}
-
-impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantValue<'a> {
-  fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_slice())
   }
 }
 

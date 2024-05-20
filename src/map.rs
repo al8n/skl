@@ -4,7 +4,7 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use crate::{Trailer, VacantValue};
+use crate::{Key, Trailer, VacantBuffer};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use super::{invalid_data, MmapOptions, OpenOptions};
@@ -112,16 +112,26 @@ impl<T, C> SkipMap<T, C> {
 }
 
 impl<T: Trailer, C> SkipMap<T, C> {
-  #[allow(clippy::type_complexity)]
   fn new_node<'a, 'b: 'a, E>(
     &'a self,
-    key: &'b [u8],
+    key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32), Either<E, Error>> {
     let height = super::random_height();
-    let nd = Node::new_node_ptr(&self.arena, height, key, trailer, value_size, f)?;
+    let nd = match key {
+      Key::Occupied(key) => Node::new_node_ptr(&self.arena, height, key, trailer, value_size, f)?,
+      Key::Vacant(key) => Node::new_node_ptr_with_key(
+        &self.arena,
+        height,
+        key.offset,
+        key.len() as u16,
+        trailer,
+        value_size,
+        f,
+      )?,
+    };
 
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
@@ -488,10 +498,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
-  unsafe fn find_splice(
-    &self,
+  unsafe fn find_splice<'a, 'b: 'a>(
+    &'a self,
     version: u64,
-    key: &[u8],
+    key: &'b [u8],
     ins: &mut Inserter<T>,
     returned_when_found: bool,
   ) -> (bool, Option<NodePtr<T>>) {
@@ -630,19 +640,22 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   fn update<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
-    key: &'b [u8],
+    key: Key<'a, 'b>,
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
     ins: &mut Inserter<T>,
     upsert: bool,
   ) -> Result<Option<VersionedEntryRef<'a, T, C>>, Either<E, Error>> {
     let version = trailer.version();
+
     // Safety: a fresh new Inserter, so safe here
     unsafe {
-      let (found, ptr) = self.find_splice(version, key, ins, true);
+      let (found, ptr) = self.find_splice(version, key.as_ref(), ins, true);
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let old = VersionedEntryRef::from_node(node_ptr, self);
+
+        key.on_fail(&self.arena);
 
         if upsert {
           node_ptr
@@ -662,7 +675,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       std::thread::yield_now();
     }
 
-    let (nd, height) = self.new_node(key, trailer, value_size, f)?;
+    let (nd, height) = self.new_node(&key, trailer, value_size, f).map_err(|e| {
+      key.on_fail(&self.arena);
+      e
+    })?;
+
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -764,7 +781,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
-              let fr = self.find_splice_for_level(trailer.version(), key, i, prev);
+              let fr = self.find_splice_for_level(trailer.version(), key.as_ref(), i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");
@@ -774,6 +791,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   .curr
                   .expect("the current should not be `None` when we found");
                 let old = VersionedEntryRef::from_node(node_ptr, self);
+
+                key.on_fail(&self.arena);
 
                 if upsert {
                   node_ptr
@@ -800,7 +819,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let next_node_ptr = NodePtr::<T>::new(ptr, next);
       let next_node = next_node_ptr.as_ptr();
       let next_node_key = next_node.get_key(&self.arena);
-      if self.cmp.compare(next_node_key, key) == cmp::Ordering::Equal {
+      if self.cmp.compare(next_node_key, key.as_ref()) == cmp::Ordering::Equal {
         self.arena.incr_discard(next_node.size());
       }
     }
@@ -822,6 +841,202 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.arena.update_min_version(version);
     Ok(None)
   }
+
+  // fn update<'a, 'b: 'a, E>(
+  //   &'a self,
+  //   trailer: T,
+  //   key: &'b [u8],
+  //   value_size: u32,
+  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
+  //   ins: &mut Inserter<T>,
+  //   upsert: bool,
+  // ) -> Result<Option<VersionedEntryRef<'a, T, C>>, Either<E, Error>> {
+  //   let version = trailer.version();
+  //   // Safety: a fresh new Inserter, so safe here
+  //   unsafe {
+  //     let (found, ptr) = self.find_splice(version, key, ins, true);
+  //     if found {
+  //       let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
+  //       let old = VersionedEntryRef::from_node(node_ptr, self);
+
+  //       if upsert {
+  //         node_ptr
+  //           .as_ptr()
+  //           .set_value(&self.arena, trailer, value_size, f)?;
+  //       }
+
+  //       return Ok(if old.is_removed() { None } else { Some(old) });
+  //     }
+  //   }
+
+  //   #[cfg(all(test, feature = "std"))]
+  //   if self.yield_now {
+  //     // Add delay to make it easier to test race between this thread
+  //     // and another thread that sees the intermediate state between
+  //     // finding the splice and using it.
+  //     std::thread::yield_now();
+  //   }
+
+  //   let (nd, height) = self.new_node(key, trailer, value_size, f)?;
+  //   // We always insert from the base level and up. After you add a node in base
+  //   // level, we cannot create a node in the level above because it would have
+  //   // discovered the node in the base level.
+  //   let mut invalid_data_splice = false;
+
+  //   for i in 0..(height as usize) {
+  //     let mut prev = ins.spl[i].prev;
+  //     let mut next = ins.spl[i].next;
+
+  //     if prev.is_null() {
+  //       // New node increased the height of the skiplist, so assume that the
+  //       // new level has not yet been populated.
+  //       if !next.is_null() {
+  //         panic!("next is expected to be nil, since prev is nil");
+  //       }
+
+  //       prev = self.head;
+  //       next = self.tail;
+  //     }
+
+  //     // +----------------+     +------------+     +----------------+
+  //     // |      prev      |     |     nd     |     |      next      |
+  //     // | prevNextOffset |---->|            |     |                |
+  //     // |                |<----| prevOffset |     |                |
+  //     // |                |     | nextOffset |---->|                |
+  //     // |                |     |            |<----| nextPrevOffset |
+  //     // +----------------+     +------------+     +----------------+
+  //     //
+  //     // 1. Initialize prevOffset and nextOffset to point to prev and next.
+  //     // 2. CAS prevNextOffset to repoint from next to nd.
+  //     // 3. CAS nextPrevOffset to repoint from prev to nd.
+  //     unsafe {
+  //       loop {
+  //         let prev_offset = prev.offset;
+  //         let next_offset = next.offset;
+  //         nd.write_tower(&self.arena, i, prev_offset, next_offset);
+
+  //         // Check whether next has an updated link to prev. If it does not,
+  //         // that can mean one of two things:
+  //         //   1. The thread that added the next node hasn't yet had a chance
+  //         //      to add the prev link (but will shortly).
+  //         //   2. Another thread has added a new node between prev and next.
+  //         //
+  //         // Safety: we already check next is not null
+  //         let next_prev_offset = next.prev_offset(&self.arena, i);
+  //         if next_prev_offset != prev_offset {
+  //           // Determine whether #1 or #2 is true by checking whether prev
+  //           // is still pointing to next. As long as the atomic operations
+  //           // have at least acquire/release semantics (no need for
+  //           // sequential consistency), this works, as it is equivalent to
+  //           // the "publication safety" pattern.
+  //           let prev_next_offset = prev.next_offset(&self.arena, i);
+  //           if prev_next_offset == next_offset {
+  //             // Ok, case #1 is true, so help the other thread along by
+  //             // updating the next node's prev link.
+  //             let _ = next.cas_prev_offset(
+  //               &self.arena,
+  //               i,
+  //               next_prev_offset,
+  //               prev_offset,
+  //               Ordering::SeqCst,
+  //               Ordering::Acquire,
+  //             );
+  //           }
+  //         }
+
+  //         match prev.cas_next_offset_weak(
+  //           &self.arena,
+  //           i,
+  //           next.offset,
+  //           nd.offset,
+  //           Ordering::SeqCst,
+  //           Ordering::Acquire,
+  //         ) {
+  //           Ok(_) => {
+  //             // Managed to insert nd between prev and next, so update the next
+  //             // node's prev link and go to the next level.
+  //             #[cfg(all(test, feature = "std"))]
+  //             if self.yield_now {
+  //               // Add delay to make it easier to test race between this thread
+  //               // and another thread that sees the intermediate state between
+  //               // setting next and setting prev.
+  //               std::thread::yield_now();
+  //             }
+
+  //             let _ = next.cas_prev_offset(
+  //               &self.arena,
+  //               i,
+  //               prev_offset,
+  //               nd.offset,
+  //               Ordering::SeqCst,
+  //               Ordering::Acquire,
+  //             );
+
+  //             break;
+  //           }
+  //           Err(_) => {
+  //             // CAS failed. We need to recompute prev and next. It is unlikely to
+  //             // be helpful to try to use a different level as we redo the search,
+  //             // because it is unlikely that lots of nodes are inserted between prev
+  //             // and next.
+  //             let fr = self.find_splice_for_level(trailer.version(), key, i, prev);
+  //             if fr.found {
+  //               if i != 0 {
+  //                 panic!("how can another thread have inserted a node at a non-base level?");
+  //               }
+
+  //               let node_ptr = fr
+  //                 .curr
+  //                 .expect("the current should not be `None` when we found");
+  //               let old = VersionedEntryRef::from_node(node_ptr, self);
+
+  //               if upsert {
+  //                 node_ptr
+  //                   .as_ptr()
+  //                   .set_value(&self.arena, trailer, value_size, f)?;
+  //               }
+
+  //               return Ok(if old.is_removed() { None } else { Some(old) });
+  //             }
+
+  //             invalid_data_splice = true;
+  //             prev = fr.splice.prev;
+  //             next = fr.splice.next;
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+
+  //   // Update discard tracker
+  //   unsafe {
+  //     let next = nd.next_offset(&self.arena, 0);
+  //     let ptr = self.arena.get_pointer(next as usize);
+  //     let next_node_ptr = NodePtr::<T>::new(ptr, next);
+  //     let next_node = next_node_ptr.as_ptr();
+  //     let next_node_key = next_node.get_key(&self.arena);
+  //     if self.cmp.compare(next_node_key, key) == cmp::Ordering::Equal {
+  //       self.arena.incr_discard(next_node.size());
+  //     }
+  //   }
+
+  //   // If we had to recompute the splice for a level, invalidate the entire
+  //   // cached splice.
+  //   if invalid_data_splice {
+  //     ins.height = 0;
+  //   } else {
+  //     // The splice was valid. We inserted a node between spl[i].prev and
+  //     // spl[i].next. Optimistically update spl[i].prev for use in a subsequent
+  //     // call to add.
+  //     for i in 0..(height as usize) {
+  //       ins.spl[i].prev = nd;
+  //     }
+  //   }
+  //   self.arena.incr_len();
+  //   self.arena.update_max_version(version);
+  //   self.arena.update_min_version(version);
+  //   Ok(None)
+  // }
 
   fn remove_in<'a, 'b: 'a>(
     &'a self,

@@ -264,14 +264,21 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
-    let copy = |buf: &mut VacantValue| {
+    let copy = |buf: &mut VacantBuffer| {
       let _ = buf.write(value);
       Ok(())
     };
     let val_len = value.len() as u32;
 
     self
-      .update::<Infallible>(trailer, key, val_len, copy, &mut Inserter::default(), true)
+      .update::<Infallible>(
+        trailer,
+        Key::Occupied(key),
+        val_len,
+        copy,
+        &mut Inserter::default(),
+        true,
+      )
       .map(|old| {
         old.and_then(|old| {
           if old.is_removed() {
@@ -285,13 +292,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`insert_with`](SkipMap::insert_with), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_value`](SkipMap::get_or_insert_with_value), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// A placeholder value will be inserted first, then you will get an [`VacantValue`],
-  /// and you must fully fill the value with bytes later in the closure.
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -322,26 +329,33 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let l = SkipMap::new(1000).unwrap();
   ///
-  /// l.insert_with::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
+  /// l.insert_with_value::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// })
   /// .unwrap();
   /// ```
-  pub fn insert_with<'a, 'b: 'a, E>(
+  pub fn insert_with_value<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
     key: &'b [u8],
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
       return Err(Either::Right(Error::Readonly));
     }
 
     self
-      .update(trailer, key, value_size, f, &mut Inserter::default(), true)
+      .update(
+        trailer,
+        Key::Occupied(key),
+        value_size,
+        f,
+        &mut Inserter::default(),
+        true,
+      )
       .map(|old| {
         old.and_then(|old| {
           if old.is_removed() {
@@ -354,6 +368,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
+  ///
   /// Unlike [`insert`](SkipMap::insert), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
@@ -368,14 +383,21 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::Readonly);
     }
 
-    let copy = |buf: &mut VacantValue| {
+    let copy = |buf: &mut VacantBuffer| {
       let _ = buf.write(value);
       Ok(())
     };
     let val_len = value.len() as u32;
 
     self
-      .update::<Infallible>(trailer, key, val_len, copy, &mut Inserter::default(), false)
+      .update::<Infallible>(
+        trailer,
+        Key::Occupied(key),
+        val_len,
+        copy,
+        &mut Inserter::default(),
+        false,
+      )
       .map(|old| {
         old.and_then(|old| {
           if old.is_removed() {
@@ -389,13 +411,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Inserts a new key if it does not yet exist.
-  /// Unlike [`insert_with`](SkipMap::insert_with), this method will not update the value if the key with the given version already exists.
+  ///
+  /// Unlike [`insert_with_value`](SkipMap::insert_with_value), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// A placeholder value will be get_or_inserted first, then you will get an [`VacantValue`],
-  /// and you must fully fill the value with bytes later in the closure.
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -426,26 +449,149 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let l = SkipMap::new(1000).unwrap();
   ///
-  /// l.get_or_insert_with::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
+  /// l.get_or_insert_with_value::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// })
   /// .unwrap();
   /// ```
-  pub fn get_or_insert_with<'a, 'b: 'a, E>(
+  pub fn get_or_insert_with_value<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
     key: &'b [u8],
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
       return Err(Either::Right(Error::Readonly));
     }
 
     self
-      .update(trailer, key, value_size, f, &mut Inserter::default(), false)
+      .update(
+        trailer,
+        Key::Occupied(key),
+        value_size,
+        f,
+        &mut Inserter::default(),
+        false,
+      )
+      .map(|old| {
+        old.and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
+  }
+
+  /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
+  /// Unlike [`get_or_insert_with`](SkipMap::get_or_insert_with), this method will update the value if the key with the given version already exists.
+  ///
+  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
+  /// at this moment.
+  ///
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
+  ///
+  /// - Returns `Ok(None)` if the key was successfully inserted.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
+  ///
+  pub fn insert_with<'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u16,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    val_size: u32,
+    val: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
+  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+    let (key_offset, key_size) = self.arena.alloc_key(key_size).map_err(|e| {
+      self.arena.incr_discard(key_size as u32);
+      Either::Right(e.into())
+    })?;
+
+    let mut vk = unsafe {
+      VacantBuffer::new(
+        key_size as usize,
+        key_offset,
+        self
+          .arena
+          .get_bytes_mut(key_offset as usize, key_size as usize),
+      )
+    };
+    key(&mut vk).map_err(|e| {
+      self.arena.incr_discard(key_size as u32);
+      Either::Left(e)
+    })?;
+
+    self
+      .update(
+        trailer,
+        Key::Vacant(vk),
+        val_size,
+        val,
+        &mut Inserter::default(),
+        true,
+      )
+      .map(|old| {
+        old.and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
+  }
+
+  /// Inserts a new key if it does not yet exist.
+  ///
+  /// Unlike [`insert_with`](SkipMap::insert_with), this method will not update the value if the key with the given version already exists.
+  ///
+  /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
+  /// at this moment.
+  ///
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
+  ///
+  pub fn get_or_insert_with<'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u16,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    val_size: u32,
+    val: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
+  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+    let (key_offset, key_size) = self.arena.alloc_key(key_size).map_err(|e| {
+      self.arena.incr_discard(key_size as u32);
+      Either::Right(e.into())
+    })?;
+
+    let mut vk = unsafe {
+      VacantBuffer::new(
+        key_size as usize,
+        key_offset,
+        self
+          .arena
+          .get_bytes_mut(key_offset as usize, key_size as usize),
+      )
+    };
+    key(&mut vk).map_err(|e| {
+      self.arena.incr_discard(key_size as u32);
+      Either::Left(e)
+    })?;
+
+    self
+      .update(
+        trailer,
+        Key::Vacant(vk),
+        val_size,
+        val,
+        &mut Inserter::default(),
+        false,
+      )
       .map(|old| {
         old.and_then(|old| {
           if old.is_removed() {

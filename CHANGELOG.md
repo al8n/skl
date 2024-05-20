@@ -3,11 +3,11 @@
 ## 0.10.0
 
 - Remove `SkipSet`
-- Add `insert`, `get_or_insert` and `get_or_insert_with` methods
+- Add `insert`, `insert_with`, `insert_with_value`, `get_or_insert`, `get_or_insert` and `get_or_insert_with_value` methods
 - Add `compare_remove` and `get_or_remove` methods
 - Add `Entry` and `VersionedEntry`
 - Add discard states tracker and `discarded` method to let users know how many bytes in ARENA are discarded.
-- Do not panic when users do not fully fill `VacantValue`
+- Rename `OccupiedValue` to `VacantBuffer` and do not panic when users do not fully fill `VacantBuffer`
 - Add `tracing`
 
 ## 0.9.0

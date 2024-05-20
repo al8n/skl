@@ -1853,7 +1853,7 @@ impl Person {
   }
 }
 
-fn get_or_insert_with(l: SkipMap) {
+fn get_or_insert_with_value(l: SkipMap) {
   let alice = Person {
     id: 1,
     name: std::string::String::from("Alice"),
@@ -1861,7 +1861,7 @@ fn get_or_insert_with(l: SkipMap) {
 
   let encoded_size = alice.encoded_size() as u32;
 
-  l.get_or_insert_with::<()>(1, b"alice", encoded_size, |val| {
+  l.get_or_insert_with_value::<()>(1, b"alice", encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1875,7 +1875,7 @@ fn get_or_insert_with(l: SkipMap) {
     let err = val.write(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "VacantValue does not have enough space (remaining 0, want 1)"
+      "buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   })
@@ -1883,30 +1883,32 @@ fn get_or_insert_with(l: SkipMap) {
 }
 
 #[test]
-fn test_get_or_insert_with() {
-  get_or_insert_with(SkipMap::new(ARENA_SIZE).unwrap());
+fn test_get_or_insert_with_value() {
+  get_or_insert_with_value(SkipMap::new(ARENA_SIZE).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_get_or_insert_with_mmap_mut() {
+fn test_get_or_insert_with_value_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
-  let p = dir.path().join("test_skipmap_get_or_insert_with_mmap_mut");
+  let p = dir
+    .path()
+    .join("test_skipmap_get_or_insert_with_value_mmap_mut");
   let open_options = OpenOptions::default()
     .create_new(Some(ARENA_SIZE as u64))
     .read(true)
     .write(true);
   let mmap_options = MmapOptions::default();
-  get_or_insert_with(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
+  get_or_insert_with_value(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_get_or_insert_with_mmap_anon() {
+fn test_get_or_insert_with_value_mmap_anon() {
   let mmap_options = MmapOptions::default().len(ARENA_SIZE);
-  get_or_insert_with(SkipMap::mmap_anon(mmap_options).unwrap());
+  get_or_insert_with_value(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn insert_in(l: SkipMap) {
@@ -1952,7 +1954,7 @@ fn test_insert_in_mmap_anon() {
   insert_in(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
-fn insert_with(l: SkipMap) {
+fn insert_with_value(l: SkipMap) {
   let alice = Person {
     id: 1,
     name: std::string::String::from("Alice"),
@@ -1960,7 +1962,7 @@ fn insert_with(l: SkipMap) {
 
   let encoded_size = alice.encoded_size() as u32;
 
-  l.insert_with::<()>(1, b"alice", encoded_size, |val| {
+  l.insert_with_value::<()>(1, b"alice", encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1974,7 +1976,7 @@ fn insert_with(l: SkipMap) {
     let err = val.write(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "VacantValue does not have enough space (remaining 0, want 1)"
+      "buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   })
@@ -1986,7 +1988,7 @@ fn insert_with(l: SkipMap) {
   };
 
   let old = l
-    .insert_with::<()>(1, b"alice", encoded_size, |val| {
+    .insert_with_value::<()>(1, b"alice", encoded_size, |val| {
       assert_eq!(val.capacity(), encoded_size as usize);
       assert!(val.is_empty());
       val.write(&alice2.id.to_le_bytes()).unwrap();
@@ -2000,7 +2002,7 @@ fn insert_with(l: SkipMap) {
       let err = val.write(&[1]).unwrap_err();
       assert_eq!(
         std::string::ToString::to_string(&err),
-        "VacantValue does not have enough space (remaining 0, want 1)"
+        "buffer does not have enough space (remaining 0, want 1)"
       );
       Ok(())
     })
@@ -2016,30 +2018,32 @@ fn insert_with(l: SkipMap) {
 }
 
 #[test]
-fn test_insert_with() {
-  insert_with(SkipMap::new(ARENA_SIZE).unwrap());
+fn test_insert_with_value() {
+  insert_with_value(SkipMap::new(ARENA_SIZE).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_insert_with_mmap_mut() {
+fn test_insert_with_value_mmap_mut() {
   let dir = tempfile::tempdir().unwrap();
-  let p = dir.path().join("test_skipmap_get_or_insert_with_mmap_mut");
+  let p = dir
+    .path()
+    .join("test_skipmap_get_or_insert_with_value_mmap_mut");
   let open_options = OpenOptions::default()
     .create_new(Some(ARENA_SIZE as u64))
     .read(true)
     .write(true);
   let mmap_options = MmapOptions::default();
-  insert_with(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
+  insert_with_value(SkipMap::mmap_mut(p, open_options, mmap_options).unwrap());
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_insert_with_mmap_anon() {
+fn test_insert_with_value_mmap_anon() {
   let mmap_options = MmapOptions::default().len(ARENA_SIZE);
-  insert_with(SkipMap::mmap_anon(mmap_options).unwrap());
+  insert_with_value(SkipMap::mmap_anon(mmap_options).unwrap());
 }
 
 fn get_or_remove(l: SkipMap) {

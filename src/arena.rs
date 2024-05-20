@@ -454,7 +454,41 @@ impl Arena {
   }
 
   #[cfg(not(feature = "unaligned"))]
-  pub(super) fn alloc_value<T>(&self, size: u32) -> Result<u32, ArenaError> {
+  pub(super) fn alloc_key(&self, size: u16) -> Result<(u32, u16), ArenaError> {
+    let size = size as u64;
+    let header = self.header();
+    let mut current_allocated = header.allocated.load(Ordering::Acquire);
+    if current_allocated + size > self.cap as u64 {
+      return Err(ArenaError);
+    }
+
+    loop {
+      let want = current_allocated + size;
+      match header.allocated.compare_exchange_weak(
+        current_allocated,
+        want,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(current) => {
+          // Return the aligned offset.
+          #[cfg(feature = "tracing")]
+          tracing::trace!("ARENA allocates {} bytes for a key", size);
+          return Ok((current as u32, size as u16));
+        }
+        Err(x) => {
+          if x + size > self.cap as u64 {
+            return Err(ArenaError);
+          }
+
+          current_allocated = x;
+        }
+      }
+    }
+  }
+
+  #[cfg(not(feature = "unaligned"))]
+  pub(super) fn alloc_value<T>(&self, size: u32) -> Result<(u32, u32), ArenaError> {
     let padded = Self::pad_value_and_trailer::<T>(size);
     let header = self.header();
     let mut current_allocated = header.allocated.load(Ordering::Acquire);
@@ -476,7 +510,7 @@ impl Arena {
           let value_offset = (allocated as u32 - size) & !(mem::align_of::<T>() as u32 - 1);
           #[cfg(feature = "tracing")]
           tracing::trace!("ARENA allocates {} bytes for a value", padded);
-          return Ok(value_offset);
+          return Ok((value_offset, padded as u32));
         }
         Err(x) => {
           if x + padded > self.cap as u64 {

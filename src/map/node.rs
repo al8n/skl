@@ -375,8 +375,7 @@ impl<T: Trailer> Node<T> {
       #[cfg(not(feature = "unaligned"))]
       ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
 
-      let ptr = arena.get_pointer_mut(value_offset as usize);
-      let trailer_ptr = ptr as *mut T;
+      let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
       #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
 
@@ -445,8 +444,7 @@ impl<T: Trailer> Node<T> {
       #[cfg(not(feature = "unaligned"))]
       ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
 
-      let ptr = arena.get_pointer_mut(value_offset as usize);
-      let trailer_ptr = ptr as *mut T;
+      let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
       #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
 
@@ -511,8 +509,7 @@ impl<T: Trailer> Node<T> {
       #[cfg(not(feature = "unaligned"))]
       ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
 
-      let ptr = arena.get_pointer_mut(value_offset as usize);
-      let trailer_ptr = ptr as *mut T;
+      let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
       #[cfg(not(feature = "unaligned"))]
       ptr::write(trailer_ptr, trailer);
       arena.incr_discard(allocated);

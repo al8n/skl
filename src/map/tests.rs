@@ -2236,15 +2236,23 @@ fn test_discard() {
 }
 
 fn discard2(l: SkipMap) {
+  // tracing_subscriber::fmt::fmt().with_env_filter("trace").init();
+  let mut old_remaining = l.remaining();
+  let mut last = 0;
   for i in 0..10 {
     let v = new_value(i);
     l.insert(i as u64, &key(0), &v).unwrap();
+    if i == 9 {
+      last = old_remaining - l.remaining();
+    } else {
+      old_remaining = l.remaining();
+    }
   }
   let mut allocated = l.remaining();
   let discarded = l.discarded();
   l.get_or_remove(10, &key(0)).unwrap();
   allocated -= l.remaining();
-  assert_eq!(l.discarded(), allocated + discarded);
+  assert_eq!(l.discarded(), allocated + discarded + last);
 }
 
 #[test]

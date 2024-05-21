@@ -4,7 +4,7 @@
 
 - Remove `SkipSet`
 - Add `insert`, `insert_with`, `insert_with_value`, `get_or_insert`, `get_or_insert` and `get_or_insert_with_value` methods
-- Add `compare_remove` and `get_or_remove` methods
+- Add `compare_remove`, `compare_remove_with`, `compare_remove_in_place`, `compare_remove_with_in_place`, `get_or_remove` and `get_or_remove_with` methods
 - Add `Entry` and `VersionedEntry`
 - Add discard states tracker and `discarded` method to let users know how many bytes in ARENA are discarded.
 - Rename `OccupiedValue` to `VacantBuffer` and do not panic when users do not fully fill `VacantBuffer`
@@ -50,7 +50,7 @@
 ## 0.8.0
 
 - Make `SkipMap::insert` and `SkipSet::insert` return the current value if the key and trailer already exist.
-- Add the `SkipMap::insert_with` method to support inserting an occupied key first, then write the value in the closure semantic.
+- Add the `SkipMap::insert_with` method to support inserting an vacant key first, then write the value in the closure semantic.
 
 ## 0.7.0
 

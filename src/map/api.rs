@@ -282,11 +282,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Key::Occupied(key),
         val_len,
         copy,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
         true,
+        false,
       )
       .map(|old| {
-        old.and_then(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
             None
           } else {
@@ -359,11 +362,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Key::Occupied(key),
         value_size,
         f,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
         true,
+        false,
       )
       .map(|old| {
-        old.and_then(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
             None
           } else {
@@ -401,11 +407,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Key::Occupied(key),
         val_len,
         copy,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
+        false,
         false,
       )
       .map(|old| {
-        old.and_then(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
             None
           } else {
@@ -479,11 +488,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Key::Occupied(key),
         value_size,
         f,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
+        false,
         false,
       )
       .map(|old| {
-        old.and_then(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
             None
           } else {
@@ -505,6 +517,42 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// struct Person {
+  ///   id: u32,
+  ///   name: String,
+  /// }
+  ///
+  /// impl Person {
+  ///   fn encoded_size(&self) -> usize {
+  ///     4 + self.name.len()
+  ///   }
+  /// }
+  ///
+  ///
+  /// let alice = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let encoded_size = alice.encoded_size();
+  ///
+  /// let l = SkipMap::new(1000).unwrap();
+  ///
+  /// l.insert_with::<core::convert::Infallible>(1, 5, |key| {
+  ///   key.write(b"alice").unwrap();
+  ///   Ok(())
+  /// }, encoded_size as u32, |mut val| {
+  ///   val.write(&alice.id.to_le_bytes()).unwrap();
+  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   Ok(())
+  /// })
+  /// .unwrap();
+  /// ```
   pub fn insert_with<'a, E>(
     &'a self,
     trailer: T,
@@ -538,11 +586,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Key::Vacant(vk),
         val_size,
         val,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
         true,
+        false,
       )
       .map(|old| {
-        old.and_then(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
             None
           } else {
@@ -562,6 +613,42 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// struct Person {
+  ///   id: u32,
+  ///   name: String,
+  /// }
+  ///
+  /// impl Person {
+  ///   fn encoded_size(&self) -> usize {
+  ///     4 + self.name.len()
+  ///   }
+  /// }
+  ///
+  ///
+  /// let alice = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let encoded_size = alice.encoded_size();
+  ///
+  /// let l = SkipMap::new(1000).unwrap();
+  ///
+  /// l.get_or_insert_with::<core::convert::Infallible>(1, 5, |key| {
+  ///   key.write(b"alice").unwrap();
+  ///   Ok(())
+  /// }, encoded_size as u32, |mut val| {
+  ///   val.write(&alice.id.to_le_bytes()).unwrap();
+  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   Ok(())
+  /// })
+  /// .unwrap();
+  /// ```
   pub fn get_or_insert_with<'a, E>(
     &'a self,
     trailer: T,
@@ -595,11 +682,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Key::Vacant(vk),
         val_size,
         val,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
+        false,
         false,
       )
       .map(|old| {
-        old.and_then(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
             None
           } else {
@@ -628,15 +718,18 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     failure: Ordering,
   ) -> Result<Either<Option<EntryRef<'a, T, C>>, EntryRef<'a, T, C>>, Error> {
     self
-      .remove_in(
+      .update(
         trailer,
-        key,
-        &mut Inserter::default(),
+        Key::Remove(key),
+        0,
+        copier::<Infallible>,
         success,
         failure,
+        &mut Inserter::default(),
+        true,
         true,
       )
-      .map(|res| match res {
+      .map(|res| match res.expect_right("remove must get RemoveOk") {
         Either::Left(old) => match old {
           Some(old) => {
             if old.is_removed() {
@@ -664,6 +757,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           }
         },
       })
+      .map_err(|e| e.expect_right("must be map::Error"))
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -677,15 +771,18 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
     self
-      .remove_in(
+      .update(
         trailer,
-        key,
+        Key::Remove(key),
+        0,
+        copier::<Infallible>,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
         &mut Inserter::default(),
-        Ordering::Relaxed,
-        Ordering::Relaxed,
         false,
+        true,
       )
-      .map(|res| match res {
+      .map(|res| match res.expect_right("remove must get RemoveOk") {
         Either::Left(old) => match old {
           Some(old) => {
             if old.is_removed() {
@@ -698,6 +795,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         },
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
+      .map_err(|e| e.expect_right("must be map::Error"))
   }
 
   /// Returns true if the key exists in the map.

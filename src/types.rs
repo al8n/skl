@@ -169,13 +169,19 @@ impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantBuffer<'a> {
 pub(crate) enum Key<'a, 'b: 'a> {
   Occupied(&'b [u8]),
   Vacant(VacantBuffer<'a>),
+  Remove(&'b [u8]),
+  #[allow(dead_code)]
+  RemoveVacant(VacantBuffer<'a>),
 }
 
 impl<'a, 'b: 'a> Key<'a, 'b> {
   #[inline]
   pub(crate) fn on_fail(&self, arena: &crate::arena::Arena) {
-    if let Self::Vacant(key) = self {
-      arena.incr_discard(key.cap as u32);
+    match self {
+      Self::Occupied(_) | Self::Remove(_) => {}
+      Self::Vacant(key) | Self::RemoveVacant(key) => {
+        arena.incr_discard(key.cap as u32);
+      }
     }
   }
 }
@@ -186,6 +192,8 @@ impl<'a, 'b: 'a> AsRef<[u8]> for Key<'a, 'b> {
     match self {
       Self::Occupied(key) => key,
       Self::Vacant(key) => key.as_ref(),
+      Self::Remove(key) => key,
+      Self::RemoveVacant(key) => key.as_ref(),
     }
   }
 }

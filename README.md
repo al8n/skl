@@ -45,6 +45,7 @@
 - **Extensible for Key-Value Database Developers:** Designed as a low-level crate, SkipMap offer a flexible foundation for key-value database developers. You can easily build your own memtable or write-ahead-log (WAL) using these structures.
 - **Memory Efficiency:** These data structures are optimized for minimal memory overhead. They operate around references, avoiding unnecessary allocations and deep copies, which can be crucial for efficient memory usage.
 - **Efficient Iteration:** Enjoy fast forward and backward iteration through the elements in your SkipMap. Additionally, bounded iterators are supported, allowing you to traverse only a specified range of elements efficiently.
+- **Discard tracker:** Builtin discard tracker to help decide when to compact or rewrite.
 - **Snapshot Support:** Create snapshots of your SkipMap, offering a read-only view of the contents at a specific moment in time. Snapshots provide a consistent view of the data, enabling implementations of transactional semantics and other use cases where data consistency is crucial.
 - **Memory Management Options:**
   - **Heap Allocation:** Memory allocation is handled by Rust's allocator, ensuring all data resides in RAM.

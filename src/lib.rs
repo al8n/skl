@@ -92,7 +92,7 @@ const PROBABILITIES: [u32; MAX_HEIGHT] = {
 
 /// Comparator is used for key-value database developers to define their own key comparison logic.
 /// e.g. some key-value database developers may want to alpabetically comparation
-pub trait Comparator {
+pub trait Comparator: core::fmt::Debug {
   /// Compares two byte slices.
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
 

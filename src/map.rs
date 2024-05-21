@@ -29,12 +29,10 @@ mod tests;
 #[cfg(all(test, loom))]
 mod loom;
 
-type RemoveOk<'a, 'b, T, C> = Either<
+type UpdateOk<'a, 'b, T, C> = Either<
   Option<VersionedEntryRef<'a, T, C>>,
   Result<VersionedEntryRef<'a, T, C>, VersionedEntryRef<'a, T, C>>,
 >;
-type InsertOk<'a, T, C> = Option<VersionedEntryRef<'a, T, C>>;
-type UpdateOk<'a, 'b, T, C> = Either<InsertOk<'a, T, C>, RemoveOk<'a, 'b, T, C>>;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration. Keys and values are immutable once added to the skipmap and
@@ -641,7 +639,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     failure: Ordering,
     ins: &mut Inserter<T>,
     upsert: bool,
-    remove: bool,
   ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {
     let version = trailer.version();
 
@@ -658,14 +655,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           return self.upsert(
             old, node_ptr, &key, trailer, value_size, f, success, failure,
           );
-        }
-
-        if remove {
-          return Ok(Either::Right(Either::Left(if old.is_removed() {
-            None
-          } else {
-            Some(old)
-          })));
         }
 
         return Ok(Either::Left(if old.is_removed() {
@@ -809,14 +798,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   );
                 }
 
-                if remove {
-                  return Ok(Either::Right(Either::Left(if old.is_removed() {
-                    None
-                  } else {
-                    Some(old)
-                  })));
-                }
-
                 return Ok(Either::Left(if old.is_removed() {
                   None
                 } else {
@@ -861,10 +842,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.arena.update_max_version(version);
     self.arena.update_min_version(version);
 
-    if remove {
-      return Ok(Either::Right(Either::Left(None)));
-    }
-
     Ok(Either::Left(None))
   }
 
@@ -879,7 +856,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Either<InsertOk<'a, T, C>, RemoveOk<'a, 'b, T, C>>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) => node_ptr
         .as_ptr()
@@ -892,24 +869,24 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           Ok((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);
             let value = node.get_value_by_offset(&self.arena, offset, len);
-            Ok(Either::Right(Either::Right(Ok(VersionedEntryRef {
+            Ok(Either::Right(Ok(VersionedEntryRef {
               map: self,
               key,
               trailer,
               value,
               ptr: node_ptr,
-            }))))
+            })))
           }
           Err((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);
             let value = node.get_value_by_offset(&self.arena, offset, len);
-            Ok(Either::Right(Either::Right(Err(VersionedEntryRef {
+            Ok(Either::Right(Err(VersionedEntryRef {
               map: self,
               key,
               trailer,
               value,
               ptr: node_ptr,
-            }))))
+            })))
           }
         }
       }

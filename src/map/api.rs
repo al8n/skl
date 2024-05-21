@@ -286,7 +286,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         &mut Inserter::default(),
         true,
-        false,
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
@@ -366,7 +365,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         &mut Inserter::default(),
         true,
-        false,
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
@@ -410,7 +408,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         Ordering::Relaxed,
         &mut Inserter::default(),
-        false,
         false,
       )
       .map(|old| {
@@ -491,7 +488,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         Ordering::Relaxed,
         &mut Inserter::default(),
-        false,
         false,
       )
       .map(|old| {
@@ -590,7 +586,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         &mut Inserter::default(),
         true,
-        false,
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
@@ -686,7 +681,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         &mut Inserter::default(),
         false,
-        false,
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
@@ -727,9 +721,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         failure,
         &mut Inserter::default(),
         true,
-        true,
       )
-      .map(|res| match res.expect_right("remove must get RemoveOk") {
+      .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
             if old.is_removed() {
@@ -780,9 +773,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         Ordering::Relaxed,
         &mut Inserter::default(),
         false,
-        true,
       )
-      .map(|res| match res.expect_right("remove must get RemoveOk") {
+      .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
             if old.is_removed() {

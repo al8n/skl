@@ -557,24 +557,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     val_size: u32,
     val: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    let (key_offset, key_size) = self.arena.alloc_key(key_size).map_err(|e| {
-      self.arena.incr_discard(key_size as u32);
-      Either::Right(e.into())
-    })?;
-
-    let mut vk = unsafe {
-      VacantBuffer::new(
-        key_size as usize,
-        key_offset,
-        self
-          .arena
-          .get_bytes_mut(key_offset as usize, key_size as usize),
-      )
-    };
-    key(&mut vk).map_err(|e| {
-      self.arena.incr_discard(key_size as u32);
-      Either::Left(e)
-    })?;
+    let vk = self.fetch_vacant_key(key_size, key)?;
 
     self
       .update(
@@ -652,24 +635,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     val_size: u32,
     val: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    let (key_offset, key_size) = self.arena.alloc_key(key_size).map_err(|e| {
-      self.arena.incr_discard(key_size as u32);
-      Either::Right(e.into())
-    })?;
-
-    let mut vk = unsafe {
-      VacantBuffer::new(
-        key_size as usize,
-        key_offset,
-        self
-          .arena
-          .get_bytes_mut(key_offset as usize, key_size as usize),
-      )
-    };
-    key(&mut vk).map_err(|e| {
-      self.arena.incr_discard(key_size as u32);
-      Either::Left(e)
-    })?;
+    let vk = self.fetch_vacant_key(key_size, key)?;
 
     self
       .update(
@@ -716,7 +682,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         trailer,
         Key::Remove(key),
         0,
-        copier::<Infallible>,
+        noop::<Infallible>,
         success,
         failure,
         &mut Inserter::default(),
@@ -768,7 +734,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         trailer,
         Key::Remove(key),
         0,
-        copier::<Infallible>,
+        noop::<Infallible>,
         Ordering::Relaxed,
         Ordering::Relaxed,
         &mut Inserter::default(),
@@ -788,6 +754,48 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
       .map_err(|e| e.expect_right("must be map::Error"))
+  }
+
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  pub fn get_or_remove_with<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u16,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+    let vk = self.fetch_vacant_key(key_size, key)?;
+
+    self
+      .update(
+        trailer,
+        Key::RemoveVacant(vk),
+        0,
+        noop::<Infallible>,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+        &mut Inserter::default(),
+        false,
+      )
+      .map(|res| match res {
+        Either::Left(old) => match old {
+          Some(old) => {
+            self.arena.incr_discard(key_size as u32);
+
+            if old.is_removed() {
+              None
+            } else {
+              Some(EntryRef(old))
+            }
+          }
+          None => None,
+        },
+        _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
+      })
+      .map_err(|e| Either::Right(e.expect_right("must be map::Error")))
   }
 
   /// Returns true if the key exists in the map.

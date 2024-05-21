@@ -628,6 +628,33 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
   }
 
+  fn fetch_vacant_key<'a, 'b: 'a, E>(
+    &'a self,
+    key_size: u16,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<VacantBuffer<'a>, Either<E, Error>> {
+    let (key_offset, key_size) = self.arena.alloc_key(key_size).map_err(|e| {
+      self.arena.incr_discard(key_size as u32);
+      Either::Right(e.into())
+    })?;
+
+    let mut vk = unsafe {
+      VacantBuffer::new(
+        key_size as usize,
+        key_offset,
+        self
+          .arena
+          .get_bytes_mut(key_offset as usize, key_size as usize),
+      )
+    };
+    key(&mut vk)
+      .map_err(|e| {
+        self.arena.incr_discard(key_size as u32);
+        Either::Left(e)
+      })
+      .map(|_| vk)
+  }
+
   #[allow(clippy::too_many_arguments)]
   fn update<'a, 'b: 'a, E>(
     &'a self,
@@ -862,9 +889,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         .as_ptr()
         .set_value(&self.arena, trailer, value_size, f)
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
-      Key::Remove(key) => {
+      Key::Remove(_) | Key::RemoveVacant(_) => {
         let node = node_ptr.as_ptr();
-
+        let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);
@@ -890,7 +917,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           }
         }
       }
-      Key::RemoveVacant(_) => unreachable!(),
     }
   }
 }
@@ -937,6 +963,6 @@ struct FindResult<T> {
 
 #[cold]
 #[inline(never)]
-fn copier<E>(_: &mut VacantBuffer<'_>) -> Result<(), E> {
+fn noop<E>(_: &mut VacantBuffer<'_>) -> Result<(), E> {
   Ok(())
 }

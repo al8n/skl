@@ -761,6 +761,45 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  ///
+  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
+  /// at this moment.
+  ///
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// struct Person {
+  ///   id: u32,
+  ///   name: String,
+  /// }
+  ///
+  /// impl Person {
+  ///   fn encoded_size(&self) -> usize {
+  ///     4 + self.name.len()
+  ///   }
+  /// }
+  ///
+  ///
+  /// let alice = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let encoded_size = alice.encoded_size();
+  ///
+  /// let l = SkipMap::new(1000).unwrap();
+  ///
+  /// l.get_or_remove_with::<core::convert::Infallible>(1, 5, |key| {
+  ///   key.write(b"alice").unwrap();
+  ///   Ok(())
+  /// })
+  /// .unwrap();
+  /// ```
   pub fn get_or_remove_with<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,

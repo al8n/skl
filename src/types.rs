@@ -176,11 +176,11 @@ pub(crate) enum Key<'a, 'b: 'a> {
 
 impl<'a, 'b: 'a> Key<'a, 'b> {
   #[inline]
-  pub(crate) fn on_fail(&self, arena: &crate::arena::Arena) {
+  pub(crate) fn on_fail(&self, arena: &super::Arena) {
     match self {
       Self::Occupied(_) | Self::Remove(_) => {}
       Self::Vacant(key) | Self::RemoveVacant(key) => {
-        arena.incr_discard(key.cap as u32);
+        // arena.incr_discard(key.cap as u32);
       }
     }
   }

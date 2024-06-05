@@ -2,7 +2,7 @@
 #![cfg_attr(not(all(feature = "std", test)), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
-#![deny(missing_docs, warnings)]
+#![deny(missing_docs)]
 #![allow(
   unexpected_cfgs,
   clippy::type_complexity,
@@ -18,7 +18,7 @@ extern crate std;
 
 use core::{cmp, ops::RangeBounds};
 
-mod arena;
+// mod arena;
 
 mod align8vp;
 use align8vp::Pointer;
@@ -30,17 +30,16 @@ mod types;
 pub use types::*;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-mod options;
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-pub use options::{MmapOptions, OpenOptions};
+pub use rarena_allocator::{MmapOptions, OpenOptions};
+
+pub use rarena_allocator::{Arena, ArenaError, ArenaOptions};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::Error {
   std::io::Error::new(std::io::ErrorKind::InvalidData, e)
 }
 
-pub use arena::ArenaError;
 pub use map::{AllVersionsIter, SkipMap};
 
 const MAX_HEIGHT: usize = 20;
@@ -161,14 +160,6 @@ unsafe impl Trailer for u64 {
   }
 }
 
-mod alloc {
-  #[cfg(not(loom))]
-  pub(crate) use std::alloc::{alloc_zeroed, dealloc, Layout};
-
-  #[cfg(loom)]
-  pub(crate) use loom::alloc::{alloc_zeroed, dealloc, Layout};
-}
-
 mod sync {
   #[derive(Debug)]
   #[repr(C)]
@@ -189,26 +180,20 @@ mod sync {
     }
   }
 
-  #[cfg(not(loom))]
+  #[cfg(not(feature = "loom"))]
   pub(crate) use core::sync::atomic::*;
 
-  #[cfg(loom)]
+  #[cfg(feature = "loom")]
   pub(crate) use loom::sync::atomic::*;
 
-  #[cfg(loom)]
-  pub(crate) trait AtomicMut<T> {}
-
-  #[cfg(loom)]
-  impl<T> AtomicMut<T> for AtomicPtr<T> {}
-
-  #[cfg(not(loom))]
+  #[cfg(not(feature = "loom"))]
   pub(crate) trait AtomicMut<T> {
     fn with_mut<F, R>(&mut self, f: F) -> R
     where
       F: FnOnce(&mut *mut T) -> R;
   }
 
-  #[cfg(not(loom))]
+  #[cfg(not(feature = "loom"))]
   impl<T> AtomicMut<T> for AtomicPtr<T> {
     fn with_mut<F, R>(&mut self, f: F) -> R
     where

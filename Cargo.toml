@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 rust-version = "1.56.0"
 repository = "https://github.com/al8n/skl-rs"
@@ -32,13 +32,13 @@ required-features = ["memmap"]
 
 [features]
 default = ["std"]
-alloc = []
-memmap = ["memmap2", "fs4", "std"]
-std = ["rand/default", "either/default"]
+alloc = ["rarena-allocator/alloc"]
+memmap = ["rarena-allocator/memmap", "std"]
+std = ["rand/default", "either/default", "rarena-allocator/std"]
 tracing = ["dep:tracing"]
 
-[target.'cfg(loom)'.dependencies]
-loom = "0.7"
+loom = ["dep:loom", "rarena-allocator/loom"]
+
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
@@ -48,9 +48,9 @@ crossbeam-utils = { version = "0.8", default-features = false }
 either = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 
-fs4 = { version = "0.8", optional = true }
-memmap2 = { version = "0.9", optional = true }
+rarena-allocator = { path = "../arena/rarena-allocator", default-features = false }
 
+loom = { version = "0.7", optional = true }
 tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]

@@ -19,6 +19,9 @@ pub enum Error {
 
   /// Readonly skipmap
   Readonly,
+
+  /// Arena too small
+  ArenaTooSmall,
 }
 
 impl core::fmt::Display for Error {
@@ -29,6 +32,7 @@ impl core::fmt::Display for Error {
       Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
       Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
       Self::Readonly => write!(f, "skipmap is read only"),
+      Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
     }
   }
 }

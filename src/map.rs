@@ -1,15 +1,18 @@
 use core::{
   cmp,
   convert::Infallible,
+  marker::PhantomData,
+  mem,
   ops::{Bound, RangeBounds},
+  ptr::{self, NonNull},
 };
 
-use crate::{Key, Trailer, VacantBuffer};
+use crate::{align8vp::Pointer, Key, Trailer, VacantBuffer};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use super::{invalid_data, MmapOptions, OpenOptions};
 
-use super::{arena::Arena, sync::Ordering, Ascend, Comparator, MAX_HEIGHT};
+use super::{sync::*, Arena, Ascend, Comparator, MAX_HEIGHT};
 
 mod api;
 
@@ -22,6 +25,7 @@ mod entry;
 pub use entry::*;
 mod iterator;
 pub use iterator::*;
+use rarena_allocator::ArenaError;
 
 #[cfg(all(test, not(loom)))]
 mod tests;
@@ -34,6 +38,85 @@ type UpdateOk<'a, 'b, T, C> = Either<
   Result<VersionedEntryRef<'a, T, C>, VersionedEntryRef<'a, T, C>>,
 >;
 
+#[derive(Debug)]
+#[repr(C)]
+struct Meta {
+  /// The maximum MVCC version of the skiplist. CAS.
+  max_version: AtomicU64,
+  /// The minimum MVCC version of the skiplist. CAS.
+  min_version: AtomicU64,
+  /// Current height. 1 <= height <= kMaxHeight. CAS.
+  height: AtomicU32,
+  len: AtomicU32,
+}
+
+impl Meta {
+  #[inline]
+  fn max_version(&self) -> u64 {
+    self.max_version.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn min_version(&self) -> u64 {
+    self.min_version.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn height(&self) -> u32 {
+    self.height.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn len(&self) -> u32 {
+    self.len.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn increase_len(&self) {
+    self.len.fetch_add(1, Ordering::Release);
+  }
+
+  fn update_max_version(&self, version: u64) {
+    let mut current = self.max_version.load(Ordering::Acquire);
+
+    loop {
+      if version <= current {
+        return;
+      }
+
+      match self.max_version.compare_exchange_weak(
+        current,
+        version,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(_) => break,
+        Err(v) => current = v,
+      }
+    }
+  }
+
+  fn update_min_version(&self, version: u64) {
+    let mut current = self.min_version.load(Ordering::Acquire);
+
+    loop {
+      if version >= current {
+        return;
+      }
+
+      match self.min_version.compare_exchange_weak(
+        current,
+        version,
+        Ordering::SeqCst,
+        Ordering::Acquire,
+      ) {
+        Ok(_) => break,
+        Err(v) => current = v,
+      }
+    }
+  }
+}
+
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration. Keys and values are immutable once added to the skipmap and
 /// deletion is not supported. Instead, higher-level code is expected to add new
@@ -43,6 +126,7 @@ type UpdateOk<'a, 'b, T, C> = Either<
 #[derive(Debug)]
 pub struct SkipMap<T = u64, C = Ascend> {
   arena: Arena,
+  meta: NonNull<Meta>,
   head: NodePtr<T>,
   tail: NodePtr<T>,
 
@@ -64,6 +148,7 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
+      meta: self.meta,
       head: self.head,
       tail: self.tail,
       ro: self.ro,
@@ -76,16 +161,16 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
 
 impl<T, C> SkipMap<T, C> {
   fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
+    Self::check_capacity(&arena)?;
+
     if ro {
-      let (ptr, offset) = arena.head_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
-      let head = NodePtr::new(ptr, offset);
-      let (ptr, offset) = arena.tail_ptr::<T>(Node::<T>::MAX_NODE_SIZE as u32, Node::<T>::ALIGN);
-      let tail = NodePtr::new(ptr, offset);
-      return Ok(Self::construct(arena, head, tail, ro, cmp));
+      let (meta, head, tail) = Self::get_pointers(&arena);
+      return Ok(Self::construct(arena, meta, head, tail, ro, cmp));
     }
 
-    let head = Node::new_empty_node_ptr(&arena)?;
-    let tail = Node::new_empty_node_ptr(&arena)?;
+    let meta = Self::allocate_meta(&arena)?;
+    let head = Self::allocate_full_node(&arena)?;
+    let tail = Self::allocate_full_node(&arena)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -99,13 +184,115 @@ impl<T, C> SkipMap<T, C> {
       }
     }
 
-    Ok(Self::construct(arena, head, tail, ro, cmp))
+    Ok(Self::construct(arena, meta, head, tail, ro, cmp))
   }
 
   #[inline]
-  fn construct(arena: Arena, head: NodePtr<T>, tail: NodePtr<T>, ro: bool, cmp: C) -> Self {
+  const fn check_capacity(arena: &Arena) -> Result<(), Error> {
+    let offset = arena.data_offset();
+
+    let alignment = mem::align_of::<Meta>();
+    let meta_offset = (offset + alignment - 1) & !(alignment - 1);
+    let meta_end = meta_offset + mem::size_of::<Meta>();
+
+    let alignment = mem::align_of::<Node<T>>();
+    let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
+    let head_end = head_offset + mem::size_of::<Node<T>>() + mem::size_of::<[Link; MAX_HEIGHT]>();
+    let trailer_alignment = mem::align_of::<T>();
+    let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+    let trailer_end = trailer_offset + mem::size_of::<T>();
+
+    let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
+    let tail_end = tail_offset + mem::size_of::<Node<T>>() + mem::size_of::<[Link; MAX_HEIGHT]>();
+    let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+    let trailer_end = trailer_offset + mem::size_of::<T>();
+
+    if trailer_end > arena.capacity() {
+      return Err(Error::ArenaTooSmall);
+    }
+
+    Ok(())
+  }
+
+  fn allocate_full_node(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
+    let mut node = arena.alloc::<Node<T>>()?;
+    let mut links = arena.alloc::<[Link; MAX_HEIGHT]>()?;
+    let mut trailer = arena.alloc::<T>()?;
+
+    // Safety: node and trailer do not need to be dropped.
+    unsafe {
+      node.detach();
+      links.detach();
+      trailer.detach();
+
+      // initialize the links
+      core::ptr::write_bytes(links.as_mut_ptr().as_ptr(), 0, MAX_HEIGHT);
+    }
+
+    node.write(Node::full(trailer.offset() as u32));
+
+    Ok(NodePtr::new(
+      node.as_mut_ptr().as_ptr() as _,
+      node.offset() as u32,
+    ))
+  }
+
+  #[inline]
+  fn allocate_meta(arena: &Arena) -> Result<NonNull<Meta>, ArenaError> {
+    let mut meta = arena.alloc::<Meta>()?;
+    // Safety: meta does not need to be dropped.
+    unsafe {
+      meta.detach();
+    }
+    meta.write(Meta {
+      max_version: AtomicU64::new(0),
+      min_version: AtomicU64::new(0),
+      height: AtomicU32::new(1),
+      len: AtomicU32::new(0),
+    });
+    Ok(meta.as_mut_ptr())
+  }
+
+  #[inline]
+  fn get_meta_ptr(arena: &Arena) -> NonNull<Meta> {
+    let data_offset = arena.data_offset();
+    unsafe { arena.get_aligned_pointer(data_offset) }
+  }
+
+  #[inline]
+  fn get_pointers(arena: &Arena) -> (NonNull<Meta>, NodePtr<T>, NodePtr<T>) {
+    unsafe {
+      let offset = arena.data_offset();
+      let meta = arena.get_aligned_pointer::<Meta>(offset);
+
+      let offset = arena.offset(meta.as_ptr() as _) + mem::size_of::<Meta>();
+      let head_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
+      let head_ptr = head_ptr.as_ptr();
+      let head_offset = arena.offset(head_ptr as _);
+      let head = NodePtr::new(head_ptr as _, head_offset as u32);
+
+      let (trailer_offset, _) = head.as_ptr().value.load(Ordering::Relaxed);
+      let offset = trailer_offset as usize + mem::size_of::<T>();
+      let tail_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
+      let tail_ptr = tail_ptr.as_ptr();
+      let tail_offset = arena.offset(tail_ptr as _);
+      let tail = NodePtr::new(tail_ptr as _, tail_offset as u32);
+      (meta, head, tail)
+    }
+  }
+
+  #[inline]
+  fn construct(
+    arena: Arena,
+    meta: NonNull<Meta>,
+    head: NodePtr<T>,
+    tail: NodePtr<T>,
+    ro: bool,
+    cmp: C,
+  ) -> Self {
     Self {
       arena,
+      meta,
       head,
       tail,
       ro,
@@ -113,6 +300,12 @@ impl<T, C> SkipMap<T, C> {
       yield_now: false,
       cmp,
     }
+  }
+
+  #[inline]
+  fn meta(&self) -> &Meta {
+    // Safety: the pointer is well aligned and initialized.
+    unsafe { self.meta.as_ref() }
   }
 }
 
@@ -152,7 +345,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
     while height > list_height {
-      match self.arena.atomic_height().compare_exchange_weak(
+      match self.meta().height.compare_exchange_weak(
         list_height,
         height,
         Ordering::SeqCst,
@@ -634,7 +827,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<VacantBuffer<'a>, Either<E, Error>> {
     let (key_offset, key_size) = self.arena.alloc_key(key_size).map_err(|e| {
-      self.arena.incr_discard(key_size as u32);
+      self.arena.increase_discarded(key_size as usize);
       Either::Right(e.into())
     })?;
 
@@ -649,7 +842,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     };
     key(&mut vk)
       .map_err(|e| {
-        self.arena.incr_discard(key_size as u32);
+        self.arena.increase_discarded(key_size);
         Either::Left(e)
       })
       .map(|_| vk)
@@ -865,9 +1058,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         ins.spl[i].prev = nd;
       }
     }
-    self.arena.incr_len();
-    self.arena.update_max_version(version);
-    self.arena.update_min_version(version);
+    self.meta().increase_len();
+    self.meta().update_max_version(version);
+    self.meta().update_min_version(version);
 
     Ok(Either::Left(None))
   }

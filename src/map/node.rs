@@ -139,7 +139,7 @@ pub(super) struct Node<T> {
   pub(super) key_size: u16,
   pub(super) height: u8,
   pub(super) magic: u8,
-  trailer: PhantomData<T>,
+  pub(super) trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will
@@ -160,6 +160,18 @@ impl<T> Node<T> {
   pub(super) const ALIGN: u32 = mem::align_of::<Self>() as u32;
 
   pub(super) const MAX_NODE_SIZE: u64 = (Self::SIZE + MAX_HEIGHT * Link::SIZE) as u64;
+
+  #[inline]
+  pub(super) fn full(value_offset: u32) -> Self {
+    Self {
+      value: Pointer::new(value_offset, 0),
+      key_offset: 0,
+      key_size: 0,
+      height: MAX_HEIGHT as u8,
+      magic: 0,
+      trailer: PhantomData,
+    }
+  }
 
   #[inline]
   pub(super) const fn min_cap() -> usize {

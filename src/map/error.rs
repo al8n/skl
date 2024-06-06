@@ -1,12 +1,10 @@
-use crate::ArenaError;
-
 /// Error type for the [`SkipMap`](crate::SkipMap).
 ///
 /// [`SkipMap`]: crate::SkipMap
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
   /// Indicates that the arena is full
-  Full(ArenaError),
+  Arena(rarena_allocator::Error),
 
   /// Indicates that the value is too large to be stored in the [`SkipMap`](super::SkipMap).
   ValueTooLarge(u64),
@@ -17,9 +15,6 @@ pub enum Error {
   /// Indicates that the entry is too large to be stored in the [`SkipMap`](super::SkipMap).
   EntryTooLarge(u64),
 
-  /// Readonly skipmap
-  Readonly,
-
   /// Arena too small
   ArenaTooSmall,
 }
@@ -27,11 +22,10 @@ pub enum Error {
 impl core::fmt::Display for Error {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     match self {
-      Self::Full(e) => write!(f, "{e}"),
+      Self::Arena(e) => write!(f, "{e}"),
       Self::ValueTooLarge(size) => write!(f, "value size {} is too large", size),
       Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
       Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
-      Self::Readonly => write!(f, "skipmap is read only"),
       Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
     }
   }
@@ -40,9 +34,17 @@ impl core::fmt::Display for Error {
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
-impl From<ArenaError> for Error {
-  fn from(e: ArenaError) -> Self {
-    Self::Full(e)
+impl From<rarena_allocator::Error> for Error {
+  fn from(e: rarena_allocator::Error) -> Self {
+    Self::Arena(e)
+  }
+}
+
+impl Error {
+  /// Returns a read only error.
+  #[inline]
+  pub const fn read_only() -> Self {
+    Self::Arena(rarena_allocator::Error::ReadOnly)
   }
 }
 
@@ -62,8 +64,11 @@ fn test_fmt() {
     "entry size 10 is too large"
   );
   assert_eq!(
-    std::format!("{}", Error::Full(ArenaError)),
+    std::format!("{}", Error::Arena(rarena_allocator::Error::ReadOnly)),
     "allocation failed because arena is full",
   );
-  assert_eq!(std::format!("{}", Error::Readonly), "skipmap is read only");
+  assert_eq!(
+    std::format!("{}", Error::Arena(rarena_allocator::Error::ReadOnly)),
+    "Arena is read-only"
+  );
 }

@@ -33,7 +33,7 @@ pub use types::*;
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
 pub use rarena_allocator::{MmapOptions, OpenOptions};
 
-pub use rarena_allocator::{Arena, ArenaError, ArenaOptions};
+pub use rarena_allocator::{Arena, ArenaOptions, Error};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::Error {

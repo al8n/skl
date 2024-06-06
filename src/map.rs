@@ -25,7 +25,8 @@ mod entry;
 pub use entry::*;
 mod iterator;
 pub use iterator::*;
-use rarena_allocator::ArenaError;
+
+use rarena_allocator::Error as ArenaError;
 
 #[cfg(all(test, not(loom)))]
 mod tests;
@@ -129,13 +130,11 @@ pub struct SkipMap<T = u64, C = Ascend> {
   meta: NonNull<Meta>,
   head: NodePtr<T>,
   tail: NodePtr<T>,
-
+  data_offset: u32,
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
   yield_now: bool,
-
-  ro: bool,
 
   cmp: C,
 }
@@ -151,7 +150,7 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
       meta: self.meta,
       head: self.head,
       tail: self.tail,
-      ro: self.ro,
+      data_offset: self.data_offset,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
       cmp: self.cmp.clone(),
@@ -160,12 +159,12 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
 }
 
 impl<T, C> SkipMap<T, C> {
-  fn new_in(arena: Arena, cmp: C, ro: bool) -> Result<Self, Error> {
-    Self::check_capacity(&arena)?;
+  fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
+    let data_offset = Self::check_capacity(&arena)?;
 
-    if ro {
+    if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
-      return Ok(Self::construct(arena, meta, head, tail, ro, cmp));
+      return Ok(Self::construct(arena, meta, head, tail, data_offset, cmp));
     }
 
     let meta = Self::allocate_meta(&arena)?;
@@ -184,11 +183,13 @@ impl<T, C> SkipMap<T, C> {
       }
     }
 
-    Ok(Self::construct(arena, meta, head, tail, ro, cmp))
+    Ok(Self::construct(arena, meta, head, tail, data_offset, cmp))
   }
 
+  /// Checks if the arena has enough capacity to store the skiplist,
+  /// and returns the data offset.
   #[inline]
-  const fn check_capacity(arena: &Arena) -> Result<(), Error> {
+  const fn check_capacity(arena: &Arena) -> Result<u32, Error> {
     let offset = arena.data_offset();
 
     let alignment = mem::align_of::<Meta>();
@@ -199,81 +200,100 @@ impl<T, C> SkipMap<T, C> {
     let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
     let head_end = head_offset + mem::size_of::<Node<T>>() + mem::size_of::<[Link; MAX_HEIGHT]>();
     let trailer_alignment = mem::align_of::<T>();
-    let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-    let trailer_end = trailer_offset + mem::size_of::<T>();
+    let trailer_size = mem::size_of::<T>();
+    let trailer_end = if trailer_size != 0 {
+      let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+      trailer_offset + trailer_size
+    } else {
+      head_end
+    };
 
     let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
     let tail_end = tail_offset + mem::size_of::<Node<T>>() + mem::size_of::<[Link; MAX_HEIGHT]>();
-    let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-    let trailer_end = trailer_offset + mem::size_of::<T>();
+
+    let trailer_end = if trailer_size != 0 {
+      let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+      trailer_offset + trailer_size
+    } else {
+      tail_end
+    };
 
     if trailer_end > arena.capacity() {
       return Err(Error::ArenaTooSmall);
     }
 
-    Ok(())
+    Ok(trailer_end as u32)
   }
 
   fn allocate_full_node(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
-    let mut node = arena.alloc::<Node<T>>()?;
-    let mut links = arena.alloc::<[Link; MAX_HEIGHT]>()?;
-    let mut trailer = arena.alloc::<T>()?;
-
-    // Safety: node and trailer do not need to be dropped.
+    // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
     unsafe {
+      let mut node = arena.alloc::<Node<T>>()?;
+      let mut links = arena.alloc::<[Link; MAX_HEIGHT]>()?;
+
+      // Safety: node and trailer do not need to be dropped.
+
       node.detach();
       links.detach();
-      trailer.detach();
+
+      let trailer_offset = if mem::size_of::<T>() != 0 {
+        let mut trailer = arena.alloc::<T>()?;
+        trailer.detach();
+        trailer.offset()
+      } else {
+        arena.allocated() as usize
+      };
 
       // initialize the links
       core::ptr::write_bytes(links.as_mut_ptr().as_ptr(), 0, MAX_HEIGHT);
+
+      node.write(Node::full(trailer_offset as u32));
+
+      Ok(NodePtr::new(
+        node.as_mut_ptr().as_ptr() as _,
+        node.offset() as u32,
+      ))
     }
-
-    node.write(Node::full(trailer.offset() as u32));
-
-    Ok(NodePtr::new(
-      node.as_mut_ptr().as_ptr() as _,
-      node.offset() as u32,
-    ))
   }
 
   #[inline]
   fn allocate_meta(arena: &Arena) -> Result<NonNull<Meta>, ArenaError> {
-    let mut meta = arena.alloc::<Meta>()?;
-    // Safety: meta does not need to be dropped.
+    // Safety: meta does not need to be dropped, and it is recoverable.
     unsafe {
+      let mut meta = arena.alloc::<Meta>()?;
       meta.detach();
+
+      meta.write(Meta {
+        max_version: AtomicU64::new(0),
+        min_version: AtomicU64::new(0),
+        height: AtomicU32::new(1),
+        len: AtomicU32::new(0),
+      });
+      Ok(meta.as_mut_ptr())
     }
-    meta.write(Meta {
-      max_version: AtomicU64::new(0),
-      min_version: AtomicU64::new(0),
-      height: AtomicU32::new(1),
-      len: AtomicU32::new(0),
-    });
-    Ok(meta.as_mut_ptr())
   }
 
   #[inline]
   fn get_meta_ptr(arena: &Arena) -> NonNull<Meta> {
     let data_offset = arena.data_offset();
-    unsafe { arena.get_aligned_pointer(data_offset) }
+    unsafe { arena.get_aligned_pointer_mut(data_offset) }
   }
 
   #[inline]
   fn get_pointers(arena: &Arena) -> (NonNull<Meta>, NodePtr<T>, NodePtr<T>) {
     unsafe {
       let offset = arena.data_offset();
-      let meta = arena.get_aligned_pointer::<Meta>(offset);
+      let meta = arena.get_aligned_pointer_mut::<Meta>(offset);
 
       let offset = arena.offset(meta.as_ptr() as _) + mem::size_of::<Meta>();
-      let head_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
+      let head_ptr = arena.get_aligned_pointer_mut::<Node<T>>(offset);
       let head_ptr = head_ptr.as_ptr();
       let head_offset = arena.offset(head_ptr as _);
       let head = NodePtr::new(head_ptr as _, head_offset as u32);
 
       let (trailer_offset, _) = head.as_ptr().value.load(Ordering::Relaxed);
       let offset = trailer_offset as usize + mem::size_of::<T>();
-      let tail_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
+      let tail_ptr = arena.get_aligned_pointer_mut::<Node<T>>(offset);
       let tail_ptr = tail_ptr.as_ptr();
       let tail_offset = arena.offset(tail_ptr as _);
       let tail = NodePtr::new(tail_ptr as _, tail_offset as u32);
@@ -287,7 +307,7 @@ impl<T, C> SkipMap<T, C> {
     meta: NonNull<Meta>,
     head: NodePtr<T>,
     tail: NodePtr<T>,
-    ro: bool,
+    data_offset: u32,
     cmp: C,
   ) -> Self {
     Self {
@@ -295,7 +315,7 @@ impl<T, C> SkipMap<T, C> {
       meta,
       head,
       tail,
-      ro,
+      data_offset,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
       cmp,
@@ -1042,7 +1062,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let next_node = next_node_ptr.as_ptr();
       let next_node_key = next_node.get_key(&self.arena);
       if self.cmp.compare(next_node_key, key.as_ref()) == cmp::Ordering::Equal {
-        self.arena.incr_discard(next_node.size());
+        self.arena.increase_discarded(next_node.size());
       }
     }
 

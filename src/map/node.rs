@@ -197,36 +197,6 @@ impl<T> Node<T> {
     }
   }
 
-  pub(super) fn new_empty_node_ptr(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
-    // Compute the amount of the tower that will never be used, since the height
-    // is less than maxHeight.
-    let AllocMeta {
-      node_offset,
-      value_offset,
-      allocated: _,
-    } = arena.alloc::<T>(Self::max_node_size(), 0, Self::ALIGN, 0)?;
-
-    // Safety: we have check the offset is valid
-    unsafe {
-      let ptr = arena.get_pointer_mut(node_offset as usize);
-      // Safety: the node is well aligned
-      let node = &mut *(ptr as *mut Node<T>);
-      let trailer_ptr = arena.get_pointer_mut(value_offset as usize);
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write_bytes(trailer_ptr as *mut T, 0, 1);
-
-      node.value = Pointer::new(value_offset, 0);
-      node.key_offset = 0;
-      node.key_size = 0;
-      node.height = MAX_HEIGHT as u8;
-
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, MAX_HEIGHT);
-
-      Ok(NodePtr::new(ptr, node_offset))
-    }
-  }
-
   #[inline]
   pub(super) fn set_value<'a, E>(
     &self,

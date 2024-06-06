@@ -3,6 +3,54 @@ use rarena_allocator::ArenaOptions;
 use super::*;
 
 impl<T, C> SkipMap<T, C> {
+  /// Returns the underlying ARENA allocator used by the skipmap.
+  ///
+  /// This is a low level API, you should not use this method unless you know what you are doing.
+  ///
+  /// By default, `skl` does not do any forward and backward compatibility checks when using file backed memory map,
+  /// so this will allow the users to access the ARENA allocator directly, and allocate some bytes or structures
+  /// to help them implement forward and backward compatibility checks.
+  ///
+  /// # Example
+  ///
+  /// ```ignore
+  /// use skl::{SkipMap, OpenOptions, MmapOptinos};
+  ///
+  /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
+  ///
+  /// struct Meta {
+  ///   magic: u32,
+  ///   version: u32,
+  /// }
+  ///
+  /// let map = SkipMap::map_mut(
+  ///   "/path/to/file",
+  ///   OpenOptions::create_new(Some(1000)).read(true).write(true),
+  ///   MmapOptions::default(),
+  /// ).unwrap();
+  /// let arena = map.allocater();
+  /// let mut meta = arena.alloc::<Meta>();
+  ///
+  /// // Safety: Meta does not require any drop, so it is safe to detach it from the ARENA.
+  /// unsafe { meta.detach(); }
+  /// meta.write(Meta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
+  /// ```
+  #[inline]
+  pub const fn allocator(&self) -> &Arena {
+    &self.arena
+  }
+
+  /// Returns the offset of the data section in the `SkipMap`.
+  ///
+  /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,
+  /// and the data section will be allocated after the tail node.
+  ///
+  /// This method will return the offset of the data section in the ARENA.
+  #[inline]
+  pub const fn data_offset(&self) -> usize {
+    self.data_offset as usize
+  }
+
   /// Returns the height of the highest tower within any of the nodes that
   /// have ever been allocated as part of this skiplist.
   #[inline]
@@ -48,7 +96,7 @@ impl<T, C> SkipMap<T, C> {
 
   /// Returns how many bytes are discarded by the ARENA.
   #[inline]
-  pub fn discarded(&self) -> usize {
+  pub fn discarded(&self) -> u32 {
     self.arena.discarded()
   }
 
@@ -231,16 +279,30 @@ impl<T, C> SkipMap<T, C> {
   /// Clear the skiplist to empty and re-initialize.
   ///
   /// # Safety
-  /// This mehod is not concurrency safe, invokers must ensure that no other threads are accessing the skipmap.
+  /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
+  /// - This method is not thread-safe.
+  ///
+  /// # Example
+  ///
+  /// Undefine behavior:
+  ///
+  /// ```ignore
+  /// let map = SkipMap::new(1000).unwrap();
+  ///
+  /// map.insert(1, b"hello", b"world").unwrap();
+  ///
+  /// let data = map.get(b"hello").unwrap();
+  ///
+  /// map.clear().unwrap();
+  ///
+  /// let w = data[0]; // undefined behavior
+  /// ```
   pub unsafe fn clear(&mut self) -> Result<(), Error> {
-    if self.ro {
-      return Err(Error::Readonly);
-    }
+    self.arena.clear()?;
 
-    let head = Node::new_empty_node_ptr(&self.arena)
-      .expect("arena is not large enough to hold the head node");
-    let tail = Node::new_empty_node_ptr(&self.arena)
-      .expect("arena is not large enough to hold the tail node");
+    Self::allocate_meta(&self.arena)?;
+    let head = Self::allocate_full_node(&self.arena)?;
+    let tail = Self::allocate_full_node(&self.arena)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -256,7 +318,6 @@ impl<T, C> SkipMap<T, C> {
 
     self.head = head;
     self.tail = tail;
-    self.arena.clear();
     Ok(())
   }
 }
@@ -273,8 +334,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
-    if self.ro {
-      return Err(Error::Readonly);
+    if self.arena.read_only() {
+      return Err(Error::read_only());
     }
 
     let copy = |buf: &mut VacantBuffer| {
@@ -359,7 +420,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
-      return Err(Either::Right(Error::Readonly));
+      return Err(Either::Right(Error::read_only()));
     }
 
     self
@@ -397,7 +458,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
     if self.ro {
-      return Err(Error::Readonly);
+      return Err(Error::read_only());
     }
 
     let copy = |buf: &mut VacantBuffer| {
@@ -483,7 +544,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
     if self.ro {
-      return Err(Either::Right(Error::Readonly));
+      return Err(Either::Right(Error::read_only()));
     }
 
     self
@@ -829,7 +890,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            self.arena.incr_discard(key_size as u32);
+            self.arena.increase_discarded(key_size as u32);
 
             if old.is_removed() {
               None

@@ -159,14 +159,14 @@ impl SkipMap {
   /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
   ///
   /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///   Even if we are working with raw pointers with `Box::into_raw`,
-  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///   especially if you're frequently accessing or modifying it.
+  ///    Even if we are working with raw pointers with `Box::into_raw`,
+  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///    especially if you're frequently accessing or modifying it.
   ///
   /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
-  ///   If you require very large contiguous memory regions, `mmap` might be more suitable because
-  ///   it's more direct in requesting large chunks of memory from the OS.
+  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
+  ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// [`SkipMap::mmap_anon`]: #method.mmap_anon
   pub fn new(cap: usize) -> Result<Self, Error> {
@@ -207,14 +207,14 @@ impl SkipMap {
   /// **What the difference between this method and [`SkipMap::new`]?**
   ///
   /// 1. This method will use mmap anonymous to require memory from the OS directly.
-  ///   If you require very large contiguous memory regions, this method might be more suitable because
-  ///   it's more direct in requesting large chunks of memory from the OS.
+  ///    If you require very large contiguous memory regions, this method might be more suitable because
+  ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///   Even if we are working with raw pointers with `Box::into_raw`,
-  ///   the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///   when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///   especially if you're frequently accessing or modifying it.
+  ///    Even if we are working with raw pointers with `Box::into_raw`,
+  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///    especially if you're frequently accessing or modifying it.
   ///
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -244,7 +244,6 @@ impl<T, C> SkipMap<T, C> {
     cmp: C,
   ) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
-    let min_cap = Node::<T>::min_cap();
     let opts = ArenaOptions::new().with_maximum_alignment(alignment);
     let arena = Arena::map_mut(path, opts, open_options, mmap_options)?;
     Self::new_in(arena, cmp).map_err(invalid_data)
@@ -259,8 +258,6 @@ impl<T, C> SkipMap<T, C> {
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::ALIGN as usize;
-    let min_cap = Node::<T>::min_cap();
     let arena = Arena::map(path, open_options, mmap_options)?;
     Self::new_in(arena, cmp).map_err(invalid_data)
   }
@@ -270,7 +267,6 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
-    let min_cap = Node::<T>::min_cap();
     let opts = ArenaOptions::new().with_maximum_alignment(alignment);
     let arena = Arena::map_anon(opts, mmap_options)?;
     Self::new_in(arena, cmp).map_err(invalid_data)
@@ -731,13 +727,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
   ///
-  ///
   /// - Returns `Ok(Either::Left(None))`:
   ///   - if the key with the given version does not exist in the skipmap.
   ///   - if the key with the given version already exists and the entry is already removed.
   /// - Returns `Ok(Either::Left(Some(old)))` if the key with the given version already exists and the entry is successfully removed.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  /// and the entry is not successfully removed because of an update on this entry happens in another thread.
+  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
     trailer: T,

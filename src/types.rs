@@ -177,17 +177,30 @@ pub(crate) enum Key<'a, 'b: 'a> {
   Remove(&'b [u8]),
   #[allow(dead_code)]
   RemoveVacant(VacantBuffer<'a>),
+  RemovePointer {
+    arena: &'a super::Arena,
+    offset: u32,
+    len: u32,
+  },
 }
 
 impl<'a, 'b: 'a> Key<'a, 'b> {
   #[inline]
   pub(crate) fn on_fail(&self, arena: &super::Arena) {
     match self {
-      Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } => {}
+      Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } | Self::RemovePointer { .. } => {}
       Self::Vacant(key) | Self::RemoveVacant(key) => unsafe {
         arena.dealloc(key.offset, key.cap as u32);
       },
     }
+  }
+
+  #[inline]
+  pub(crate) fn is_remove(&self) -> bool {
+    matches!(
+      self,
+      Self::Remove(_) | Self::RemoveVacant(_) | Self::RemovePointer { .. }
+    )
   }
 }
 
@@ -195,13 +208,11 @@ impl<'a, 'b: 'a> AsRef<[u8]> for Key<'a, 'b> {
   #[inline]
   fn as_ref(&self) -> &[u8] {
     match self {
-      Self::Occupied(key) => key,
-      Self::Vacant(key) => key.as_ref(),
-      Self::Pointer { arena, offset, len } => unsafe {
+      Self::Occupied(key) | Self::Remove(key) => key,
+      Self::Vacant(key) | Self::RemoveVacant(key) => key.as_ref(),
+      Self::Pointer { arena, offset, len } | Self::RemovePointer { arena, offset, len } => unsafe {
         arena.get_bytes(*offset as usize, *len as usize)
       },
-      Self::Remove(key) => key,
-      Self::RemoveVacant(key) => key.as_ref(),
     }
   }
 }

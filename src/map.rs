@@ -1,7 +1,6 @@
 use core::{
   cmp,
   convert::Infallible,
-  marker::PhantomData,
   mem,
   ops::{Bound, RangeBounds},
   ptr::{self, NonNull},
@@ -261,7 +260,7 @@ impl<T, C> SkipMap<T, C> {
       let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
       let mut key = self
         .arena
-        .alloc_bytes(key_size as u32)
+        .alloc_bytes(key_size)
         .map_err(|e| Either::Right(e.into()))?;
       let key_offset = key.offset();
       let key_cap = key.capacity();
@@ -284,7 +283,7 @@ impl<T, C> SkipMap<T, C> {
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size = key_cap as u16;
       node_ref.height = height as u8;
-      ptr::write_bytes(node_ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       key.detach();
       let (_, key_deallocate_info) = self
@@ -313,13 +312,13 @@ impl<T, C> SkipMap<T, C> {
     }
   }
 
+  #[allow(unused)]
   fn allocate_key_node<'a, 'b: 'a, E>(
     &'a self,
     height: u32,
+    trailer: T,
     key_size: u32,
     kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-    value_offset: u32,
-    value_size: u32,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     if height < 1 || height > MAX_HEIGHT as u32 {
       panic!("height cannot be less than one or greater than the max height");
@@ -344,18 +343,18 @@ impl<T, C> SkipMap<T, C> {
       let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
       let mut key = self
         .arena
-        .alloc_bytes(key_size as u32)
+        .alloc_bytes(key_size)
         .map_err(|e| Either::Right(e.into()))?;
       let key_offset = key.offset();
       let key_cap = key.capacity();
 
       // Safety: the node is well aligned
       let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(value_offset as u32, value_size);
+      node_ref.value = AtomicValuePointer::new(value_offset, 0);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size = key_cap as u16;
       node_ref.height = height as u8;
-      ptr::write_bytes(node_ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       key.detach();
       let (_, key_deallocate_info) = self
@@ -420,10 +419,10 @@ impl<T, C> SkipMap<T, C> {
       // Safety: the node is well aligned
       let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
-      node_ref.key_offset = key_offset as u32;
+      node_ref.key_offset = key_offset;
       node_ref.key_size = key_size as u16;
       node_ref.height = height as u8;
-      ptr::write_bytes(node_ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       trailer_and_value.detach();
       let (_, value_deallocate_info) = self
@@ -465,7 +464,7 @@ impl<T, C> SkipMap<T, C> {
         trailer.detach();
         trailer.offset()
       } else {
-        arena.allocated() as usize
+        arena.allocated()
       };
 
       // initialize the links
@@ -566,12 +565,6 @@ impl<T, C> SkipMap<T, C> {
   }
 
   #[inline]
-  fn get_meta_ptr(arena: &Arena) -> NonNull<Meta> {
-    let data_offset = arena.data_offset();
-    unsafe { arena.get_aligned_pointer_mut(data_offset) }
-  }
-
-  #[inline]
   fn get_pointers(arena: &Arena) -> (NonNull<Meta>, NodePtr<T>, NodePtr<T>) {
     unsafe {
       let offset = arena.data_offset();
@@ -650,18 +643,21 @@ impl<T: Trailer, C> SkipMap<T, C> {
         offset,
         len,
       } => self.allocate_value_node(height, trailer, *len, *offset, value_size, f)?,
-      // Key::Remove(key) => {
-      //   Node::new_remove_node_ptr(&self.arena, height, key, trailer).map_err(Either::Right)?
-      // }
-      // Key::RemoveVacant(key) => Node::new_remove_node_ptr_with_key(
-      //   &self.arena,
-      //   height,
-      //   key.offset,
-      //   key.len() as u16,
-      //   trailer,
-      // )
-      // .map_err(Either::Right)?,
-      _ => todo!(),
+      Key::Remove(key) => {
+        Node::new_remove_node_ptr(&self.arena, height, key, trailer).map_err(Either::Right)?;
+        self.allocate_key_node(height, trailer, key_size, kf)
+      }
+      Key::RemoveVacant(key) => Node::new_remove_node_ptr_with_key(
+        &self.arena,
+        height,
+        key.offset,
+        key.len() as u16,
+        trailer,
+      )
+      .map_err(Either::Right)?,
+      Key::RemovePointer { arena, offset, len } => {
+        todo!()
+      }
     };
 
     // Try to increase self.height via CAS.
@@ -1235,12 +1231,23 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
     let k = match found_key {
       None => key,
-      Some(k) => Key::Pointer {
-        arena: &self.arena,
-        offset: k.offset,
-        len: k.size,
-      },
+      Some(k) => {
+        if key.is_remove() {
+          Key::RemovePointer {
+            arena: &self.arena,
+            offset: k.offset,
+            len: k.size,
+          }
+        } else {
+          Key::Pointer {
+            arena: &self.arena,
+            offset: k.offset,
+            len: k.size,
+          }
+        }
+      }
     };
+
     let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, f).map_err(|e| {
       k.on_fail(&self.arena);
       e
@@ -1418,20 +1425,21 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         .as_ptr()
         .set_value(&self.arena, trailer, value_size, f)
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
-      Key::Remove(_) | Key::RemoveVacant(_) => {
+      Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = node_ptr.as_ptr();
         let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
-          Ok((offset, len)) => {
-            let trailer = node.get_trailer_by_offset(&self.arena, offset);
-            let value = node.get_value_by_offset(&self.arena, offset, len);
-            Ok(Either::Right(Ok(VersionedEntryRef {
-              map: self,
-              key,
-              trailer,
-              value,
-              ptr: node_ptr,
-            })))
+          Ok(_) => {
+            // let trailer = node.get_trailer_by_offset(&self.arena, offset);
+            // let value = node.get_value_by_offset(&self.arena, offset, len);
+            // Ok(Either::Right(Ok(VersionedEntryRef {
+            //   map: self,
+            //   key,
+            //   trailer,
+            //   value,
+            //   ptr: node_ptr,
+            // })))
+            Ok(Either::Left(None))
           }
           Err((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);

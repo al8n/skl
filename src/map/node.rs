@@ -6,7 +6,7 @@ use super::*;
 
 #[derive(Debug)]
 pub(crate) struct NodePtr<T> {
-  pub(super) ptr: *const Node<T>,
+  pub(super) ptr: *mut Node<T>,
   pub(super) offset: u32,
 }
 
@@ -20,12 +20,12 @@ impl<T> Copy for NodePtr<T> {}
 
 impl<T> NodePtr<T> {
   pub(super) const NULL: Self = Self {
-    ptr: ptr::null(),
+    ptr: ptr::null_mut(),
     offset: 0,
   };
 
   #[inline]
-  pub(super) const fn new(ptr: *const u8, offset: u32) -> Self {
+  pub(super) const fn new(ptr: *mut u8, offset: u32) -> Self {
     Self {
       ptr: ptr.cast(),
       offset,
@@ -40,8 +40,15 @@ impl<T> NodePtr<T> {
   /// ## Safety
   /// - the pointer must be valid
   #[inline]
-  pub(super) const unsafe fn as_ptr(&self) -> &Node<T> {
+  pub(super) unsafe fn as_ref(&self) -> &Node<T> {
     &*self.ptr.cast()
+  }
+
+  /// ## Safety
+  /// - the pointer must be valid
+  #[inline]
+  pub(super) unsafe fn as_mut(&self) -> &mut Node<T> {
+    &mut *self.ptr.cast()
   }
 
   #[inline]

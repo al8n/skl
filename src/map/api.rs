@@ -922,7 +922,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let n = n?;
-      let node = n.as_ptr();
+      let node = n.as_ref();
       let node_key = node.get_key(&self.arena);
       let (trailer, value) = node.get_value_and_trailer(&self.arena);
       if eq {

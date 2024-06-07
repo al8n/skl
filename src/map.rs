@@ -576,7 +576,7 @@ impl<T, C> SkipMap<T, C> {
       let head_offset = arena.offset(head_ptr as _);
       let head = NodePtr::new(head_ptr as _, head_offset as u32);
 
-      let (trailer_offset, _) = head.as_ptr().value.load(Ordering::Relaxed);
+      let (trailer_offset, _) = head.as_ref().value.load(Ordering::Relaxed);
       let offset = trailer_offset as usize + mem::size_of::<T>();
       let tail_ptr = arena.get_aligned_pointer_mut::<Node<T>>(offset);
       let tail_ptr = tail_ptr.as_ptr();
@@ -689,7 +689,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
 
     let offset = nd.prev_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
+    let ptr = self.arena.get_pointer_mut(offset as usize);
     NodePtr::new(ptr, offset)
   }
 
@@ -702,7 +702,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return NodePtr::NULL;
     }
     let offset = nptr.next_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
+    let ptr = self.arena.get_pointer_mut(offset as usize);
     NodePtr::new(ptr, offset)
   }
 
@@ -716,7 +716,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
 
     unsafe {
-      let node = nd.as_ptr();
+      let node = nd.as_ref();
       let curr_key = node.get_key(&self.arena);
       self.ge(version, curr_key)
     }
@@ -732,7 +732,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
 
     unsafe {
-      let node = nd.as_ptr();
+      let node = nd.as_ref();
       let curr_key = node.get_key(&self.arena);
       self.le(version, curr_key)
     }
@@ -821,7 +821,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     let mut prev = self.get_prev(curr, 0);
 
     loop {
-      let curr_node = curr.as_ptr();
+      let curr_node = curr.as_ref();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is greater than the given version, we should return.
       let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
@@ -837,7 +837,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
-      let prev_node = prev.as_ptr();
+      let prev_node = prev.as_ref();
       let prev_key = prev_node.get_key(&self.arena);
       if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {
         return Some(curr);
@@ -862,7 +862,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     let mut next = self.get_next(curr, 0);
 
     loop {
-      let curr_node = curr.as_ptr();
+      let curr_node = curr.as_ref();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
       let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
@@ -878,7 +878,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return None;
       }
 
-      let next_node = next.as_ptr();
+      let next_node = next.as_ref();
       let next_key = next_node.get_key(&self.arena);
       let version_cmp = next_node.get_trailer(&self.arena).version().cmp(&version);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
@@ -942,7 +942,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         return (Some(x), false);
       }
 
-      let next_node = next.as_ptr();
+      let next_node = next.as_ref();
       let next_key = next_node.get_key(&self.arena);
       let cmp = self
         .cmp
@@ -1092,7 +1092,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
 
       // offset is not zero, so we can safely dereference the next node ptr.
-      let next_node = next.as_ptr();
+      let next_node = next.as_ref();
       let next_key = next_node.get_key(&self.arena);
 
       let cmp = self.cmp.compare(key, next_key);
@@ -1229,7 +1229,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       std::thread::yield_now();
     }
 
-    let k = match found_key {
+    let mut k = match found_key {
       None => key,
       Some(k) => {
         if key.is_remove() {
@@ -1380,6 +1380,18 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 }));
               }
 
+              if let Some(p) = fr.found_key {
+                k.on_fail(&self.arena);
+                let node = nd.as_mut();
+                node.key_offset = p.offset;
+                node.key_size = p.size as u16;
+                k = Key::Pointer {
+                  arena: &self.arena,
+                  offset: p.offset,
+                  len: p.size,
+                };
+              }
+
               invalid_data_splice = true;
               prev = fr.splice.prev;
               next = fr.splice.next;
@@ -1422,11 +1434,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => node_ptr
-        .as_ptr()
+        .as_ref()
         .set_value(&self.arena, trailer, value_size, f)
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
-        let node = node_ptr.as_ptr();
+        let node = node_ptr.as_ref();
         let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => {

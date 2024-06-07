@@ -90,7 +90,7 @@ impl<'a, T: Copy, C> VersionedEntryRef<'a, T, C> {
     map: &'a SkipMap<T, C>,
   ) -> VersionedEntryRef<'a, T, C> {
     unsafe {
-      let node = node_ptr.as_ptr();
+      let node = node_ptr.as_ref();
       let (trailer, value) = node.get_value_and_trailer(&map.arena);
       VersionedEntryRef {
         key: node.get_key(&map.arena),
@@ -161,9 +161,9 @@ impl<'a, T: Clone, C> From<&'a VersionedEntry<T, C>> for VersionedEntryRef<'a, T
 impl<T, C> VersionedEntry<T, C> {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &[u8] {
+  pub fn key(&self) -> &[u8] {
     unsafe {
-      let node = self.ptr.as_ptr();
+      let node = self.ptr.as_ref();
       node.get_key(&self.map.arena)
     }
   }
@@ -172,7 +172,7 @@ impl<T, C> VersionedEntry<T, C> {
   #[inline]
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
-      let node = self.ptr.as_ptr();
+      let node = self.ptr.as_ref();
       let value = node.get_value(&self.map.arena);
       value
     }
@@ -230,7 +230,7 @@ impl<'a, T: Clone, C> From<&'a Entry<T, C>> for EntryRef<'a, T, C> {
 impl<T, C> Entry<T, C> {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &[u8] {
+  pub fn key(&self) -> &[u8] {
     self.0.key()
   }
 

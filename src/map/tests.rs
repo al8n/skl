@@ -33,6 +33,13 @@ fn make_value(i: usize) -> std::vec::Vec<u8> {
   format!("v{:05}", i).into_bytes()
 }
 
+#[test]
+fn test_node_ptr_clone() {
+  let node_ptr = NodePtr::<u8>::NULL;
+  #[allow(clippy::clone_on_copy)]
+  let _ = node_ptr.clone();
+}
+
 fn empty_in(l: SkipMap) {
   let mut it = l.iter_all_versions(0);
 

@@ -1,19 +1,19 @@
 use crate::sync::{AtomicU64, Ordering};
 
 #[repr(C, align(8))]
-pub(crate) struct Pointer(AtomicU64);
+pub(crate) struct AtomicValuePointer(AtomicU64);
 
-impl core::fmt::Debug for Pointer {
+impl core::fmt::Debug for AtomicValuePointer {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let (offset, len) = decode_value(self.0.load(Ordering::Relaxed));
-    f.debug_struct("Pointer")
+    f.debug_struct("AtomicValuePointer")
       .field("offset", &offset)
       .field("len", &len)
       .finish()
   }
 }
 
-impl Pointer {
+impl AtomicValuePointer {
   #[inline]
   pub(crate) fn new(offset: u32, len: u32) -> Self {
     Self(AtomicU64::new(encode_value(offset, len)))

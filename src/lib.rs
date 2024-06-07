@@ -18,11 +18,6 @@ extern crate std;
 
 use core::{cmp, ops::RangeBounds};
 
-// mod arena;
-
-mod align8vp;
-use align8vp::AtomicValuePointer;
-
 /// A map implementation based on skiplist
 pub mod map;
 

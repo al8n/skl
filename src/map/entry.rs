@@ -1,6 +1,6 @@
 use core::cmp;
 
-use super::{node::NodePtr, Comparator, SkipMap, Trailer};
+use super::{Comparator, NodePtr, SkipMap, Trailer};
 
 /// A versioned entry reference of the skipmap.
 ///

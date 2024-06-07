@@ -274,57 +274,6 @@ impl<T> Node<T> {
         arena.dealloc(offset, (mem::size_of::<T>() as u32) + size);
       })
   }
-
-  // pub(super) fn new_value<'a, E>(
-  //   arena: &'a Arena,
-  //   trailer: T,
-  //   value_size: u32,
-  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  // ) -> Result<(u32, u32), Either<E, Error>> {
-  //   if value_size as u64 > u32::MAX as u64 {
-  //     return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
-  //   }
-
-  //   let (value_offset, allocated) = arena
-  //     .alloc_value::<T>(value_size)
-  //     .map_err(|e: ArenaError| Either::Right(e.into()))?;
-
-  //   // Safety: we have check the offset is valid
-  //   unsafe {
-  //     let ptr = arena.get_pointer_mut(value_offset as usize);
-  //     let trailer_ptr = ptr as *mut T;
-  //     #[cfg(not(feature = "unaligned"))]
-  //     ptr::write(trailer_ptr, trailer);
-
-  //     let val = core::slice::from_raw_parts_mut(ptr.add(mem::size_of::<T>()), value_size as usize);
-  //     let value_size =
-  //       Self::fill_vacant_value(arena, value_size, value_offset, val, f).map_err(|e| {
-  //         arena.incr_discard(allocated);
-  //         Either::Left(e)
-  //       })?;
-  //     Ok((value_offset, value_size))
-  //   }
-  // }
-
-  // #[inline]
-  // unsafe fn fill_vacant_value<'a, E>(
-  //   arena: &'a Arena,
-  //   value_size: u32,
-  //   value_offset: u32,
-  //   buf: &'a mut [u8],
-  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  // ) -> Result<u32, E> {
-  //   let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
-  //   f(&mut oval)?;
-  //   let remaining = oval.remaining();
-  //   if remaining != 0 {
-  //     #[cfg(feature = "tracing")]
-  //     tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-
-  //     arena.incr_discard(remaining as u32);
-  //   }
-  //   Ok(oval.len() as u32)
-  // }
 }
 
 impl<T: Trailer> Node<T> {

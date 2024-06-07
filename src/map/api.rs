@@ -67,7 +67,7 @@ impl<T, C> SkipMap<T, C> {
   /// Returns the number of bytes that have allocated from the arena.
   #[inline]
   pub fn allocated(&self) -> usize {
-    self.arena.size()
+    self.arena.allocated()
   }
 
   /// Returns the capacity of the arena.
@@ -231,7 +231,7 @@ impl<T, C> SkipMap<T, C> {
       .with_capacity(cap as u32)
       .with_maximum_alignment(Node::<T>::ALIGN as usize);
     let arena = Arena::new(opts);
-    Self::new_in(arena, cmp, false)
+    Self::new_in(arena, cmp)
   }
 
   /// Like [`SkipMap::map_mut`], but with a custom comparator.
@@ -247,7 +247,7 @@ impl<T, C> SkipMap<T, C> {
     let min_cap = Node::<T>::min_cap();
     let opts = ArenaOptions::new().with_maximum_alignment(alignment);
     let arena = Arena::map_mut(path, opts, open_options, mmap_options)?;
-    Self::new_in(arena, cmp, false).map_err(invalid_data)
+    Self::new_in(arena, cmp).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::map`], but with a custom comparator.
@@ -262,7 +262,7 @@ impl<T, C> SkipMap<T, C> {
     let alignment = Node::<T>::ALIGN as usize;
     let min_cap = Node::<T>::min_cap();
     let arena = Arena::map(path, open_options, mmap_options)?;
-    Self::new_in(arena, cmp, true).map_err(invalid_data)
+    Self::new_in(arena, cmp).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::map_anon`], but with a custom comparator.
@@ -273,7 +273,7 @@ impl<T, C> SkipMap<T, C> {
     let min_cap = Node::<T>::min_cap();
     let opts = ArenaOptions::new().with_maximum_alignment(alignment);
     let arena = Arena::map_anon(opts, mmap_options)?;
-    Self::new_in(arena, cmp, false).map_err(invalid_data)
+    Self::new_in(arena, cmp).map_err(invalid_data)
   }
 
   /// Clear the skiplist to empty and re-initialize.
@@ -419,7 +419,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     value_size: u32,
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    if self.ro {
+    if self.arena.read_only() {
       return Err(Either::Right(Error::read_only()));
     }
 
@@ -457,7 +457,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
-    if self.ro {
+    if self.arena.read_only() {
       return Err(Error::read_only());
     }
 
@@ -543,7 +543,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     value_size: u32,
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    if self.ro {
+    if self.arena.read_only() {
       return Err(Either::Right(Error::read_only()));
     }
 

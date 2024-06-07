@@ -183,270 +183,270 @@ impl<T> Node<T> {
     Node::<T>::MAX_NODE_SIZE as u32
   }
 
-  #[inline]
-  pub(super) fn size(&self) -> u32 {
-    let pad = (Self::SIZE + self.height as usize * Link::SIZE + self.key_size as usize) as u32
-      + Self::ALIGN
-      - 1;
-    let trailer_pad = (mem::size_of::<T>() + mem::align_of::<T>() - 1) as u32;
-    let (_, value_size) = self.value.load(Ordering::Acquire);
-    if value_size != u32::MAX {
-      pad + trailer_pad + value_size
-    } else {
-      pad + trailer_pad
-    }
-  }
+  // #[inline]
+  // pub(super) fn size(&self) -> u32 {
+  //   let pad = (Self::SIZE + self.height as usize * Link::SIZE + self.key_size as usize) as u32
+  //     + Self::ALIGN
+  //     - 1;
+  //   let trailer_pad = (mem::size_of::<T>() + mem::align_of::<T>() - 1) as u32;
+  //   let (_, value_size) = self.value.load(Ordering::Acquire);
+  //   if value_size != u32::MAX {
+  //     pad + trailer_pad + value_size
+  //   } else {
+  //     pad + trailer_pad
+  //   }
+  // }
 
-  #[inline]
-  pub(super) fn set_value<'a, E>(
-    &self,
-    arena: &'a Arena,
-    trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(), Either<E, Error>> {
-    let (offset, value_size) = Self::new_value(arena, trailer, value_size, f)?;
-    let (_, old_size) = self.value.swap(offset, value_size);
+  // #[inline]
+  // pub(super) fn set_value<'a, E>(
+  //   &self,
+  //   arena: &'a Arena,
+  //   trailer: T,
+  //   value_size: u32,
+  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  // ) -> Result<(), Either<E, Error>> {
+  //   let (offset, value_size) = Self::new_value(arena, trailer, value_size, f)?;
+  //   let (_, old_size) = self.value.swap(offset, value_size);
 
-    // on success, which means that old value is removed, we need to incr the discard bytes
-    // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
-    if old_size != u32::MAX {
-      let padded = Arena::pad_value_and_trailer::<T>(old_size);
+  //   // on success, which means that old value is removed, we need to incr the discard bytes
+  //   // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
+  //   if old_size != u32::MAX {
+  //     let padded = Arena::pad_value_and_trailer::<T>(old_size);
 
-      arena.incr_discard(padded as u32);
-    } else {
-      let padded = Arena::pad_value_and_trailer::<T>(0);
-      arena.incr_discard(padded as u32);
-    }
+  //     arena.incr_discard(padded as u32);
+  //   } else {
+  //     let padded = Arena::pad_value_and_trailer::<T>(0);
+  //     arena.incr_discard(padded as u32);
+  //   }
 
-    Ok(())
-  }
+  //   Ok(())
+  // }
 
-  #[inline]
-  pub(super) fn clear_value(
-    &self,
-    arena: &Arena,
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<(u32, u32), (u32, u32)> {
-    self
-      .value
-      .compare_remove(success, failure)
-      .map(|(offset, size)| {
-        // on success, which means that old value is removed, we need to incr the discard bytes
-        // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
-        if size != u32::MAX {
-          let padded = Arena::pad_value_and_trailer::<T>(size);
+  // #[inline]
+  // pub(super) fn clear_value(
+  //   &self,
+  //   arena: &Arena,
+  //   success: Ordering,
+  //   failure: Ordering,
+  // ) -> Result<(u32, u32), (u32, u32)> {
+  //   self
+  //     .value
+  //     .compare_remove(success, failure)
+  //     .map(|(offset, size)| {
+  //       // on success, which means that old value is removed, we need to incr the discard bytes
+  //       // if size is u32::MAX, it means the value is already removed, we do not need to incr the discard bytes
+  //       if size != u32::MAX {
+  //         let padded = Arena::pad_value_and_trailer::<T>(size);
 
-          arena.incr_discard(padded as u32);
-        } else {
-          let padded = Arena::pad_value_and_trailer::<T>(0);
-          arena.incr_discard(padded as u32);
-        }
-        (offset, size)
-      })
-  }
+  //         arena.incr_discard(padded as u32);
+  //       } else {
+  //         let padded = Arena::pad_value_and_trailer::<T>(0);
+  //         arena.incr_discard(padded as u32);
+  //       }
+  //       (offset, size)
+  //     })
+  // }
 
-  pub(super) fn new_value<'a, E>(
-    arena: &'a Arena,
-    trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(u32, u32), Either<E, Error>> {
-    if value_size as u64 > u32::MAX as u64 {
-      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
-    }
+  // pub(super) fn new_value<'a, E>(
+  //   arena: &'a Arena,
+  //   trailer: T,
+  //   value_size: u32,
+  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  // ) -> Result<(u32, u32), Either<E, Error>> {
+  //   if value_size as u64 > u32::MAX as u64 {
+  //     return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
+  //   }
 
-    let (value_offset, allocated) = arena
-      .alloc_value::<T>(value_size)
-      .map_err(|e: ArenaError| Either::Right(e.into()))?;
+  //   let (value_offset, allocated) = arena
+  //     .alloc_value::<T>(value_size)
+  //     .map_err(|e: ArenaError| Either::Right(e.into()))?;
 
-    // Safety: we have check the offset is valid
-    unsafe {
-      let ptr = arena.get_pointer_mut(value_offset as usize);
-      let trailer_ptr = ptr as *mut T;
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write(trailer_ptr, trailer);
+  //   // Safety: we have check the offset is valid
+  //   unsafe {
+  //     let ptr = arena.get_pointer_mut(value_offset as usize);
+  //     let trailer_ptr = ptr as *mut T;
+  //     #[cfg(not(feature = "unaligned"))]
+  //     ptr::write(trailer_ptr, trailer);
 
-      let val = core::slice::from_raw_parts_mut(ptr.add(mem::size_of::<T>()), value_size as usize);
-      let value_size =
-        Self::fill_vacant_value(arena, value_size, value_offset, val, f).map_err(|e| {
-          arena.incr_discard(allocated);
-          Either::Left(e)
-        })?;
-      Ok((value_offset, value_size))
-    }
-  }
+  //     let val = core::slice::from_raw_parts_mut(ptr.add(mem::size_of::<T>()), value_size as usize);
+  //     let value_size =
+  //       Self::fill_vacant_value(arena, value_size, value_offset, val, f).map_err(|e| {
+  //         arena.incr_discard(allocated);
+  //         Either::Left(e)
+  //       })?;
+  //     Ok((value_offset, value_size))
+  //   }
+  // }
 
-  #[inline]
-  unsafe fn fill_vacant_value<'a, E>(
-    arena: &'a Arena,
-    value_size: u32,
-    value_offset: u32,
-    buf: &'a mut [u8],
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<u32, E> {
-    let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
-    f(&mut oval)?;
-    let remaining = oval.remaining();
-    if remaining != 0 {
-      #[cfg(feature = "tracing")]
-      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
+  // #[inline]
+  // unsafe fn fill_vacant_value<'a, E>(
+  //   arena: &'a Arena,
+  //   value_size: u32,
+  //   value_offset: u32,
+  //   buf: &'a mut [u8],
+  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  // ) -> Result<u32, E> {
+  //   let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
+  //   f(&mut oval)?;
+  //   let remaining = oval.remaining();
+  //   if remaining != 0 {
+  //     #[cfg(feature = "tracing")]
+  //     tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
 
-      arena.incr_discard(remaining as u32);
-    }
-    Ok(oval.len() as u32)
-  }
+  //     arena.incr_discard(remaining as u32);
+  //   }
+  //   Ok(oval.len() as u32)
+  // }
 }
 
 impl<T: Trailer> Node<T> {
-  pub(super) fn new_node_ptr<'a, 'b: 'a, E>(
-    arena: &'a Arena,
-    height: u32,
-    key: &'b [u8],
-    trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<NodePtr<T>, Either<E, Error>> {
-    if height < 1 || height > MAX_HEIGHT as u32 {
-      panic!("height cannot be less than one or greater than the max height");
-    }
+  // pub(super) fn new_node_ptr<'a, 'b: 'a, E>(
+  //   arena: &'a Arena,
+  //   height: u32,
+  //   key: &'b [u8],
+  //   trailer: T,
+  //   value_size: u32,
+  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  // ) -> Result<NodePtr<T>, Either<E, Error>> {
+  //   if height < 1 || height > MAX_HEIGHT as u32 {
+  //     panic!("height cannot be less than one or greater than the max height");
+  //   }
 
-    let key_size = key.len();
-    if key_size as u64 > u16::MAX as u64 {
-      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
-    }
+  //   let key_size = key.len();
+  //   if key_size as u64 > u16::MAX as u64 {
+  //     return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
+  //   }
 
-    if value_size as u64 > u32::MAX as u64 {
-      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
-    }
+  //   if value_size as u64 > u32::MAX as u64 {
+  //     return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
+  //   }
 
-    let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
-    if entry_size > u32::MAX as u64 {
-      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
-    }
+  //   let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+  //   if entry_size > u32::MAX as u64 {
+  //     return Err(Either::Right(Error::EntryTooLarge(entry_size)));
+  //   }
 
-    // Compute the amount of the tower that will never be used, since the height
-    // is less than maxHeight.
-    let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
-    let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
+  //   // Compute the amount of the tower that will never be used, since the height
+  //   // is less than maxHeight.
+  //   let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
+  //   let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let AllocMeta {
-      node_offset,
-      value_offset,
-      allocated,
-    } = arena
-      .alloc::<T>(
-        node_size + key_size as u32,
-        value_size,
-        Self::ALIGN,
-        unused_size,
-      )
-      .map_err(|e| Either::Right(e.into()))?;
+  //   let AllocMeta {
+  //     node_offset,
+  //     value_offset,
+  //     allocated,
+  //   } = arena
+  //     .alloc::<T>(
+  //       node_size + key_size as u32,
+  //       value_size,
+  //       Self::ALIGN,
+  //       unused_size,
+  //     )
+  //     .map_err(|e| Either::Right(e.into()))?;
 
-    unsafe {
-      // Safety: we have check the offset is valid
-      let ptr = arena.get_pointer_mut(node_offset as usize);
-      // Safety: the node is well aligned
-      let node = &mut *(ptr as *mut Node<T>);
-      node.value = Pointer::new(value_offset, value_size);
-      node.key_offset = node_offset + node_size;
-      node.key_size = key_size as u16;
-      node.height = height as u8;
-      node.get_key_mut(arena).copy_from_slice(key);
+  //   unsafe {
+  //     // Safety: we have check the offset is valid
+  //     let ptr = arena.get_pointer_mut(node_offset as usize);
+  //     // Safety: the node is well aligned
+  //     let node = &mut *(ptr as *mut Node<T>);
+  //     node.value = Pointer::new(value_offset, value_size);
+  //     node.key_offset = node_offset + node_size;
+  //     node.key_size = key_size as u16;
+  //     node.height = height as u8;
+  //     node.get_key_mut(arena).copy_from_slice(key);
 
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+  //     #[cfg(not(feature = "unaligned"))]
+  //     ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
 
-      let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write(trailer_ptr, trailer);
+  //     let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
+  //     #[cfg(not(feature = "unaligned"))]
+  //     ptr::write(trailer_ptr, trailer);
 
-      let value_size = Self::fill_vacant_value(
-        arena,
-        value_size,
-        value_offset,
-        node.get_value_mut(arena),
-        f,
-      )
-      .map_err(|e| {
-        arena.incr_discard(allocated);
-        Either::Left(e)
-      })?;
+  //     let value_size = Self::fill_vacant_value(
+  //       arena,
+  //       value_size,
+  //       value_offset,
+  //       node.get_value_mut(arena),
+  //       f,
+  //     )
+  //     .map_err(|e| {
+  //       arena.incr_discard(allocated);
+  //       Either::Left(e)
+  //     })?;
 
-      node.value = Pointer::new(value_offset, value_size);
-      Ok(NodePtr::new(ptr, node_offset))
-    }
-  }
+  //     node.value = Pointer::new(value_offset, value_size);
+  //     Ok(NodePtr::new(ptr, node_offset))
+  //   }
+  // }
 
-  pub(super) fn new_node_ptr_with_key<'a, 'b: 'a, E>(
-    arena: &'a Arena,
-    height: u32,
-    key_offset: u32,
-    key_size: u16,
-    trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<NodePtr<T>, Either<E, Error>> {
-    if height < 1 || height > MAX_HEIGHT as u32 {
-      panic!("height cannot be less than one or greater than the max height");
-    }
+  // pub(super) fn new_node_ptr_with_key<'a, 'b: 'a, E>(
+  //   arena: &'a Arena,
+  //   height: u32,
+  //   key_offset: u32,
+  //   key_size: u16,
+  //   trailer: T,
+  //   value_size: u32,
+  //   f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  // ) -> Result<NodePtr<T>, Either<E, Error>> {
+  //   if height < 1 || height > MAX_HEIGHT as u32 {
+  //     panic!("height cannot be less than one or greater than the max height");
+  //   }
 
-    if value_size as u64 > u32::MAX as u64 {
-      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
-    }
+  //   if value_size as u64 > u32::MAX as u64 {
+  //     return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
+  //   }
 
-    let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
-    if entry_size > u32::MAX as u64 {
-      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
-    }
+  //   let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+  //   if entry_size > u32::MAX as u64 {
+  //     return Err(Either::Right(Error::EntryTooLarge(entry_size)));
+  //   }
 
-    // Compute the amount of the tower that will never be used, since the height
-    // is less than maxHeight.
-    let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
-    let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
+  //   // Compute the amount of the tower that will never be used, since the height
+  //   // is less than maxHeight.
+  //   let unused_size = (MAX_HEIGHT as u32 - height) * (Link::SIZE as u32);
+  //   let node_size = (Self::MAX_NODE_SIZE as u32) - unused_size;
 
-    let AllocMeta {
-      node_offset,
-      value_offset,
-      allocated,
-    } = arena
-      .alloc::<T>(node_size, value_size, Self::ALIGN, unused_size)
-      .map_err(|e| Either::Right(e.into()))?;
+  //   let AllocMeta {
+  //     node_offset,
+  //     value_offset,
+  //     allocated,
+  //   } = arena
+  //     .alloc::<T>(node_size, value_size, Self::ALIGN, unused_size)
+  //     .map_err(|e| Either::Right(e.into()))?;
 
-    unsafe {
-      // Safety: we have check the offset is valid
-      let ptr = arena.get_pointer_mut(node_offset as usize);
-      // Safety: the node is well aligned
-      let node = &mut *(ptr as *mut Node<T>);
-      node.value = Pointer::new(value_offset, value_size);
-      node.key_offset = key_offset;
-      node.key_size = key_size;
-      node.height = height as u8;
+  //   unsafe {
+  //     // Safety: we have check the offset is valid
+  //     let ptr = arena.get_pointer_mut(node_offset as usize);
+  //     // Safety: the node is well aligned
+  //     let node = &mut *(ptr as *mut Node<T>);
+  //     node.value = Pointer::new(value_offset, value_size);
+  //     node.key_offset = key_offset;
+  //     node.key_size = key_size;
+  //     node.height = height as u8;
 
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+  //     #[cfg(not(feature = "unaligned"))]
+  //     ptr::write_bytes(ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
 
-      let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
-      #[cfg(not(feature = "unaligned"))]
-      ptr::write(trailer_ptr, trailer);
+  //     let trailer_ptr = arena.get_pointer_mut(value_offset as usize) as *mut T;
+  //     #[cfg(not(feature = "unaligned"))]
+  //     ptr::write(trailer_ptr, trailer);
 
-      let value_size = Self::fill_vacant_value(
-        arena,
-        value_size,
-        value_offset,
-        node.get_value_mut(arena),
-        f,
-      )
-      .map_err(|e| {
-        arena.incr_discard(allocated);
-        Either::Left(e)
-      })?;
-      node.value = Pointer::new(value_offset, value_size);
+  //     let value_size = Self::fill_vacant_value(
+  //       arena,
+  //       value_size,
+  //       value_offset,
+  //       node.get_value_mut(arena),
+  //       f,
+  //     )
+  //     .map_err(|e| {
+  //       arena.incr_discard(allocated);
+  //       Either::Left(e)
+  //     })?;
+  //     node.value = Pointer::new(value_offset, value_size);
 
-      Ok(NodePtr::new(ptr, node_offset))
-    }
-  }
+  //     Ok(NodePtr::new(ptr, node_offset))
+  //   }
+  // }
 
   pub(super) fn new_remove_node_ptr<'a, 'b: 'a>(
     arena: &'a Arena,

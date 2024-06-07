@@ -225,6 +225,90 @@ impl<T, C> SkipMap<T, C> {
     Ok(trailer_end as u32)
   }
 
+  fn allocate_node<'a, 'b: 'a, E>(
+    &'a self,
+    height: u32,
+    trailer: T,
+    key_size: u32,
+    kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_size: u32,
+    vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<NodePtr<T>, Either<E, Error>> {
+    if height < 1 || height > MAX_HEIGHT as u32 {
+      panic!("height cannot be less than one or greater than the max height");
+    }
+
+    if key_size as u64 > u16::MAX as u64 {
+      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
+    }
+
+    if value_size as u64 > u32::MAX as u64 {
+      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
+    }
+
+    let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+    if entry_size > u32::MAX as u64 {
+      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
+    }
+
+    unsafe {
+      let mut node = self
+        .arena
+        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
+        .map_err(|e| Either::Right(e.into()))?;
+      let ptr = node.as_mut_ptr();
+      let aligned_node_offset = ptr.align_offset(mem::align_of::<Node<T>>());
+      let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
+      let mut key = self
+        .arena
+        .alloc_bytes(key_size as u32)
+        .map_err(|e| Either::Right(e.into()))?;
+      let key_offset = key.offset();
+      let key_cap = key.capacity();
+      let mut trailer_and_value = self
+        .arena
+        .alloc_aligned_bytes::<T>(value_size)
+        .map_err(|e| Either::Right(e.into()))?;
+      let trailer_and_value_offset = trailer_and_value.offset();
+      let trailer_and_value_ptr = trailer_and_value.as_mut_ptr();
+      let aligned_trailer_offset = trailer_and_value_ptr.align_offset(mem::align_of::<T>());
+      let trailer_ptr = trailer_and_value_ptr
+        .add(aligned_trailer_offset)
+        .cast::<T>();
+      trailer_ptr.write(trailer);
+      let value_offset = trailer_and_value_offset + aligned_trailer_offset + mem::size_of::<T>();
+
+      // Safety: the node is well aligned
+      let node_ref = &mut *node_ptr;
+      node_ref.value = Pointer::new(trailer_and_value_offset as u32, value_size);
+      node_ref.key_offset = key_offset as u32;
+      node_ref.key_size = key_cap as u16;
+      node_ref.height = height as u8;
+      ptr::write_bytes(node_ptr.add(mem::size_of::<Node<T>>()), 0, height as usize);
+
+      key.detach();
+      self
+        .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
+        .map_err(Either::Left)?;
+      trailer_and_value.detach();
+      self
+        .fill_vacant_value(
+          trailer_and_value_offset as u32,
+          trailer_and_value.capacity() as u32,
+          value_size,
+          value_offset as u32,
+          vf,
+        )
+        .map_err(Either::Left)?;
+
+      node.detach();
+      Ok(NodePtr::new(
+        node_ptr as _,
+        (node.offset() + aligned_node_offset) as u32,
+      ))
+    }
+  }
+
   fn allocate_full_node(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
     // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
     unsafe {
@@ -271,6 +355,60 @@ impl<T, C> SkipMap<T, C> {
       });
       Ok(meta.as_mut_ptr())
     }
+  }
+
+  #[inline]
+  unsafe fn fill_vacant_key<'a, E>(
+    &'a self,
+    size: u32,
+    offset: u32,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<u32, E> {
+    let buf = self.arena.get_bytes_mut(offset as usize, size as usize);
+    let mut oval = VacantBuffer::new(size as usize, offset, buf);
+    if let Err(e) = f(&mut oval) {
+      self.arena.dealloc(offset, size);
+      return Err(e);
+    }
+
+    let len = oval.len();
+    let remaining = oval.remaining();
+    if remaining != 0 {
+      #[cfg(feature = "tracing")]
+      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
+      self.arena.dealloc(offset + len as u32, remaining as u32);
+    }
+    Ok(oval.len() as u32)
+  }
+
+  #[inline]
+  unsafe fn fill_vacant_value<'a, E>(
+    &'a self,
+    offset: u32,
+    size: u32,
+    value_size: u32,
+    value_offset: u32,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<u32, E> {
+    let buf = self
+      .arena
+      .get_bytes_mut(value_offset as usize, value_size as usize);
+    let mut oval = VacantBuffer::new(size as usize, offset, buf);
+    if let Err(e) = f(&mut oval) {
+      self.arena.dealloc(offset, size);
+      return Err(e);
+    }
+
+    let len = oval.len();
+    let remaining = oval.remaining();
+    if remaining != 0 {
+      #[cfg(feature = "tracing")]
+      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
+      self
+        .arena
+        .dealloc(value_offset + len as u32, remaining as u32);
+    }
+    Ok(oval.len() as u32)
   }
 
   #[inline]

@@ -21,6 +21,8 @@ use core::{cmp, ops::RangeBounds};
 /// A map implementation based on skiplist
 pub mod map;
 
+
+
 mod types;
 pub use types::*;
 
@@ -37,29 +39,32 @@ fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::
 
 pub use map::{AllVersionsIter, SkipMap};
 
-const MAX_HEIGHT: usize = 20;
+const MAX_HEIGHT: usize = 32;
 
 #[cfg(feature = "std")]
-fn random_height() -> u32 {
+fn random_height(max_height: u8) -> u32 {
   use rand::{thread_rng, Rng};
   let mut rng = thread_rng();
   let rnd: u32 = rng.gen();
   let mut h = 1;
+  let max_height = max_height as usize;
 
-  while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+
+  while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;
   }
   h as u32
 }
 
 #[cfg(not(feature = "std"))]
-fn random_height() -> u32 {
+fn random_height(max_height: u8) -> u32 {
   use rand::{rngs::OsRng, Rng};
 
+  let max_height = max_height as usize;
   let rnd: u32 = OsRng.gen();
   let mut h = 1;
 
-  while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+  while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;
   }
   h as u32

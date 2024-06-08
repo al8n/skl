@@ -40,6 +40,13 @@ fn test_node_ptr_clone() {
   let _ = node_ptr.clone();
 }
 
+#[test]
+fn test_encode_decode_key_size() {
+  let key_size = 1234;
+  let encoded = encode_key_size(key_size, 32);
+  assert_eq!((key_size, 32), decode_key_size(encoded));
+}
+
 fn empty_in(l: SkipMap) {
   let mut it = l.iter_all_versions(0);
 

@@ -78,3 +78,4 @@
 - Increase maximum key size to `u27::MAX`
 - Add `Options` as a parameter when constructing the `SkipMap` and `SkipSet`
   - Support specify max key size and max value size
+  - Support set the max height

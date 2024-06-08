@@ -25,6 +25,9 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
+mod options;
+pub use options::*;
+
 use rarena_allocator::Error as ArenaError;
 
 #[cfg(all(test, not(loom)))]
@@ -125,7 +128,7 @@ pub(crate) struct AtomicValuePointer(AtomicU64);
 
 impl core::fmt::Debug for AtomicValuePointer {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    let (offset, len) = decode_value(self.0.load(Ordering::Relaxed));
+    let (offset, len) = decode_value_pointer(self.0.load(Ordering::Relaxed));
     f.debug_struct("AtomicValuePointer")
       .field("offset", &offset)
       .field("len", &len)
@@ -136,18 +139,18 @@ impl core::fmt::Debug for AtomicValuePointer {
 impl AtomicValuePointer {
   #[inline]
   pub(crate) fn new(offset: u32, len: u32) -> Self {
-    Self(AtomicU64::new(encode_value(offset, len)))
+    Self(AtomicU64::new(encode_value_pointer(offset, len)))
   }
 
   #[cfg(not(feature = "unaligned"))]
   #[inline]
   pub(crate) fn load(&self, ordering: Ordering) -> (u32, u32) {
-    decode_value(self.0.load(ordering))
+    decode_value_pointer(self.0.load(ordering))
   }
 
   #[inline]
   pub(crate) fn swap(&self, offset: u32, len: u32) -> (u32, u32) {
-    decode_value(self.0.swap(encode_value(offset, len), Ordering::AcqRel))
+    decode_value_pointer(self.0.swap(encode_value_pointer(offset, len), Ordering::AcqRel))
   }
 
   #[inline]
@@ -157,13 +160,13 @@ impl AtomicValuePointer {
     failure: Ordering,
   ) -> Result<(u32, u32), (u32, u32)> {
     let old = self.0.load(Ordering::Acquire);
-    let (offset, _) = decode_value(old);
-    let new = encode_value(offset, REMOVE);
+    let (offset, _) = decode_value_pointer(old);
+    let new = encode_value_pointer(offset, REMOVE);
     self
       .0
       .compare_exchange(old, new, success, failure)
-      .map(decode_value)
-      .map_err(decode_value)
+      .map(decode_value_pointer)
+      .map_err(decode_value_pointer)
   }
 }
 
@@ -298,9 +301,7 @@ struct Node<T> {
   // Immutable. No need to lock to access key.
   key_offset: u32,
   // Immutable. No need to lock to access key.
-  key_size: u16,
-  height: u8,
-  magic: u8,
+  key_size_and_height: u32,
   trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
@@ -328,9 +329,7 @@ impl<T> Node<T> {
     Self {
       value: AtomicValuePointer::new(value_offset, 0),
       key_offset: 0,
-      key_size: 0,
-      height: MAX_HEIGHT as u8,
-      magic: 0,
+      key_size_and_height: encode_key_size_and_height(0, MAX_HEIGHT as u8),
       trailer: PhantomData,
     }
   }
@@ -419,11 +418,21 @@ impl<T> Node<T> {
 }
 
 impl<T> Node<T> {
+  #[inline]
+  const fn key_size(&self) -> u32 {
+    decode_key_size_and_height(self.key_size_and_height).0
+  }
+
+  #[inline]
+  const fn height(&self) -> u8 {
+    decode_key_size_and_height(self.key_size_and_height).1
+  }
+
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   const unsafe fn get_key<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> &'b [u8] {
-    arena.get_bytes(self.key_offset as usize, self.key_size as usize)
+    arena.get_bytes(self.key_offset as usize, self.key_size() as usize)
   }
 
   /// ## Safety
@@ -511,6 +520,7 @@ pub struct SkipMap<T = u64, C = Ascend> {
   head: NodePtr<T>,
   tail: NodePtr<T>,
   data_offset: u32,
+  opts: Options,
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
@@ -531,6 +541,7 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
       head: self.head,
       tail: self.tail,
       data_offset: self.data_offset,
+      opts: self.opts,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
       cmp: self.cmp.clone(),
@@ -539,12 +550,12 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
 }
 
 impl<T, C> SkipMap<T, C> {
-  fn new_in(arena: Arena, cmp: C) -> Result<Self, Error> {
+  fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
     let data_offset = Self::check_capacity(&arena)?;
 
     if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
-      return Ok(Self::construct(arena, meta, head, tail, data_offset, cmp));
+      return Ok(Self::construct(arena, meta, head, tail, data_offset, opts, cmp));
     }
 
     let meta = Self::allocate_meta(&arena)?;
@@ -563,7 +574,7 @@ impl<T, C> SkipMap<T, C> {
       }
     }
 
-    Ok(Self::construct(arena, meta, head, tail, data_offset, cmp))
+    Ok(Self::construct(arena, meta, head, tail, data_offset, opts, cmp))
   }
 
   /// Checks if the arena has enough capacity to store the skiplist,
@@ -663,8 +674,7 @@ impl<T, C> SkipMap<T, C> {
       let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
-      node_ref.key_size = key_cap as u16;
-      node_ref.height = height as u8;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
       ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       key.detach();
@@ -736,8 +746,7 @@ impl<T, C> SkipMap<T, C> {
       let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset;
-      node_ref.key_size = key_size as u16;
-      node_ref.height = height as u8;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
       ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       trailer_ref.detach();
@@ -804,8 +813,7 @@ impl<T, C> SkipMap<T, C> {
       let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
-      node_ref.key_size = key_cap as u16;
-      node_ref.height = height as u8;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
       ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       key.detach();
@@ -877,8 +885,7 @@ impl<T, C> SkipMap<T, C> {
       let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
       node_ref.key_offset = key_offset;
-      node_ref.key_size = key_size as u16;
-      node_ref.height = height as u8;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
       ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       trailer_and_value.detach();
@@ -1050,6 +1057,7 @@ impl<T, C> SkipMap<T, C> {
     head: NodePtr<T>,
     tail: NodePtr<T>,
     data_offset: u32,
+    opts: Options,
     cmp: C,
   ) -> Self {
     Self {
@@ -1058,6 +1066,7 @@ impl<T, C> SkipMap<T, C> {
       head,
       tail,
       data_offset,
+      opts,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
       cmp,
@@ -1079,7 +1088,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     value_size: u32,
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32, Deallocator), Either<E, Error>> {
-    let height = super::random_height();
+    let height = super::random_height(self.opts.max_height());
     let (nd, deallocator) = match key {
       Key::Occupied(key) => self.allocate_entry_node(
         height,
@@ -1561,7 +1570,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       if cmp.is_eq() {
         found_key = Some(Pointer {
           offset: next_node.key_offset,
-          size: next_node.key_size as u32,
+          size: next_node.key_size(),
+          height: Some(next_node.height()),
         });
       }
 
@@ -1596,7 +1606,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     let nd = &*nd.ptr;
     let nd_key = self
       .arena
-      .get_bytes(nd.key_offset as usize, nd.key_size as usize);
+      .get_bytes(nd.key_offset as usize, nd.key_size() as usize);
 
     match self
       .cmp
@@ -1844,7 +1854,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 k.on_fail(&self.arena);
                 let node = nd.as_mut();
                 node.key_offset = p.offset;
-                node.key_size = p.size as u16;
+                node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
                 deallocator.key = None;
                 k = Key::Pointer {
                   arena: &self.arena,
@@ -1993,12 +2003,13 @@ impl Deallocator {
 struct Pointer {
   offset: u32,
   size: u32,
+  height: Option<u8>,
 }
 
 impl Pointer {
   #[inline]
   const fn new(offset: u32, size: u32) -> Self {
-    Self { offset, size }
+    Self { offset, size, height: None }
   }
 }
 
@@ -2012,15 +2023,28 @@ struct FindResult<T> {
 }
 
 #[inline]
-const fn encode_value(offset: u32, val_size: u32) -> u64 {
+const fn encode_value_pointer(offset: u32, val_size: u32) -> u64 {
   (val_size as u64) << 32 | offset as u64
 }
 
 #[inline]
-const fn decode_value(value: u64) -> (u32, u32) {
+const fn decode_value_pointer(value: u64) -> (u32, u32) {
   let offset = value as u32;
   let val_size = (value >> 32) as u32;
   (offset, val_size)
+}
+
+#[inline]
+const fn encode_key_size_and_height(key_size: u32, height: u8) -> u32 {
+  // first 27 bits for key_size, last 5 bits for height.
+  key_size << 5 | height as u32
+}
+
+#[inline]
+const fn decode_key_size_and_height(size: u32) -> (u32, u8) {
+  let key_size = size >> 5;
+  let height = (size & 0b11111) as u8;
+  (key_size, height)
 }
 
 #[cold]

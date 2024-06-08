@@ -169,8 +169,8 @@ impl SkipMap {
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// [`SkipMap::mmap_anon`]: #method.mmap_anon
-  pub fn new(cap: usize) -> Result<Self, Error> {
-    Self::with_comparator(cap, Ascend)
+  pub fn new() -> Result<Self, Error> {
+    Self::with_comparator(Options::new(), Ascend)
   }
 
   /// Create a new skipmap according to the given capacity, and mmaped to a file.
@@ -186,7 +186,7 @@ impl SkipMap {
     open_options: OpenOptions,
     mmap_options: MmapOptions,
   ) -> std::io::Result<Self> {
-    Self::map_mut_with_comparator(path, open_options, mmap_options, Ascend)
+    Self::map_mut_with_comparator(path, Options::new(), open_options, mmap_options, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
@@ -199,7 +199,7 @@ impl SkipMap {
     open_options: OpenOptions,
     mmap_options: MmapOptions,
   ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, open_options, mmap_options, Ascend)
+    Self::map_with_comparator(path, Options::new(), open_options, mmap_options, Ascend)
   }
 
   /// Create a new skipmap according to the given capacity, and mmap anon.
@@ -220,18 +220,18 @@ impl SkipMap {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::mmap_anon_with_comparator(mmap_options, Ascend)
+    Self::mmap_anon_with_comparator(Options::new(), mmap_options, Ascend)
   }
 }
 
 impl<T, C> SkipMap<T, C> {
   /// Like [`SkipMap::new`], but with a custom comparator.
-  pub fn with_comparator(cap: usize, cmp: C) -> Result<Self, Error> {
-    let opts = ArenaOptions::new()
-      .with_capacity(cap as u32)
+  pub fn with_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
+    let arena_opts = ArenaOptions::new()
+      .with_capacity(opts.capacity())
       .with_maximum_alignment(Node::<T>::ALIGN as usize);
-    let arena = Arena::new(opts);
-    Self::new_in(arena, cmp)
+    let arena = Arena::new(arena_opts);
+    Self::new_in(arena, cmp, opts)
   }
 
   /// Like [`SkipMap::map_mut`], but with a custom comparator.
@@ -239,14 +239,15 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
-    let opts = ArenaOptions::new().with_maximum_alignment(alignment);
-    let arena = Arena::map_mut(path, opts, open_options, mmap_options)?;
-    Self::new_in(arena, cmp).map_err(invalid_data)
+    let arena_opts = ArenaOptions::new().with_maximum_alignment(alignment);
+    let arena = Arena::map_mut(path, arena_opts, open_options, mmap_options)?;
+    Self::new_in(arena, cmp, opts).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::map`], but with a custom comparator.
@@ -254,22 +255,23 @@ impl<T, C> SkipMap<T, C> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
     let arena = Arena::map(path, open_options, mmap_options)?;
-    Self::new_in(arena, cmp).map_err(invalid_data)
+    Self::new_in(arena, cmp, opts).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::map_anon`], but with a custom comparator.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
+  pub fn mmap_anon_with_comparator(opts: Options, mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
-    let opts = ArenaOptions::new().with_maximum_alignment(alignment);
-    let arena = Arena::map_anon(opts, mmap_options)?;
-    Self::new_in(arena, cmp).map_err(invalid_data)
+    let arena_opts = ArenaOptions::new().with_maximum_alignment(alignment);
+    let arena = Arena::map_anon(arena_opts, mmap_options)?;
+    Self::new_in(arena, cmp, opts).map_err(invalid_data)
   }
 
   /// Clear the skiplist to empty and re-initialize.

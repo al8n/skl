@@ -29,14 +29,14 @@ impl Options {
   }
 
   /// Sets the maximum size of the value.
-  /// 
+  ///
   /// Default is `u32::MAX`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_max_value_size(1024);
   /// ```
   #[inline]
@@ -46,37 +46,33 @@ impl Options {
   }
 
   /// Sets the maximum size of the key.
-  /// 
+  ///
   /// The maximum size of the key is `u27::MAX`.
-  /// 
+  ///
   /// Default is `u27::MAX`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_max_key_size(1024);
   /// ```
   #[inline]
   pub const fn with_max_key_size(mut self, size: u32) -> Options {
-    self.max_key_size = if size > U27_MAX {
-      U27_MAX
-    } else {
-      size
-    };
+    self.max_key_size = if size > U27_MAX { U27_MAX } else { size };
     self
   }
 
   /// Sets the maximum height.
-  /// 
+  ///
   /// Default is `20`. The maximum height is `32`. The minimum height is `1`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_max_height(20);
   /// ```
   #[inline]
@@ -92,14 +88,14 @@ impl Options {
   }
 
   /// Sets the capacity of the underlying ARENA.
-  /// 
+  ///
   /// Default is `1024`. This configuration will be ignored if the map is memory-mapped.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_capacity(1024);
   /// ```
   #[inline]
@@ -109,14 +105,14 @@ impl Options {
   }
 
   /// Returns the maximum size of the value.
-  /// 
+  ///
   /// Default is `u32::MAX`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_max_value_size(1024);
   /// ```
   #[inline]
@@ -131,16 +127,16 @@ impl Options {
   }
 
   /// Returns the maximum height.
-  /// 
+  ///
   /// Default is `20`. The maximum height is `32`. The minimum height is `1`.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_max_height(20);
-  /// 
+  ///
   /// assert_eq!(options.max_height(), 20);
   /// ```
   #[inline]
@@ -149,14 +145,14 @@ impl Options {
   }
 
   /// Returns the configuration of underlying ARENA size.
-  /// 
+  ///
   /// Default is `1024`. This configuration will be ignored if the map is memory-mapped.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use skl::map::Options;
-  /// 
+  ///
   /// let options = Options::new().with_capacity(1024);
   /// ```
   #[inline]
@@ -164,4 +160,3 @@ impl Options {
     self.capacity
   }
 }
-

@@ -1,4 +1,4 @@
-use skl::SkipMap;
+use skl::{map::Options, SkipMap};
 use std::sync::Arc;
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -11,7 +11,7 @@ pub fn new_value(i: usize) -> Vec<u8> {
 
 fn main() {
   const N: usize = 1000;
-  let l = SkipMap::new(1 << 20).unwrap();
+  let l = SkipMap::with_options(Options::new().with_capacity(1 << 20)).unwrap();
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();

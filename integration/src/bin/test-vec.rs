@@ -1,10 +1,10 @@
 use integration::{big_value, key, new_value};
-use skl::*;
+use skl::{map::Options, *};
 
 fn main() {
   {
     const N: usize = 10;
-    let l = SkipMap::new(1 << 20).unwrap();
+    let l = SkipMap::with_options(Options::new().with_capacity(1 << 20)).unwrap();
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -30,7 +30,7 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = SkipMap::new(120 << 20).unwrap();
+    let l = SkipMap::with_options(Options::new().with_capacity(120 << 20)).unwrap();
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {

@@ -12,7 +12,7 @@ use crate::{Key, Trailer, VacantBuffer};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use super::{invalid_data, MmapOptions, OpenOptions};
 
-use super::{sync::*, Arena, Ascend, Comparator, MAX_HEIGHT};
+use super::{sync::*, Arena, Ascend, Comparator};
 
 mod api;
 
@@ -150,7 +150,11 @@ impl AtomicValuePointer {
 
   #[inline]
   pub(crate) fn swap(&self, offset: u32, len: u32) -> (u32, u32) {
-    decode_value_pointer(self.0.swap(encode_value_pointer(offset, len), Ordering::AcqRel))
+    decode_value_pointer(
+      self
+        .0
+        .swap(encode_value_pointer(offset, len), Ordering::AcqRel),
+    )
   }
 
   #[inline]
@@ -315,23 +319,26 @@ struct Node<T> {
   // is deliberately truncated to not include unneeded tower elements.
   //
   // All accesses to elements should use CAS operations, with no need to lock.
-  // pub(super) tower: [Link; Self::MAX_HEIGHT],
+  // pub(super) tower: [Link; self.opts.max_height],
 }
 
 impl<T> Node<T> {
   const SIZE: usize = mem::size_of::<Self>();
   const ALIGN: u32 = mem::align_of::<Self>() as u32;
 
-  const MAX_NODE_SIZE: u64 = (Self::SIZE + MAX_HEIGHT * Link::SIZE) as u64;
-
   #[inline]
-  fn full(value_offset: u32) -> Self {
+  fn full(value_offset: u32, max_height: u8) -> Self {
     Self {
       value: AtomicValuePointer::new(value_offset, 0),
       key_offset: 0,
-      key_size_and_height: encode_key_size_and_height(0, MAX_HEIGHT as u8),
+      key_size_and_height: encode_key_size_and_height(0, max_height),
       trailer: PhantomData,
     }
+  }
+
+  #[inline]
+  fn size(max_height: u8) -> usize {
+    Self::SIZE + (max_height as usize) * Link::SIZE
   }
 
   // TODO: remove those functions
@@ -551,22 +558,30 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
 
 impl<T, C> SkipMap<T, C> {
   fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
-    let data_offset = Self::check_capacity(&arena)?;
+    let data_offset = Self::check_capacity(&arena, opts.max_height())?;
 
     if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
-      return Ok(Self::construct(arena, meta, head, tail, data_offset, opts, cmp));
+      return Ok(Self::construct(
+        arena,
+        meta,
+        head,
+        tail,
+        data_offset,
+        opts,
+        cmp,
+      ));
     }
 
     let meta = Self::allocate_meta(&arena)?;
-    let head = Self::allocate_full_node(&arena)?;
-    let tail = Self::allocate_full_node(&arena)?;
+    let head = Self::allocate_full_node(&arena, opts.max_height())?;
+    let tail = Self::allocate_full_node(&arena, opts.max_height())?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
     unsafe {
       // Link all head/tail levels together.
-      for i in 0..MAX_HEIGHT {
+      for i in 0..(opts.max_height() as usize) {
         let head_link = head.tower(&arena, i);
         let tail_link = tail.tower(&arena, i);
         head_link.next_offset.store(tail.offset, Ordering::Relaxed);
@@ -574,13 +589,21 @@ impl<T, C> SkipMap<T, C> {
       }
     }
 
-    Ok(Self::construct(arena, meta, head, tail, data_offset, opts, cmp))
+    Ok(Self::construct(
+      arena,
+      meta,
+      head,
+      tail,
+      data_offset,
+      opts,
+      cmp,
+    ))
   }
 
   /// Checks if the arena has enough capacity to store the skiplist,
   /// and returns the data offset.
   #[inline]
-  const fn check_capacity(arena: &Arena) -> Result<u32, Error> {
+  const fn check_capacity(arena: &Arena, max_height: u8) -> Result<u32, Error> {
     let offset = arena.data_offset();
 
     let alignment = mem::align_of::<Meta>();
@@ -589,7 +612,9 @@ impl<T, C> SkipMap<T, C> {
 
     let alignment = mem::align_of::<Node<T>>();
     let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-    let head_end = head_offset + mem::size_of::<Node<T>>() + mem::size_of::<[Link; MAX_HEIGHT]>();
+    let head_end =
+      head_offset + mem::size_of::<Node<T>>() + mem::size_of::<Link>() * max_height as usize;
+
     let trailer_alignment = mem::align_of::<T>();
     let trailer_size = mem::size_of::<T>();
     let trailer_end = if trailer_size != 0 {
@@ -600,7 +625,8 @@ impl<T, C> SkipMap<T, C> {
     };
 
     let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
-    let tail_end = tail_offset + mem::size_of::<Node<T>>() + mem::size_of::<[Link; MAX_HEIGHT]>();
+    let tail_end =
+      tail_offset + mem::size_of::<Node<T>>() + mem::size_of::<Link>() * max_height as usize;
 
     let trailer_end = if trailer_size != 0 {
       let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
@@ -608,7 +634,6 @@ impl<T, C> SkipMap<T, C> {
     } else {
       tail_end
     };
-
     if trailer_end > arena.capacity() {
       return Err(Error::ArenaTooSmall);
     }
@@ -626,9 +651,7 @@ impl<T, C> SkipMap<T, C> {
     value_size: u32,
     vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    if height < 1 || height > MAX_HEIGHT as u32 {
-      panic!("height cannot be less than one or greater than the max height");
-    }
+    self.check_height(height);
 
     if key_size as u64 > u16::MAX as u64 {
       return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
@@ -638,7 +661,7 @@ impl<T, C> SkipMap<T, C> {
       return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
     }
 
-    let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+    let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::size(height as u8) as u64;
     if entry_size > u32::MAX as u64 {
       return Err(Either::Right(Error::EntryTooLarge(entry_size)));
     }
@@ -713,15 +736,13 @@ impl<T, C> SkipMap<T, C> {
     key_size: u32,
     value_size: u32,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    if height < 1 || height > MAX_HEIGHT as u32 {
-      panic!("height cannot be less than one or greater than the max height");
-    }
+    self.check_height(height);
 
     if key_size as u64 > u16::MAX as u64 {
       return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
     }
 
-    let entry_size = (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+    let entry_size = (key_size as u64) + Node::<T>::size(height as u8) as u64;
     if entry_size > u32::MAX as u64 {
       return Err(Either::Right(Error::EntryTooLarge(entry_size)));
     }
@@ -774,15 +795,13 @@ impl<T, C> SkipMap<T, C> {
     kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     value_size: u32,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    if height < 1 || height > MAX_HEIGHT as u32 {
-      panic!("height cannot be less than one or greater than the max height");
-    }
+    self.check_height(height);
 
     if key_size as u64 > u16::MAX as u64 {
       return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
     }
 
-    let entry_size = (key_size as u64) + Node::<T>::MAX_NODE_SIZE;
+    let entry_size = (key_size as u64) + Node::<T>::size(height as u8) as u64;
     if entry_size > u32::MAX as u64 {
       return Err(Either::Right(Error::EntryTooLarge(entry_size)));
     }
@@ -847,15 +866,13 @@ impl<T, C> SkipMap<T, C> {
     value_size: u32,
     vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    if height < 1 || height > MAX_HEIGHT as u32 {
-      panic!("height cannot be less than one or greater than the max height");
-    }
+    self.check_height(height);
 
     if value_size as u64 > u32::MAX as u64 {
       return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
     }
 
-    let entry_size = (value_size as u64) + Node::<T>::MAX_NODE_SIZE;
+    let entry_size = (value_size as u64) + Node::<T>::size(height as u8) as u64;
     if entry_size > u32::MAX as u64 {
       return Err(Either::Right(Error::EntryTooLarge(entry_size)));
     }
@@ -912,11 +929,12 @@ impl<T, C> SkipMap<T, C> {
     }
   }
 
-  fn allocate_full_node(arena: &Arena) -> Result<NodePtr<T>, ArenaError> {
+  fn allocate_full_node(arena: &Arena, max_height: u8) -> Result<NodePtr<T>, ArenaError> {
     // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
     unsafe {
       let mut node = arena.alloc::<Node<T>>()?;
-      let mut links = arena.alloc::<[Link; MAX_HEIGHT]>()?;
+      let mut links = arena
+        .alloc_aligned_bytes::<Link>((mem::size_of::<Link>() * (max_height - 1) as usize) as u32)?;
 
       // Safety: node and trailer do not need to be dropped.
 
@@ -932,9 +950,9 @@ impl<T, C> SkipMap<T, C> {
       };
 
       // initialize the links
-      core::ptr::write_bytes(links.as_mut_ptr().as_ptr(), 0, MAX_HEIGHT);
+      core::ptr::write_bytes(links.as_mut_ptr(), 0, max_height as usize);
 
-      node.write(Node::full(trailer_offset as u32));
+      node.write(Node::full(trailer_offset as u32, max_height));
 
       Ok(NodePtr::new(
         node.as_mut_ptr().as_ptr() as _,
@@ -1047,6 +1065,13 @@ impl<T, C> SkipMap<T, C> {
       let tail_offset = arena.offset(tail_ptr as _);
       let tail = NodePtr::new(tail_ptr as _, tail_offset as u32);
       (meta, head, tail)
+    }
+  }
+
+  #[inline]
+  const fn check_height(&self, height: u32) {
+    if height < 1 || height > self.opts.max_height() as u32 {
+      panic!("height cannot be less than one or greater than the max height");
     }
   }
 
@@ -1943,7 +1968,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
 /// A helper struct for caching splice information
 pub struct Inserter<'a, T> {
-  spl: [Splice<T>; MAX_HEIGHT],
+  spl: [Splice<T>; super::MAX_HEIGHT],
   height: u32,
   _m: core::marker::PhantomData<&'a ()>,
 }
@@ -1952,7 +1977,7 @@ impl<'a, T: Copy> Default for Inserter<'a, T> {
   #[inline]
   fn default() -> Self {
     Self {
-      spl: [Splice::default(); MAX_HEIGHT],
+      spl: [Splice::default(); super::MAX_HEIGHT],
       height: 0,
       _m: core::marker::PhantomData,
     }
@@ -2009,7 +2034,11 @@ struct Pointer {
 impl Pointer {
   #[inline]
   const fn new(offset: u32, size: u32) -> Self {
-    Self { offset, size, height: None }
+    Self {
+      offset,
+      size,
+      height: None,
+    }
   }
 }
 

@@ -12,7 +12,7 @@ fn main() {
       .read(true)
       .write(true);
     let mmap_options = MmapOptions::default();
-    let l = SkipMap::mmap_mut(&p, open_options, mmap_options).unwrap();
+    let l = SkipMap::map_mut(&p, open_options, mmap_options).unwrap();
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -41,7 +41,7 @@ fn main() {
 
     let open_options = OpenOptions::default().read(true);
     let mmap_options = MmapOptions::default();
-    let l = SkipMap::<u64>::mmap(&p, open_options, mmap_options).unwrap();
+    let l = SkipMap::<u64>::map(&p, open_options, mmap_options).unwrap();
     assert_eq!(N2, l.len());
     for i in 0..N2 {
       let l = l.clone();

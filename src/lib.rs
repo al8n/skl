@@ -21,8 +21,6 @@ use core::{cmp, ops::RangeBounds};
 /// A map implementation based on skiplist
 pub mod map;
 
-
-
 mod types;
 pub use types::*;
 
@@ -48,7 +46,6 @@ fn random_height(max_height: u8) -> u32 {
   let rnd: u32 = rng.gen();
   let mut h = 1;
   let max_height = max_height as usize;
-
 
   while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;

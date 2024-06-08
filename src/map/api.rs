@@ -2,6 +2,107 @@ use rarena_allocator::ArenaOptions;
 
 use super::*;
 
+impl SkipMap {
+  /// Create a new skipmap with default options.
+  ///
+  /// **Note:** The capacity stands for how many memory allocated,
+  /// it does not mean the skiplist can store `cap` entries.
+  ///
+  ///
+  ///
+  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
+  ///
+  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///    Even if we are working with raw pointers with `Box::into_raw`,
+  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///    especially if you're frequently accessing or modifying it.
+  ///
+  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
+  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
+  ///    it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
+  pub fn new() -> Result<Self, Error> {
+    Self::with_options(Options::new())
+  }
+
+  /// Like [`SkipMap::new`], but with [`Options`].
+  #[inline]
+  pub fn with_options(opts: Options) -> Result<Self, Error> {
+    Self::with_options_and_comparator(opts, Ascend)
+  }
+
+  /// Create a new memory map file backed with default options.
+  ///
+  /// **Note:** The capacity stands for how many memory mmaped,
+  /// it does not mean the skipmap can store `cap` entries.
+  ///
+  /// `lock`: whether to lock the underlying file or not
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn map_mut<P: AsRef<std::path::Path>>(
+    path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+  ) -> std::io::Result<Self> {
+    Self::map_mut_with_options(path, Options::new(), open_options, mmap_options)
+  }
+
+  /// Like [`SkipMap::map_mut`], but with [`Options`].
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn map_mut_with_options<P: AsRef<std::path::Path>>(
+    path: P,
+    opts: Options,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+  ) -> std::io::Result<Self> {
+    Self::map_mut_with_options_and_comparator(path, opts, open_options, mmap_options, Ascend)
+  }
+
+  /// Open an exist file and mmap it to create skipmap.
+  ///
+  /// `lock`: whether to lock the underlying file or not
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn map<P: AsRef<std::path::Path>>(
+    path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+  ) -> std::io::Result<Self> {
+    Self::map_with_comparator(path, open_options, mmap_options, Ascend)
+  }
+
+  /// Create a new memory map backed skipmap with default options.
+  ///
+  /// **What the difference between this method and [`SkipMap::new`]?**
+  ///
+  /// 1. This method will use mmap anonymous to require memory from the OS directly.
+  ///    If you require very large contiguous memory regions, this method might be more suitable because
+  ///    it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///    Even if we are working with raw pointers with `Box::into_raw`,
+  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///    especially if you're frequently accessing or modifying it.
+  ///
+  /// [`SkipMap::new`]: #method.new
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::mmap_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
+  }
+
+  /// Like [`SkipMap::map_anon`], but with [`Options`].
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn mmap_anon_with_options(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::mmap_anon_with_options_and_comparator(opts, mmap_options, Ascend)
+  }
+}
+
 impl<T, C> SkipMap<T, C> {
   /// Returns the underlying ARENA allocator used by the skipmap.
   ///
@@ -118,115 +219,15 @@ impl<T, C> SkipMap<T, C> {
     &self.cmp
   }
 
-  /// Flushes outstanding memory map modifications to disk.
-  ///
-  /// When this method returns with a non-error result,
-  /// all outstanding changes to a file-backed memory map are guaranteed to be durably stored.
-  /// The file's metadata (including last modification timestamp) may not be updated.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn flush(&self) -> std::io::Result<()> {
-    self.arena.flush()
-  }
-
-  /// Asynchronously flushes outstanding memory map modifications to disk.
-  ///
-  /// This method initiates flushing modified pages to durable storage, but it will not wait for
-  /// the operation to complete before returning. The file's metadata (including last
-  /// modification timestamp) may not be updated.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn flush_async(&self) -> std::io::Result<()> {
-    self.arena.flush_async()
-  }
-
-  #[cfg(all(test, feature = "std"))]
+  /// Like [`SkipMap::new`], but with a custom [`Comparator`].
   #[inline]
-  pub(crate) fn with_yield_now(mut self) -> Self {
-    self.yield_now = true;
-    self
-  }
-}
-
-impl SkipMap {
-  /// Create a new skipmap according to the given capacity
-  ///
-  /// **Note:** The capacity stands for how many memory allocated,
-  /// it does not mean the skiplist can store `cap` entries.
-  ///
-  ///
-  ///
-  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
-  ///
-  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
-  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
-  pub fn new() -> Result<Self, Error> {
-    Self::with_comparator(Options::new(), Ascend)
+  pub fn with_comparator(cmp: C) -> Result<Self, Error> {
+    Self::with_options_and_comparator(Options::new(), cmp)
   }
 
-  /// Create a new skipmap according to the given capacity, and mmaped to a file.
-  ///
-  /// **Note:** The capacity stands for how many memory mmaped,
-  /// it does not mean the skipmap can store `cap` entries.
-  ///
-  /// `lock`: whether to lock the underlying file or not
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_mut<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_comparator(path, Options::new(), open_options, mmap_options, Ascend)
-  }
-
-  /// Open an exist file and mmap it to create skipmap.
-  ///
-  /// `lock`: whether to lock the underlying file or not
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, Options::new(), open_options, mmap_options, Ascend)
-  }
-
-  /// Create a new skipmap according to the given capacity, and mmap anon.
-  ///
-  /// **What the difference between this method and [`SkipMap::new`]?**
-  ///
-  /// 1. This method will use mmap anonymous to require memory from the OS directly.
-  ///    If you require very large contiguous memory regions, this method might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// [`SkipMap::new`]: #method.new
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::mmap_anon_with_comparator(Options::new(), mmap_options, Ascend)
-  }
-}
-
-impl<T, C> SkipMap<T, C> {
-  /// Like [`SkipMap::new`], but with a custom comparator.
-  pub fn with_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
+  /// Like [`SkipMap::new`], but with [`Options`] and a custom [`Comparator`].
+  #[inline]
+  pub fn with_options_and_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
     let arena_opts = ArenaOptions::new()
       .with_capacity(opts.capacity())
       .with_maximum_alignment(Node::<T>::ALIGN as usize);
@@ -234,10 +235,24 @@ impl<T, C> SkipMap<T, C> {
     Self::new_in(arena, cmp, opts)
   }
 
-  /// Like [`SkipMap::map_mut`], but with a custom comparator.
+  /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
   pub fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
+    path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+    cmp: C,
+  ) -> std::io::Result<Self> {
+    Self::map_mut_with_options_and_comparator(path, Options::new(), open_options, mmap_options, cmp)
+  }
+
+  /// Like [`SkipMap::map_mut`], but with [`Options`] and a custom [`Comparator`].
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn map_mut_with_options_and_comparator<P: AsRef<std::path::Path>>(
     path: P,
     opts: Options,
     open_options: OpenOptions,
@@ -250,24 +265,37 @@ impl<T, C> SkipMap<T, C> {
     Self::new_in(arena, cmp, opts).map_err(invalid_data)
   }
 
-  /// Like [`SkipMap::map`], but with a custom comparator.
+  /// Like [`SkipMap::map`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
   pub fn map_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
-    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
     let arena = Arena::map(path, open_options, mmap_options)?;
-    Self::new_in(arena, cmp, opts).map_err(invalid_data)
+    Self::new_in(arena, cmp, Options::new()).map_err(invalid_data)
   }
 
-  /// Like [`SkipMap::map_anon`], but with a custom comparator.
+  /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon_with_comparator(opts: Options, mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
+  #[inline]
+  pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
+    Self::mmap_anon_with_options_and_comparator(Options::new(), mmap_options, cmp)
+  }
+
+  /// Like [`SkipMap::map_anon`], but with [`Options`] and a custom [`Comparator`].
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn mmap_anon_with_options_and_comparator(
+    opts: Options,
+    mmap_options: MmapOptions,
+    cmp: C,
+  ) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
     let arena_opts = ArenaOptions::new().with_maximum_alignment(alignment);
     let arena = Arena::map_anon(arena_opts, mmap_options)?;
@@ -299,14 +327,14 @@ impl<T, C> SkipMap<T, C> {
     self.arena.clear()?;
 
     Self::allocate_meta(&self.arena)?;
-    let head = Self::allocate_full_node(&self.arena)?;
-    let tail = Self::allocate_full_node(&self.arena)?;
+    let head = Self::allocate_full_node(&self.arena, self.opts.max_height())?;
+    let tail = Self::allocate_full_node(&self.arena, self.opts.max_height())?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
     unsafe {
       // Link all head/tail levels together.
-      for i in 0..MAX_HEIGHT {
+      for i in 0..(self.opts.max_height() as usize) {
         let head_link = head.tower(&self.arena, i);
         let tail_link = tail.tower(&self.arena, i);
         head_link.next_offset.store(tail.offset, Ordering::Relaxed);
@@ -317,6 +345,35 @@ impl<T, C> SkipMap<T, C> {
     self.head = head;
     self.tail = tail;
     Ok(())
+  }
+
+  /// Flushes outstanding memory map modifications to disk.
+  ///
+  /// When this method returns with a non-error result,
+  /// all outstanding changes to a file-backed memory map are guaranteed to be durably stored.
+  /// The file's metadata (including last modification timestamp) may not be updated.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn flush(&self) -> std::io::Result<()> {
+    self.arena.flush()
+  }
+
+  /// Asynchronously flushes outstanding memory map modifications to disk.
+  ///
+  /// This method initiates flushing modified pages to durable storage, but it will not wait for
+  /// the operation to complete before returning. The file's metadata (including last
+  /// modification timestamp) may not be updated.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  pub fn flush_async(&self) -> std::io::Result<()> {
+    self.arena.flush_async()
+  }
+
+  #[cfg(all(test, feature = "std"))]
+  #[inline]
+  pub(crate) fn with_yield_now(mut self) -> Self {
+    self.yield_now = true;
+    self
   }
 }
 

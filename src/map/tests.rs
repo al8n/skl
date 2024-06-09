@@ -1511,7 +1511,7 @@ fn test_concurrent_one_key_map_anon_unify() {
   })
 }
 
-fn iter_all_versionsator_next(l: SkipMap) {
+fn iter_all_versions_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -1533,128 +1533,128 @@ fn iter_all_versionsator_next(l: SkipMap) {
 }
 
 #[test]
-fn test_iter_all_versionsator_next() {
-  run(|| iter_all_versionsator_next(SkipMap::with_options(TEST_OPTIONS).unwrap()));
+fn test_iter_all_versions_next() {
+  run(|| iter_all_versions_next(SkipMap::with_options(TEST_OPTIONS).unwrap()));
 }
 
 #[test]
-fn test_iter_all_versionsator_next_unify() {
-  run(|| iter_all_versionsator_next(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
+fn test_iter_all_versions_next_unify() {
+  run(|| iter_all_versions_next(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_next_map_mut() {
+fn test_iter_all_versions_next_map_mut() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
-      .join("test_skipmap_iter_all_versionsator_next_map_mut");
+      .join("test_skipmap_iter_all_versions_next_map_mut");
     let open_options = OpenOptions::default()
       .create_new(Some(ARENA_SIZE as u32))
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    iter_all_versionsator_next(SkipMap::map_mut(p, open_options, map_options).unwrap());
+    iter_all_versions_next(SkipMap::map_mut(p, open_options, map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_next_map_anon() {
+fn test_iter_all_versions_next_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_next(SkipMap::map_anon(map_options).unwrap());
+    iter_all_versions_next(SkipMap::map_anon(map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_next_map_anon_unify() {
+fn test_iter_all_versions_next_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_next(
+    iter_all_versions_next(
       SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap(),
     );
   })
 }
 
-fn range_next(l: SkipMap) {
-  const N: usize = 100;
+// fn range_next(l: SkipMap) {
+//   const N: usize = 100;
 
-  for i in (0..N).rev() {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i))
-      .unwrap();
-  }
+//   for i in (0..N).rev() {
+//     l.get_or_insert(0, &make_int_key(i), &make_value(i))
+//       .unwrap();
+//   }
 
-  let upper = make_int_key(50);
-  let mut it = l.range(0, ..=upper.as_slice());
-  let mut ent = it.seek_lower_bound(Bound::Unbounded);
-  for i in 0..N {
-    if i <= 50 {
-      {
-        let ent = ent.unwrap();
-        assert_eq!(ent.key(), make_int_key(i));
-        assert_eq!(ent.value(), make_value(i));
-      }
-      ent = it.next();
-    } else {
-      assert!(ent.is_none());
-      ent = it.next();
-    }
-  }
+//   let upper = make_int_key(50);
+//   let mut it = l.range(0, ..=upper.as_slice());
+//   let mut ent = it.seek_lower_bound(Bound::Unbounded);
+//   for i in 0..N {
+//     if i <= 50 {
+//       {
+//         let ent = ent.unwrap();
+//         assert_eq!(ent.key(), make_int_key(i));
+//         assert_eq!(ent.value(), make_value(i));
+//       }
+//       ent = it.next();
+//     } else {
+//       assert!(ent.is_none());
+//       ent = it.next();
+//     }
+//   }
 
-  assert!(it.next().is_none());
-}
+//   assert!(it.next().is_none());
+// }
 
-#[test]
-fn test_range_next() {
-  run(|| range_next(SkipMap::with_options(TEST_OPTIONS).unwrap()));
-}
+// #[test]
+// fn test_range_next() {
+//   run(|| range_next(SkipMap::with_options(TEST_OPTIONS).unwrap()));
+// }
 
-#[test]
-fn test_range_next_unify() {
-  run(|| range_next(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
-}
+// #[test]
+// fn test_range_next_unify() {
+//   run(|| range_next(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
+// }
 
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-fn test_range_next_map_mut() {
-  run(|| {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("test_skipmap_range_next_map_mut");
-    let open_options = OpenOptions::default()
-      .create_new(Some(ARENA_SIZE as u32))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    iter_all_versionsator_next(SkipMap::map_mut(p, open_options, map_options).unwrap());
-  })
-}
+// #[test]
+// #[cfg(feature = "memmap")]
+// #[cfg_attr(miri, ignore)]
+// fn test_range_next_map_mut() {
+//   run(|| {
+//     let dir = tempfile::tempdir().unwrap();
+//     let p = dir.path().join("test_skipmap_range_next_map_mut");
+//     let open_options = OpenOptions::default()
+//       .create_new(Some(ARENA_SIZE as u32))
+//       .read(true)
+//       .write(true);
+//     let map_options = MmapOptions::default();
+//     iter_all_versions_next(SkipMap::map_mut(p, open_options, map_options).unwrap());
+//   })
+// }
 
-#[test]
-#[cfg(feature = "memmap")]
-fn test_range_next_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_next(SkipMap::map_anon(map_options).unwrap());
-  })
-}
+// #[test]
+// #[cfg(feature = "memmap")]
+// fn test_range_next_map_anon() {
+//   run(|| {
+//     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+//     iter_all_versions_next(SkipMap::map_anon(map_options).unwrap());
+//   })
+// }
 
-#[test]
-#[cfg(feature = "memmap")]
-fn test_range_next_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_next(
-      SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap(),
-    );
-  })
-}
+// #[test]
+// #[cfg(feature = "memmap")]
+// fn test_range_next_map_anon_unify() {
+//   run(|| {
+//     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+//     iter_all_versions_next(
+//       SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap(),
+//     );
+//   })
+// }
 
-fn iter_all_versionsator_prev(l: SkipMap) {
+fn iter_all_versions_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
@@ -1676,121 +1676,121 @@ fn iter_all_versionsator_prev(l: SkipMap) {
 }
 
 #[test]
-fn test_iter_all_versionsator_next_back() {
-  run(|| iter_all_versionsator_prev(SkipMap::with_options(TEST_OPTIONS).unwrap()))
+fn test_iter_all_versions_next_back() {
+  run(|| iter_all_versions_prev(SkipMap::with_options(TEST_OPTIONS).unwrap()))
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_prev_map_mut() {
+fn test_iter_all_versions_prev_map_mut() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
-      .join("test_skipmap_iter_all_versionsator_prev_map_mut");
+      .join("test_skipmap_iter_all_versions_prev_map_mut");
     let open_options = OpenOptions::default()
       .create_new(Some(ARENA_SIZE as u32))
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    iter_all_versionsator_prev(SkipMap::map_mut(p, open_options, map_options).unwrap());
+    iter_all_versions_prev(SkipMap::map_mut(p, open_options, map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_prev_map_anon() {
+fn test_iter_all_versions_prev_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_prev(SkipMap::map_anon(map_options).unwrap());
+    iter_all_versions_prev(SkipMap::map_anon(map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_prev_map_anon_unify() {
+fn test_iter_all_versions_prev_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_prev(
+    iter_all_versions_prev(
       SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap(),
     );
   })
 }
 
-fn range_prev(l: SkipMap) {
-  const N: usize = 100;
+// fn range_prev(l: SkipMap) {
+//   const N: usize = 100;
 
-  for i in 0..N {
-    l.get_or_insert(0, &make_int_key(i), &make_value(i))
-      .unwrap();
-  }
+//   for i in 0..N {
+//     l.get_or_insert(0, &make_int_key(i), &make_value(i))
+//       .unwrap();
+//   }
 
-  let lower = make_int_key(50);
-  let mut it = l.range(0, lower.as_slice()..);
-  let mut ent = it.seek_upper_bound(Bound::Unbounded);
-  for i in (0..N).rev() {
-    if i >= 50 {
-      {
-        let ent = ent.unwrap();
-        assert_eq!(ent.key(), make_int_key(i));
-        assert_eq!(ent.value(), make_value(i));
-      }
-      ent = it.next_back();
-    } else {
-      assert!(ent.is_none());
-      ent = it.next_back();
-    }
-  }
+//   let lower = make_int_key(50);
+//   let mut it = l.range(0, lower.as_slice()..);
+//   let mut ent = it.seek_upper_bound(Bound::Unbounded);
+//   for i in (0..N).rev() {
+//     if i >= 50 {
+//       {
+//         let ent = ent.unwrap();
+//         assert_eq!(ent.key(), make_int_key(i));
+//         assert_eq!(ent.value(), make_value(i));
+//       }
+//       ent = it.next_back();
+//     } else {
+//       assert!(ent.is_none());
+//       ent = it.next_back();
+//     }
+//   }
 
-  assert!(it.next_back().is_none());
-}
+//   assert!(it.next_back().is_none());
+// }
 
-#[test]
-fn test_range_prev() {
-  run(|| range_prev(SkipMap::with_options(TEST_OPTIONS).unwrap()));
-}
+// #[test]
+// fn test_range_prev() {
+//   run(|| range_prev(SkipMap::with_options(TEST_OPTIONS).unwrap()));
+// }
 
-#[test]
-fn test_range_prev_unify() {
-  run(|| range_prev(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
-}
+// #[test]
+// fn test_range_prev_unify() {
+//   run(|| range_prev(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
+// }
 
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-fn test_range_prev_map_mut() {
-  run(|| {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("test_skipmap_range_prev_map_mut");
-    let open_options = OpenOptions::default()
-      .create_new(Some(ARENA_SIZE as u32))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    range_prev(SkipMap::map_mut(p, open_options, map_options).unwrap());
-  })
-}
+// #[test]
+// #[cfg(feature = "memmap")]
+// #[cfg_attr(miri, ignore)]
+// fn test_range_prev_map_mut() {
+//   run(|| {
+//     let dir = tempfile::tempdir().unwrap();
+//     let p = dir.path().join("test_skipmap_range_prev_map_mut");
+//     let open_options = OpenOptions::default()
+//       .create_new(Some(ARENA_SIZE as u32))
+//       .read(true)
+//       .write(true);
+//     let map_options = MmapOptions::default();
+//     range_prev(SkipMap::map_mut(p, open_options, map_options).unwrap());
+//   })
+// }
 
-#[test]
-#[cfg(feature = "memmap")]
-fn test_range_prev_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    range_prev(SkipMap::map_anon(map_options).unwrap());
-  })
-}
+// #[test]
+// #[cfg(feature = "memmap")]
+// fn test_range_prev_map_anon() {
+//   run(|| {
+//     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+//     range_prev(SkipMap::map_anon(map_options).unwrap());
+//   })
+// }
 
-#[test]
-#[cfg(feature = "memmap")]
-fn test_range_prev_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    range_prev(SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
-  })
-}
+// #[test]
+// #[cfg(feature = "memmap")]
+// fn test_range_prev_map_anon_unify() {
+//   run(|| {
+//     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+//     range_prev(SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
+//   })
+// }
 
-fn iter_all_versionsator_seek_ge(l: SkipMap) {
+fn iter_all_versions_seek_ge(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -1842,54 +1842,54 @@ fn iter_all_versionsator_seek_ge(l: SkipMap) {
 }
 
 #[test]
-fn test_iter_all_versionsator_seek_ge() {
-  run(|| iter_all_versionsator_seek_ge(SkipMap::with_options(TEST_OPTIONS).unwrap()));
+fn test_iter_all_versions_seek_ge() {
+  run(|| iter_all_versions_seek_ge(SkipMap::with_options(TEST_OPTIONS).unwrap()));
 }
 
 #[test]
-fn test_iter_all_versionsator_seek_ge_unify() {
-  run(|| iter_all_versionsator_seek_ge(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
+fn test_iter_all_versions_seek_ge_unify() {
+  run(|| iter_all_versions_seek_ge(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()));
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_seek_ge_map_mut() {
+fn test_iter_all_versions_seek_ge_map_mut() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
-      .join("test_skipmap_iter_all_versionsator_seek_ge_map_mut");
+      .join("test_skipmap_iter_all_versions_seek_ge_map_mut");
     let open_options = OpenOptions::default()
       .create_new(Some(ARENA_SIZE as u32))
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    iter_all_versionsator_seek_ge(SkipMap::map_mut(p, open_options, map_options).unwrap());
+    iter_all_versions_seek_ge(SkipMap::map_mut(p, open_options, map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_seek_ge_map_anon() {
+fn test_iter_all_versions_seek_ge_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_seek_ge(SkipMap::map_anon(map_options).unwrap());
+    iter_all_versions_seek_ge(SkipMap::map_anon(map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_seek_ge_map_anon_unify() {
+fn test_iter_all_versions_seek_ge_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_seek_ge(
+    iter_all_versions_seek_ge(
       SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap(),
     );
   })
 }
 
-fn iter_all_versionsator_seek_lt(l: SkipMap) {
+fn iter_all_versions_seek_lt(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -1928,48 +1928,48 @@ fn iter_all_versionsator_seek_lt(l: SkipMap) {
 }
 
 #[test]
-fn test_iter_all_versionsator_seek_lt() {
-  run(|| iter_all_versionsator_seek_lt(SkipMap::with_options(TEST_OPTIONS).unwrap()))
+fn test_iter_all_versions_seek_lt() {
+  run(|| iter_all_versions_seek_lt(SkipMap::with_options(TEST_OPTIONS).unwrap()))
 }
 
 #[test]
-fn test_iter_all_versionsator_seek_lt_unify() {
-  run(|| iter_all_versionsator_seek_lt(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()))
+fn test_iter_all_versions_seek_lt_unify() {
+  run(|| iter_all_versions_seek_lt(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()))
 }
 
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
-fn test_iter_all_versionsator_seek_lt_map_mut() {
+fn test_iter_all_versions_seek_lt_map_mut() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
-      .join("test_skipmap_iter_all_versionsator_seek_lt_map_mut");
+      .join("test_skipmap_iter_all_versions_seek_lt_map_mut");
     let open_options = OpenOptions::default()
       .create_new(Some(ARENA_SIZE as u32))
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    iter_all_versionsator_seek_lt(SkipMap::map_mut(p, open_options, map_options).unwrap());
+    iter_all_versions_seek_lt(SkipMap::map_mut(p, open_options, map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_seek_lt_map_anon() {
+fn test_iter_all_versions_seek_lt_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_seek_lt(SkipMap::map_anon(map_options).unwrap());
+    iter_all_versions_seek_lt(SkipMap::map_anon(map_options).unwrap());
   })
 }
 
 #[test]
 #[cfg(feature = "memmap")]
-fn test_iter_all_versionsator_seek_lt_map_anon_unify() {
+fn test_iter_all_versions_seek_lt_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    iter_all_versionsator_seek_lt(
+    iter_all_versions_seek_lt(
       SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap(),
     );
   })

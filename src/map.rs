@@ -1026,7 +1026,7 @@ impl<T, C> SkipMap<T, C> {
     let buf = self
       .arena
       .get_bytes_mut(value_offset as usize, value_size as usize);
-    let mut oval = VacantBuffer::new(size as usize, offset, buf);
+    let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
     if let Err(e) = f(&mut oval) {
       self.arena.dealloc(offset, size);
       return Err(e);

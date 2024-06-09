@@ -2257,7 +2257,7 @@ fn test_range_latest_map_anon_unify() {
 
 #[test]
 #[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
+// #[cfg_attr(miri, ignore)]
 fn test_reopen_mmap() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
@@ -2888,18 +2888,16 @@ fn remove(l: SkipMap) {
 
   for i in 0..100 {
     let k = key(i);
+    // no race, remove should succeed
     let old = l
       .compare_remove(0, &k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap()
-      .unwrap_left()
       .unwrap();
-    assert_eq!(old.key(), k);
-    assert_eq!(old.value(), new_value(i));
+    assert!(old.is_none());
 
+    // key already removed
     let old = l
       .compare_remove(0, &k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap()
-      .unwrap_left();
+      .unwrap();
     assert!(old.is_none());
   }
 
@@ -2962,19 +2960,17 @@ fn remove2(l: SkipMap) {
 
   for i in 0..100 {
     let k = key(i);
+    // not found, remove should succeed
     let old = l
       .compare_remove(1, &k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap()
-      .unwrap_left();
+      .unwrap();
     assert!(old.is_none());
 
+    // no-race, remove should succeed
     let old = l
       .compare_remove(0, &k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap()
-      .unwrap_left()
       .unwrap();
-    assert_eq!(old.key(), k);
-    assert_eq!(old.value(), new_value(i));
+    assert!(old.is_none());
   }
 
   for i in 0..100 {

@@ -445,8 +445,16 @@ impl<T> Node<T> {
     self
       .value
       .compare_remove(success, failure)
-      .map(|(offset, size)| unsafe {
-        arena.dealloc(offset, (mem::size_of::<T>() as u32) + size);
+      .map(|(offset, size)| {
+        if size != u32::MAX {
+          unsafe {
+            arena.dealloc(offset, (mem::size_of::<T>() as u32) + size);
+          }
+        } else {
+          unsafe {
+            arena.dealloc(offset, mem::size_of::<T>() as u32);
+          }
+        }
       })
   }
 }
@@ -940,6 +948,9 @@ impl<T, C> SkipMap<T, C> {
       // Safety: node and trailer do not need to be dropped.
       node.detach();
 
+      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
+      let aligned_node_offset = node.offset() + node.len();
+
       let trailer_offset = if mem::size_of::<T>() != 0 {
         let mut trailer = arena.alloc::<T>()?;
         trailer.detach();
@@ -948,22 +959,13 @@ impl<T, C> SkipMap<T, C> {
         arena.allocated()
       };
 
-      node.align_to::<T>().unwrap();
-      let node_ptr = node.as_mut_ptr().add(node.len());
-      let node_offset = node.offset() + node.len();
-      node
-        .put(Node::<T>::full(trailer_offset as u32, max_height))
-        .unwrap();
+      let node = node_ptr.as_mut();
+      *node = Node::<T>::full(trailer_offset as u32, max_height);
 
-      for i in 0..(max_height as usize) {
-        let link = node
-          .as_mut_ptr()
-          .add(Node::<T>::SIZE + i * Link::SIZE)
-          .cast::<Link>();
-        link.write(Link::new(0, 0));
-      }
-
-      Ok(NodePtr::new(node_ptr, node_offset as u32))
+      Ok(NodePtr::new(
+        node_ptr.as_ptr() as _,
+        aligned_node_offset as u32,
+      ))
     }
   }
 
@@ -1056,21 +1058,19 @@ impl<T, C> SkipMap<T, C> {
   fn get_pointers(arena: &Arena) -> (NonNull<Meta>, NodePtr<T>, NodePtr<T>) {
     unsafe {
       let offset = arena.data_offset();
-      let meta = arena.get_aligned_pointer_mut::<Meta>(offset);
+      let meta = arena.get_aligned_pointer::<Meta>(offset);
 
-      let offset = arena.offset(meta.as_ptr() as _) + mem::size_of::<Meta>();
-      let head_ptr = arena.get_aligned_pointer_mut::<Node<T>>(offset);
-      let head_ptr = head_ptr.as_ptr();
+      let offset = arena.offset(meta as _) + mem::size_of::<Meta>();
+      let head_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
       let head_offset = arena.offset(head_ptr as _);
       let head = NodePtr::new(head_ptr as _, head_offset as u32);
 
       let (trailer_offset, _) = head.as_ref().value.load(Ordering::Relaxed);
       let offset = trailer_offset as usize + mem::size_of::<T>();
-      let tail_ptr = arena.get_aligned_pointer_mut::<Node<T>>(offset);
-      let tail_ptr = tail_ptr.as_ptr();
+      let tail_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
       let tail_offset = arena.offset(tail_ptr as _);
       let tail = NodePtr::new(tail_ptr as _, tail_offset as u32);
-      (meta, head, tail)
+      (NonNull::new_unchecked(meta as _), head, tail)
     }
   }
 
@@ -1079,7 +1079,7 @@ impl<T, C> SkipMap<T, C> {
     &self,
     height: u32,
     key_size: u32,
-    value_size: u32,
+    mut value_size: u32,
   ) -> Result<(), Error> {
     if height < 1 || height > self.opts.max_height() as u32 {
       panic!("height cannot be less than one or greater than the max height");
@@ -1088,6 +1088,13 @@ impl<T, C> SkipMap<T, C> {
     if key_size > self.opts.max_key_size() {
       return Err(Error::KeyTooLarge(key_size as u64));
     }
+
+    // if value_size is u32::MAX, it means that the value is removed.
+    value_size = if value_size == u32::MAX {
+      0
+    } else {
+      value_size
+    };
 
     if value_size > self.opts.max_value_size() {
       return Err(Error::ValueTooLarge(value_size as u64));
@@ -1209,8 +1216,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
 
     let offset = nd.prev_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer_mut(offset as usize);
-    NodePtr::new(ptr, offset)
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr as _, offset)
   }
 
   /// ## Safety
@@ -1222,8 +1229,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return NodePtr::NULL;
     }
     let offset = nptr.next_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer_mut(offset as usize);
-    NodePtr::new(ptr, offset)
+    let ptr = self.arena.get_pointer(offset as usize);
+    NodePtr::new(ptr as _, offset)
   }
 
   /// Returns the first entry in the map.
@@ -1963,18 +1970,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         let node = node_ptr.as_ref();
         let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
-          Ok(_) => {
-            // let trailer = node.get_trailer_by_offset(&self.arena, offset);
-            // let value = node.get_value_by_offset(&self.arena, offset, len);
-            // Ok(Either::Right(Ok(VersionedEntryRef {
-            //   map: self,
-            //   key,
-            //   trailer,
-            //   value,
-            //   ptr: node_ptr,
-            // })))
-            Ok(Either::Left(None))
-          }
+          Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);
             let value = node.get_value_by_offset(&self.arena, offset, len);

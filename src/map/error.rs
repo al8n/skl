@@ -64,7 +64,13 @@ fn test_fmt() {
     "entry size 10 is too large"
   );
   assert_eq!(
-    std::format!("{}", Error::Arena(rarena_allocator::Error::InsufficientSpace { requested: 10, available: 10 })),
+    std::format!(
+      "{}",
+      Error::Arena(rarena_allocator::Error::InsufficientSpace {
+        requested: 10,
+        available: 10
+      })
+    ),
     "Allocation failed: requested size is 10, but only 10 is available",
   );
   assert_eq!(

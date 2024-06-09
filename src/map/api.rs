@@ -799,10 +799,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
   ///
-  /// - Returns `Ok(Either::Left(None))`:
-  ///   - if the key with the given version does not exist in the skipmap.
-  ///   - if the key with the given version already exists and the entry is already removed.
-  /// - Returns `Ok(Either::Left(Some(old)))` if the key with the given version already exists and the entry is successfully removed.
+  /// - Returns `Ok(None)`:
+  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   pub fn compare_remove<'a, 'b: 'a>(
@@ -811,7 +809,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Either<Option<EntryRef<'a, T, C>>, EntryRef<'a, T, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
     self
       .update(
         trailer,
@@ -824,29 +822,20 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         true,
       )
       .map(|res| match res {
-        Either::Left(old) => match old {
-          Some(old) => {
-            if old.is_removed() {
-              Either::Left(None)
-            } else {
-              Either::Left(Some(EntryRef(old)))
-            }
-          }
-          None => Either::Left(None),
-        },
+        Either::Left(_) => None,
         Either::Right(res) => match res {
           Ok(old) => {
             if old.is_removed() {
-              Either::Left(None)
+              None
             } else {
-              Either::Left(Some(EntryRef(old)))
+              Some(EntryRef(old))
             }
           }
           Err(current) => {
             if current.is_removed() {
-              Either::Left(None)
+              None
             } else {
-              Either::Right(EntryRef(current))
+              Some(EntryRef(current))
             }
           }
         },

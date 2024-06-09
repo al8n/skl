@@ -7,7 +7,6 @@ use core::{
   ptr::{self, NonNull},
 };
 
-// #[cfg(not(feature = "std"))]
 use std::boxed::Box;
 
 use crate::{Key, Trailer, VacantBuffer};
@@ -33,11 +32,8 @@ pub use options::*;
 
 use rarena_allocator::Error as ArenaError;
 
-#[cfg(all(test, not(loom)))]
+#[cfg(test)]
 mod tests;
-
-#[cfg(all(test, loom))]
-mod loom;
 
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;

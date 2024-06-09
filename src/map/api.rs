@@ -230,7 +230,8 @@ impl<T, C> SkipMap<T, C> {
   pub fn with_options_and_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
     let arena_opts = ArenaOptions::new()
       .with_capacity(opts.capacity())
-      .with_maximum_alignment(Node::<T>::ALIGN as usize);
+      .with_maximum_alignment(Node::<T>::ALIGN as usize)
+      .with_unify(opts.unify());
     let arena = Arena::new(arena_opts);
     Self::new_in(arena, cmp, opts)
   }
@@ -297,7 +298,9 @@ impl<T, C> SkipMap<T, C> {
     cmp: C,
   ) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
-    let arena_opts = ArenaOptions::new().with_maximum_alignment(alignment);
+    let arena_opts = ArenaOptions::new()
+      .with_maximum_alignment(alignment)
+      .with_unify(opts.unify());
     let arena = Arena::map_anon(arena_opts, mmap_options)?;
     Self::new_in(arena, cmp, opts).map_err(invalid_data)
   }

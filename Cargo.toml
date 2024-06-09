@@ -37,7 +37,7 @@ memmap = ["rarena-allocator/memmap", "std"]
 std = ["rand/default", "either/default", "rarena-allocator/std"]
 tracing = ["dep:tracing"]
 
-loom = ["dep:loom", "rarena-allocator/loom"]
+# loom = ["dep:loom", "rarena-allocator/loom"]
 
 
 [target.'cfg(target_family = "wasm")'.dependencies]
@@ -50,7 +50,7 @@ rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 
 rarena-allocator = { path = "../arena/rarena-allocator", default-features = false }
 
-loom = { version = "0.7", optional = true }
+# loom = { version = "0.7", optional = true }
 tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]

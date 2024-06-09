@@ -292,9 +292,7 @@ impl<T> NodePtr<T> {
   }
 }
 
-#[derive(Debug)]
-#[cfg_attr(all(feature = "atomic", feature = "std"), repr(C, align(4)))]
-#[cfg_attr(not(all(feature = "atomic", feature = "std")), repr(C, align(8)))]
+#[repr(C)]
 struct Node<T> {
   // A byte slice is 24 bytes. We are trying to save space here.
   /// Multiple parts of the value are encoded as a single uint64 so that it
@@ -322,6 +320,20 @@ struct Node<T> {
   // pub(super) tower: [Link; self.opts.max_height],
 }
 
+impl<T> core::fmt::Debug for Node<T> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let (key_size, height) = decode_key_size_and_height(self.key_size_and_height);
+    let (value_offset, value_size) = decode_value_pointer(self.value.0.load(Ordering::Relaxed));
+    f.debug_struct("Node")
+      .field("value_offset", &value_offset)
+      .field("value_size", &value_size)
+      .field("key_offset", &self.key_offset)
+      .field("key_size", &key_size)
+      .field("height", &height)
+      .finish()
+  }
+}
+
 impl<T> Node<T> {
   const SIZE: usize = mem::size_of::<Self>();
   const ALIGN: u32 = mem::align_of::<Self>() as u32;
@@ -337,7 +349,7 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  fn size(max_height: u8) -> usize {
+  const fn size(max_height: u8) -> usize {
     Self::SIZE + (max_height as usize) * Link::SIZE
   }
 
@@ -452,8 +464,8 @@ impl<T> Node<T> {
     if len == u32::MAX {
       return None;
     }
-
-    Some(arena.get_bytes(offset as usize + mem::size_of::<T>(), len as usize))
+    let align_offset = Self::align_offset(offset);
+    Some(arena.get_bytes(align_offset as usize + mem::size_of::<T>(), len as usize))
   }
 
   /// ## Safety
@@ -469,8 +481,14 @@ impl<T> Node<T> {
     if len == u32::MAX {
       return None;
     }
+    let align_offset = Self::align_offset(offset);
+    Some(arena.get_bytes(align_offset as usize + mem::size_of::<T>(), len as usize))
+  }
 
-    Some(arena.get_bytes(offset as usize + mem::size_of::<T>(), len as usize))
+  #[inline]
+  const fn align_offset(current_offset: u32) -> u32 {
+    let alignment = mem::align_of::<T>() as u32;
+    (current_offset + alignment - 1) & !(alignment - 1)
   }
 }
 
@@ -478,9 +496,7 @@ impl<T: Copy> Node<T> {
   #[inline]
   unsafe fn get_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> T {
     let (offset, _) = self.value.load(Ordering::Acquire);
-    let ptr = arena.get_pointer(offset as usize);
-    #[cfg(not(feature = "unaligned"))]
-    ptr::read(ptr as *const T)
+    *arena.get_aligned_pointer(offset as usize)
   }
 
   /// ## Safety
@@ -488,9 +504,7 @@ impl<T: Copy> Node<T> {
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
   unsafe fn get_trailer_by_offset<'a, 'b: 'a>(&'a self, arena: &'b Arena, offset: u32) -> T {
-    let ptr = arena.get_pointer(offset as usize);
-    #[cfg(not(feature = "unaligned"))]
-    ptr::read(ptr as *const T)
+    *arena.get_aligned_pointer::<T>(offset as usize)
   }
 
   /// ## Safety
@@ -499,18 +513,16 @@ impl<T: Copy> Node<T> {
   #[inline]
   unsafe fn get_value_and_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> (T, Option<&'b [u8]>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
-    let ptr = arena.get_pointer(offset as usize);
+    let ptr = arena.get_aligned_pointer(offset as usize);
     #[cfg(not(feature = "unaligned"))]
-    let trailer = ptr::read(ptr as *const T);
+    let trailer = *ptr;
 
     if len == u32::MAX {
       return (trailer, None);
     }
 
-    (
-      trailer,
-      Some(arena.get_bytes(offset as usize + mem::size_of::<T>(), len as usize)),
-    )
+    let value_offset = arena.offset(ptr as _) + mem::size_of::<T>();
+    (trailer, Some(arena.get_bytes(value_offset, len as usize)))
   }
 }
 
@@ -651,29 +663,18 @@ impl<T, C> SkipMap<T, C> {
     value_size: u32,
     vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self.check_height(height);
-
-    if key_size as u64 > u16::MAX as u64 {
-      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
-    }
-
-    if value_size as u64 > u32::MAX as u64 {
-      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
-    }
-
-    let entry_size = (value_size as u64) + (key_size as u64) + Node::<T>::size(height as u8) as u64;
-    if entry_size > u32::MAX as u64 {
-      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
-    }
+    self
+      .check_node_size(height, key_size, value_size)
+      .map_err(Either::Right)?;
 
     unsafe {
       let mut node = self
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let ptr = node.as_mut_ptr();
-      let aligned_node_offset = ptr.align_offset(mem::align_of::<Node<T>>());
-      let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
+      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
+      let aligned_node_offset = node.offset() + node.len();
+
       let mut key = self
         .arena
         .alloc_bytes(key_size)
@@ -685,21 +686,14 @@ impl<T, C> SkipMap<T, C> {
         .alloc_aligned_bytes::<T>(value_size)
         .map_err(|e| Either::Right(e.into()))?;
       let trailer_and_value_offset = trailer_and_value.offset();
-      let trailer_and_value_ptr = trailer_and_value.as_mut_ptr();
-      let aligned_trailer_offset = trailer_and_value_ptr.align_offset(mem::align_of::<T>());
-      let trailer_ptr = trailer_and_value_ptr
-        .add(aligned_trailer_offset)
-        .cast::<T>();
-      trailer_ptr.write(trailer);
-      let value_offset = trailer_and_value_offset + aligned_trailer_offset + mem::size_of::<T>();
+      trailer_and_value.put_aligned::<T>(trailer).unwrap();
+      let value_offset = (trailer_and_value_offset + trailer_and_value.len()) as u32;
 
       // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
+      let node_ref = node_ptr.as_mut();
       node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
-      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
-
       key.detach();
       let (_, key_deallocate_info) = self
         .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
@@ -710,14 +704,14 @@ impl<T, C> SkipMap<T, C> {
           trailer_and_value_offset as u32,
           trailer_and_value.capacity() as u32,
           value_size,
-          value_offset as u32,
+          value_offset,
           vf,
         )
         .map_err(Either::Left)?;
 
       node.detach();
       Ok((
-        NodePtr::new(node_ptr as _, (node.offset() + aligned_node_offset) as u32),
+        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
         Deallocator {
           node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
           key: Some(key_deallocate_info),
@@ -736,25 +730,17 @@ impl<T, C> SkipMap<T, C> {
     key_size: u32,
     value_size: u32,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self.check_height(height);
-
-    if key_size as u64 > u16::MAX as u64 {
-      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
-    }
-
-    let entry_size = (key_size as u64) + Node::<T>::size(height as u8) as u64;
-    if entry_size > u32::MAX as u64 {
-      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
-    }
+    self
+      .check_node_size(height, key_size, value_size)
+      .map_err(Either::Right)?;
 
     unsafe {
       let mut node = self
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let ptr = node.as_mut_ptr();
-      let aligned_node_offset = ptr.align_offset(mem::align_of::<Node<T>>());
-      let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
+      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
+      let aligned_node_offset = node.offset() + node.len();
 
       let mut trailer_ref = self
         .arena
@@ -764,16 +750,15 @@ impl<T, C> SkipMap<T, C> {
       let trailer_offset = trailer_ref.offset();
 
       // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
+      let node_ref = node_ptr.as_mut();
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
-      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       trailer_ref.detach();
       node.detach();
       Ok((
-        NodePtr::new(node_ptr as _, (node.offset() + aligned_node_offset) as u32),
+        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
         Deallocator {
           node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
           key: None,
@@ -795,25 +780,18 @@ impl<T, C> SkipMap<T, C> {
     kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     value_size: u32,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self.check_height(height);
-
-    if key_size as u64 > u16::MAX as u64 {
-      return Err(Either::Right(Error::KeyTooLarge(key_size as u64)));
-    }
-
-    let entry_size = (key_size as u64) + Node::<T>::size(height as u8) as u64;
-    if entry_size > u32::MAX as u64 {
-      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
-    }
+    self
+      .check_node_size(height, key_size, value_size)
+      .map_err(Either::Right)?;
 
     unsafe {
       let mut node = self
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let ptr = node.as_mut_ptr();
-      let aligned_node_offset = ptr.align_offset(mem::align_of::<Node<T>>());
-      let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
+      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
+      let aligned_node_offset = node.offset() + node.len();
+
       let mut key = self
         .arena
         .alloc_bytes(key_size)
@@ -829,11 +807,10 @@ impl<T, C> SkipMap<T, C> {
       let trailer_offset = trailer_ref.offset();
 
       // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
+      let node_ref = node_ptr.as_mut();
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
-      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       key.detach();
       let (_, key_deallocate_info) = self
@@ -842,8 +819,9 @@ impl<T, C> SkipMap<T, C> {
 
       trailer_ref.detach();
       node.detach();
+
       Ok((
-        NodePtr::new(node_ptr as _, (node.offset() + aligned_node_offset) as u32),
+        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
         Deallocator {
           node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
           key: Some(key_deallocate_info),
@@ -866,44 +844,31 @@ impl<T, C> SkipMap<T, C> {
     value_size: u32,
     vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self.check_height(height);
-
-    if value_size as u64 > u32::MAX as u64 {
-      return Err(Either::Right(Error::ValueTooLarge(value_size as u64)));
-    }
-
-    let entry_size = (value_size as u64) + Node::<T>::size(height as u8) as u64;
-    if entry_size > u32::MAX as u64 {
-      return Err(Either::Right(Error::EntryTooLarge(entry_size)));
-    }
+    self
+      .check_node_size(height, key_size, value_size)
+      .map_err(Either::Right)?;
 
     unsafe {
       let mut node = self
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let ptr = node.as_mut_ptr();
-      let aligned_node_offset = ptr.align_offset(mem::align_of::<Node<T>>());
-      let node_ptr = ptr.add(aligned_node_offset).cast::<Node<T>>();
+      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
+      let aligned_node_offset = node.offset() + node.len();
+
       let mut trailer_and_value = self
         .arena
         .alloc_aligned_bytes::<T>(value_size)
         .map_err(|e| Either::Right(e.into()))?;
       let trailer_and_value_offset = trailer_and_value.offset();
-      let trailer_and_value_ptr = trailer_and_value.as_mut_ptr();
-      let aligned_trailer_offset = trailer_and_value_ptr.align_offset(mem::align_of::<T>());
-      let trailer_ptr = trailer_and_value_ptr
-        .add(aligned_trailer_offset)
-        .cast::<T>();
-      trailer_ptr.write(trailer);
-      let value_offset = trailer_and_value_offset + aligned_trailer_offset + mem::size_of::<T>();
+      trailer_and_value.put_aligned::<T>(trailer).unwrap();
+      let value_offset = (trailer_and_value_offset + trailer_and_value.len()) as u32;
 
       // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
+      let node_ref = node_ptr.as_mut();
       node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
-      ptr::write_bytes(node_ptr.add(1).cast::<Link>(), 0, height as usize);
 
       trailer_and_value.detach();
       let (_, value_deallocate_info) = self
@@ -911,7 +876,7 @@ impl<T, C> SkipMap<T, C> {
           trailer_and_value_offset as u32,
           trailer_and_value.capacity() as u32,
           value_size,
-          value_offset as u32,
+          value_offset,
           vf,
         )
         .map_err(Either::Left)?;
@@ -919,7 +884,7 @@ impl<T, C> SkipMap<T, C> {
       node.detach();
 
       Ok((
-        NodePtr::new(node_ptr as _, (node.offset() + aligned_node_offset) as u32),
+        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
         Deallocator {
           node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
           key: None,
@@ -932,14 +897,11 @@ impl<T, C> SkipMap<T, C> {
   fn allocate_full_node(arena: &Arena, max_height: u8) -> Result<NodePtr<T>, ArenaError> {
     // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
     unsafe {
-      let mut node = arena.alloc::<Node<T>>()?;
-      let mut links = arena
-        .alloc_aligned_bytes::<Link>((mem::size_of::<Link>() * (max_height - 1) as usize) as u32)?;
+      let mut node =
+        arena.alloc_aligned_bytes::<Node<T>>(((max_height as usize) * Link::SIZE) as u32)?;
 
       // Safety: node and trailer do not need to be dropped.
-
       node.detach();
-      links.detach();
 
       let trailer_offset = if mem::size_of::<T>() != 0 {
         let mut trailer = arena.alloc::<T>()?;
@@ -949,15 +911,22 @@ impl<T, C> SkipMap<T, C> {
         arena.allocated()
       };
 
-      // initialize the links
-      core::ptr::write_bytes(links.as_mut_ptr(), 0, max_height as usize);
+      node.align_to::<T>().unwrap();
+      let node_ptr = node.as_mut_ptr().add(node.len());
+      let node_offset = node.offset() + node.len();
+      node
+        .put(Node::<T>::full(trailer_offset as u32, max_height))
+        .unwrap();
 
-      node.write(Node::full(trailer_offset as u32, max_height));
+      for i in 0..(max_height as usize) {
+        let link = node
+          .as_mut_ptr()
+          .add(Node::<T>::SIZE + i * Link::SIZE)
+          .cast::<Link>();
+        link.write(Link::new(0, 0));
+      }
 
-      Ok(NodePtr::new(
-        node.as_mut_ptr().as_ptr() as _,
-        node.offset() as u32,
-      ))
+      Ok(NodePtr::new(node_ptr, node_offset as u32))
     }
   }
 
@@ -1069,10 +1038,30 @@ impl<T, C> SkipMap<T, C> {
   }
 
   #[inline]
-  const fn check_height(&self, height: u32) {
+  const fn check_node_size(
+    &self,
+    height: u32,
+    key_size: u32,
+    value_size: u32,
+  ) -> Result<(), Error> {
     if height < 1 || height > self.opts.max_height() as u32 {
       panic!("height cannot be less than one or greater than the max height");
     }
+
+    if key_size > self.opts.max_key_size() {
+      return Err(Error::KeyTooLarge(key_size as u64));
+    }
+
+    if value_size > self.opts.max_value_size() {
+      return Err(Error::ValueTooLarge(value_size as u64));
+    }
+
+    let entry_size = (value_size as u64 + key_size as u64) + Node::<T>::size(height as u8) as u64;
+    if entry_size > u32::MAX as u64 {
+      return Err(Error::EntryTooLarge(entry_size));
+    }
+
+    Ok(())
   }
 
   #[inline]

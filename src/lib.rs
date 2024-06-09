@@ -182,21 +182,4 @@ mod sync {
 
   #[cfg(feature = "loom")]
   pub(crate) use loom::sync::atomic::*;
-
-  #[cfg(not(feature = "loom"))]
-  pub(crate) trait AtomicMut<T> {
-    fn with_mut<F, R>(&mut self, f: F) -> R
-    where
-      F: FnOnce(&mut *mut T) -> R;
-  }
-
-  #[cfg(not(feature = "loom"))]
-  impl<T> AtomicMut<T> for AtomicPtr<T> {
-    fn with_mut<F, R>(&mut self, f: F) -> R
-    where
-      F: FnOnce(&mut *mut T) -> R,
-    {
-      f(self.get_mut())
-    }
-  }
 }

@@ -7,6 +7,9 @@ use core::{
   ptr::{self, NonNull},
 };
 
+// #[cfg(not(feature = "std"))]
+use std::boxed::Box;
+
 use crate::{Key, Trailer, VacantBuffer};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -54,6 +57,18 @@ struct Meta {
   /// Current height. 1 <= height <= kMaxHeight. CAS.
   height: AtomicU32,
   len: AtomicU32,
+}
+
+impl Default for Meta {
+  #[inline]
+  fn default() -> Self {
+    Self {
+      max_version: AtomicU64::new(0),
+      min_version: AtomicU64::new(0),
+      height: AtomicU32::new(1),
+      len: AtomicU32::new(0),
+    }
+  }
 }
 
 impl Meta {
@@ -568,6 +583,16 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
   }
 }
 
+impl<T, C> Drop for SkipMap<T, C> {
+  fn drop(&mut self) {
+    if self.arena.refs() == 1 && !self.opts.unify() {
+      unsafe {
+        let _ = Box::from_raw(self.meta.as_ptr());
+      }
+    }
+  }
+}
+
 impl<T, C> SkipMap<T, C> {
   fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
     let data_offset = Self::check_capacity(&arena, opts.max_height())?;
@@ -585,7 +610,19 @@ impl<T, C> SkipMap<T, C> {
       ));
     }
 
-    let meta = Self::allocate_meta(&arena)?;
+    let meta = if opts.unify() {
+      Self::allocate_meta(&arena)?
+    } else {
+      unsafe {
+        NonNull::new_unchecked(Box::into_raw(Box::new(Meta {
+          max_version: AtomicU64::new(0),
+          min_version: AtomicU64::new(0),
+          height: AtomicU32::new(1),
+          len: AtomicU32::new(0),
+        })))
+      }
+    };
+
     let head = Self::allocate_full_node(&arena, opts.max_height())?;
     let tail = Self::allocate_full_node(&arena, opts.max_height())?;
 

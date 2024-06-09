@@ -92,14 +92,14 @@ impl SkipMap {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::mmap_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
+    Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
   }
 
   /// Like [`SkipMap::map_anon`], but with [`Options`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn mmap_anon_with_options(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::mmap_anon_with_options_and_comparator(opts, mmap_options, Ascend)
+  pub fn map_anon_with_options(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::map_anon_with_options_and_comparator(opts, mmap_options, Ascend)
   }
 }
 
@@ -263,7 +263,7 @@ impl<T, C> SkipMap<T, C> {
     let alignment = Node::<T>::ALIGN as usize;
     let arena_opts = ArenaOptions::new().with_maximum_alignment(alignment);
     let arena = Arena::map_mut(path, arena_opts, open_options, mmap_options)?;
-    Self::new_in(arena, cmp, opts).map_err(invalid_data)
+    Self::new_in(arena, cmp, opts.with_unify(true)).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`].
@@ -277,22 +277,22 @@ impl<T, C> SkipMap<T, C> {
     cmp: C,
   ) -> std::io::Result<Self> {
     let arena = Arena::map(path, open_options, mmap_options)?;
-    Self::new_in(arena, cmp, Options::new()).map_err(invalid_data)
+    Self::new_in(arena, cmp, Options::new().with_unify(true)).map_err(invalid_data)
   }
 
   /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn mmap_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
-    Self::mmap_anon_with_options_and_comparator(Options::new(), mmap_options, cmp)
+  pub fn map_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
+    Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, cmp)
   }
 
   /// Like [`SkipMap::map_anon`], but with [`Options`] and a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn mmap_anon_with_options_and_comparator(
+  pub fn map_anon_with_options_and_comparator(
     opts: Options,
     mmap_options: MmapOptions,
     cmp: C,
@@ -329,7 +329,17 @@ impl<T, C> SkipMap<T, C> {
   pub unsafe fn clear(&mut self) -> Result<(), Error> {
     self.arena.clear()?;
 
-    Self::allocate_meta(&self.arena)?;
+    let meta = if self.opts.unify() {
+      Self::allocate_meta(&self.arena)?
+    } else {
+      unsafe {
+        let _ = Box::from_raw(self.meta.as_ptr());
+        NonNull::new_unchecked(Box::into_raw(Box::new(Meta::default())))
+      }
+    };
+
+    self.meta = meta;
+
     let head = Self::allocate_full_node(&self.arena, self.opts.max_height())?;
     let tail = Self::allocate_full_node(&self.arena, self.opts.max_height())?;
 

@@ -39,7 +39,6 @@ tracing = ["dep:tracing"]
 
 # loom = ["dep:loom", "rarena-allocator/loom"]
 
-
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 

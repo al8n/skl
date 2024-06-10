@@ -532,7 +532,6 @@ impl<T: Copy> Node<T> {
   #[inline]
   unsafe fn get_value_and_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> (T, Option<&'b [u8]>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
-    std::println!("get value of node {self:?} at {}", arena.offset(self as *const _ as _));
     let ptr = arena.get_aligned_pointer(offset as usize);
     #[cfg(not(feature = "unaligned"))]
     let trailer = *ptr;
@@ -750,7 +749,6 @@ impl<T, C> SkipMap<T, C> {
           vf,
         )
         .map_err(Either::Left)?;
-      std::println!("allocate node {node_ref:?}");
       node.detach();
       Ok((
         NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
@@ -959,7 +957,6 @@ impl<T, C> SkipMap<T, C> {
       let node = node_ptr.as_mut();
       *node = Node::<T>::full(trailer_offset as u32, max_height);
 
-      std::println!("allocate full node {node:?}");
       Ok(NodePtr::new(
         node_ptr.as_ptr() as _,
         aligned_node_offset as u32,

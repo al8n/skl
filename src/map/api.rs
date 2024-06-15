@@ -276,7 +276,7 @@ impl<T, C> SkipMap<T, C> {
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let arena = Arena::map(path, open_options, mmap_options)?;
+    let arena = Arena::map(path, open_options, mmap_options, 0)?;
     Self::new_in(arena, cmp, Options::new().with_unify(true)).map_err(invalid_data)
   }
 

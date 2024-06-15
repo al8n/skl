@@ -386,11 +386,8 @@ impl<T> Node<T> {
     let mut bytes = arena
       .alloc_aligned_bytes::<T>(value_size)
       .map_err(|e| Either::Right(e.into()))?;
-    let trailer_and_value_ptr = bytes.as_mut_ptr();
-    let trailer_and_value_offset = bytes.offset();
-    let aligned_trailer_offset = trailer_and_value_ptr.align_offset(mem::align_of::<T>());
-
-    let trailer_offset = trailer_and_value_offset + aligned_trailer_offset;
+    let trailer_ptr = bytes.as_mut_ptr().cast::<T>();
+    let trailer_offset = bytes.offset();
     let value_offset = trailer_offset + mem::size_of::<T>();
 
     let mut oval = VacantBuffer::new(value_size as usize, value_offset as u32, unsafe {
@@ -399,7 +396,7 @@ impl<T> Node<T> {
     f(&mut oval).map_err(Either::Left)?;
 
     let remaining = oval.remaining();
-    let mut discard = aligned_trailer_offset;
+    let mut discard = 0;
     if remaining != 0 {
       #[cfg(feature = "tracing")]
       tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
@@ -411,10 +408,7 @@ impl<T> Node<T> {
 
     bytes.detach();
     unsafe {
-      let ptr = trailer_and_value_ptr
-        .add(aligned_trailer_offset)
-        .cast::<T>();
-      ptr.write(trailer);
+      trailer_ptr.write(trailer);
     }
 
     if discard != 0 {
@@ -713,8 +707,8 @@ impl<T, C> SkipMap<T, C> {
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
-      let aligned_node_offset = node.offset() + node.len();
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
 
       let mut key = self
         .arena
@@ -726,13 +720,15 @@ impl<T, C> SkipMap<T, C> {
         .arena
         .alloc_aligned_bytes::<T>(value_size)
         .map_err(|e| Either::Right(e.into()))?;
-      let trailer_and_value_offset = trailer_and_value.offset();
-      trailer_and_value.put_aligned::<T>(trailer).unwrap();
-      let value_offset = (trailer_and_value_offset + trailer_and_value.len()) as u32;
+      let trailer_offset = trailer_and_value.offset();
+      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
+      trailer_ptr.write(trailer);
+
+      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
 
       // Safety: the node is well aligned
-      let node_ref = node_ptr.as_mut();
-      node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
+      let node_ref = &mut *node_ptr;
+      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
       key.detach();
@@ -742,7 +738,7 @@ impl<T, C> SkipMap<T, C> {
       trailer_and_value.detach();
       let (_, value_deallocate_info) = self
         .fill_vacant_value(
-          trailer_and_value_offset as u32,
+          trailer_offset as u32,
           trailer_and_value.capacity() as u32,
           value_size,
           value_offset,
@@ -751,9 +747,9 @@ impl<T, C> SkipMap<T, C> {
         .map_err(Either::Left)?;
       node.detach();
       Ok((
-        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
+        NodePtr::new(node_ptr as _, node_offset as u32),
         Deallocator {
-          node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
+          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
           key: Some(key_deallocate_info),
           value: Some(value_deallocate_info),
         },
@@ -779,18 +775,18 @@ impl<T, C> SkipMap<T, C> {
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
-      let aligned_node_offset = node.offset() + node.len();
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
 
       let mut trailer_ref = self
         .arena
         .alloc::<T>()
         .map_err(|e| Either::Right(e.into()))?;
-      trailer_ref.write(trailer);
       let trailer_offset = trailer_ref.offset();
+      trailer_ref.write(trailer);
 
       // Safety: the node is well aligned
-      let node_ref = node_ptr.as_mut();
+      let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
@@ -798,9 +794,9 @@ impl<T, C> SkipMap<T, C> {
       trailer_ref.detach();
       node.detach();
       Ok((
-        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
+        NodePtr::new(node_ptr as _, node_offset as u32),
         Deallocator {
-          node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
+          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
           key: None,
           value: Some(Pointer::new(
             trailer_offset as u32,
@@ -829,8 +825,8 @@ impl<T, C> SkipMap<T, C> {
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
-      let aligned_node_offset = node.offset() + node.len();
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
 
       let mut key = self
         .arena
@@ -843,11 +839,11 @@ impl<T, C> SkipMap<T, C> {
         .arena
         .alloc::<T>()
         .map_err(|e| Either::Right(e.into()))?;
-      trailer_ref.write(trailer);
       let trailer_offset = trailer_ref.offset();
+      trailer_ref.write(trailer);
 
       // Safety: the node is well aligned
-      let node_ref = node_ptr.as_mut();
+      let node_ref = &mut *node_ptr;
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
@@ -861,9 +857,9 @@ impl<T, C> SkipMap<T, C> {
       node.detach();
 
       Ok((
-        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
+        NodePtr::new(node_ptr as _, node_offset as u32),
         Deallocator {
-          node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
+          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
           key: Some(key_deallocate_info),
           value: Some(Pointer::new(
             trailer_offset as u32,
@@ -893,27 +889,28 @@ impl<T, C> SkipMap<T, C> {
         .arena
         .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
         .map_err(|e| Either::Right(e.into()))?;
-      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
-      let aligned_node_offset = node.offset() + node.len();
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
 
       let mut trailer_and_value = self
         .arena
         .alloc_aligned_bytes::<T>(value_size)
         .map_err(|e| Either::Right(e.into()))?;
-      let trailer_and_value_offset = trailer_and_value.offset();
-      trailer_and_value.put_aligned::<T>(trailer).unwrap();
-      let value_offset = (trailer_and_value_offset + trailer_and_value.len()) as u32;
+      let trailer_offset = trailer_and_value.offset();
+      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
+      trailer_ptr.write(trailer);
+      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
 
       // Safety: the node is well aligned
-      let node_ref = node_ptr.as_mut();
-      node_ref.value = AtomicValuePointer::new(trailer_and_value_offset as u32, value_size);
+      let node_ref = &mut *node_ptr;
+      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
 
       trailer_and_value.detach();
       let (_, value_deallocate_info) = self
         .fill_vacant_value(
-          trailer_and_value_offset as u32,
+          trailer_offset as u32,
           trailer_and_value.capacity() as u32,
           value_size,
           value_offset,
@@ -924,9 +921,9 @@ impl<T, C> SkipMap<T, C> {
       node.detach();
 
       Ok((
-        NodePtr::new(node_ptr.as_ptr() as _, aligned_node_offset as u32),
+        NodePtr::new(node_ptr as _, node_offset as u32),
         Deallocator {
-          node: Some(Pointer::new(node.offset() as u32, node.capacity() as u32)),
+          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
           key: None,
           value: Some(value_deallocate_info),
         },
@@ -943,8 +940,8 @@ impl<T, C> SkipMap<T, C> {
       // Safety: node and trailer do not need to be dropped.
       node.detach();
 
-      let mut node_ptr = node.align_to::<Node<T>>().unwrap();
-      let aligned_node_offset = node.offset() + node.len();
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
 
       let trailer_offset = if mem::size_of::<T>() != 0 {
         let mut trailer = arena.alloc::<T>()?;
@@ -954,13 +951,10 @@ impl<T, C> SkipMap<T, C> {
         arena.allocated()
       };
 
-      let node = node_ptr.as_mut();
+      let node = &mut *node_ptr;
       *node = Node::<T>::full(trailer_offset as u32, max_height);
 
-      Ok(NodePtr::new(
-        node_ptr.as_ptr() as _,
-        aligned_node_offset as u32,
-      ))
+      Ok(NodePtr::new(node_ptr as _, node_offset as u32))
     }
   }
 

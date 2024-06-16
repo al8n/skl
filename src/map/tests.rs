@@ -3,32 +3,27 @@ use crate::Descend;
 
 use std::format;
 
-#[cfg(feature = "loom")]
-use ::loom::sync::Arc;
-
-#[cfg(not(feature = "loom"))]
 use std::sync::Arc;
 
 #[cfg(feature = "std")]
 use wg::WaitGroup;
 
 const ARENA_SIZE: usize = 1 << 20;
+#[cfg(feature = "std")]
 const BIG_ARENA_SIZE: usize = 120 << 20;
 const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
 const UNIFY_TEST_OPTIONS: Options = Options::new()
   .with_capacity(ARENA_SIZE as u32)
   .with_unify(true);
+#[cfg(feature = "std")]
 const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
+#[cfg(feature = "std")]
 const UNIFY_BIG_TEST_OPTIONS: Options = Options::new()
   .with_capacity(BIG_ARENA_SIZE as u32)
   .with_unify(true);
 
 fn run(f: impl Fn() + Send + Sync + 'static) {
-  #[cfg(not(feature = "loom"))]
   f();
-
-  #[cfg(feature = "loom")]
-  loom::model(f);
 }
 
 /// Only used for testing

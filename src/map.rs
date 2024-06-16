@@ -309,6 +309,25 @@ impl<T> NodePtr<T> {
   }
 }
 
+#[derive(Debug)]
+#[repr(C)]
+struct Link {
+  next_offset: AtomicU32,
+  prev_offset: AtomicU32,
+}
+
+impl Link {
+  const SIZE: usize = mem::size_of::<Self>();
+
+  #[inline]
+  fn new(next_offset: u32, prev_offset: u32) -> Self {
+    Self {
+      next_offset: AtomicU32::new(next_offset),
+      prev_offset: AtomicU32::new(prev_offset),
+    }
+  }
+}
+
 #[repr(C)]
 struct Node<T> {
   // A byte slice is 24 bytes. We are trying to save space here.

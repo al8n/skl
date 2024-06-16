@@ -1,4 +1,4 @@
-use skl::{map::Options, SkipMap};
+use skl::*;
 use std::sync::Arc;
 
 pub fn key(i: usize) -> Vec<u8> {

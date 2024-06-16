@@ -41,7 +41,7 @@ fn main() {
 
     let open_options = OpenOptions::default().read(true);
     let mmap_options = MmapOptions::default();
-    let l = SkipMap::<u64>::map(&p, open_options, mmap_options).unwrap();
+    let l = SkipMap::<u64>::map(&p, open_options, mmap_options, 0).unwrap();
     assert_eq!(N2, l.len());
     for i in 0..N2 {
       let l = l.clone();

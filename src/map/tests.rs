@@ -2257,7 +2257,7 @@ fn test_range_latest_map_anon_unify() {
 
 #[test]
 #[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
+#[cfg_attr(miri, ignore)]
 fn test_reopen_mmap() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
@@ -2281,7 +2281,7 @@ fn test_reopen_mmap() {
       .lock_shared(true)
       .shrink_on_drop(true);
     let map_options = MmapOptions::default();
-    let l = SkipMap::map(&p, open_options, map_options).unwrap();
+    let l = SkipMap::map(&p, open_options, map_options, 0).unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
       let k = key(i);
@@ -2322,8 +2322,8 @@ fn test_reopen_mmap2() {
 
     let open_options = OpenOptions::default().read(true);
     let map_options = MmapOptions::default();
-    let l =
-      SkipMap::<u64, Ascend>::map_with_comparator(&p, open_options, map_options, Ascend).unwrap();
+    let l = SkipMap::<u64, Ascend>::map_with_comparator(&p, open_options, map_options, Ascend, 0)
+      .unwrap();
     assert_eq!(1000, l.len());
     let mut data = (0..1000).collect::<Vec<usize>>();
     data.shuffle(&mut rand::thread_rng());

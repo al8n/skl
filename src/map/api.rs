@@ -70,8 +70,9 @@ impl SkipMap {
     path: P,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
+    magic_version: u16,
   ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, open_options, mmap_options, Ascend)
+    Self::map_with_comparator(path, open_options, mmap_options, Ascend, magic_version)
   }
 
   /// Create a new memory map backed skipmap with default options.
@@ -152,10 +153,24 @@ impl<T, C> SkipMap<T, C> {
     self.data_offset as usize
   }
 
+  /// Returns the version number of the [`SkipMap`].
+  #[inline]
+  pub const fn version(&self) -> u16 {
+    self.arena.magic_version()
+  }
+
+  /// Returns the magic version number of the [`SkipMap`].
+  ///
+  /// This value can be used to check the compatibility for application using [`SkipMap`].
+  #[inline]
+  pub const fn magic_version(&self) -> u16 {
+    self.meta().magic_version()
+  }
+
   /// Returns the height of the highest tower within any of the nodes that
   /// have ever been allocated as part of this skiplist.
   #[inline]
-  pub fn height(&self) -> u32 {
+  pub fn height(&self) -> u8 {
     self.meta().height()
   }
 
@@ -231,7 +246,9 @@ impl<T, C> SkipMap<T, C> {
     let arena_opts = ArenaOptions::new()
       .with_capacity(opts.capacity())
       .with_maximum_alignment(Node::<T>::ALIGN as usize)
-      .with_unify(opts.unify());
+      .with_unify(opts.unify())
+      .with_magic_version(CURRENT_VERSION)
+      .with_freelist(opts.freelist());
     let arena = Arena::new(arena_opts);
     Self::new_in(arena, cmp, opts)
   }
@@ -261,9 +278,22 @@ impl<T, C> SkipMap<T, C> {
     cmp: C,
   ) -> std::io::Result<Self> {
     let alignment = Node::<T>::ALIGN as usize;
-    let arena_opts = ArenaOptions::new().with_maximum_alignment(alignment);
+    let arena_opts = ArenaOptions::new()
+      .with_maximum_alignment(alignment)
+      .with_magic_version(CURRENT_VERSION)
+      .with_freelist(opts.freelist());
     let arena = Arena::map_mut(path, arena_opts, open_options, mmap_options)?;
-    Self::new_in(arena, cmp, opts.with_unify(true)).map_err(invalid_data)
+    Self::new_in(arena, cmp, opts.with_unify(true))
+      .map_err(invalid_data)
+      .and_then(|map| {
+        if map.magic_version() != opts.magic_version() {
+          Err(bad_magic_version())
+        } else if map.version() != CURRENT_VERSION {
+          Err(bad_version())
+        } else {
+          Ok(map)
+        }
+      })
   }
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`].
@@ -275,9 +305,26 @@ impl<T, C> SkipMap<T, C> {
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
+    magic_version: u16,
   ) -> std::io::Result<Self> {
-    let arena = Arena::map(path, open_options, mmap_options, 0)?;
-    Self::new_in(arena, cmp, Options::new().with_unify(true)).map_err(invalid_data)
+    let arena = Arena::map(path, open_options, mmap_options, CURRENT_VERSION)?;
+    Self::new_in(
+      arena,
+      cmp,
+      Options::new()
+        .with_unify(true)
+        .with_magic_version(magic_version),
+    )
+    .map_err(invalid_data)
+    .and_then(|map| {
+      if map.magic_version() != magic_version {
+        Err(bad_magic_version())
+      } else if map.version() != CURRENT_VERSION {
+        Err(bad_version())
+      } else {
+        Ok(map)
+      }
+    })
   }
 
   /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
@@ -300,7 +347,8 @@ impl<T, C> SkipMap<T, C> {
     let alignment = Node::<T>::ALIGN as usize;
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
-      .with_unify(opts.unify());
+      .with_unify(opts.unify())
+      .with_magic_version(CURRENT_VERSION);
     let arena = Arena::map_anon(arena_opts, mmap_options)?;
     Self::new_in(arena, cmp, opts).map_err(invalid_data)
   }
@@ -330,11 +378,13 @@ impl<T, C> SkipMap<T, C> {
     self.arena.clear()?;
 
     let meta = if self.opts.unify() {
-      Self::allocate_meta(&self.arena)?
+      Self::allocate_meta(&self.arena, self.meta().magic_version())?
     } else {
       unsafe {
         let _ = Box::from_raw(self.meta.as_ptr());
-        NonNull::new_unchecked(Box::into_raw(Box::new(Meta::default())))
+        NonNull::new_unchecked(Box::into_raw(Box::new(Meta::new(
+          self.meta().magic_version(),
+        ))))
       }
     };
 

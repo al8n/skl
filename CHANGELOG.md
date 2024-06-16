@@ -74,6 +74,7 @@
   - Add an ordered linked list to track segments.
 - Increase maximum key size to `u27::MAX`
 - Support key prefix compression
+- Support version compatibility check
 - Add `Options` as a parameter when constructing the `SkipMap` and `SkipSet`
   - Support specify max key size and max value size
   - Support set the max height

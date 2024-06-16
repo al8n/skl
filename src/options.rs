@@ -1,3 +1,9 @@
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+pub use rarena_allocator::{MmapOptions, OpenOptions};
+
+pub use rarena_allocator::Freelist;
+
 const U27_MAX: u32 = (1 << 27) - 1;
 
 /// Options for `SkipMap`.
@@ -6,8 +12,10 @@ pub struct Options {
   max_value_size: u32,
   max_key_size: u32,
   max_height: u8,
+  magic_version: u16,
   capacity: u32,
   unify: bool,
+  freelist: Freelist,
 }
 
 impl Default for Options {
@@ -27,7 +35,47 @@ impl Options {
       max_height: 20,
       capacity: 1024,
       unify: false,
+      magic_version: 0,
+      freelist: Freelist::Optimistic,
     }
+  }
+
+  /// Set the magic version of the [`SkipMap`](super::SkipMap).
+  ///
+  /// This is used by the application using [`SkipMap`](super::SkipMap)
+  /// to ensure that it doesn't open the [`SkipMap`](super::SkipMap)
+  /// with incompatible data format.
+  ///  
+  /// The default value is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_magic_version(1);
+  /// ```
+  #[inline]
+  pub const fn with_magic_version(mut self, magic_version: u16) -> Self {
+    self.magic_version = magic_version;
+    self
+  }
+
+  /// Set the [`Freelist`] kind of the [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`Freelist::Optimistic`].
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::{Options, options::Freelist};
+  ///
+  /// let opts = Options::new().with_freelist(Freelist::Optimistic);
+  /// ```
+  #[inline]
+  pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
+    self.freelist = freelist;
+    self
   }
 
   /// Set if use the unify memory layout of the [`SkipMap`](super::SkipMap).
@@ -43,7 +91,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let opts = Options::new().with_unify(true);
   /// ```
@@ -60,7 +108,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_max_value_size(1024);
   /// ```
@@ -79,7 +127,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_max_key_size(1024);
   /// ```
@@ -96,7 +144,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_max_height(20);
   /// ```
@@ -119,7 +167,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_capacity(1024);
   /// ```
@@ -136,7 +184,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_max_value_size(1024);
   /// ```
@@ -158,7 +206,7 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_max_height(20);
   ///
@@ -176,7 +224,7 @@ impl Options {
   /// # Example
   ///
   /// ```rust
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let options = Options::new().with_capacity(1024);
   /// ```
@@ -198,7 +246,7 @@ impl Options {
   /// # Example
   ///
   /// ```rust
-  /// use skl::map::Options;
+  /// use skl::Options;
   ///
   /// let opts = Options::new().with_unify(true);
   ///
@@ -207,5 +255,45 @@ impl Options {
   #[inline]
   pub const fn unify(&self) -> bool {
     self.unify
+  }
+
+  /// Get the magic version of the [`SkipMap`](super::SkipMap).
+  ///
+  /// This is used by the application using [`SkipMap`](super::SkipMap)
+  /// to ensure that it doesn't open the [`SkipMap`](super::SkipMap)
+  /// with incompatible data format.
+  ///
+  /// The default value is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_magic_version(1);
+  ///
+  /// assert_eq!(opts.magic_version(), 1);
+  /// ```
+  #[inline]
+  pub const fn magic_version(&self) -> u16 {
+    self.magic_version
+  }
+
+  /// Get the [`Freelist`] kind of the [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`Freelist::Optimistic`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::{Options, options::Freelist};
+  ///
+  /// let opts = Options::new().with_freelist(Freelist::Optimistic);
+  ///
+  /// assert_eq!(opts.freelist(), Freelist::Optimistic);
+  /// ```
+  #[inline]
+  pub const fn freelist(&self) -> Freelist {
+    self.freelist
   }
 }

@@ -12,9 +12,9 @@ use std::boxed::Box;
 use crate::{Key, Trailer, VacantBuffer};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-use super::{invalid_data, MmapOptions, OpenOptions};
+use super::{bad_magic_version, bad_version, invalid_data};
 
-use super::{sync::*, Arena, Ascend, Comparator};
+use super::{sync::*, Arena, Ascend, Comparator, *};
 
 mod api;
 
@@ -27,13 +27,12 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
-mod options;
-pub use options::*;
-
 use rarena_allocator::Error as ArenaError;
 
 #[cfg(test)]
 mod tests;
+
+const CURRENT_VERSION: u16 = 0;
 
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
@@ -50,24 +49,31 @@ struct Meta {
   max_version: AtomicU64,
   /// The minimum MVCC version of the skiplist. CAS.
   min_version: AtomicU64,
-  /// Current height. 1 <= height <= kMaxHeight. CAS.
-  height: AtomicU32,
   len: AtomicU32,
-}
-
-impl Default for Meta {
-  #[inline]
-  fn default() -> Self {
-    Self {
-      max_version: AtomicU64::new(0),
-      min_version: AtomicU64::new(0),
-      height: AtomicU32::new(1),
-      len: AtomicU32::new(0),
-    }
-  }
+  magic_version: u16,
+  /// Current height. 1 <= height <= 31. CAS.
+  height: AtomicU8,
+  reserved_byte: u8,
 }
 
 impl Meta {
+  #[inline]
+  fn new(version: u16) -> Self {
+    Self {
+      max_version: AtomicU64::new(0),
+      min_version: AtomicU64::new(0),
+      magic_version: version,
+      height: AtomicU8::new(1),
+      len: AtomicU32::new(0),
+      reserved_byte: 0,
+    }
+  }
+
+  #[inline]
+  const fn magic_version(&self) -> u16 {
+    self.magic_version
+  }
+
   #[inline]
   fn max_version(&self) -> u64 {
     self.max_version.load(Ordering::Acquire)
@@ -79,7 +85,7 @@ impl Meta {
   }
 
   #[inline]
-  fn height(&self) -> u32 {
+  fn height(&self) -> u8 {
     self.height.load(Ordering::Acquire)
   }
 
@@ -609,14 +615,16 @@ impl<T, C> SkipMap<T, C> {
     }
 
     let meta = if opts.unify() {
-      Self::allocate_meta(&arena)?
+      Self::allocate_meta(&arena, opts.magic_version())?
     } else {
       unsafe {
         NonNull::new_unchecked(Box::into_raw(Box::new(Meta {
           max_version: AtomicU64::new(0),
           min_version: AtomicU64::new(0),
-          height: AtomicU32::new(1),
+          height: AtomicU8::new(1),
           len: AtomicU32::new(0),
+          magic_version: opts.magic_version(),
+          reserved_byte: 0,
         })))
       }
     };
@@ -959,7 +967,7 @@ impl<T, C> SkipMap<T, C> {
   }
 
   #[inline]
-  fn allocate_meta(arena: &Arena) -> Result<NonNull<Meta>, ArenaError> {
+  fn allocate_meta(arena: &Arena, magic_version: u16) -> Result<NonNull<Meta>, ArenaError> {
     // Safety: meta does not need to be dropped, and it is recoverable.
     unsafe {
       let mut meta = arena.alloc::<Meta>()?;
@@ -968,8 +976,10 @@ impl<T, C> SkipMap<T, C> {
       meta.write(Meta {
         max_version: AtomicU64::new(0),
         min_version: AtomicU64::new(0),
-        height: AtomicU32::new(1),
+        height: AtomicU8::new(1),
         len: AtomicU32::new(0),
+        magic_version,
+        reserved_byte: 0,
       });
       Ok(meta.as_mut_ptr())
     }
@@ -1121,7 +1131,7 @@ impl<T, C> SkipMap<T, C> {
   }
 
   #[inline]
-  fn meta(&self) -> &Meta {
+  const fn meta(&self) -> &Meta {
     // Safety: the pointer is well aligned and initialized.
     unsafe { self.meta.as_ref() }
   }
@@ -1178,10 +1188,10 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
     // Try to increase self.height via CAS.
     let mut list_height = self.height();
-    while height > list_height {
+    while height as u8 > list_height {
       match self.meta().height.compare_exchange_weak(
         list_height,
-        height,
+        height as u8,
         Ordering::SeqCst,
         Ordering::Acquire,
       ) {
@@ -1523,7 +1533,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     ins: &mut Inserter<T>,
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<NodePtr<T>>) {
-    let list_height = self.height();
+    let list_height = self.height() as u32;
     let mut level = 0;
 
     let mut prev = self.head;

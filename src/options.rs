@@ -139,7 +139,7 @@ impl Options {
 
   /// Sets the maximum height.
   ///
-  /// Default is `20`. The maximum height is `32`. The minimum height is `1`.
+  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
   ///
   /// # Example
   ///
@@ -152,8 +152,8 @@ impl Options {
   pub const fn with_max_height(mut self, height: u8) -> Self {
     self.max_height = if height == 0 {
       1
-    } else if height > 32 {
-      32
+    } else if height > 31 {
+      31
     } else {
       height
     };
@@ -201,7 +201,7 @@ impl Options {
 
   /// Returns the maximum height.
   ///
-  /// Default is `20`. The maximum height is `32`. The minimum height is `1`.
+  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
   ///
   /// # Example
   ///

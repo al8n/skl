@@ -115,10 +115,6 @@ Facebook's RocksDB:
 
 https://github.com/facebook/rocksdb/tree/master/memtable
 
-## TODO (help wanted)
-
-- [ ] make the crate test cases pass `cargo loom`
-
 #### License
 
 `skl-rs` is under the terms of both the MIT license and the

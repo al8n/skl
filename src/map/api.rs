@@ -471,7 +471,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new(1000).unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// l.insert_with_value::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -595,7 +595,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new(1000).unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// l.get_or_insert_with_value::<core::convert::Infallible>(1, b"alice", encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -673,7 +673,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new(1000).unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// l.insert_with::<core::convert::Infallible>(1, 5, |key| {
   ///   key.write(b"alice").unwrap();
@@ -751,7 +751,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new(1000).unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// l.get_or_insert_with::<core::convert::Infallible>(1, 5, |key| {
   ///   key.write(b"alice").unwrap();
@@ -916,7 +916,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new(1000).unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// l.get_or_remove_with::<core::convert::Infallible>(1, 5, |key| {
   ///   key.write(b"alice").unwrap();

@@ -72,10 +72,8 @@
 
 - Refactor and extract lock-free ARENA allocator implementation to [`rarena-allocator`](https://github.com/al8n/rarena) crate.
   - Add an ordered linked list to track segments.
-- All test cases can pass `loom` tests
-- Support `serde`
-- Add back `SkipSet`
 - Increase maximum key size to `u27::MAX`
+- Support key prefix compression
 - Add `Options` as a parameter when constructing the `SkipMap` and `SkipSet`
   - Support specify max key size and max value size
   - Support set the max height

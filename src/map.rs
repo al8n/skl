@@ -1614,12 +1614,25 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let cmp = self.cmp.compare(key, next_key);
 
       let mut found_key = None;
-      if cmp.is_eq() {
-        found_key = Some(Pointer {
-          offset: next_node.key_offset,
-          size: next_node.key_size(),
-          height: Some(next_node.height()),
-        });
+
+      match cmp {
+        cmp::Ordering::Equal => {
+          found_key = Some(Pointer {
+            offset: next_node.key_offset,
+            size: next_node.key_size(),
+            height: Some(next_node.height()),
+          });
+        }
+        cmp::Ordering::Greater => {
+          if next_key.starts_with(key) {
+            found_key = Some(Pointer {
+              offset: next_node.key_offset,
+              size: key.len() as u32,
+              height: Some(next_node.height()),
+            });
+          }
+        }
+        _ => {}
       }
 
       match cmp.then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version)) {

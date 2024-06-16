@@ -403,13 +403,10 @@ impl<T> Node<T> {
 
     let remaining = oval.remaining();
     let mut discard = 0;
-    if remaining != 0 {
-      #[cfg(feature = "tracing")]
-      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-
-      if unsafe { !arena.dealloc((value_offset + oval.len()) as u32, remaining as u32) } {
-        discard += remaining;
-      }
+    if remaining != 0
+      && unsafe { !arena.dealloc((value_offset + oval.len()) as u32, remaining as u32) }
+    {
+      discard += remaining;
     }
 
     bytes.detach();

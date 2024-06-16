@@ -381,10 +381,9 @@ impl<T, C> SkipMap<T, C> {
       Self::allocate_meta(&self.arena, self.meta().magic_version())?
     } else {
       unsafe {
+        let magic_version = self.meta().magic_version();
         let _ = Box::from_raw(self.meta.as_ptr());
-        NonNull::new_unchecked(Box::into_raw(Box::new(Meta::new(
-          self.meta().magic_version(),
-        ))))
+        NonNull::new_unchecked(Box::into_raw(Box::new(Meta::new(magic_version))))
       }
     };
 

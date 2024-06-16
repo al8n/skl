@@ -1,5 +1,4 @@
 use criterion::*;
-use map::Options;
 use parking_lot::Mutex;
 use rand::prelude::*;
 use skl::*;

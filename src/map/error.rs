@@ -48,6 +48,21 @@ impl Error {
   }
 }
 
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+pub(super) fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::Error {
+  std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+}
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+pub(super) fn bad_magic_version() -> std::io::Error {
+  std::io::Error::new(std::io::ErrorKind::InvalidData, "bad magic version")
+}
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+pub(super) fn bad_version() -> std::io::Error {
+  std::io::Error::new(std::io::ErrorKind::InvalidData, "bad version")
+}
+
 #[cfg(test)]
 #[test]
 fn test_fmt() {

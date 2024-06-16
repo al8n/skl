@@ -12,7 +12,7 @@ use std::boxed::Box;
 use crate::{Key, Trailer, VacantBuffer};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-use super::{bad_magic_version, bad_version, invalid_data};
+use error::{bad_magic_version, bad_version, invalid_data};
 
 use super::{sync::*, Arena, Ascend, Comparator, *};
 

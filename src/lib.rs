@@ -32,21 +32,6 @@ pub use types::*;
 
 pub use rarena_allocator::{Arena, Error as ArenaError};
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::Error {
-  std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-fn bad_magic_version() -> std::io::Error {
-  std::io::Error::new(std::io::ErrorKind::InvalidData, "bad magic version")
-}
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-fn bad_version() -> std::io::Error {
-  std::io::Error::new(std::io::ErrorKind::InvalidData, "bad version")
-}
-
 pub use map::{AllVersionsIter, SkipMap};
 
 const MAX_HEIGHT: usize = 32;

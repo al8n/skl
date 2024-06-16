@@ -13,11 +13,15 @@ use std::sync::Arc;
 use wg::WaitGroup;
 
 const ARENA_SIZE: usize = 1 << 20;
-
-const TEST_OPTIONS: Options = Options::new().with_capacity(1 << 20);
-const UNIFY_TEST_OPTIONS: Options = Options::new().with_capacity(1 << 20).with_unify(true);
-const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(120 << 20);
-const UNIFY_BIG_TEST_OPTIONS: Options = Options::new().with_capacity(120 << 20).with_unify(true);
+const BIG_ARENA_SIZE: usize = 120 << 20;
+const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
+const UNIFY_TEST_OPTIONS: Options = Options::new()
+  .with_capacity(ARENA_SIZE as u32)
+  .with_unify(true);
+const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
+const UNIFY_BIG_TEST_OPTIONS: Options = Options::new()
+  .with_capacity(BIG_ARENA_SIZE as u32)
+  .with_unify(true);
 
 fn run(f: impl Fn() + Send + Sync + 'static) {
   #[cfg(not(feature = "loom"))]

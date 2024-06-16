@@ -155,18 +155,17 @@ impl core::fmt::Debug for AtomicValuePointer {
 
 impl AtomicValuePointer {
   #[inline]
-  pub(crate) fn new(offset: u32, len: u32) -> Self {
+  fn new(offset: u32, len: u32) -> Self {
     Self(AtomicU64::new(encode_value_pointer(offset, len)))
   }
 
-  #[cfg(not(feature = "unaligned"))]
   #[inline]
-  pub(crate) fn load(&self, ordering: Ordering) -> (u32, u32) {
+  fn load(&self, ordering: Ordering) -> (u32, u32) {
     decode_value_pointer(self.0.load(ordering))
   }
 
   #[inline]
-  pub(crate) fn swap(&self, offset: u32, len: u32) -> (u32, u32) {
+  fn swap(&self, offset: u32, len: u32) -> (u32, u32) {
     decode_value_pointer(
       self
         .0
@@ -175,11 +174,7 @@ impl AtomicValuePointer {
   }
 
   #[inline]
-  pub(crate) fn compare_remove(
-    &self,
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<(u32, u32), (u32, u32)> {
+  fn compare_remove(&self, success: Ordering, failure: Ordering) -> Result<(u32, u32), (u32, u32)> {
     let old = self.0.load(Ordering::Acquire);
     let (offset, _) = decode_value_pointer(old);
     let new = encode_value_pointer(offset, REMOVE);
@@ -401,7 +396,7 @@ impl<T> Node<T> {
   // }
 
   #[inline]
-  pub(super) fn set_value<'a, E>(
+  fn set_value<'a, E>(
     &self,
     arena: &'a Arena,
     trailer: T,
@@ -448,7 +443,7 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  pub(super) fn clear_value(
+  fn clear_value(
     &self,
     arena: &Arena,
     success: Ordering,
@@ -1177,11 +1172,9 @@ impl<T: Trailer, C> SkipMap<T, C> {
       Key::Vacant(key) => {
         self.allocate_value_node(height, trailer, key.len() as u32, key.offset, value_size, f)?
       }
-      Key::Pointer {
-        arena: _,
-        offset,
-        len,
-      } => self.allocate_value_node(height, trailer, *len, *offset, value_size, f)?,
+      Key::Pointer { offset, len, .. } => {
+        self.allocate_value_node(height, trailer, *len, *offset, value_size, f)?
+      }
       Key::Remove(key) => self.allocate_key_node(
         height,
         trailer,
@@ -1195,11 +1188,9 @@ impl<T: Trailer, C> SkipMap<T, C> {
       Key::RemoveVacant(key) => {
         self.allocate_node(height, trailer, key.offset, key.len() as u32, REMOVE)?
       }
-      Key::RemovePointer {
-        arena: _,
-        offset,
-        len,
-      } => self.allocate_node(height, trailer, *offset, *len, REMOVE)?,
+      Key::RemovePointer { offset, len, .. } => {
+        self.allocate_node(height, trailer, *offset, *len, REMOVE)?
+      }
     };
 
     // Try to increase self.height via CAS.

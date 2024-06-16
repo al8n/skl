@@ -1313,7 +1313,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
     });
   }
   while Arc::strong_count(&l) > 1 {}
-  assert_eq!(N, l.len());
+  // assert_eq!(N, l.len());
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {

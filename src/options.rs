@@ -1,536 +1,299 @@
-use fs4::FileExt;
-use memmap2::MmapOptions as Mmap2Options;
-use std::{
-  fs::{File, OpenOptions as StdOpenOptions},
-  io,
-  path::Path,
-};
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+pub use rarena_allocator::{MmapOptions, OpenOptions};
 
-/// Options for opening a file for memory mapping.
-pub struct OpenOptions {
-  opts: StdOpenOptions,
-  create: Option<u64>,
-  create_new: Option<u64>,
-  shrink_on_drop: bool,
-  lock_shared: bool,
-  lock_exclusive: bool,
+pub use rarena_allocator::Freelist;
+
+const U27_MAX: u32 = (1 << 27) - 1;
+
+/// Options for `SkipMap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Options {
+  max_value_size: u32,
+  max_key_size: u32,
+  max_height: u8,
+  magic_version: u16,
+  capacity: u32,
+  unify: bool,
+  freelist: Freelist,
 }
 
-impl From<StdOpenOptions> for OpenOptions {
-  fn from(opts: StdOpenOptions) -> Self {
+impl Default for Options {
+  #[inline]
+  fn default() -> Options {
+    Options::new()
+  }
+}
+
+impl Options {
+  /// Creates a new set of options with the default values.
+  #[inline]
+  pub const fn new() -> Self {
     Self {
-      opts,
-      create_new: None,
-      create: None,
-      shrink_on_drop: false,
-      lock_shared: false,
-      lock_exclusive: true,
-    }
-  }
-}
-
-impl Default for OpenOptions {
-  /// Creates a blank new set of options ready for configuration.
-  ///
-  /// All options are initially set to `false`.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let options = OpenOptions::default();
-  /// ```
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl OpenOptions {
-  /// Creates a blank new set of options ready for configuration.
-  ///
-  /// All options are initially set to `false`.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let mut options = OpenOptions::new();
-  /// ```
-  #[inline]
-  pub fn new() -> Self {
-    Self {
-      opts: StdOpenOptions::new(),
-      create: None,
-      create_new: None,
-      shrink_on_drop: false,
-      lock_shared: false,
-      lock_exclusive: true,
+      max_value_size: u32::MAX,
+      max_key_size: U27_MAX,
+      max_height: 20,
+      capacity: 1024,
+      unify: false,
+      magic_version: 0,
+      freelist: Freelist::Optimistic,
     }
   }
 
-  /// Sets the option for read access.
+  /// Set the magic version of the [`SkipMap`](super::SkipMap).
   ///
-  /// This option, when true, will indicate that the file should be
-  /// `read`-able if opened.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().read(true);
-  /// ```
-  #[inline]
-  pub fn read(mut self, read: bool) -> Self {
-    self.opts.read(read);
-    self
-  }
-
-  /// Sets the option for write access.
-  ///
-  /// This option, when true, will indicate that the file should be
-  /// `write`-able if opened.
-  ///
-  /// If the file already exists, any write calls on it will overwrite its
-  /// contents, without truncating it.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().write(true);
-  /// ```
-  #[inline]
-  pub fn write(mut self, write: bool) -> Self {
-    self.opts.write(write);
-    self
-  }
-
-  /// Sets the option for the append mode.
-  ///
-  /// This option, when true, means that writes will append to a file instead
-  /// of overwriting previous contents.
-  /// Note that setting `.write(true).append(true)` has the same effect as
-  /// setting only `.append(true)`.
-  ///
-  /// For most filesystems, the operating system guarantees that all writes are
-  /// atomic: no writes get mangled because another process writes at the same
-  /// time.
-  ///
-  /// One maybe obvious note when using append-mode: make sure that all data
-  /// that belongs together is written to the file in one operation. This
-  /// can be done by concatenating strings before passing them to [`write()`],
-  /// or using a buffered writer (with a buffer of adequate size),
-  /// and calling [`flush()`] when the message is complete.
-  ///
-  /// If a file is opened with both read and append access, beware that after
-  /// opening, and after every write, the position for reading may be set at the
-  /// end of the file. So, before writing, save the current position (using
-  /// <code>[seek]\([SeekFrom](std::io::SeekFrom)::[Current]\(opts))</code>), and restore it before the next read.
-  ///
-  /// ## Note
-  ///
-  /// This function doesn't create the file if it doesn't exist. Use the
-  /// [`OpenOptions::create`] method to do so.
-  ///
-  /// [`write()`]: std::io::Write::write "io::Write::write"
-  /// [`flush()`]: std::io::Write::flush "io::Write::flush"
-  /// [seek]: std::io::Seek::seek "io::Seek::seek"
-  /// [Current]: std::io::SeekFrom::Current "io::SeekFrom::Current"
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().append(true);
-  /// ```
-  #[inline]
-  pub fn append(mut self, append: bool) -> Self {
-    self.opts.append(append);
-    self
-  }
-
-  /// Sets the option for truncating a previous file.
-  ///
-  /// If a file is successfully opened with this option set it will truncate
-  /// the file to opts length if it already exists.
-  ///
-  /// The file must be opened with write access for truncate to work.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().write(true).truncate(true);
-  /// ```
-  #[inline]
-  pub fn truncate(mut self, truncate: bool) -> Self {
-    self.opts.truncate(truncate);
-    self
-  }
-
-  /// Sets the option to create a new file, or open it if it already exists.
-  /// If the file does not exist, it is created and set the lenght of the file to the given size.
-  ///
-  /// In order for the file to be created, [`OpenOptions::write`] or
-  /// [`OpenOptions::append`] access must be used.
-  ///
-  /// See also [`std::fs::write()`][std::fs::write] for a simple function to
-  /// create a file with some given data.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().write(true).create(Some(1000));
-  /// ```
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().write(true).create(None);
-  /// ```
-  #[inline]
-  pub fn create(mut self, size: Option<u64>) -> Self {
-    match size {
-      Some(size) => {
-        self.opts.create(true);
-        self.create = Some(size);
-      }
-      None => {
-        self.opts.create(false);
-        self.create = None;
-      }
-    }
-    self
-  }
-
-  /// Sets the option to create a new file and set the file length to the given value, failing if it already exists.
-  ///
-  /// No file is allowed to exist at the target location, also no (dangling) symlink. In this
-  /// way, if the call succeeds, the file returned is guaranteed to be new.
-  ///
-  /// This option is useful because it is atomic. Otherwise between checking
-  /// whether a file exists and creating a new one, the file may have been
-  /// created by another process (a TOCTOU race condition / attack).
-  ///
-  /// If `.create_new(true)` is set, [`.create()`] and [`.truncate()`] are
-  /// ignored.
-  ///
-  /// The file must be opened with write or append access in order to create
-  /// a new file.
-  ///
-  /// [`.create()`]: OpenOptions::create
-  /// [`.truncate()`]: OpenOptions::truncate
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let file = OpenOptions::new()
-  ///   .write(true)
-  ///   .create_new(Some(1000));
-  /// ```
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new()
-  ///   .write(true)
-  ///   .create_new(None);
-  /// ```
-  #[inline]
-  pub fn create_new(mut self, size: Option<u64>) -> Self {
-    match size {
-      Some(size) => {
-        self.opts.create_new(true);
-        self.create_new = Some(size);
-      }
-      None => {
-        self.opts.create_new(false);
-        self.create_new = None;
-      }
-    }
-    self
-  }
-
-  /// Sets the option to make the file shrink to the used size when dropped.
-  ///
-  /// This option, when true, will indicate that the file should be shrunk to
-  /// the size of the data written to it when the file is dropped.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().shrink_on_drop(true);
-  /// ```
-  #[inline]
-  pub fn shrink_on_drop(mut self, shrink_on_drop: bool) -> Self {
-    self.shrink_on_drop = shrink_on_drop;
-    self
-  }
-
-  /// Sets the option to lock the file for shared read access.
-  ///
-  /// This option, when true, will indicate that the file should be locked for
-  /// shared read access.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().lock_shared(true);
-  /// ```
-  #[inline]
-  pub fn lock_shared(mut self, lock_shared: bool) -> Self {
-    self.lock_shared = lock_shared;
-    self
-  }
-
-  /// Sets the option to lock the file for exclusive write access.
-  ///
-  /// This option, when true, will indicate that the file should be locked for
-  /// exclusive write access.
-  ///
-  /// # Examples
-  ///
-  /// ```rust
-  /// use skl::OpenOptions;
-  ///
-  /// let opts = OpenOptions::new().lock_exclusive(true);
-  /// ```
-  #[inline]
-  pub fn lock_exclusive(mut self, lock_exclusive: bool) -> Self {
-    self.lock_exclusive = lock_exclusive;
-    self
-  }
-
-  pub(crate) fn open<P: AsRef<Path>>(&self, path: P) -> io::Result<(bool, File)> {
-    if let Some(size) = self.create_new {
-      return self.opts.open(path).and_then(|f| {
-        if self.lock_exclusive {
-          f.lock_exclusive()?;
-        } else if self.lock_shared {
-          f.lock_shared()?;
-        }
-
-        f.set_len(size).map(|_| (true, f))
-      });
-    }
-
-    if let Some(size) = self.create {
-      return if path.as_ref().exists() {
-        self.opts.open(path).and_then(|f| {
-          if self.lock_exclusive {
-            f.lock_exclusive()?;
-          } else if self.lock_shared {
-            f.lock_shared()?;
-          }
-          Ok((false, f))
-        })
-      } else {
-        self.opts.open(path).and_then(|f| {
-          if self.lock_exclusive {
-            f.lock_exclusive()?;
-          } else if self.lock_shared {
-            f.lock_shared()?;
-          }
-
-          f.set_len(size).map(|_| (true, f))
-        })
-      };
-    }
-
-    self.opts.open(path).and_then(|f| {
-      if self.lock_exclusive {
-        f.lock_exclusive()?;
-      } else if self.lock_shared {
-        f.lock_shared()?;
-      }
-      Ok((false, f))
-    })
-  }
-
-  #[inline]
-  pub(crate) const fn is_lock(&self) -> bool {
-    self.lock_shared || self.lock_exclusive
-  }
-
-  #[inline]
-  pub(crate) const fn is_shrink_on_drop(&self) -> bool {
-    self.shrink_on_drop
-  }
-}
-
-/// A memory map options for file backed [`SkipMap`](super::SkipMap),
-/// providing advanced options and flags for specifying memory map behavior.
-#[derive(Clone, Debug)]
-pub struct MmapOptions(Mmap2Options);
-
-impl Default for MmapOptions {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl From<Mmap2Options> for MmapOptions {
-  fn from(opts: Mmap2Options) -> Self {
-    Self(opts)
-  }
-}
-
-impl MmapOptions {
-  /// Creates a new set of options for configuring and creating a memory map.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::MmapOptions;
-  ///
-  /// // Create a new memory map options.
-  /// let mut mmap_options = MmapOptions::new();
-  /// ```
-  #[inline]
-  pub fn new() -> Self {
-    Self(Mmap2Options::new())
-  }
-
-  /// Configures the created memory mapped buffer to be `len` bytes long.
-  ///
-  /// This option is mandatory for anonymous memory maps.
-  ///
-  /// For file-backed memory maps, the length will default to the file length.
+  /// This is used by the application using [`SkipMap`](super::SkipMap)
+  /// to ensure that it doesn't open the [`SkipMap`](super::SkipMap)
+  /// with incompatible data format.
+  ///  
+  /// The default value is `0`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::MmapOptions;
+  /// use skl::Options;
   ///
-  /// let opts = MmapOptions::new().len(9);
+  /// let opts = Options::new().with_magic_version(1);
   /// ```
   #[inline]
-  pub fn len(mut self, len: usize) -> Self {
-    self.0.len(len);
+  pub const fn with_magic_version(mut self, magic_version: u16) -> Self {
+    self.magic_version = magic_version;
     self
   }
 
-  /// Configures the memory map to start at byte `offset` from the beginning of the file.
+  /// Set the [`Freelist`] kind of the [`SkipMap`](super::SkipMap).
   ///
-  /// This option has no effect on anonymous memory maps.
-  ///
-  /// By default, the offset is 0.
+  /// The default value is [`Freelist::Optimistic`].
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::MmapOptions;
+  /// use skl::{Options, options::Freelist};
   ///
-  /// let opts = MmapOptions::new().offset(30);
+  /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
   #[inline]
-  pub fn offset(mut self, offset: u64) -> Self {
-    self.0.offset(offset);
+  pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
+    self.freelist = freelist;
     self
   }
 
-  /// Configures the anonymous memory map to be suitable for a process or thread stack.
+  /// Set if use the unify memory layout of the [`SkipMap`](super::SkipMap).
   ///
-  /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Windows.
+  /// File backed [`SkipMap`](super::SkipMap) has different memory layout with other kind backed [`SkipMap`](super::SkipMap),
+  /// set this value to `true` will unify the memory layout of the [`SkipMap`](super::SkipMap), which means
+  /// all kinds of backed [`SkipMap`](super::SkipMap) will have the same memory layout.
   ///
-  /// This option has no effect on file-backed memory maps.
+  /// This value will be ignored if the [`SkipMap`](super::SkipMap) is backed by a file backed memory map.
+  ///
+  /// The default value is `false`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::MmapOptions;
+  /// use skl::Options;
   ///
-  /// let stack = MmapOptions::new().stack();
+  /// let opts = Options::new().with_unify(true);
   /// ```
   #[inline]
-  pub fn stack(mut self) -> Self {
-    self.0.stack();
+  pub const fn with_unify(mut self, unify: bool) -> Self {
+    self.unify = unify;
     self
   }
 
-  /// Configures the anonymous memory map to be allocated using huge pages.
+  /// Sets the maximum size of the value.
   ///
-  /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
-  ///
-  /// The size of the requested page can be specified in page bits. If not provided, the system
-  /// default is requested. The requested length should be a multiple of this, or the mapping
-  /// will fail.
-  ///
-  /// This option has no effect on file-backed memory maps.
+  /// Default is `u32::MAX`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::MmapOptions;
+  /// use skl::Options;
   ///
-  /// let stack = MmapOptions::new().huge(Some(21)).len(2*1024*1024);
+  /// let options = Options::new().with_max_value_size(1024);
   /// ```
   #[inline]
-  pub fn huge(mut self, page_bits: Option<u8>) -> Self {
-    self.0.huge(page_bits);
+  pub const fn with_max_value_size(mut self, size: u32) -> Self {
+    self.max_value_size = size;
     self
   }
 
-  /// Populate (prefault) page tables for a mapping.
+  /// Sets the maximum size of the key.
   ///
-  /// For a file mapping, this causes read-ahead on the file. This will help to reduce blocking on page faults later.
+  /// The maximum size of the key is `u27::MAX`.
   ///
-  /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Windows.
+  /// Default is `u27::MAX`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::MmapOptions;
+  /// use skl::Options;
   ///
-  ///
-  /// let opts = MmapOptions::new().populate();
+  /// let options = Options::new().with_max_key_size(1024);
   /// ```
   #[inline]
-  pub fn populate(mut self) -> Self {
-    self.0.populate();
+  pub const fn with_max_key_size(mut self, size: u32) -> Self {
+    self.max_key_size = if size > U27_MAX { U27_MAX } else { size };
     self
   }
 
+  /// Sets the maximum height.
+  ///
+  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::Options;
+  ///
+  /// let options = Options::new().with_max_height(20);
+  /// ```
   #[inline]
-  pub(crate) unsafe fn map(&self, file: &File) -> io::Result<memmap2::Mmap> {
-    self.0.map(file)
+  pub const fn with_max_height(mut self, height: u8) -> Self {
+    self.max_height = if height == 0 {
+      1
+    } else if height > 31 {
+      31
+    } else {
+      height
+    };
+    self
   }
 
+  /// Sets the capacity of the underlying ARENA.
+  ///
+  /// Default is `1024`. This configuration will be ignored if the map is memory-mapped.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::Options;
+  ///
+  /// let options = Options::new().with_capacity(1024);
+  /// ```
   #[inline]
-  pub(crate) unsafe fn map_mut(&self, file: &File) -> io::Result<memmap2::MmapMut> {
-    self.0.map_mut(file)
+  pub const fn with_capacity(mut self, capacity: u32) -> Self {
+    self.capacity = capacity;
+    self
   }
 
+  /// Returns the maximum size of the value.
+  ///
+  /// Default is `u32::MAX`.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::Options;
+  ///
+  /// let options = Options::new().with_max_value_size(1024);
+  /// ```
   #[inline]
-  pub(crate) fn map_anon(&self) -> io::Result<memmap2::MmapMut> {
-    self.0.map_anon()
+  pub const fn max_value_size(&self) -> u32 {
+    self.max_value_size
   }
-}
 
-#[cfg(test)]
-mod tests {
-  use super::*;
+  /// Returns the maximum size of the key.
+  #[inline]
+  pub const fn max_key_size(&self) -> u32 {
+    self.max_key_size
+  }
 
-  #[test]
-  fn test_from() {
-    let opts = StdOpenOptions::new();
-    let _open_opts = OpenOptions::from(opts);
+  /// Returns the maximum height.
+  ///
+  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::Options;
+  ///
+  /// let options = Options::new().with_max_height(20);
+  ///
+  /// assert_eq!(options.max_height(), 20);
+  /// ```
+  #[inline]
+  pub const fn max_height(&self) -> u8 {
+    self.max_height
+  }
 
-    let opts = Mmap2Options::new();
-    let _mmap_opts = MmapOptions::from(opts);
+  /// Returns the configuration of underlying ARENA size.
+  ///
+  /// Default is `1024`. This configuration will be ignored if the map is memory-mapped.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let options = Options::new().with_capacity(1024);
+  /// ```
+  #[inline]
+  pub const fn capacity(&self) -> u32 {
+    self.capacity
+  }
+
+  /// Get if use the unify memory layout of the [`SkipMap`](super::SkipMap).
+  ///
+  /// File backed [`SkipMap`](super::SkipMap) has different memory layout with other kind backed [`SkipMap`](super::SkipMap),
+  /// set this value to `true` will unify the memory layout of the [`SkipMap`](super::SkipMap), which means
+  /// all kinds of backed [`SkipMap`](super::SkipMap) will have the same memory layout.
+  ///
+  /// This value will be ignored if the [`SkipMap`](super::SkipMap) is backed by a file backed memory map.
+  ///  
+  /// The default value is `false`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_unify(true);
+  ///
+  /// assert_eq!(opts.unify(), true);
+  /// ```
+  #[inline]
+  pub const fn unify(&self) -> bool {
+    self.unify
+  }
+
+  /// Get the magic version of the [`SkipMap`](super::SkipMap).
+  ///
+  /// This is used by the application using [`SkipMap`](super::SkipMap)
+  /// to ensure that it doesn't open the [`SkipMap`](super::SkipMap)
+  /// with incompatible data format.
+  ///
+  /// The default value is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_magic_version(1);
+  ///
+  /// assert_eq!(opts.magic_version(), 1);
+  /// ```
+  #[inline]
+  pub const fn magic_version(&self) -> u16 {
+    self.magic_version
+  }
+
+  /// Get the [`Freelist`] kind of the [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`Freelist::Optimistic`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::{Options, options::Freelist};
+  ///
+  /// let opts = Options::new().with_freelist(Freelist::Optimistic);
+  ///
+  /// assert_eq!(opts.freelist(), Freelist::Optimistic);
+  /// ```
+  #[inline]
+  pub const fn freelist(&self) -> Freelist {
+    self.freelist
   }
 }

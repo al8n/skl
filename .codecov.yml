@@ -3,6 +3,7 @@ codecov:
 
 ignore:
   - integration/
+  - src/map/error.rs
 
 coverage:
   status:

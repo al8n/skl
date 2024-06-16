@@ -17,7 +17,7 @@ fn main() {
     .read(true)
     .write(true);
 
-  let l = SkipMap::mmap_mut("test.wal", open_options, mmap_options).unwrap();
+  let l = SkipMap::map_mut("test.wal", open_options, mmap_options).unwrap();
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();

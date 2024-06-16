@@ -13,7 +13,7 @@ fn main() {
   const N: usize = 1000;
 
   let mmap_options = skl::MmapOptions::default().len(1 << 20);
-  let l = SkipMap::mmap_anon(mmap_options).unwrap();
+  let l = SkipMap::map_anon(mmap_options).unwrap();
   let wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();

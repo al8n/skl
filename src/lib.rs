@@ -2,7 +2,7 @@
 #![cfg_attr(not(all(feature = "std", test)), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
-#![deny(missing_docs, warnings)]
+#![deny(missing_docs)]
 #![allow(
   unexpected_cfgs,
   clippy::type_complexity,
@@ -18,54 +18,47 @@ extern crate std;
 
 use core::{cmp, ops::RangeBounds};
 
-mod arena;
-
-mod align8vp;
-use align8vp::Pointer;
-
 /// A map implementation based on skiplist
 pub mod map;
+
+/// Options for the [`SkipMap`](crate::SkipMap).
+pub mod options;
+pub use options::Options;
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+pub use options::{MmapOptions, OpenOptions};
 
 mod types;
 pub use types::*;
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-mod options;
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-pub use options::{MmapOptions, OpenOptions};
+pub use rarena_allocator::{Arena, Error as ArenaError};
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-fn invalid_data<E: std::error::Error + Send + Sync + 'static>(e: E) -> std::io::Error {
-  std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-}
-
-pub use arena::ArenaError;
 pub use map::{AllVersionsIter, SkipMap};
 
-const MAX_HEIGHT: usize = 20;
+const MAX_HEIGHT: usize = 32;
 
 #[cfg(feature = "std")]
-fn random_height() -> u32 {
+fn random_height(max_height: u8) -> u32 {
   use rand::{thread_rng, Rng};
   let mut rng = thread_rng();
   let rnd: u32 = rng.gen();
   let mut h = 1;
+  let max_height = max_height as usize;
 
-  while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+  while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;
   }
   h as u32
 }
 
 #[cfg(not(feature = "std"))]
-fn random_height() -> u32 {
+fn random_height(max_height: u8) -> u32 {
   use rand::{rngs::OsRng, Rng};
 
+  let max_height = max_height as usize;
   let rnd: u32 = OsRng.gen();
   let mut h = 1;
 
-  while h < MAX_HEIGHT && rnd <= PROBABILITIES[h] {
+  while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;
   }
   h as u32
@@ -161,60 +154,10 @@ unsafe impl Trailer for u64 {
   }
 }
 
-mod alloc {
-  #[cfg(not(loom))]
-  pub(crate) use std::alloc::{alloc_zeroed, dealloc, Layout};
-
-  #[cfg(loom)]
-  pub(crate) use loom::alloc::{alloc_zeroed, dealloc, Layout};
-}
-
 mod sync {
-  #[derive(Debug)]
-  #[repr(C)]
-  pub(super) struct Link {
-    pub(super) next_offset: AtomicU32,
-    pub(super) prev_offset: AtomicU32,
-  }
-
-  impl Link {
-    pub(super) const SIZE: usize = core::mem::size_of::<Self>();
-
-    #[inline]
-    pub(super) fn new(next_offset: u32, prev_offset: u32) -> Self {
-      Self {
-        next_offset: AtomicU32::new(next_offset),
-        prev_offset: AtomicU32::new(prev_offset),
-      }
-    }
-  }
-
-  #[cfg(not(loom))]
+  #[cfg(not(feature = "loom"))]
   pub(crate) use core::sync::atomic::*;
 
-  #[cfg(loom)]
+  #[cfg(feature = "loom")]
   pub(crate) use loom::sync::atomic::*;
-
-  #[cfg(loom)]
-  pub(crate) trait AtomicMut<T> {}
-
-  #[cfg(loom)]
-  impl<T> AtomicMut<T> for AtomicPtr<T> {}
-
-  #[cfg(not(loom))]
-  pub(crate) trait AtomicMut<T> {
-    fn with_mut<F, R>(&mut self, f: F) -> R
-    where
-      F: FnOnce(&mut *mut T) -> R;
-  }
-
-  #[cfg(not(loom))]
-  impl<T> AtomicMut<T> for AtomicPtr<T> {
-    fn with_mut<F, R>(&mut self, f: F) -> R
-    where
-      F: FnOnce(&mut *mut T) -> R,
-    {
-      f(self.get_mut())
-    }
-  }
 }

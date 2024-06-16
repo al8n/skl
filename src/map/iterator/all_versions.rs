@@ -134,7 +134,7 @@ where
           return None;
         }
 
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
         if trailer.version() > self.version {
           continue;
@@ -180,7 +180,7 @@ where
           return None;
         }
 
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
         if trailer.version() > self.version {
           continue;
@@ -227,7 +227,7 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
@@ -268,7 +268,7 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
@@ -305,7 +305,7 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this on line 75
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
 
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
@@ -345,7 +345,7 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this on line 75
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
@@ -384,7 +384,7 @@ where
       }
 
       unsafe {
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         let nk = node.get_key(&self.map.arena);
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
 
@@ -426,7 +426,7 @@ where
           return None;
         }
 
-        let node = self.nd.as_ptr();
+        let node = self.nd.as_ref();
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
 
         if trailer.version() > self.version {

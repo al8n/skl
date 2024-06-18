@@ -2440,7 +2440,7 @@ fn get_or_insert_with(l: SkipMap) {
 
   l.get_or_insert_with::<()>(
     1,
-    5,
+    u27::new(5),
     |key| {
       key.write(b"alice").unwrap();
       Ok(())
@@ -2695,7 +2695,7 @@ fn insert_with(l: SkipMap) {
 
   l.insert_with::<()>(
     1,
-    5,
+    u27::new(5),
     |key| {
       key.write(b"alice").unwrap();
       Ok(())
@@ -2730,7 +2730,7 @@ fn insert_with(l: SkipMap) {
   let old = l
     .insert_with::<()>(
       1,
-      5,
+      u27::new(5),
       |key| {
         key.write(b"alice").unwrap();
         Ok(())

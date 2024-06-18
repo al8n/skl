@@ -1,4 +1,5 @@
 use rarena_allocator::ArenaOptions;
+use ux2::u27;
 
 use super::*;
 
@@ -389,14 +390,15 @@ impl<T, C> SkipMap<T, C> {
 
     self.meta = meta;
 
-    let head = Self::allocate_full_node(&self.arena, self.opts.max_height())?;
-    let tail = Self::allocate_full_node(&self.arena, self.opts.max_height())?;
+    let max_height: u8 = self.opts.max_height().into();
+    let head = Self::allocate_full_node(&self.arena, max_height)?;
+    let tail = Self::allocate_full_node(&self.arena, max_height)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
     unsafe {
       // Link all head/tail levels together.
-      for i in 0..(self.opts.max_height() as usize) {
+      for i in 0..(max_height as usize) {
         let head_link = head.tower(&self.arena, i);
         let tail_link = tail.tower(&self.arena, i);
         head_link.next_offset.store(tail.offset, Ordering::Relaxed);
@@ -701,7 +703,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::{SkipMap, u27};
   ///
   /// struct Person {
   ///   id: u32,
@@ -724,7 +726,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// l.insert_with::<core::convert::Infallible>(1, 5, |key| {
+  /// l.insert_with::<core::convert::Infallible>(1, u27::new(5), |key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// }, encoded_size as u32, |mut val| {
@@ -737,12 +739,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   pub fn insert_with<'a, E>(
     &'a self,
     trailer: T,
-    key_size: u16,
+    key_size: u27,
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     val_size: u32,
     val: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    let vk = self.fetch_vacant_key(key_size, key)?;
+    let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
       .update(
@@ -779,7 +781,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::{SkipMap, u27};
   ///
   /// struct Person {
   ///   id: u32,
@@ -802,7 +804,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// l.get_or_insert_with::<core::convert::Infallible>(1, 5, |key| {
+  /// l.get_or_insert_with::<core::convert::Infallible>(1, u27::new(5), |key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// }, encoded_size as u32, |mut val| {
@@ -815,12 +817,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   pub fn get_or_insert_with<'a, E>(
     &'a self,
     trailer: T,
-    key_size: u16,
+    key_size: u27,
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     val_size: u32,
     val: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    let vk = self.fetch_vacant_key(key_size, key)?;
+    let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
       .update(
@@ -944,7 +946,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::{SkipMap, u27};
   ///
   /// struct Person {
   ///   id: u32,
@@ -967,7 +969,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// l.get_or_remove_with::<core::convert::Infallible>(1, 5, |key| {
+  /// l.get_or_remove_with::<core::convert::Infallible>(1, u27::new(5), |key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// })
@@ -976,15 +978,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   pub fn get_or_remove_with<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
-    key_size: u16,
+    key_size: u27,
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
-    let vk = self.fetch_vacant_key(key_size, key)?;
-
+    let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
+    let key = Key::RemoveVacant(vk);
     self
       .update(
         trailer,
-        Key::RemoveVacant(vk),
+        key,
         0,
         noop::<Infallible>,
         Ordering::Relaxed,
@@ -995,8 +997,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            self.arena.increase_discarded(key_size as u32);
-
             if old.is_removed() {
               None
             } else {

@@ -610,7 +610,7 @@ impl<T, C> Drop for SkipMap<T, C> {
 
 impl<T, C> SkipMap<T, C> {
   fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
-    let data_offset = Self::check_capacity(&arena, opts.max_height())?;
+    let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
 
     if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
@@ -640,14 +640,15 @@ impl<T, C> SkipMap<T, C> {
       }
     };
 
-    let head = Self::allocate_full_node(&arena, opts.max_height())?;
-    let tail = Self::allocate_full_node(&arena, opts.max_height())?;
+    let max_height: u8 = opts.max_height().into();
+    let head = Self::allocate_full_node(&arena, max_height)?;
+    let tail = Self::allocate_full_node(&arena, max_height)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
     unsafe {
       // Link all head/tail levels together.
-      for i in 0..(opts.max_height() as usize) {
+      for i in 0..(max_height as usize) {
         let head_link = head.tower(&arena, i);
         let tail_link = tail.tower(&arena, i);
         head_link.next_offset.store(tail.offset, Ordering::Relaxed);
@@ -1085,17 +1086,14 @@ impl<T, C> SkipMap<T, C> {
   }
 
   #[inline]
-  const fn check_node_size(
-    &self,
-    height: u32,
-    key_size: u32,
-    mut value_size: u32,
-  ) -> Result<(), Error> {
-    if height < 1 || height > self.opts.max_height() as u32 {
+  fn check_node_size(&self, height: u32, key_size: u32, mut value_size: u32) -> Result<(), Error> {
+    let max_height: u32 = self.opts.max_height().into();
+    if height < 1 || height > max_height {
       panic!("height cannot be less than one or greater than the max height");
     }
 
-    if key_size > self.opts.max_key_size() {
+    let max_key_size: u32 = self.opts.max_key_size().into();
+    if key_size > max_key_size {
       return Err(Error::KeyTooLarge(key_size as u64));
     }
 
@@ -1156,7 +1154,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     value_size: u32,
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32, Deallocator), Either<E, Error>> {
-    let height = super::random_height(self.opts.max_height());
+    let height = super::random_height(self.opts.max_height().into());
     let (nd, deallocator) = match key {
       Key::Occupied(key) => self.allocate_entry_node(
         height,
@@ -1700,12 +1698,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   fn fetch_vacant_key<'a, 'b: 'a, E>(
     &'a self,
-    key_size: u16,
+    key_size: u32,
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<VacantBuffer<'a>, Either<E, Error>> {
     let (key_offset, key_size) = self
       .arena
-      .alloc_bytes(key_size as u32)
+      .alloc_bytes(key_size)
       .map(|mut b| {
         b.detach();
         (b.offset(), b.capacity())

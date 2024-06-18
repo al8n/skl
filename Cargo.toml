@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.11.1"
+version = "0.11.2"
 edition = "2021"
 rust-version = "1.56.0"
 repository = "https://github.com/al8n/skl"
@@ -46,6 +46,7 @@ getrandom = { version = "0.2", features = ["js"] }
 either = { version = "1", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 rarena-allocator = { version = "0.1", default-features = false }
+ux2 = { version = "0.8", default-features = false, features = ["32"] }
 
 tracing = { version = "0.1", optional = true }
 

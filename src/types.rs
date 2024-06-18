@@ -29,7 +29,13 @@ pub struct VacantBuffer<'a> {
 }
 
 impl<'a> VacantBuffer<'a> {
-  /// Write bytes to the occupied value.
+  /// Fill the remaining space with the given byte.
+  pub fn fill(&mut self, byte: u8) {
+    self.len = self.cap;
+    self.value[self.len..].fill(byte);
+  }
+
+  /// Write bytes to the vacant value.
   pub fn write(&mut self, bytes: &[u8]) -> Result<(), TooLarge> {
     let len = bytes.len();
     let remaining = self.cap - self.len;
@@ -45,25 +51,35 @@ impl<'a> VacantBuffer<'a> {
     Ok(())
   }
 
-  /// Returns the capacity of the occupied value.
+  /// Write bytes to the vacant value without bounds checking.
+  ///
+  /// # Panics
+  /// - If a slice is larger than the remaining space.
+  pub fn write_unchecked(&mut self, bytes: &[u8]) {
+    let len = bytes.len();
+    self.value[self.len..self.len + len].copy_from_slice(bytes);
+    self.len += len;
+  }
+
+  /// Returns the capacity of the vacant value.
   #[inline]
   pub const fn capacity(&self) -> usize {
     self.cap
   }
 
-  /// Returns the length of the occupied value.
+  /// Returns the length of the vacant value.
   #[inline]
   pub const fn len(&self) -> usize {
     self.len
   }
 
-  /// Returns `true` if the occupied value is empty.
+  /// Returns `true` if the vacant value is empty.
   #[inline]
   pub const fn is_empty(&self) -> bool {
     self.len == 0
   }
 
-  /// Returns the remaining space of the occupied value.
+  /// Returns the remaining space of the vacant value.
   #[inline]
   pub const fn remaining(&self) -> usize {
     self.cap - self.len

@@ -4,14 +4,14 @@ pub use rarena_allocator::{MmapOptions, OpenOptions};
 
 pub use rarena_allocator::Freelist;
 
-const U27_MAX: u32 = (1 << 27) - 1;
+use ux2::{u27, u5};
 
 /// Options for `SkipMap`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Options {
   max_value_size: u32,
-  max_key_size: u32,
-  max_height: u8,
+  max_key_size: u27,
+  max_height: u5,
   magic_version: u16,
   capacity: u32,
   unify: bool,
@@ -31,8 +31,8 @@ impl Options {
   pub const fn new() -> Self {
     Self {
       max_value_size: u32::MAX,
-      max_key_size: U27_MAX,
-      max_height: 20,
+      max_key_size: u27::MAX,
+      max_height: u5::new(20),
       capacity: 1024,
       unify: false,
       magic_version: 0,
@@ -127,13 +127,13 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::Options;
+  /// use skl::{Options, u27};
   ///
-  /// let options = Options::new().with_max_key_size(1024);
+  /// let options = Options::new().with_max_key_size(u27::new(1024));
   /// ```
   #[inline]
-  pub const fn with_max_key_size(mut self, size: u32) -> Self {
-    self.max_key_size = if size > U27_MAX { U27_MAX } else { size };
+  pub const fn with_max_key_size(mut self, size: u27) -> Self {
+    self.max_key_size = size;
     self
   }
 
@@ -144,19 +144,13 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::Options;
+  /// use skl::{Options, u5};
   ///
-  /// let options = Options::new().with_max_height(20);
+  /// let options = Options::new().with_max_height(u5::new(20));
   /// ```
   #[inline]
-  pub const fn with_max_height(mut self, height: u8) -> Self {
-    self.max_height = if height == 0 {
-      1
-    } else if height > 31 {
-      31
-    } else {
-      height
-    };
+  pub const fn with_max_height(mut self, height: u5) -> Self {
+    self.max_height = height;
     self
   }
 
@@ -194,26 +188,40 @@ impl Options {
   }
 
   /// Returns the maximum size of the key.
+  ///
+  /// The maximum size of the key is `u27::MAX`.
+  ///
+  /// Default is `u27::MAX`.
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::{Options, u27};
+  ///
+  /// let options = Options::new().with_max_key_size(u27::new(1024));
+  ///
+  /// assert_eq!(options.max_key_size(), u27::new(1024));
+  /// ```
   #[inline]
-  pub const fn max_key_size(&self) -> u32 {
+  pub const fn max_key_size(&self) -> u27 {
     self.max_key_size
   }
 
   /// Returns the maximum height.
   ///
-  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
+  /// Default is `20`. The maximum height is `u5::MAX`. The minimum height is `1`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::Options;
+  /// use skl::{Options, u5};
   ///
-  /// let options = Options::new().with_max_height(20);
+  /// let options = Options::new().with_max_height(u5::new(5));
   ///
-  /// assert_eq!(options.max_height(), 20);
+  /// assert_eq!(options.max_height(), u5::new(5));
   /// ```
   #[inline]
-  pub const fn max_height(&self) -> u8 {
+  pub const fn max_height(&self) -> u5 {
     self.max_height
   }
 

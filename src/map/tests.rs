@@ -5,6 +5,7 @@ use std::format;
 
 use std::sync::Arc;
 
+use rarena_allocator::Freelist;
 #[cfg(feature = "std")]
 use wg::WaitGroup;
 
@@ -180,12 +181,30 @@ fn full_in(l: impl FnOnce(usize) -> SkipMap) {
 
 #[test]
 fn test_full() {
-  run(|| full_in(|n| SkipMap::with_options(Options::new().with_capacity(n as u32)).unwrap()))
+  run(|| {
+    full_in(|n| {
+      SkipMap::with_options(
+        Options::new()
+          .with_capacity(n as u32)
+          .with_freelist(Freelist::None),
+      )
+      .unwrap()
+    })
+  })
 }
 
 #[test]
 fn test_full_unify() {
-  run(|| full_in(|n| SkipMap::with_options(UNIFY_TEST_OPTIONS.with_capacity(n as u32)).unwrap()))
+  run(|| {
+    full_in(|n| {
+      SkipMap::with_options(
+        UNIFY_TEST_OPTIONS
+          .with_capacity(n as u32)
+          .with_freelist(Freelist::None),
+      )
+      .unwrap()
+    })
+  })
 }
 
 #[test]
@@ -202,7 +221,13 @@ fn test_full_map_mut() {
         .read(true)
         .write(true);
       let map_options = MmapOptions::default();
-      SkipMap::map_mut(p, open_options, map_options).unwrap()
+      SkipMap::map_mut_with_options(
+        p,
+        Options::new().with_freelist(Freelist::None),
+        open_options,
+        map_options,
+      )
+      .unwrap()
     });
   })
 }
@@ -213,7 +238,8 @@ fn test_full_map_anon() {
   run(|| {
     full_in(|n| {
       let map_options = MmapOptions::default().len(n as u32);
-      SkipMap::map_anon(map_options).unwrap()
+      SkipMap::map_anon_with_options(Options::new().with_freelist(Freelist::None), map_options)
+        .unwrap()
     });
   })
 }
@@ -224,7 +250,8 @@ fn test_full_map_anon_unify() {
   run(|| {
     full_in(|n| {
       let map_options = MmapOptions::default().len(n as u32);
-      SkipMap::map_anon_with_options(TEST_OPTIONS, map_options).unwrap()
+      SkipMap::map_anon_with_options(Options::new().with_freelist(Freelist::None), map_options)
+        .unwrap()
     });
   })
 }
@@ -2265,8 +2292,7 @@ fn test_reopen_mmap() {
       let open_options = OpenOptions::default()
         .create(Some(ARENA_SIZE as u32))
         .read(true)
-        .write(true)
-        .lock_exclusive(true);
+        .write(true);
       let map_options = MmapOptions::default();
       let l = SkipMap::map_mut(&p, open_options, map_options).unwrap();
       for i in 0..1000 {
@@ -2275,12 +2301,9 @@ fn test_reopen_mmap() {
       l.flush().unwrap();
     }
 
-    let open_options = OpenOptions::default()
-      .read(true)
-      .lock_shared(true)
-      .shrink_on_drop(true);
+    let open_options = OpenOptions::default().read(true).shrink_on_drop(true);
     let map_options = MmapOptions::default();
-    let l = SkipMap::map(&p, open_options, map_options, 0).unwrap();
+    let l = SkipMap::<u64>::map(&p, open_options, map_options, 0).unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
       let k = key(i);
@@ -2305,8 +2328,7 @@ fn test_reopen_mmap2() {
       let open_options = OpenOptions::default()
         .create(Some(ARENA_SIZE as u32))
         .read(true)
-        .write(true)
-        .lock_shared(true);
+        .write(true);
       let map_options = MmapOptions::default();
       let l = SkipMap::map_mut_with_comparator(&p, open_options, map_options, Ascend).unwrap();
       let mut data = (0..1000).collect::<Vec<usize>>();
@@ -2440,7 +2462,7 @@ fn get_or_insert_with(l: SkipMap) {
 
   l.get_or_insert_with::<()>(
     1,
-    5,
+    u27::new(5),
     |key| {
       key.write(b"alice").unwrap();
       Ok(())
@@ -2695,7 +2717,7 @@ fn insert_with(l: SkipMap) {
 
   l.insert_with::<()>(
     1,
-    5,
+    u27::new(5),
     |key| {
       key.write(b"alice").unwrap();
       Ok(())
@@ -2730,7 +2752,7 @@ fn insert_with(l: SkipMap) {
   let old = l
     .insert_with::<()>(
       1,
-      5,
+      u27::new(5),
       |key| {
         key.write(b"alice").unwrap();
         Ok(())

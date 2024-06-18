@@ -30,9 +30,10 @@ pub use options::{MmapOptions, OpenOptions};
 mod types;
 pub use types::*;
 
-pub use rarena_allocator::{Arena, Error as ArenaError};
-
+pub use either;
 pub use map::{AllVersionsIter, SkipMap};
+pub use rarena_allocator::{Arena, Error as ArenaError};
+pub use ux2::{u27, u5};
 
 const MAX_HEIGHT: usize = 32;
 

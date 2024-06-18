@@ -154,6 +154,14 @@ unsafe impl Trailer for u64 {
   }
 }
 
+unsafe impl Trailer for () {
+  /// Returns the version of the trailer.
+  #[inline]
+  fn version(&self) -> u64 {
+    0
+  }
+}
+
 mod sync {
   #[cfg(not(feature = "loom"))]
   pub(crate) use core::sync::atomic::*;

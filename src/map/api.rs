@@ -3,7 +3,7 @@ use ux2::u27;
 
 use super::*;
 
-impl SkipMap {
+impl<T> SkipMap<T> {
   /// Create a new skipmap with default options.
   ///
   /// **Note:** The capacity stands for how many memory allocated,

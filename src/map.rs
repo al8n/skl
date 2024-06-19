@@ -287,7 +287,7 @@ impl<T> NodePtr<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  unsafe fn cas_next_offset_weak(
+  unsafe fn cas_next_offset(
     &self,
     arena: &Arena,
     idx: usize,
@@ -296,11 +296,10 @@ impl<T> NodePtr<T> {
     success: Ordering,
     failure: Ordering,
   ) -> Result<u32, u32> {
-    #[cfg(not(feature = "unaligned"))]
     self
       .tower(arena, idx)
       .next_offset
-      .compare_exchange_weak(current, new, success, failure)
+      .compare_exchange(current, new, success, failure)
   }
 }
 
@@ -1864,7 +1863,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
             }
           }
 
-          match prev.cas_next_offset_weak(
+          match prev.cas_next_offset(
             &self.arena,
             i,
             next.offset,

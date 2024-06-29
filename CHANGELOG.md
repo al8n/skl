@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.12.0
+
+- Bump `rarena-allocator`'s version
+- Give users back the key offset in the ARENA and the key in value callback
+
 ## 0.11.0
 
 - Refactor and extract lock-free ARENA allocator implementation to [`rarena-allocator`](https://github.com/al8n/rarena) crate.

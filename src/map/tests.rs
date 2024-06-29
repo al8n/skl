@@ -170,7 +170,7 @@ fn full_in(l: impl FnOnce(usize) -> SkipMap) {
   assert!(found_arena_full);
 
   let e = l
-    .get_or_insert(0, &make_int_key(full_at + 1), &make_value(full_at + 1))
+    .get_or_insert(0, &make_int_key(full_at), &make_value(full_at))
     .unwrap_err();
 
   assert!(matches!(

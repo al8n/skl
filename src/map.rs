@@ -402,7 +402,7 @@ impl<T> Node<T> {
     key_offset: u32,
     key: &'a [u8],
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    f: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(), Either<E, Error>> {
     let mut bytes = arena
       .alloc_aligned_bytes::<T>(value_size)
@@ -718,7 +718,7 @@ impl<T, C> SkipMap<T, C> {
     key_size: u32,
     kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     value_size: u32,
-    vf: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    vf: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     self
       .check_node_size(height, key_size, value_size)
@@ -902,7 +902,7 @@ impl<T, C> SkipMap<T, C> {
     key_size: u32,
     key_offset: u32,
     value_size: u32,
-    vf: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    vf: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     self
       .check_node_size(height, key_size, value_size)
@@ -1043,7 +1043,7 @@ impl<T, C> SkipMap<T, C> {
     key: &'a [u8],
     value_size: u32,
     value_offset: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    f: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(u32, Pointer), E> {
     let buf = self
       .arena
@@ -1162,7 +1162,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    f: &impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32, Deallocator), Either<E, Error>> {
     let height = super::random_height(self.opts.max_height().into());
     let (nd, deallocator) = match key {
@@ -1743,7 +1743,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: Key<'a, 'b>,
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E> + Copy,
+    f: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
     ins: &mut Inserter<T>,
@@ -1769,7 +1769,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
             &key,
             trailer,
             value_size,
-            f,
+            &f,
             success,
             failure,
           );
@@ -1812,10 +1812,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, height, mut deallocator) = self.new_node(&k, trailer, value_size, f).map_err(|e| {
-      k.release(&self.arena);
-      e
-    })?;
+    let (nd, height, mut deallocator) =
+      self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+        k.release(&self.arena);
+        e
+      })?;
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -1941,7 +1942,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                     &k,
                     trailer,
                     value_size,
-                    f,
+                    &f,
                     success,
                     failure,
                   );
@@ -2006,7 +2007,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(&mut VacantValue<'a>) -> Result<(), E>,
+    f: &impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {

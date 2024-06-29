@@ -3,6 +3,7 @@
 ## 0.12.0
 
 - Bump `rarena-allocator`'s version
+- Change value callback from `impl FnOnce + Copy` to `impl Fn`
 - Give users back the key offset in the ARENA and the key in value callback
 
 ## 0.11.0
@@ -83,5 +84,4 @@
 - Add `flush` API
 
 ## UNRELEASED
-
 

@@ -399,8 +399,10 @@ impl<T> Node<T> {
     &self,
     arena: &'a Arena,
     trailer: T,
+    key_offset: u32,
+    key: &'a [u8],
     value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    f: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(), Either<E, Error>> {
     let mut bytes = arena
       .alloc_aligned_bytes::<T>(value_size)
@@ -409,9 +411,10 @@ impl<T> Node<T> {
     let trailer_offset = bytes.offset();
     let value_offset = trailer_offset + mem::size_of::<T>();
 
-    let mut oval = VacantBuffer::new(value_size as usize, value_offset as u32, unsafe {
+    let buffer = VacantBuffer::new(value_size as usize, value_offset as u32, unsafe {
       arena.get_bytes_mut(value_offset, value_size as usize)
     });
+    let mut oval = VacantValue::new(key_offset, key, buffer);
     f(&mut oval).map_err(Either::Left)?;
 
     let remaining = oval.remaining();
@@ -715,7 +718,7 @@ impl<T, C> SkipMap<T, C> {
     key_size: u32,
     kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     value_size: u32,
-    vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    vf: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     self
       .check_node_size(height, key_size, value_size)
@@ -759,6 +762,8 @@ impl<T, C> SkipMap<T, C> {
         .fill_vacant_value(
           trailer_offset as u32,
           trailer_and_value.capacity() as u32,
+          key_offset as u32,
+          self.arena.get_bytes(key_offset, key_cap),
           value_size,
           value_offset,
           vf,
@@ -897,7 +902,7 @@ impl<T, C> SkipMap<T, C> {
     key_size: u32,
     key_offset: u32,
     value_size: u32,
-    vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    vf: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     self
       .check_node_size(height, key_size, value_size)
@@ -931,6 +936,8 @@ impl<T, C> SkipMap<T, C> {
         .fill_vacant_value(
           trailer_offset as u32,
           trailer_and_value.capacity() as u32,
+          key_offset,
+          self.arena.get_bytes(key_offset as usize, key_size as usize),
           value_size,
           value_offset,
           vf,
@@ -1026,19 +1033,23 @@ impl<T, C> SkipMap<T, C> {
     Ok((oval.len() as u32, Pointer::new(offset, size)))
   }
 
+  #[allow(clippy::too_many_arguments)]
   #[inline]
   unsafe fn fill_vacant_value<'a, E>(
     &'a self,
     offset: u32,
     size: u32,
+    key_offset: u32,
+    key: &'a [u8],
     value_size: u32,
     value_offset: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    f: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(u32, Pointer), E> {
     let buf = self
       .arena
       .get_bytes_mut(value_offset as usize, value_size as usize);
-    let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
+    let buffer = VacantBuffer::new(value_size as usize, value_offset, buf);
+    let mut oval = VacantValue::new(key_offset, key, buffer);
     if let Err(e) = f(&mut oval) {
       self.arena.dealloc(offset, size);
       return Err(e);
@@ -1151,7 +1162,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    f: &impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32, Deallocator), Either<E, Error>> {
     let height = super::random_height(self.opts.max_height().into());
     let (nd, deallocator) = match key {
@@ -1732,7 +1743,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: Key<'a, 'b>,
     value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E> + Copy,
+    f: impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
     ins: &mut Inserter<T>,
@@ -1746,12 +1757,21 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let old = VersionedEntryRef::from_node(node_ptr, self);
-
-        key.on_fail(&self.arena);
+        let node = node_ptr.as_ref();
+        key.release(&self.arena);
 
         if upsert {
           return self.upsert(
-            old, node_ptr, &key, trailer, value_size, f, success, failure,
+            old,
+            node_ptr,
+            node.key_offset,
+            node.key_size(),
+            &key,
+            trailer,
+            value_size,
+            &f,
+            success,
+            failure,
           );
         }
 
@@ -1792,10 +1812,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, height, mut deallocator) = self.new_node(&k, trailer, value_size, f).map_err(|e| {
-      k.on_fail(&self.arena);
-      e
-    })?;
+    let (nd, height, mut deallocator) =
+      self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+        k.release(&self.arena);
+        e
+      })?;
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -1908,12 +1929,23 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   .curr
                   .expect("the current should not be `None` when we found");
                 let old = VersionedEntryRef::from_node(node_ptr, self);
-
-                k.on_fail(&self.arena);
+                let node = node_ptr.as_ref();
+                k.release(&self.arena);
 
                 if upsert {
                   deallocator.dealloc(&self.arena);
-                  return self.upsert(old, node_ptr, &k, trailer, value_size, f, success, failure);
+                  return self.upsert(
+                    old,
+                    node_ptr,
+                    node.key_offset,
+                    node.key_size(),
+                    &k,
+                    trailer,
+                    value_size,
+                    &f,
+                    success,
+                    failure,
+                  );
                 }
 
                 deallocator.dealloc(&self.arena);
@@ -1925,7 +1957,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               }
 
               if let Some(p) = fr.found_key {
-                k.on_fail(&self.arena);
+                k.release(&self.arena);
                 let node = nd.as_mut();
                 node.key_offset = p.offset;
                 node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
@@ -1970,17 +2002,26 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     old: VersionedEntryRef<'a, T, C>,
     node_ptr: NodePtr<T>,
+    key_offset: u32,
+    key_len: u32,
     key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    f: &impl Fn(&mut VacantValue<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => node_ptr
         .as_ref()
-        .set_value(&self.arena, trailer, value_size, f)
+        .set_value(
+          &self.arena,
+          trailer,
+          key_offset,
+          self.arena.get_bytes(key_offset as usize, key_len as usize),
+          value_size,
+          f,
+        )
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = node_ptr.as_ref();
@@ -2116,6 +2157,6 @@ const fn decode_key_size_and_height(size: u32) -> (u32, u8) {
 
 #[cold]
 #[inline(never)]
-fn noop<E>(_: &mut VacantBuffer<'_>) -> Result<(), E> {
+fn noop<E>(_: &mut VacantValue<'_>) -> Result<(), E> {
   Ok(())
 }

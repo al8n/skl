@@ -18,6 +18,124 @@ impl core::fmt::Display for TooLarge {
 #[cfg(feature = "std")]
 impl std::error::Error for TooLarge {}
 
+/// A vacant value in the skiplist.
+#[must_use = "vacant value must be filled with bytes."]
+#[derive(Debug)]
+pub struct VacantValue<'a> {
+  buffer: VacantBuffer<'a>,
+  key_offset: u32,
+  key: &'a [u8],
+}
+
+impl<'a> core::ops::Deref for VacantValue<'a> {
+  type Target = VacantBuffer<'a>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.buffer
+  }
+}
+
+impl<'a> core::ops::DerefMut for VacantValue<'a> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.buffer
+  }
+}
+
+impl<'a> AsRef<[u8]> for VacantValue<'a> {
+  fn as_ref(&self) -> &[u8] {
+    &self.buffer
+  }
+}
+
+impl<'a> AsMut<[u8]> for VacantValue<'a> {
+  fn as_mut(&mut self) -> &mut [u8] {
+    &mut self.buffer
+  }
+}
+
+impl<'a> PartialEq<[u8]> for VacantValue<'a> {
+  fn eq(&self, other: &[u8]) -> bool {
+    self.buffer.eq(other)
+  }
+}
+
+impl<'a> PartialEq<VacantValue<'a>> for [u8] {
+  fn eq(&self, other: &VacantValue<'a>) -> bool {
+    self.eq(&other.buffer)
+  }
+}
+
+impl<'a> PartialEq<[u8]> for &VacantValue<'a> {
+  fn eq(&self, other: &[u8]) -> bool {
+    self.buffer.eq(other)
+  }
+}
+
+impl<'a> PartialEq<&VacantValue<'a>> for [u8] {
+  fn eq(&self, other: &&VacantValue<'a>) -> bool {
+    self.eq(&other.buffer)
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.buffer.eq(other)
+  }
+}
+
+impl<'a, const N: usize> PartialEq<VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &VacantValue<'a>) -> bool {
+    self.as_ref().eq(&other.buffer)
+  }
+}
+
+impl<'a, const N: usize> PartialEq<&VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &&VacantValue<'a>) -> bool {
+    self.as_ref().eq(&other.buffer)
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for &VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.buffer.eq(other)
+  }
+}
+
+impl<'a, const N: usize> PartialEq<&mut VacantValue<'a>> for [u8; N] {
+  fn eq(&self, other: &&mut VacantValue<'a>) -> bool {
+    self.eq(&other.buffer)
+  }
+}
+
+impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantValue<'a> {
+  fn eq(&self, other: &[u8; N]) -> bool {
+    self.buffer.eq(other)
+  }
+}
+
+impl<'a> VacantValue<'a> {
+  #[inline]
+  pub(crate) const fn new(key_offset: u32, key: &'a [u8], buffer: VacantBuffer<'a>) -> Self {
+    Self {
+      buffer,
+      key_offset,
+      key,
+    }
+  }
+
+  /// Returns the offset of the key (corresponding to the value) in the underlying ARENA.
+  #[inline]
+  pub const fn key_offset(&self) -> u32 {
+    self.key_offset
+  }
+
+  /// Returns the key of the vacant value.
+  #[inline]
+  pub const fn key(&self) -> &'a [u8] {
+    self.key
+  }
+}
+
 /// A vacant buffer in the skiplist.
 #[must_use = "vacant buffer must be filled with bytes."]
 #[derive(Debug)]
@@ -202,7 +320,7 @@ pub(crate) enum Key<'a, 'b: 'a> {
 
 impl<'a, 'b: 'a> Key<'a, 'b> {
   #[inline]
-  pub(crate) fn on_fail(&self, arena: &super::Arena) {
+  pub(crate) fn release(&self, arena: &super::Arena) {
     match self {
       Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } | Self::RemovePointer { .. } => {}
       Self::Vacant(key) | Self::RemoveVacant(key) => unsafe {

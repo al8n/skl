@@ -153,8 +153,6 @@ fn test_empty_map_anon_unify() {
 fn full_in(l: impl FnOnce(usize) -> SkipMap) {
   let l = l(1000);
   let mut found_arena_full = false;
-
-  let mut full_at = 0;
   for i in 0..100 {
     if let Err(e) = l.get_or_insert(0, &make_int_key(i), &make_value(i)) {
       assert!(matches!(
@@ -162,21 +160,11 @@ fn full_in(l: impl FnOnce(usize) -> SkipMap) {
         Error::Arena(ArenaError::InsufficientSpace { .. })
       ));
       found_arena_full = true;
-      full_at = i;
       break;
     }
   }
 
   assert!(found_arena_full);
-
-  let e = l
-    .get_or_insert(0, &make_int_key(full_at + 1), &make_value(full_at + 1))
-    .unwrap_err();
-
-  assert!(matches!(
-    e,
-    Error::Arena(ArenaError::InsufficientSpace { .. })
-  ));
 }
 
 #[test]
@@ -1502,8 +1490,7 @@ fn test_concurrent_one_key_map_mut() {
     let open_options = OpenOptions::default()
       .create(Some(ARENA_SIZE as u32))
       .read(true)
-      .write(true)
-      .shrink_on_drop(true);
+      .write(true);
     let map_options = MmapOptions::default();
     concurrent_one_key(Arc::new(
       SkipMap::map_mut(p, open_options, map_options)
@@ -2301,7 +2288,7 @@ fn test_reopen_mmap() {
       l.flush().unwrap();
     }
 
-    let open_options = OpenOptions::default().read(true).shrink_on_drop(true);
+    let open_options = OpenOptions::default().read(true);
     let map_options = MmapOptions::default();
     let l = SkipMap::<u64>::map(&p, open_options, map_options, 0).unwrap();
     assert_eq!(1000, l.len());

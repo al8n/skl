@@ -46,7 +46,7 @@ impl<'a, Q: ?Sized, R, T, C> Iter<'a, T, C, Q, R> {
 impl<'a, Q: ?Sized, R, T: Clone, C> Iter<'a, T, C, Q, R> {
   /// Returns the entry at the current position of the iterator.
   #[inline]
-  pub fn entry(&self) -> Option<EntryRef<'a, T, C>> {
+  pub fn entry(&self) -> Option<EntryRef<'a, T>> {
     self.0.last.clone().map(EntryRef)
   }
 }
@@ -61,13 +61,13 @@ where
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<EntryRef<'a, T, C>> {
+  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<EntryRef<'a, T>> {
     self.0.seek_upper_bound(upper).map(EntryRef)
   }
 
   /// Moves the iterator to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<EntryRef<'a, T, C>> {
+  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<EntryRef<'a, T>> {
     self.0.seek_lower_bound(lower).map(EntryRef)
   }
 }
@@ -80,7 +80,7 @@ where
   Q: ?Sized + PartialOrd<&'a [u8]>,
   R: RangeBounds<Q>,
 {
-  type Item = EntryRef<'a, T, C>;
+  type Item = EntryRef<'a, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -93,24 +93,6 @@ where
     Self: Sized,
   {
     self.0.last().map(EntryRef)
-  }
-
-  #[inline]
-  fn max(self) -> Option<Self::Item>
-  where
-    Self: Sized,
-    Self::Item: Ord,
-  {
-    self.last()
-  }
-
-  #[inline]
-  fn min(self) -> Option<Self::Item>
-  where
-    Self: Sized,
-    Self::Item: Ord,
-  {
-    self.0.min().map(EntryRef)
   }
 }
 

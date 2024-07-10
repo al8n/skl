@@ -37,9 +37,9 @@ const CURRENT_VERSION: u16 = 0;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
 
-type UpdateOk<'a, 'b, T, C> = Either<
-  Option<VersionedEntryRef<'a, T, C>>,
-  Result<VersionedEntryRef<'a, T, C>, VersionedEntryRef<'a, T, C>>,
+type UpdateOk<'a, 'b, T> = Either<
+  Option<VersionedEntryRef<'a, T>>,
+  Result<VersionedEntryRef<'a, T>, VersionedEntryRef<'a, T>>,
 >;
 
 #[derive(Debug)]
@@ -1737,7 +1737,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     failure: Ordering,
     ins: &mut Inserter<T>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
     let version = trailer.version();
 
     // Safety: a fresh new Inserter, so safe here
@@ -1745,7 +1745,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       let (found, found_key, ptr) = self.find_splice(version, key.as_ref(), ins, true);
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(node_ptr, self);
+        let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
 
         key.on_fail(&self.arena);
 
@@ -1908,7 +1908,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = VersionedEntryRef::from_node(node_ptr, self);
+                let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
 
                 k.on_fail(&self.arena);
 
@@ -1969,7 +1969,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
-    old: VersionedEntryRef<'a, T, C>,
+    old: VersionedEntryRef<'a, T>,
     node_ptr: NodePtr<T>,
     key: &Key<'a, 'b>,
     trailer: T,
@@ -1977,7 +1977,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: &impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, T, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => node_ptr
         .as_ref()
@@ -1992,7 +1992,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);
             let value = node.get_value_by_offset(&self.arena, offset, len);
             Ok(Either::Right(Err(VersionedEntryRef {
-              map: self,
+              arena: &self.arena,
               key,
               trailer,
               value,

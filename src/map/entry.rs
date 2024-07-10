@@ -1,23 +1,23 @@
-use core::cmp;
+use rarena_allocator::Arena;
 
-use super::{Comparator, NodePtr, SkipMap, Trailer};
+use super::{NodePtr, Trailer};
 
 /// A versioned entry reference of the skipmap.
 ///
 /// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
 #[derive(Debug)]
-pub struct VersionedEntryRef<'a, T, C> {
-  pub(super) map: &'a SkipMap<T, C>,
+pub struct VersionedEntryRef<'a, T> {
+  pub(super) arena: &'a Arena,
   pub(super) key: &'a [u8],
   pub(super) trailer: T,
   pub(super) value: Option<&'a [u8]>,
   pub(super) ptr: NodePtr<T>,
 }
 
-impl<'a, T: Clone, C> Clone for VersionedEntryRef<'a, T, C> {
+impl<'a, T: Clone> Clone for VersionedEntryRef<'a, T> {
   fn clone(&self) -> Self {
     Self {
-      map: self.map,
+      arena: self.arena,
       key: self.key,
       trailer: self.trailer.clone(),
       value: self.value,
@@ -26,9 +26,9 @@ impl<'a, T: Clone, C> Clone for VersionedEntryRef<'a, T, C> {
   }
 }
 
-impl<'a, T: Copy, C> Copy for VersionedEntryRef<'a, T, C> {}
+impl<'a, T: Copy> Copy for VersionedEntryRef<'a, T> {}
 
-impl<'a, T, C> VersionedEntryRef<'a, T, C> {
+impl<'a, T> VersionedEntryRef<'a, T> {
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &[u8] {
@@ -56,13 +56,12 @@ impl<'a, T, C> VersionedEntryRef<'a, T, C> {
   /// Returns the owned versioned entry,
   /// feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
-  pub fn to_owned(&self) -> VersionedEntry<T, C>
+  pub fn to_owned(&self) -> VersionedEntry<T>
   where
     T: Clone,
-    C: Clone,
   {
     VersionedEntry {
-      map: self.map.clone(),
+      arena: self.arena.clone(),
       trailer: self.trailer.clone(),
       ptr: self.ptr,
     }
@@ -78,57 +77,25 @@ impl<'a, T, C> VersionedEntryRef<'a, T, C> {
   }
 }
 
-impl<'a, T: Clone, C: Clone> From<VersionedEntryRef<'a, T, C>> for VersionedEntry<T, C> {
-  fn from(entry: VersionedEntryRef<'a, T, C>) -> Self {
+impl<'a, T: Clone> From<VersionedEntryRef<'a, T>> for VersionedEntry<T> {
+  fn from(entry: VersionedEntryRef<'a, T>) -> Self {
     entry.to_owned()
   }
 }
 
-impl<'a, T: Copy, C> VersionedEntryRef<'a, T, C> {
-  pub(super) fn from_node(
-    node_ptr: NodePtr<T>,
-    map: &'a SkipMap<T, C>,
-  ) -> VersionedEntryRef<'a, T, C> {
+impl<'a, T: Copy> VersionedEntryRef<'a, T> {
+  pub(super) fn from_node(node_ptr: NodePtr<T>, arena: &'a Arena) -> VersionedEntryRef<'a, T> {
     unsafe {
       let node = node_ptr.as_ref();
-      let (trailer, value) = node.get_value_and_trailer(&map.arena);
+      let (trailer, value) = node.get_value_and_trailer(arena);
       VersionedEntryRef {
-        key: node.get_key(&map.arena),
+        key: node.get_key(arena),
         trailer,
         value,
-        map,
+        arena,
         ptr: node_ptr,
       }
     }
-  }
-}
-
-impl<'a, T: Trailer, C: Comparator> PartialEq for VersionedEntryRef<'a, T, C> {
-  fn eq(&self, other: &Self) -> bool {
-    self
-      .map
-      .cmp
-      .compare(self.key, other.key)
-      .then_with(|| self.version().cmp(&other.version()))
-      .is_eq()
-  }
-}
-
-impl<'a, T: Trailer, C: Comparator> Eq for VersionedEntryRef<'a, T, C> {}
-
-impl<'a, T: Trailer, C: Comparator> PartialOrd for VersionedEntryRef<'a, T, C> {
-  fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl<'a, T: Trailer, C: Comparator> Ord for VersionedEntryRef<'a, T, C> {
-  fn cmp(&self, other: &Self) -> cmp::Ordering {
-    self
-      .map
-      .cmp
-      .compare(self.key, other.key)
-      .then_with(|| self.version().cmp(&other.version()).reverse())
   }
 }
 
@@ -136,35 +103,35 @@ impl<'a, T: Trailer, C: Comparator> Ord for VersionedEntryRef<'a, T, C> {
 ///
 /// Compared to the [`Entry`], this one's value can be `None` which means the entry is removed.
 #[derive(Debug)]
-pub struct VersionedEntry<T, C> {
-  pub(super) map: SkipMap<T, C>,
+pub struct VersionedEntry<T> {
+  pub(super) arena: Arena,
   pub(super) trailer: T,
   pub(super) ptr: NodePtr<T>,
 }
 
-impl<T: Clone, C: Clone> Clone for VersionedEntry<T, C> {
+impl<T: Clone> Clone for VersionedEntry<T> {
   fn clone(&self) -> Self {
     Self {
-      map: self.map.clone(),
+      arena: self.arena.clone(),
       trailer: self.trailer.clone(),
       ptr: self.ptr,
     }
   }
 }
 
-impl<'a, T: Clone, C> From<&'a VersionedEntry<T, C>> for VersionedEntryRef<'a, T, C> {
-  fn from(entry: &'a VersionedEntry<T, C>) -> VersionedEntryRef<'a, T, C> {
+impl<'a, T: Clone> From<&'a VersionedEntry<T>> for VersionedEntryRef<'a, T> {
+  fn from(entry: &'a VersionedEntry<T>) -> VersionedEntryRef<'a, T> {
     entry.borrow()
   }
 }
 
-impl<T, C> VersionedEntry<T, C> {
+impl<T> VersionedEntry<T> {
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &[u8] {
     unsafe {
       let node = self.ptr.as_ref();
-      node.get_key(&self.map.arena)
+      node.get_key(&self.arena)
     }
   }
 
@@ -173,7 +140,7 @@ impl<T, C> VersionedEntry<T, C> {
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
       let node = self.ptr.as_ref();
-      let value = node.get_value(&self.map.arena);
+      let value = node.get_value(&self.arena);
       value
     }
   }
@@ -186,12 +153,12 @@ impl<T, C> VersionedEntry<T, C> {
 
   /// Returns the borrowed entry reference
   #[inline]
-  pub fn borrow(&self) -> VersionedEntryRef<'_, T, C>
+  pub fn borrow(&self) -> VersionedEntryRef<'_, T>
   where
     T: Clone,
   {
     VersionedEntryRef {
-      map: &self.map,
+      arena: &self.arena,
       key: self.key(),
       trailer: self.trailer.clone(),
       value: self.value(),
@@ -213,21 +180,21 @@ impl<T, C> VersionedEntry<T, C> {
 ///
 /// Compared to the [`VersionedEntry`], this one's value cannot be `None`.
 #[derive(Debug)]
-pub struct Entry<T, C>(VersionedEntry<T, C>);
+pub struct Entry<T>(VersionedEntry<T>);
 
-impl<T: Clone, C: Clone> Clone for Entry<T, C> {
+impl<T: Clone> Clone for Entry<T> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, T: Clone, C> From<&'a Entry<T, C>> for EntryRef<'a, T, C> {
-  fn from(entry: &'a Entry<T, C>) -> Self {
+impl<'a, T: Clone> From<&'a Entry<T>> for EntryRef<'a, T> {
+  fn from(entry: &'a Entry<T>) -> Self {
     entry.borrow()
   }
 }
 
-impl<T, C> Entry<T, C> {
+impl<T> Entry<T> {
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &[u8] {
@@ -251,7 +218,7 @@ impl<T, C> Entry<T, C> {
 
   /// Returns the borrowed entry reference
   #[inline]
-  pub fn borrow(&self) -> EntryRef<'_, T, C>
+  pub fn borrow(&self) -> EntryRef<'_, T>
   where
     T: Clone,
   {
@@ -272,23 +239,23 @@ impl<T, C> Entry<T, C> {
 ///
 /// Compared to the [`VersionedEntryRef`], this one's value cannot be `None`.
 #[derive(Debug)]
-pub struct EntryRef<'a, T, C>(pub(crate) VersionedEntryRef<'a, T, C>);
+pub struct EntryRef<'a, T>(pub(crate) VersionedEntryRef<'a, T>);
 
-impl<'a, T: Clone, C> Clone for EntryRef<'a, T, C> {
+impl<'a, T: Clone> Clone for EntryRef<'a, T> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, T: Copy, C> Copy for EntryRef<'a, T, C> {}
+impl<'a, T: Copy> Copy for EntryRef<'a, T> {}
 
-impl<'a, T: Clone, C: Clone> From<EntryRef<'a, T, C>> for Entry<T, C> {
-  fn from(entry: EntryRef<'a, T, C>) -> Self {
+impl<'a, T: Clone> From<EntryRef<'a, T>> for Entry<T> {
+  fn from(entry: EntryRef<'a, T>) -> Self {
     entry.to_owned()
   }
 }
 
-impl<'a, T, C> EntryRef<'a, T, C> {
+impl<'a, T> EntryRef<'a, T> {
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &[u8] {
@@ -312,10 +279,9 @@ impl<'a, T, C> EntryRef<'a, T, C> {
 
   /// Returns the owned entry, feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
-  pub fn to_owned(&self) -> Entry<T, C>
+  pub fn to_owned(&self) -> Entry<T>
   where
     T: Clone,
-    C: Clone,
   {
     Entry(self.0.to_owned())
   }
@@ -327,25 +293,5 @@ impl<'a, T, C> EntryRef<'a, T, C> {
     T: Trailer,
   {
     self.0.version()
-  }
-}
-
-impl<'a, T: Trailer, C: Comparator> PartialEq for EntryRef<'a, T, C> {
-  fn eq(&self, other: &Self) -> bool {
-    self.0.eq(&other.0)
-  }
-}
-
-impl<'a, T: Trailer, C: Comparator> Eq for EntryRef<'a, T, C> {}
-
-impl<'a, T: Trailer, C: Comparator> PartialOrd for EntryRef<'a, T, C> {
-  fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl<'a, T: Trailer, C: Comparator> Ord for EntryRef<'a, T, C> {
-  fn cmp(&self, other: &Self) -> cmp::Ordering {
-    self.0.cmp(&other.0)
   }
 }

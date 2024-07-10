@@ -8,7 +8,7 @@ pub struct AllVersionsIter<'a, T, C, Q: ?Sized = &'static [u8], R = core::ops::R
   pub(super) version: u64,
   pub(super) range: R,
   pub(super) all_versions: bool,
-  pub(super) last: Option<VersionedEntryRef<'a, T, C>>,
+  pub(super) last: Option<VersionedEntryRef<'a, T>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
@@ -74,7 +74,7 @@ impl<'a, Q: ?Sized, R, T, C> AllVersionsIter<'a, T, C, Q, R> {
 
   /// Returns the entry at the current position of the iterator.
   #[inline]
-  pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, T, C>> {
+  pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, T>> {
     self.last.as_ref()
   }
 }
@@ -89,15 +89,15 @@ where
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, T, C>> {
+  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, T>> {
     match upper {
       Bound::Included(key) => self.seek_le(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, self.map);
+        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
         self.last = Some(ent);
         ent
       }),
       Bound::Excluded(key) => self.seek_lt(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, self.map);
+        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
         self.last = Some(ent);
         ent
       }),
@@ -107,15 +107,15 @@ where
 
   /// Moves the iterator to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, T, C>> {
+  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, T>> {
     match lower {
       Bound::Included(key) => self.seek_ge(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, self.map);
+        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
         self.last = Some(ent);
         ent
       }),
       Bound::Excluded(key) => self.seek_gt(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, self.map);
+        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
         self.last = Some(ent);
         ent
       }),
@@ -125,7 +125,7 @@ where
 
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn next_in(&mut self) -> Option<VersionedEntryRef<T, C>> {
+  fn next_in(&mut self) -> Option<VersionedEntryRef<T>> {
     loop {
       unsafe {
         self.nd = self.map.get_next(self.nd, 0);
@@ -156,7 +156,7 @@ where
 
         if self.map.cmp.contains(&self.range, nk) {
           let ent = VersionedEntryRef {
-            map: self.map,
+            arena: &self.map.arena,
             key: nk,
             trailer,
             value,
@@ -171,7 +171,7 @@ where
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn prev(&mut self) -> Option<VersionedEntryRef<T, C>> {
+  fn prev(&mut self) -> Option<VersionedEntryRef<T>> {
     loop {
       unsafe {
         self.nd = self.map.get_prev(self.nd, 0);
@@ -202,7 +202,7 @@ where
 
         if self.map.cmp.contains(&self.range, nk) {
           let ent = VersionedEntryRef {
-            map: self.map,
+            arena: &self.map.arena,
             key: nk,
             trailer,
             value,
@@ -375,7 +375,7 @@ where
 
   /// Seeks position at the first entry in map. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
-  fn first(&mut self) -> Option<VersionedEntryRef<'a, T, C>> {
+  fn first(&mut self) -> Option<VersionedEntryRef<'a, T>> {
     self.nd = self.map.first_in(self.version)?;
 
     loop {
@@ -400,7 +400,7 @@ where
 
         if self.map.cmp.contains(&self.range, nk) {
           let ent = VersionedEntryRef {
-            map: self.map,
+            arena: &self.map.arena,
             key: nk,
             trailer,
             value,
@@ -417,7 +417,7 @@ where
 
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
-  fn last(&mut self) -> Option<VersionedEntryRef<'a, T, C>> {
+  fn last(&mut self) -> Option<VersionedEntryRef<'a, T>> {
     self.nd = self.map.last_in(self.version)?;
 
     loop {
@@ -442,7 +442,7 @@ where
         let nk = node.get_key(&self.map.arena);
         if self.map.cmp.contains(&self.range, nk) {
           let ent = VersionedEntryRef {
-            map: self.map,
+            arena: &self.map.arena,
             key: nk,
             trailer,
             value,
@@ -465,7 +465,7 @@ where
   Q: ?Sized + PartialOrd<&'a [u8]>,
   R: RangeBounds<Q>,
 {
-  type Item = VersionedEntryRef<'a, T, C>;
+  type Item = VersionedEntryRef<'a, T>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {

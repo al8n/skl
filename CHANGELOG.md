@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.13.0
+
+- Remove `Comparator` generic on `Entry*`
+
 ## 0.12.0
 
 - Bump `rarena-allocator`'s version

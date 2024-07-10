@@ -452,7 +452,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
     if self.arena.read_only() {
       return Err(Error::read_only());
     }
@@ -537,7 +537,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value_size: u32,
     f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
     if self.arena.read_only() {
       return Err(Either::Right(Error::read_only()));
     }
@@ -575,7 +575,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
     if self.arena.read_only() {
       return Err(Error::read_only());
     }
@@ -661,7 +661,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value_size: u32,
     f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
     if self.arena.read_only() {
       return Err(Either::Right(Error::read_only()));
     }
@@ -743,7 +743,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     val_size: u32,
     val: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
     let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
@@ -821,7 +821,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     val_size: u32,
     val: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
     let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
@@ -860,7 +860,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
     self
       .update(
         trailer,
@@ -903,7 +903,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     trailer: T,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, T, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
     self
       .update(
         trailer,
@@ -980,7 +980,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key_size: u27,
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<Option<EntryRef<'a, T, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
     let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
     let key = Key::RemoveVacant(vk);
     self
@@ -1017,17 +1017,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
+  pub fn first(&self, version: u64) -> Option<EntryRef<'_, T>> {
     self.iter(version).seek_lower_bound(Bound::Unbounded)
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T, C>> {
+  pub fn last(&self, version: u64) -> Option<EntryRef<'_, T>> {
     self.iter(version).seek_upper_bound(Bound::Unbounded)
   }
 
   /// Returns the value associated with the given key, if it exists.
-  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T, C>> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -1038,7 +1038,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       if eq {
         return value.map(|val| {
           EntryRef(VersionedEntryRef {
-            map: self,
+            arena: &self.arena,
             key: node_key,
             trailer,
             value: Some(val),
@@ -1057,7 +1057,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
       value.map(|val| {
         EntryRef(VersionedEntryRef {
-          map: self,
+          arena: &self.arena,
           key: node_key,
           trailer,
           value: Some(val),
@@ -1073,7 +1073,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T, C>> {
+  ) -> Option<EntryRef<'a, T>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
@@ -1083,7 +1083,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T, C>> {
+  ) -> Option<EntryRef<'a, T>> {
     self.iter(version).seek_lower_bound(lower)
   }
 

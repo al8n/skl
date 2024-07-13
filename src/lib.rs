@@ -97,6 +97,54 @@ pub trait Comparator: core::fmt::Debug {
     Q: ?Sized + PartialOrd<&'a [u8]>;
 }
 
+impl<C: Comparator> Comparator for std::sync::Arc<C> {
+  #[inline]
+  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
+    (**self).compare(a, b)
+  }
+
+  #[inline]
+  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+  {
+    (**self).contains(range, key)
+  }
+}
+
+impl<C: Comparator> Comparator for std::rc::Rc<C> {
+  #[inline]
+  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
+    (**self).compare(a, b)
+  }
+
+  #[inline]
+  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+  {
+    (**self).contains(range, key)
+  }
+}
+
+impl<C: Comparator> Comparator for std::boxed::Box<C> {
+  #[inline]
+  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
+    (**self).compare(a, b)
+  }
+
+  #[inline]
+  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
+  where
+    &'a [u8]: PartialOrd<Q>,
+    Q: ?Sized + PartialOrd<&'a [u8]>,
+  {
+    (**self).contains(range, key)
+  }
+}
+
 /// Ascend is a comparator that compares byte slices in ascending order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Ascend;

@@ -426,15 +426,8 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  fn clear_value(
-    &self,
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<(), (u32, u32)> {
-    self
-      .value
-      .compare_remove(success, failure)
-      .map(|_| ()) 
+  fn clear_value(&self, success: Ordering, failure: Ordering) -> Result<(), (u32, u32)> {
+    self.value.compare_remove(success, failure).map(|_| ())
   }
 }
 

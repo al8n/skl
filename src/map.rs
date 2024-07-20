@@ -1774,7 +1774,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       std::thread::yield_now();
     }
 
-    let mut k = match found_key {
+    let k = match found_key {
       None => key,
       Some(k) => {
         if key.is_remove() {
@@ -1793,12 +1793,43 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, height, mut deallocator) =
-      self.new_node(&k, trailer, value_size, &f).map_err(|e| {
-        k.on_fail(&self.arena);
-        e
-      })?;
+    let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+      k.on_fail(&self.arena);
+      e
+    })?;
 
+    self.link(
+      trailer,
+      k,
+      value_size,
+      f,
+      success,
+      failure,
+      ins,
+      upsert,
+      nd,
+      height,
+      deallocator,
+      version,
+    )
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  fn link<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    mut k: Key<'a, 'b>,
+    value_size: u32,
+    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    success: Ordering,
+    failure: Ordering,
+    ins: &mut Inserter<T>,
+    upsert: bool,
+    nd: NodePtr<T>,
+    height: u32,
+    mut deallocator: Deallocator,
+    version: u64,
+  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -1900,7 +1931,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
-              let fr = self.find_splice_for_level(trailer.version(), k.as_ref(), i, prev);
+              let fr = self.find_splice_for_level(version, k.as_ref(), i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");

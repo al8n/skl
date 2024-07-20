@@ -383,17 +383,6 @@ impl<T> Node<T> {
     Self::SIZE + (max_height as usize) * Link::SIZE
   }
 
-  // TODO: remove those functions
-  // #[inline]
-  // const fn min_cap() -> usize {
-  //   (Node::<T>::MAX_NODE_SIZE * 2) as usize
-  // }
-
-  // #[inline]
-  // const fn max_node_size() -> u32 {
-  //   Node::<T>::MAX_NODE_SIZE as u32
-  // }
-
   #[inline]
   fn set_value<'a, E>(
     &self,
@@ -431,37 +420,14 @@ impl<T> Node<T> {
       arena.increase_discarded(discard as u32);
     }
 
-    let (old_offset, old_size) = self.value.swap(trailer_offset as u32, value_size);
-
-    // on success, which means that old value is removed, we need to dealloc the old value
-    unsafe {
-      arena.dealloc(old_offset, (mem::size_of::<T>() as u32) + old_size);
-    }
+    self.value.swap(trailer_offset as u32, value_size);
 
     Ok(())
   }
 
   #[inline]
-  fn clear_value(
-    &self,
-    arena: &Arena,
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<(), (u32, u32)> {
-    self
-      .value
-      .compare_remove(success, failure)
-      .map(|(offset, size)| {
-        if size != u32::MAX {
-          unsafe {
-            arena.dealloc(offset, (mem::size_of::<T>() as u32) + size);
-          }
-        } else {
-          unsafe {
-            arena.dealloc(offset, mem::size_of::<T>() as u32);
-          }
-        }
-      })
+  fn clear_value(&self, success: Ordering, failure: Ordering) -> Result<(), (u32, u32)> {
+    self.value.compare_remove(success, failure).map(|_| ())
   }
 }
 
@@ -1986,7 +1952,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = node_ptr.as_ref();
         let key = node.get_key(&self.arena);
-        match node.clear_value(&self.arena, success, failure) {
+        match node.clear_value(success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);

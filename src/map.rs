@@ -13,6 +13,7 @@ use crate::{Key, Trailer, VacantBuffer};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use error::{bad_magic_version, bad_version, invalid_data};
+use options::CompressionPolicy;
 
 use super::{sync::*, Arena, Ascend, Comparator, *};
 
@@ -1549,6 +1550,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       if fr.splice.next.is_null() {
         fr.splice.next = self.tail;
       }
+
       found = fr.found;
       if let Some(key) = fr.found_key {
         found_key.get_or_insert(key);
@@ -1603,14 +1605,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
             height: Some(next_node.height()),
           });
         }
-        cmp::Ordering::Greater => {
-          if next_key.starts_with(key) {
-            found_key = Some(Pointer {
-              offset: next_node.key_offset,
-              size: key.len() as u32,
-              height: Some(next_node.height()),
-            });
-          }
+        cmp::Ordering::Greater | cmp::Ordering::Less if found_key.is_none() => {
+          found_key = self.try_get_pointer(next_node, next_key, key);
         }
         _ => {}
       }
@@ -1637,6 +1633,30 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         }
       }
     }
+  }
+
+  fn try_get_pointer(&self, next_node: &Node<T>, next_key: &[u8], key: &[u8]) -> Option<Pointer> {
+    match self.opts.compression_policy() {
+      CompressionPolicy::Fast => {
+        if next_key.starts_with(key) {
+          return Some(Pointer {
+            offset: next_node.key_offset,
+            size: key.len() as u32,
+            height: Some(next_node.height()),
+          });
+        }
+      }
+      CompressionPolicy::High => {
+        if let Some(idx) = memchr::memmem::find(next_key, key) {
+          return Some(Pointer {
+            offset: next_node.key_offset + idx as u32,
+            size: key.len() as u32,
+            height: Some(next_node.height()),
+          });
+        }
+      }
+    }
+    None
   }
 
   /// ## Safety

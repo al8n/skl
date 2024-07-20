@@ -6,7 +6,18 @@ pub use rarena_allocator::Freelist;
 
 use ux2::{u27, u5};
 
-/// Options for `SkipMap`.
+/// Configuration for the compression policy of the key in [`SkipMap`](super::SkipMap).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum CompressionPolicy {
+  /// Fast compression policy, which only checks if the key is a prefix of the next key.
+  #[default]
+  Fast,
+  /// High compression policy, which checks if the key is a substring of the next key.
+  High,
+}
+
+/// Options for [`SkipMap`](super::SkipMap).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Options {
   max_value_size: u32,
@@ -16,6 +27,7 @@ pub struct Options {
   capacity: u32,
   unify: bool,
   freelist: Freelist,
+  policy: CompressionPolicy,
 }
 
 impl Default for Options {
@@ -37,6 +49,7 @@ impl Options {
       unify: false,
       magic_version: 0,
       freelist: Freelist::Optimistic,
+      policy: CompressionPolicy::Fast,
     }
   }
 
@@ -75,6 +88,23 @@ impl Options {
   #[inline]
   pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
     self.freelist = freelist;
+    self
+  }
+
+  /// Set the compression policy of the key in [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`CompressionPolicy::Fast`].
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::{Options, options::CompressionPolicy};
+  ///
+  /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
+  /// ```
+  #[inline]
+  pub const fn with_compression_policy(mut self, policy: CompressionPolicy) -> Self {
+    self.policy = policy;
     self
   }
 
@@ -303,5 +333,23 @@ impl Options {
   #[inline]
   pub const fn freelist(&self) -> Freelist {
     self.freelist
+  }
+
+  /// Get the compression policy of the key in [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`CompressionPolicy::Fast`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::{Options, options::CompressionPolicy};
+  ///
+  /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
+  ///
+  /// assert_eq!(opts.compression_policy(), CompressionPolicy::High);
+  /// ```
+  #[inline]
+  pub const fn compression_policy(&self) -> CompressionPolicy {
+    self.policy
   }
 }

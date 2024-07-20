@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.13.1"
+version = "0.13.2"
 edition = "2021"
 rust-version = "1.56.0"
 repository = "https://github.com/al8n/skl"
@@ -9,7 +9,7 @@ documentation = "https://docs.rs/skl"
 homepage = "https://github.com/al8n/skl"
 keywords = ["skiplist", "lock-free", "memtable", "concurrency", "arena"]
 categories = ["database", "data-structures", "concurrency", "no-std"]
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 
 [[bench]]
 path = "benches/bench.rs"
@@ -34,7 +34,7 @@ required-features = ["memmap"]
 default = ["std"]
 alloc = ["rarena-allocator/alloc"]
 memmap = ["rarena-allocator/memmap", "std"]
-std = ["rand/default", "either/default", "rarena-allocator/std"]
+std = ["rand/default", "either/default", "rarena-allocator/std", "memchr/default"]
 tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
 # loom = ["dep:loom", "rarena-allocator/loom"]
@@ -44,6 +44,7 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
 either = { version = "1", default-features = false }
+memchr = { version = "2", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 rarena-allocator = { version = "0.1", default-features = false }
 ux2 = { version = "0.8", default-features = false, features = ["32"] }

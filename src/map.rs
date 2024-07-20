@@ -421,14 +421,21 @@ impl<T> Node<T> {
       arena.increase_discarded(discard as u32);
     }
 
-    self.value.swap(trailer_offset as u32, value_size);
+    let (_, old_len) = self.value.swap(trailer_offset as u32, value_size);
+    if old_len != REMOVE {
+      arena.increase_discarded(old_len);
+    }
 
     Ok(())
   }
 
   #[inline]
-  fn clear_value(&self, success: Ordering, failure: Ordering) -> Result<(), (u32, u32)> {
-    self.value.compare_remove(success, failure).map(|_| ())
+  fn clear_value(&self, arena: &Arena, success: Ordering, failure: Ordering) -> Result<(), (u32, u32)> {
+    self.value.compare_remove(success, failure).map(|(_, old_len)| {
+      if old_len != REMOVE {
+        arena.increase_discarded(old_len);
+      }
+    })
   }
 }
 
@@ -1972,7 +1979,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = node_ptr.as_ref();
         let key = node.get_key(&self.arena);
-        match node.clear_value(success, failure) {
+        match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);

@@ -430,12 +430,20 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  fn clear_value(&self, arena: &Arena, success: Ordering, failure: Ordering) -> Result<(), (u32, u32)> {
-    self.value.compare_remove(success, failure).map(|(_, old_len)| {
-      if old_len != REMOVE {
-        arena.increase_discarded(old_len);
-      }
-    })
+  fn clear_value(
+    &self,
+    arena: &Arena,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<(), (u32, u32)> {
+    self
+      .value
+      .compare_remove(success, failure)
+      .map(|(_, old_len)| {
+        if old_len != REMOVE {
+          arena.increase_discarded(old_len);
+        }
+      })
   }
 }
 
@@ -751,7 +759,7 @@ impl<T, C> SkipMap<T, C> {
   }
 
   /// Allocates a `Node` and trailer
-  fn allocate_node<'a, 'b: 'a, E>(
+  fn allocate_node_in<'a, 'b: 'a, E>(
     &'a self,
     height: u32,
     trailer: T,
@@ -1157,10 +1165,10 @@ impl<T: Trailer, C> SkipMap<T, C> {
         REMOVE,
       )?,
       Key::RemoveVacant(key) => {
-        self.allocate_node(height, trailer, key.offset, key.len() as u32, REMOVE)?
+        self.allocate_node_in(height, trailer, key.offset, key.len() as u32, REMOVE)?
       }
       Key::RemovePointer { offset, len, .. } => {
-        self.allocate_node(height, trailer, *offset, *len, REMOVE)?
+        self.allocate_node_in(height, trailer, *offset, *len, REMOVE)?
       }
     };
 

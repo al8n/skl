@@ -442,6 +442,28 @@ impl<T, C> SkipMap<T, C> {
 }
 
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
+  /// Links a node into the [`SkipMap`].
+  pub fn link_node<'a, 'b: 'a>(
+    &'a self,
+    node: UnlinkedNode<'a, T>,
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    self
+      .link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true)
+      .map(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
+  }
+
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`insert`](SkipMap::insert), this method will update the value if the key with the given version already exists.
   ///
@@ -471,7 +493,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         copy,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         true,
       )
       .map(|old| {
@@ -550,7 +572,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         f,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         true,
       )
       .map(|old| {
@@ -594,7 +616,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         copy,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         false,
       )
       .map(|old| {
@@ -674,7 +696,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         f,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         false,
       )
       .map(|old| {
@@ -754,7 +776,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         val,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         true,
       )
       .map(|old| {
@@ -832,7 +854,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         val,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         false,
       )
       .map(|old| {
@@ -869,7 +891,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         noop::<Infallible>,
         success,
         failure,
-        &mut Inserter::default(),
+        Inserter::default(),
         true,
       )
       .map(|res| match res {
@@ -912,7 +934,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         noop::<Infallible>,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         false,
       )
       .map(|res| match res {
@@ -991,7 +1013,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
         noop::<Infallible>,
         Ordering::Relaxed,
         Ordering::Relaxed,
-        &mut Inserter::default(),
+        Inserter::default(),
         false,
       )
       .map(|res| match res {

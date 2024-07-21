@@ -385,12 +385,12 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  fn set_value<'a, E>(
+  fn allocate_and_set_value<'a, E>(
     &self,
     arena: &'a Arena,
     trailer: T,
     value_size: u32,
-    f: &impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(), Either<E, Error>> {
     let mut bytes = arena
       .alloc_aligned_bytes::<T>(value_size)
@@ -422,6 +422,16 @@ impl<T> Node<T> {
     }
 
     let (_, old_len) = self.value.swap(trailer_offset as u32, value_size);
+    if old_len != REMOVE {
+      arena.increase_discarded(old_len);
+    }
+
+    Ok(())
+  }
+
+  #[inline]
+  fn set_value(&self, arena: &Arena, offset: u32, value_size: u32) -> Result<(), Error> {
+    let (_, old_len) = self.value.swap(offset, value_size);
     if old_len != REMOVE {
       arena.increase_discarded(old_len);
     }
@@ -534,6 +544,82 @@ impl<T: Copy> Node<T> {
 
     let value_offset = arena.offset(ptr as _) + mem::size_of::<T>();
     (trailer, Some(arena.get_bytes(value_offset, len as usize)))
+  }
+}
+
+/// A node allocated by the [`Arena`], but not be linked to the [`SkipMap`].
+///
+/// It is used to help users implement atomic batch insertion or deletion logic.
+///
+/// **NOTE:** If this node is not linked to the [`SkipMap`] through [`insert_node`](SkipMap::insert_node), it is better to deallocate it to let the [`Arena`] reuse the memory.
+#[must_use = "UnlinkedNode should be either linked to the SkipMap or deallocated."]
+pub struct UnlinkedNode<'a, T> {
+  arena: &'a Arena,
+  ptr: NodePtr<T>,
+  deallocator: Deallocator,
+  height: u32,
+  ins: Inserter<'a, T>,
+  version: u64,
+}
+
+impl<'a, T> UnlinkedNode<'a, T> {
+  fn new(
+    arena: &'a Arena,
+    ptr: NodePtr<T>,
+    height: u32,
+    version: u64,
+    deallocator: Deallocator,
+    ins: Inserter<'a, T>,
+  ) -> Self {
+    Self {
+      arena,
+      ptr,
+      deallocator,
+      height,
+      ins,
+      version,
+    }
+  }
+
+  /// Deallocates the unlinked node, let the [`Arena`] reuse the memory.
+  #[inline]
+  pub fn dealloc(self) {
+    self.deallocator.dealloc(self.arena)
+  }
+
+  /// Returns the height of the node.
+  #[inline]
+  pub const fn height(&self) -> u32 {
+    self.height
+  }
+
+  /// Returns the version of the node.
+  #[inline]
+  pub const fn version(&self) -> u64 {
+    self.version
+  }
+
+  /// Returns the key of the node.
+  #[inline]
+  pub fn key(&self) -> &[u8] {
+    // Safety: the node is allocated by the arena.
+    unsafe { self.ptr.as_ref().get_key(self.arena) }
+  }
+
+  /// Returns the value of the node.
+  #[inline]
+  pub fn value(&self) -> Option<&[u8]> {
+    // Safety: the node is allocated by the arena.
+    unsafe { self.ptr.as_ref().get_value(self.arena) }
+  }
+}
+
+impl<'a, T: Trailer> UnlinkedNode<'a, T> {
+  /// Returns the trailer of the node.
+  #[inline]
+  pub fn trailer(&self) -> T {
+    // Safety: the node is allocated by the arena.
+    unsafe { self.ptr.as_ref().get_trailer(self.arena) }
   }
 }
 
@@ -1133,7 +1219,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
     key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
-    f: &impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, u32, Deallocator), Either<E, Error>> {
     let height = super::random_height(self.opts.max_height().into());
     let (nd, deallocator) = match key {
@@ -1727,6 +1813,138 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .map(|_| vk)
   }
 
+  #[allow(unused)]
+  fn allocate_unlinked_node_in<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    key: Key<'a, 'b>,
+    value_size: u32,
+    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    mut ins: Inserter<'a, T>,
+  ) -> Result<UnlinkedNode<T>, Either<E, Error>> {
+    let version = trailer.version();
+
+    // Safety: a fresh new Inserter, so safe here
+    let (_, found_key, _) = unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
+
+    let k = match found_key {
+      None => key,
+      Some(k) => {
+        let is_remove = key.is_remove();
+        key.on_fail(&self.arena);
+
+        if is_remove {
+          Key::remove_pointer(&self.arena, k)
+        } else {
+          Key::pointer(&self.arena, k)
+        }
+      }
+    };
+
+    let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+      k.on_fail(&self.arena);
+      e
+    })?;
+
+    Ok(UnlinkedNode::new(
+      &self.arena,
+      nd,
+      height,
+      version,
+      deallocator,
+      ins,
+    ))
+  }
+
+  fn link_node_in<'a, 'b: 'a>(
+    &'a self,
+    mut node: UnlinkedNode<'a, T>,
+    success: Ordering,
+    failure: Ordering,
+    upsert: bool,
+  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+    assert!(
+      ptr::addr_eq(&self.arena, node.arena),
+      "unlinked node is not from the same arena as the skipmap"
+    );
+
+    let trailer = node.trailer();
+    let version = trailer.version();
+
+    // SAFETY: node is allocated by the arena, so safe here
+    let unlinked = unsafe { node.ptr.as_ref() };
+    let value = unsafe { unlinked.get_value(&self.arena) };
+
+    // Safety: a fresh new Inserter, so safe here
+    unsafe {
+      let (found, found_key, ptr) =
+        self.find_splice(version, unlinked.get_key(&self.arena), &mut node.ins, true);
+
+      if found {
+        let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
+        let k = found_key.expect("the key cannot be `None` when we found");
+        let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
+
+        if upsert {
+          let (value_offset, value_size) = unlinked.value.load(Ordering::Acquire);
+          match value {
+            Some(_) => {
+              return self.upsert_value(
+                old,
+                node_ptr,
+                &Key::pointer(&self.arena, k),
+                value_offset,
+                value_size,
+                success,
+                failure,
+              );
+            }
+            None => {
+              return self.upsert_value(
+                old,
+                node_ptr,
+                &Key::remove_pointer(&self.arena, k),
+                value_offset,
+                value_size,
+                success,
+                failure,
+              );
+            }
+          }
+        }
+
+        return Ok(Either::Left(if old.is_removed() {
+          None
+        } else {
+          Some(old)
+        }));
+      }
+    }
+
+    match value {
+      Some(_) => self.link(
+        Key::pointer(
+          &self.arena,
+          Pointer::new(unlinked.key_offset, unlinked.key_size()),
+        ),
+        node,
+        success,
+        failure,
+        upsert,
+      ),
+      None => self.link(
+        Key::remove_pointer(
+          &self.arena,
+          Pointer::new(unlinked.key_offset, unlinked.key_size()),
+        ),
+        node,
+        success,
+        failure,
+        upsert,
+      ),
+    }
+  }
+
   #[allow(clippy::too_many_arguments)]
   fn update<'a, 'b: 'a, E>(
     &'a self,
@@ -1736,23 +1954,39 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
-    ins: &mut Inserter<T>,
+    mut ins: Inserter<'a, T>,
     upsert: bool,
   ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
     let version = trailer.version();
+    let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
     let found_key = unsafe {
-      let (found, found_key, ptr) = self.find_splice(version, key.as_ref(), ins, true);
+      let (found, found_key, ptr) = self.find_splice(version, key.as_ref(), &mut ins, true);
+
+      if found_key.is_some() {
+        key.on_fail(&self.arena);
+      }
+
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
+        let k = found_key.expect("the key cannot be `None` when we found");
         let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
-
-        key.on_fail(&self.arena);
 
         if upsert {
           return self.upsert(
-            old, node_ptr, &key, trailer, value_size, &f, success, failure,
+            old,
+            node_ptr,
+            &if is_remove {
+              Key::remove_pointer(&self.arena, k)
+            } else {
+              Key::pointer(&self.arena, k)
+            },
+            trailer,
+            value_size,
+            &f,
+            success,
+            failure,
           );
         }
 
@@ -1777,18 +2011,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     let k = match found_key {
       None => key,
       Some(k) => {
-        if key.is_remove() {
-          Key::RemovePointer {
-            arena: &self.arena,
-            offset: k.offset,
-            len: k.size,
-          }
+        if is_remove {
+          Key::remove_pointer(&self.arena, k)
         } else {
-          Key::Pointer {
-            arena: &self.arena,
-            offset: k.offset,
-            len: k.size,
-          }
+          Key::pointer(&self.arena, k)
         }
       }
     };
@@ -1798,38 +2024,30 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       e
     })?;
 
-    self.link(
-      trailer,
-      k,
-      value_size,
-      f,
-      success,
-      failure,
-      ins,
-      upsert,
-      nd,
-      height,
-      deallocator,
-      version,
-    )
+    let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator, ins);
+
+    self
+      .link(k, node, success, failure, upsert)
+      .map_err(Either::Right)
   }
 
-  #[allow(clippy::too_many_arguments)]
-  fn link<'a, 'b: 'a, E>(
+  fn link<'a, 'b: 'a>(
     &'a self,
-    trailer: T,
     mut k: Key<'a, 'b>,
-    value_size: u32,
-    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    node: UnlinkedNode<'a, T>,
     success: Ordering,
     failure: Ordering,
-    ins: &mut Inserter<T>,
     upsert: bool,
-    nd: NodePtr<T>,
-    height: u32,
-    mut deallocator: Deallocator,
-    version: u64,
-  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+    let UnlinkedNode {
+      arena: _,
+      ptr: nd,
+      mut deallocator,
+      height,
+      mut ins,
+      version,
+    } = node;
+
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -1941,12 +2159,21 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   .curr
                   .expect("the current should not be `None` when we found");
                 let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
-
                 k.on_fail(&self.arena);
 
                 if upsert {
-                  deallocator.dealloc(&self.arena);
-                  return self.upsert(old, node_ptr, &k, trailer, value_size, &f, success, failure);
+                  let curr = nd.as_ref();
+                  let (new_value_offset, new_value_size) = curr.value.load(Ordering::Acquire);
+                  deallocator.dealloc_node_and_key(&self.arena);
+                  return self.upsert_value(
+                    old,
+                    node_ptr,
+                    &k,
+                    new_value_offset,
+                    new_value_size,
+                    success,
+                    failure,
+                  );
                 }
 
                 deallocator.dealloc(&self.arena);
@@ -1958,16 +2185,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               }
 
               if let Some(p) = fr.found_key {
-                k.on_fail(&self.arena);
-                let node = nd.as_mut();
-                node.key_offset = p.offset;
-                node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
-                deallocator.key = None;
-                k = Key::Pointer {
-                  arena: &self.arena,
-                  offset: p.offset,
-                  len: p.size,
-                };
+                if !k.is_pointer() {
+                  k.on_fail(&self.arena);
+                  let node = nd.as_mut();
+                  node.key_offset = p.offset;
+                  node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
+                  deallocator.key = None;
+                  k = Key::pointer(&self.arena, p);
+                }
               }
 
               invalid_data_splice = true;
@@ -1999,24 +2224,23 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   #[allow(clippy::too_many_arguments)]
-  unsafe fn upsert<'a, 'b: 'a, E>(
+  unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     old: VersionedEntryRef<'a, T>,
-    node_ptr: NodePtr<T>,
+    old_node_ptr: NodePtr<T>,
     key: &Key<'a, 'b>,
-    trailer: T,
+    value_offset: u32,
     value_size: u32,
-    f: &impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
     match key {
-      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => node_ptr
+      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => old_node_ptr
         .as_ref()
-        .set_value(&self.arena, trailer, value_size, f)
+        .set_value(&self.arena, value_offset, value_size)
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
-        let node = node_ptr.as_ref();
+        let node = old_node_ptr.as_ref();
         let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
@@ -2028,7 +2252,45 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               key,
               trailer,
               value,
-              ptr: node_ptr,
+              ptr: old_node_ptr,
+            })))
+          }
+        }
+      }
+    }
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  unsafe fn upsert<'a, 'b: 'a, E>(
+    &'a self,
+    old: VersionedEntryRef<'a, T>,
+    old_node_ptr: NodePtr<T>,
+    key: &Key<'a, 'b>,
+    trailer: T,
+    value_size: u32,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
+    match key {
+      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => old_node_ptr
+        .as_ref()
+        .allocate_and_set_value(&self.arena, trailer, value_size, f)
+        .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
+      Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
+        let node = old_node_ptr.as_ref();
+        let key = node.get_key(&self.arena);
+        match node.clear_value(&self.arena, success, failure) {
+          Ok(_) => Ok(Either::Left(None)),
+          Err((offset, len)) => {
+            let trailer = node.get_trailer_by_offset(&self.arena, offset);
+            let value = node.get_value_by_offset(&self.arena, offset, len);
+            Ok(Either::Right(Err(VersionedEntryRef {
+              arena: &self.arena,
+              key,
+              trailer,
+              value,
+              ptr: old_node_ptr,
             })))
           }
         }
@@ -2094,6 +2356,19 @@ impl Deallocator {
       }
     }
   }
+
+  #[inline]
+  fn dealloc_node_and_key(self, arena: &Arena) {
+    unsafe {
+      if let Some(ptr) = self.node {
+        arena.dealloc(ptr.offset, ptr.size);
+      }
+
+      if let Some(ptr) = self.key {
+        arena.dealloc(ptr.offset, ptr.size);
+      }
+    }
+  }
 }
 
 struct Pointer {
@@ -2109,6 +2384,26 @@ impl Pointer {
       offset,
       size,
       height: None,
+    }
+  }
+}
+
+impl<'a, 'b: 'a> Key<'a, 'b> {
+  #[inline]
+  const fn pointer(arena: &'a super::Arena, pointer: Pointer) -> Self {
+    Self::Pointer {
+      arena,
+      offset: pointer.offset,
+      len: pointer.size,
+    }
+  }
+
+  #[inline]
+  const fn remove_pointer(arena: &'a super::Arena, pointer: Pointer) -> Self {
+    Self::RemovePointer {
+      arena,
+      offset: pointer.offset,
+      len: pointer.size,
     }
   }
 }

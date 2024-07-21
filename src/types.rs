@@ -211,12 +211,18 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
     }
   }
 
+  /// Returns `true` if the key is a remove operation.
   #[inline]
   pub(crate) fn is_remove(&self) -> bool {
     matches!(
       self,
       Self::Remove(_) | Self::RemoveVacant(_) | Self::RemovePointer { .. }
     )
+  }
+
+  #[inline]
+  pub(crate) const fn is_pointer(&self) -> bool {
+    matches!(self, Self::Pointer { .. } | Self::RemovePointer { .. })
   }
 }
 

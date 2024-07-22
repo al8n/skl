@@ -2048,6 +2048,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       version,
     } = node;
 
+    let is_removed = k.is_remove();
+
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
@@ -2191,7 +2193,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   node.key_offset = p.offset;
                   node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
                   deallocator.key = None;
-                  k = Key::pointer(&self.arena, p);
+
+                  if is_removed {
+                    k = Key::remove_pointer(&self.arena, p);
+                  } else {
+                    k = Key::pointer(&self.arena, p);
+                  }
                 }
               }
 

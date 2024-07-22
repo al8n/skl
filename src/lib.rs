@@ -31,7 +31,7 @@ mod types;
 pub use types::*;
 
 pub use either;
-pub use map::{AllVersionsIter, SkipMap};
+pub use map::{AllVersionsIter, SkipMap, UnlinkedNode};
 pub use rarena_allocator::{Arena, Error as ArenaError};
 pub use ux2::{u27, u5};
 

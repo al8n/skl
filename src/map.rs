@@ -1813,7 +1813,65 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .map(|_| vk)
   }
 
-  #[allow(unused)]
+  fn get_or_allocate_unlinked_node_in<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    key: Key<'a, 'b>,
+    value_size: u32,
+    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    mut ins: Inserter<'a, T>,
+  ) -> Result<Either<UnlinkedNode<'a, T>, VersionedEntryRef<'a, T>>, Either<E, Error>> {
+    let version = trailer.version();
+    let is_remove = key.is_remove();
+
+    // Safety: a fresh new Inserter, so safe here
+    let (found, found_key, ptr) = unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
+
+    if found {
+      let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
+      let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
+      let is_old_removed = old.is_removed();
+
+      if !is_old_removed {
+        key.on_fail(&self.arena);
+        return Ok(Either::Right(old));
+      }
+
+      if is_old_removed && is_remove {
+        key.on_fail(&self.arena);
+        return Ok(Either::Right(old));
+      }
+    }
+
+    let k = match found_key {
+      None => key,
+      Some(k) => {
+        key.on_fail(&self.arena);
+
+        if is_remove {
+          Key::remove_pointer(&self.arena, k)
+        } else {
+          Key::pointer(&self.arena, k)
+        }
+      }
+    };
+
+    let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+      k.on_fail(&self.arena);
+      e
+    })?;
+
+    Ok(Either::Left(UnlinkedNode::new(
+      &self.arena,
+      nd,
+      height,
+      version,
+      deallocator,
+      ins,
+    )))
+  }
+
+
   fn allocate_unlinked_node_in<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
@@ -1922,21 +1980,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
 
     match value {
-      Some(_) => self.link(
-        Key::pointer(
-          &self.arena,
-          Pointer::new(unlinked.key_offset, unlinked.key_size()),
-        ),
+      Some(_) => self.link_in(
         node,
         success,
         failure,
         upsert,
       ),
-      None => self.link(
-        Key::remove_pointer(
-          &self.arena,
-          Pointer::new(unlinked.key_offset, unlinked.key_size()),
-        ),
+      None => self.link_in(
         node,
         success,
         failure,
@@ -2027,28 +2077,28 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator, ins);
 
     self
-      .link(k, node, success, failure, upsert)
+      .link_in(node, success, failure, upsert)
       .map_err(Either::Right)
   }
 
-  fn link<'a, 'b: 'a>(
+  fn link_in<'a, 'b: 'a>(
     &'a self,
-    mut k: Key<'a, 'b>,
+    // mut k: Key<'a, 'b>,
     node: UnlinkedNode<'a, T>,
     success: Ordering,
     failure: Ordering,
     upsert: bool,
   ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+    let is_removed = node.value().is_none();
     let UnlinkedNode {
-      arena: _,
+      arena,
       ptr: nd,
       mut deallocator,
       height,
       mut ins,
       version,
     } = node;
-
-    let is_removed = k.is_remove();
+    
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -2147,11 +2197,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               break;
             }
             Err(_) => {
+              let unlinked_node = nd.as_ref();
+
               // CAS failed. We need to recompute prev and next. It is unlikely to
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
-              let fr = self.find_splice_for_level(version, k.as_ref(), i, prev);
+              let fr = self.find_splice_for_level(version, unlinked_node.get_key(arena), i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");
@@ -2161,7 +2213,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   .curr
                   .expect("the current should not be `None` when we found");
                 let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
-                k.on_fail(&self.arena);
 
                 if upsert {
                   let curr = nd.as_ref();
@@ -2170,7 +2221,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                   return self.upsert_value(
                     old,
                     node_ptr,
-                    &k,
+                    &if is_removed {
+                      Key::remove_pointer(&self.arena, fr.found_key.unwrap())
+                    } else {
+                      Key::pointer(&self.arena, fr.found_key.unwrap())
+                    },
                     new_value_offset,
                     new_value_size,
                     success,
@@ -2187,18 +2242,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
               }
 
               if let Some(p) = fr.found_key {
-                if !k.is_pointer() {
-                  k.on_fail(&self.arena);
+                // if key is already in the underlying allocator, we should deallocate the key
+                // in deallocator, and let the underlying allocator reclaim it, so that we do not store the same key twice.
+                if deallocator.key.is_some() {
                   let node = nd.as_mut();
                   node.key_offset = p.offset;
                   node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
-                  deallocator.key = None;
-
-                  if is_removed {
-                    k = Key::remove_pointer(&self.arena, p);
-                  } else {
-                    k = Key::pointer(&self.arena, p);
-                  }
+                  deallocator.dealloc_key_by_ref(arena)
                 }
               }
 
@@ -2372,6 +2422,15 @@ impl Deallocator {
       }
 
       if let Some(ptr) = self.key {
+        arena.dealloc(ptr.offset, ptr.size);
+      }
+    }
+  }
+
+  #[inline]
+  fn dealloc_key_by_ref(&mut self, arena: &Arena) {
+    if let Some(ptr) = self.key.take() {
+      unsafe {
         arena.dealloc(ptr.offset, ptr.size);
       }
     }

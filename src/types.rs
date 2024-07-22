@@ -219,11 +219,6 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
       Self::Remove(_) | Self::RemoveVacant(_) | Self::RemovePointer { .. }
     )
   }
-
-  #[inline]
-  pub(crate) const fn is_pointer(&self) -> bool {
-    matches!(self, Self::Pointer { .. } | Self::RemovePointer { .. })
-  }
 }
 
 impl<'a, 'b: 'a> AsRef<[u8]> for Key<'a, 'b> {

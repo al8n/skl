@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.14.0
+
+- Supports allocating unlinked node for helping implement atomic semantic batch operations
+- Fix: dealloc potential in-unsed memory chunk
+- Add `CompressionPolicy` as a configuration
+- Increase the discarded tracker when find new version of a key
+
 ## 0.13.0
 
 - Remove `Comparator` generic on `Entry*`
@@ -87,5 +94,3 @@
 - Add `flush` API
 
 ## UNRELEASED
-
-

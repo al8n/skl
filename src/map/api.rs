@@ -442,8 +442,293 @@ impl<T, C> SkipMap<T, C> {
 }
 
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  pub fn allocate<'a, 'b: 'a>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+    value: &'b [u8],
+  ) -> Result<UnlinkedNode<'a, T>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    let copy = |buf: &mut VacantBuffer| {
+      let _ = buf.write(value);
+      Ok(())
+    };
+    let val_len = value.len() as u32;
+
+    self.allocate_unlinked_node_in::<Infallible>(
+      trailer,
+      Key::Occupied(key),
+      val_len,
+      copy,
+      Inserter::default(),
+    ).map_err(|e| e.expect_right("must be map::Error"))
+  }
+
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  pub fn get_or_allocate<'a, 'b: 'a>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+    value: &'b [u8],
+  ) -> Result<Either<UnlinkedNode<'a, T>, EntryRef<'a, T>>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    let copy = |buf: &mut VacantBuffer| {
+      let _ = buf.write(value);
+      Ok(())
+    };
+
+    self.get_or_allocate_unlinked_node_in::<Infallible>(trailer, Key::Occupied(key), value.len() as u32, copy, Inserter::default())
+      .map(|res| res.map_right(EntryRef))
+      .map_err(|e| e.expect_right("must be map::Error"))
+  }
+
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  /// 
+  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
+  /// at this moment.
+  pub fn allocate_with_value<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+    value_size: u32,
+    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<UnlinkedNode<'a, T>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    self
+      .allocate_unlinked_node_in(
+        trailer,
+        Key::Occupied(key),
+        value_size,
+        f,
+        Inserter::default(),
+      )
+  }
+
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  /// 
+  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
+  /// at this moment.
+  pub fn get_or_allocate_with_value<'a, 'b: 'a, E>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+    value_size: u32,
+    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<Either<UnlinkedNode<'a, T>, EntryRef<'a, T>>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    self
+      .get_or_allocate_unlinked_node_in(
+        trailer,
+        Key::Occupied(key),
+        value_size,
+        f,
+        Inserter::default(),
+      )
+      .map(|res| res.map_right(EntryRef))
+  }
+
+  /// Allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  /// 
+  /// This method is useful when you want to insert a key-value pair and you know the key size and value size but you do not have the key and value
+  /// at this moment.
+  pub fn allocate_with<'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u27,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    val_size: u32,
+    val: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<UnlinkedNode<'a, T>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+    
+    let key_size = key_size.into();
+    let vk = self.fetch_vacant_key(key_size, key)?;
+
+    self
+      .allocate_unlinked_node_in(
+        trailer,
+        Key::Vacant(vk),
+        val_size,
+        val,
+        Inserter::default(),
+      )
+  }
+
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  /// 
+  /// This method is useful when you want to insert a key-value pair and you know the key size and value size but you do not have the key and value
+  /// at this moment.
+  pub fn get_or_allocate_with<'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u27,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    val_size: u32,
+    val: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<Either<UnlinkedNode<'a, T>, EntryRef<'a, T>>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    let key_size = key_size.into();
+    let vk = self.fetch_vacant_key(key_size, key)?;
+
+    self
+      .get_or_allocate_unlinked_node_in(
+        trailer,
+        Key::Vacant(vk),
+        val_size,
+        val,
+        Inserter::default(),
+      )
+      .map(|res| res.map_right(EntryRef))
+  }
+
+  /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  pub fn allocate_remove_entry<'a, 'b: 'a>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+  ) -> Result<UnlinkedNode<'a, T>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    self
+      .allocate_unlinked_node_in::<Infallible>(
+        trailer,
+        Key::Remove(key),
+        0,
+        |_| Ok(()),
+        Inserter::default(),
+      )
+      .map_err(|e| e.expect_right("must be map::Error"))
+  }
+
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  /// 
+  /// If the key is already removed, it will return `Either::Right(None)`.
+  /// If the key is not removed, it will return `Either::Right(Some(EntryRef))`.
+  /// If the key does not exist, it will return `Either::Left(UnlinkedNode)`.
+  pub fn get_or_allocate_remove_entry<'a, 'b: 'a>(
+    &'a self,
+    trailer: T,
+    key: &'b [u8],
+  ) -> Result<Either<UnlinkedNode<'a, T>, Option<EntryRef<'a, T>>>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    self
+      .get_or_allocate_unlinked_node_in::<Infallible>(
+        trailer,
+        Key::Remove(key),
+        0,
+        |_| Ok(()),
+        Inserter::default(),
+      )
+      .map(|res| res.map_right(|ent| {
+        if ent.is_removed() {
+          None
+        } else {
+          Some(EntryRef(ent))
+        }
+      }))
+      .map_err(|e| e.expect_right("must be map::Error"))
+  }
+
+  /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  ///
+  /// This method is useful when you want to remove a key and you know the key size but you do not have the key
+  /// at this moment.
+  pub fn allocate_remove_entry_with<'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u27,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<UnlinkedNode<'a, T>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    let key_size = key_size.into();
+    let vk = self.fetch_vacant_key(key_size, key)?;
+
+    self
+      .allocate_unlinked_node_in::<E>(
+        trailer,
+        Key::RemoveVacant(vk),
+        0,
+        |_| Ok(()),
+        Inserter::default(),
+      )
+  }
+
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
+  /// 
+  /// If the key is already removed, it will return `Either::Right(None)`.
+  /// If the key is not removed, it will return `Either::Right(Some(EntryRef))`.
+  /// If the key does not exist, it will return `Either::Left(UnlinkedNode)`.
+  /// 
+  /// This method is useful when you want to remove a key and you know the key size but you do not have the key
+  /// at this moment.
+  pub fn get_or_allocate_remove_entry_with<'a, E>(
+    &'a self,
+    trailer: T,
+    key_size: u27,
+    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<Either<UnlinkedNode<'a, T>, Option<EntryRef<'a, T>>>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
+    let key_size = key_size.into();
+    let vk = self.fetch_vacant_key(key_size, key)?;
+
+    self
+      .get_or_allocate_unlinked_node_in::<E>(
+        trailer,
+        Key::RemoveVacant(vk),
+        0,
+        |_| Ok(()),
+        Inserter::default(),
+      )
+      .map(|res| res.map_right(|ent| {
+        if ent.is_removed() {
+          None
+        } else {
+          Some(EntryRef(ent))
+        }
+      }))
+  }
+
   /// Links a node into the [`SkipMap`].
-  pub fn link_node<'a, 'b: 'a>(
+  pub fn link<'a>(
     &'a self,
     node: UnlinkedNode<'a, T>,
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
@@ -453,6 +738,28 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
     self
       .link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true)
+      .map(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
+  }
+
+  /// Gets or links a node into the [`SkipMap`].
+  pub fn get_or_link<'a>(
+    &'a self,
+    node: UnlinkedNode<'a, T>,
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    self
+      .link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false)
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
           if old.is_removed() {
@@ -713,7 +1020,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert_with`](SkipMap::get_or_insert_with), this method will update the value if the key with the given version already exists.
   ///
-  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
+  /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
@@ -766,6 +1073,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     val_size: u32,
     val: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
     let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
@@ -844,6 +1155,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     val_size: u32,
     val: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
     let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
@@ -883,6 +1198,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     success: Ordering,
     failure: Ordering,
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
     self
       .update(
         trailer,
@@ -926,6 +1245,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     trailer: T,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
     self
       .update(
         trailer,
@@ -1003,6 +1326,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key_size: u27,
     key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    if self.arena.read_only() {
+      return Err(Either::Right(Error::read_only()));
+    }
+
     let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
     let key = Key::RemoveVacant(vk);
     self

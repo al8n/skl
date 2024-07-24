@@ -3008,3 +3008,61 @@ fn test_remove2_map_anon_unify() {
     remove2(SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
   })
 }
+
+fn allocate_in(map: SkipMap) {
+  let unlinked_node = map.allocate(0, b"hello", b"world").unwrap();
+  map.link(unlinked_node).unwrap();
+
+  let entry = map.get(0, b"hello").unwrap();
+  assert_eq!(entry.value(), b"world");
+
+  let unlinked_node2 = map.allocate(0, b"hello", b"rust").unwrap();
+  map.link(unlinked_node2).unwrap();
+
+  let entry = map.get(0, b"hello").unwrap();
+  assert_eq!(entry.value(), b"rust");
+}
+
+#[test]
+fn test_allocate_in() {
+  run(|| allocate_in(SkipMap::with_options(TEST_OPTIONS).unwrap()))
+}
+
+#[test]
+fn test_allocate_in_unify() {
+  run(|| allocate_in(SkipMap::with_options(UNIFY_TEST_OPTIONS).unwrap()))
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_allocate_in_map_mut() {
+  run(|| {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("test_skipmap_allocate_in_map_mut");
+    let open_options = OpenOptions::default()
+      .create_new(Some(ARENA_SIZE as u32))
+      .read(true)
+      .write(true);
+    let map_options = MmapOptions::default();
+    allocate_in(SkipMap::map_mut(p, open_options, map_options).unwrap());
+  })
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+fn test_allocate_in_map_anon() {
+  run(|| {
+    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+    allocate_in(SkipMap::map_anon(map_options).unwrap());
+  })
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+fn test_allocate_in_map_anon_unify() {
+  run(|| {
+    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+    allocate_in(SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
+  })
+}

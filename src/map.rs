@@ -558,8 +558,17 @@ pub struct UnlinkedNode<'a, T> {
   ptr: NodePtr<T>,
   deallocator: Deallocator,
   height: u32,
-  ins: Inserter<'a, T>,
   version: u64,
+}
+
+impl<'a, T> core::fmt::Debug for UnlinkedNode<'a, T> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("UnlinkedNode")
+      .field("version", &self.version)
+      .field("key", &self.key())
+      .field("value", &self.value())
+      .finish()
+  }
 }
 
 impl<'a, T> UnlinkedNode<'a, T> {
@@ -569,14 +578,12 @@ impl<'a, T> UnlinkedNode<'a, T> {
     height: u32,
     version: u64,
     deallocator: Deallocator,
-    ins: Inserter<'a, T>,
   ) -> Self {
     Self {
       arena,
       ptr,
       deallocator,
       height,
-      ins,
       version,
     }
   }
@@ -1825,7 +1832,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
-    let (found, found_key, ptr) = unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
+    let (found, found_key, ptr) =
+      unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
 
     if found {
       let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
@@ -1867,10 +1875,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       height,
       version,
       deallocator,
-      ins,
     )))
   }
-
 
   fn allocate_unlinked_node_in<'a, 'b: 'a, E>(
     &'a self,
@@ -1910,13 +1916,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       height,
       version,
       deallocator,
-      ins,
     ))
   }
 
   fn link_node_in<'a, 'b: 'a>(
     &'a self,
-    mut node: UnlinkedNode<'a, T>,
+    node: UnlinkedNode<'a, T>,
     success: Ordering,
     failure: Ordering,
     upsert: bool,
@@ -1932,11 +1937,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     // SAFETY: node is allocated by the arena, so safe here
     let unlinked = unsafe { node.ptr.as_ref() };
     let value = unsafe { unlinked.get_value(&self.arena) };
+    let mut ins = Inserter::default();
 
     // Safety: a fresh new Inserter, so safe here
     unsafe {
       let (found, found_key, ptr) =
-        self.find_splice(version, unlinked.get_key(&self.arena), &mut node.ins, true);
+        self.find_splice(version, unlinked.get_key(&self.arena), &mut ins, true);
 
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
@@ -1980,18 +1986,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     }
 
     match value {
-      Some(_) => self.link_in(
-        node,
-        success,
-        failure,
-        upsert,
-      ),
-      None => self.link_in(
-        node,
-        success,
-        failure,
-        upsert,
-      ),
+      Some(_) => self.link_in(node, success, failure, upsert, ins),
+      None => self.link_in(node, success, failure, upsert, ins),
     }
   }
 
@@ -2074,20 +2070,20 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       e
     })?;
 
-    let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator, ins);
+    let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator);
 
     self
-      .link_in(node, success, failure, upsert)
+      .link_in(node, success, failure, upsert, ins)
       .map_err(Either::Right)
   }
 
   fn link_in<'a, 'b: 'a>(
     &'a self,
-    // mut k: Key<'a, 'b>,
     node: UnlinkedNode<'a, T>,
     success: Ordering,
     failure: Ordering,
     upsert: bool,
+    mut ins: Inserter<'a, T>,
   ) -> Result<UpdateOk<'a, 'b, T>, Error> {
     let is_removed = node.value().is_none();
     let UnlinkedNode {
@@ -2095,10 +2091,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       ptr: nd,
       mut deallocator,
       height,
-      mut ins,
       version,
     } = node;
-    
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have

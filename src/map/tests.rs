@@ -1292,6 +1292,109 @@ fn test_concurrent_basic_map_anon_unify() {
 }
 
 #[cfg(feature = "std")]
+fn test_concurrent_basic_2pc_runner(l: Arc<SkipMap>) {
+  #[cfg(not(any(miri, feature = "loom")))]
+  const N: usize = 1000;
+  #[cfg(any(miri, feature = "loom"))]
+  const N: usize = 5;
+
+  let wg = Arc::new(());
+  for i in 0..N {
+    let w = wg.clone();
+    let l = l.clone();
+    std::thread::spawn(move || {
+      let k = key(i);
+      let v = new_value(i);
+      let node = l.allocate(0, &k, &v).unwrap();
+      std::thread::sleep(std::time::Duration::from_millis(rand::random::<u8>() as u64));
+      l.link(node).unwrap();
+      drop(w);
+    });
+  }
+  while Arc::strong_count(&wg) > 1 {}
+  for i in 0..N {
+    let w = wg.clone();
+    let l = l.clone();
+    std::thread::spawn(move || {
+      let k = key(i);
+      assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
+      drop(w);
+    });
+  }
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn test_concurrent_basic_2pc() {
+  run(|| {
+    let l = Arc::new(
+      SkipMap::with_options(TEST_OPTIONS)
+        .unwrap()
+        .with_yield_now(),
+    );
+    test_concurrent_basic_2pc_runner(l);
+  })
+}
+
+#[test]
+#[cfg(feature = "std")]
+fn test_concurrent_basic_2pc_unify() {
+  run(|| {
+    let l = Arc::new(
+      SkipMap::with_options(UNIFY_TEST_OPTIONS)
+        .unwrap()
+        .with_yield_now(),
+    );
+    test_concurrent_basic_2pc_runner(l);
+  })
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
+fn test_concurrent_basic_2pc_map_mut() {
+  run(|| {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("test_skipmap_concurrent_basic_2pc_map_mut");
+    let open_options = OpenOptions::default()
+      .create_new(Some(ARENA_SIZE as u32))
+      .read(true)
+      .write(true);
+    let map_options = MmapOptions::default();
+    let l = Arc::new(
+      SkipMap::map_mut(p, open_options, map_options)
+        .unwrap()
+        .with_yield_now(),
+    );
+    test_concurrent_basic_2pc_runner(l);
+  })
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+fn test_concurrent_basic_2pc_map_anon() {
+  run(|| {
+    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+    test_concurrent_basic_2pc_runner(Arc::new(
+      SkipMap::map_anon(map_options).unwrap().with_yield_now(),
+    ));
+  })
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+fn test_concurrent_basic_2pc_map_anon_unify() {
+  run(|| {
+    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
+    test_concurrent_basic_2pc_runner(Arc::new(
+      SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options)
+        .unwrap()
+        .with_yield_now(),
+    ));
+  })
+}
+
+#[cfg(all(feature = "std", not(miri)))]
 fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 100;
@@ -1317,7 +1420,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
 }
 
 #[test]
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(miri)))]
 fn test_concurrent_basic_big_values() {
   run(|| {
     test_concurrent_basic_big_values_runner(Arc::new(
@@ -1329,7 +1432,7 @@ fn test_concurrent_basic_big_values() {
 }
 
 #[test]
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(miri)))]
 fn test_concurrent_basic_big_values_unify() {
   run(|| {
     test_concurrent_basic_big_values_runner(Arc::new(
@@ -1341,8 +1444,7 @@ fn test_concurrent_basic_big_values_unify() {
 }
 
 #[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
+#[cfg(all(feature = "memmap", not(miri)))]
 fn test_concurrent_basic_big_values_map_mut() {
   run(|| {
     let dir = tempfile::tempdir().unwrap();
@@ -1363,7 +1465,7 @@ fn test_concurrent_basic_big_values_map_mut() {
 }
 
 #[test]
-#[cfg(feature = "memmap")]
+#[cfg(all(feature = "memmap", not(miri)))]
 fn test_concurrent_basic_big_values_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(120 << 20);
@@ -1374,7 +1476,7 @@ fn test_concurrent_basic_big_values_map_anon() {
 }
 
 #[test]
-#[cfg(feature = "memmap")]
+#[cfg(all(feature = "memmap", not(miri)))]
 fn test_concurrent_basic_big_values_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(120 << 20);

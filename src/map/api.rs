@@ -1801,10 +1801,49 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .map_err(|e| Either::Right(e.expect_right("must be map::Error")))
   }
 
-  /// Returns true if the key exists in the map.
+  /// Returns `true` if the key exists in the map.
+  ///
+  /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
+  /// you can use [`contains_key_versioned`](SkipMap::contains_key_versioned).
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0, b"hello", b"world").unwrap();
+  ///
+  /// map.get_or_remove(1, b"hello").unwrap();
+  ///
+  /// assert!(!map.contains_key(1, b"hello"));
+  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// ```
   #[inline]
   pub fn contains_key<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> bool {
     self.get(version, key).is_some()
+  }
+
+  /// Returns `true` if the key exists in the map, even if it is marked as removed.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0, b"hello", b"world").unwrap();
+  ///
+  /// map.get_or_remove(1, b"hello").unwrap();
+  ///
+  /// assert!(!map.contains_key(1, b"hello"));
+  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// ```
+  #[inline]
+  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> bool {
+    self.get_versioned(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
@@ -1818,6 +1857,26 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Returns the value associated with the given key, if it exists.
+  ///
+  /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
+  /// you can use [`get_versioned`](SkipMap::get_versioned).
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0, b"hello", b"world").unwrap();
+  ///
+  /// let ent = map.get(0, b"hello").unwrap();
+  /// assert_eq!(ent.value(), b"world");
+  ///
+  /// map.get_or_remove(1, b"hello").unwrap();
+  ///
+  /// assert!(map.get(1, b"hello").is_none());
+  /// ```
   pub fn get<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -1854,6 +1913,67 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           value: Some(val),
           ptr: n,
         })
+      })
+    }
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  ///
+  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0, b"hello", b"world").unwrap();
+  ///
+  /// map.get_or_remove(1, b"hello").unwrap();
+  ///
+  /// assert!(map.get(1, b"hello").is_none());
+  ///
+  /// let ent = map.get_versioned(1, b"hello").unwrap();
+  /// // value is None because the entry is marked as removed.
+  /// assert!(ent.value().is_none());
+  /// ```
+  pub fn get_versioned<'a, 'b: 'a>(
+    &'a self,
+    version: u64,
+    key: &'b [u8],
+  ) -> Option<VersionedEntryRef<'a, T>> {
+    unsafe {
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
+
+      let n = n?;
+      let node = n.as_ref();
+      let node_key = node.get_key(&self.arena);
+      let (trailer, value) = node.get_value_and_trailer(&self.arena);
+      if eq {
+        return Some(VersionedEntryRef {
+          arena: &self.arena,
+          key: node_key,
+          trailer,
+          value,
+          ptr: n,
+        });
+      }
+
+      if !matches!(self.cmp.compare(key, node_key), cmp::Ordering::Equal) {
+        return None;
+      }
+
+      if trailer.version() > version {
+        return None;
+      }
+
+      Some(VersionedEntryRef {
+        arena: &self.arena,
+        key: node_key,
+        trailer,
+        value,
+        ptr: n,
       })
     }
   }

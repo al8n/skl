@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(warnings)]
 
 use super::*;
 use crate::Descend;

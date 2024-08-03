@@ -247,7 +247,7 @@ impl<T, C> SkipMap<T, C> {
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = map.estimated_node_size(height, key_size, value_size);
+  /// let needed = map.estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
   /// ```
   #[inline]
   pub fn random_height(&self) -> u5 {

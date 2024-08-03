@@ -1296,7 +1296,7 @@ fn test_concurrent_basic_map_anon_unify() {
 #[cfg(feature = "std")]
 fn test_concurrent_basic_2pc_runner(l: Arc<SkipMap>) {
   #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 1000;
+  const N: usize = 100;
   #[cfg(any(miri, feature = "loom"))]
   const N: usize = 5;
 

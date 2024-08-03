@@ -244,7 +244,7 @@ impl<T, C> SkipMap<T, C> {
   /// ```rust
   /// use skl::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::<u64>::new().unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = map.estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);

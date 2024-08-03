@@ -1,3 +1,5 @@
+use ux2::u5;
+
 /// Error type for the [`SkipMap`](crate::SkipMap).
 ///
 /// [`SkipMap`]: crate::SkipMap
@@ -15,6 +17,15 @@ pub enum Error {
   /// Indicates that the entry is too large to be stored in the [`SkipMap`](super::SkipMap).
   EntryTooLarge(u64),
 
+  /// Indicates that the height of the [`SkipMap`](super::SkipMap) is too large.
+  InvalidHeight {
+    /// The height of the [`SkipMap`](super::SkipMap).
+    height: u5,
+
+    /// The max height of the [`SkipMap`](super::SkipMap).
+    max_height: u5,
+  },
+
   /// Arena too small
   ArenaTooSmall,
 }
@@ -27,6 +38,10 @@ impl core::fmt::Display for Error {
       Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
       Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
       Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
+      Self::InvalidHeight { height, max_height } => write!(
+        f,
+        "given height {height} is larger than the max height {max_height}"
+      ),
     }
   }
 }
@@ -45,6 +60,10 @@ impl Error {
   #[inline]
   pub const fn read_only() -> Self {
     Self::Arena(rarena_allocator::Error::ReadOnly)
+  }
+
+  pub(crate) const fn invalid_height(height: u5, max_height: u5) -> Self {
+    Self::InvalidHeight { height, max_height }
   }
 }
 

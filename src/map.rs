@@ -1223,12 +1223,12 @@ impl<T, C> SkipMap<T, C> {
 impl<T: Trailer, C> SkipMap<T, C> {
   fn new_node<'a, 'b: 'a, E>(
     &'a self,
+    height: u32,
     key: &Key<'a, 'b>,
     trailer: T,
     value_size: u32,
     f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(NodePtr<T>, u32, Deallocator), Either<E, Error>> {
-    let height = super::random_height(self.opts.max_height().into());
+  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
       Key::Occupied(key) => self.allocate_entry_node(
         height,
@@ -1279,7 +1279,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
         Err(h) => list_height = h,
       }
     }
-    Ok((nd, height, deallocator))
+    Ok((nd, deallocator))
   }
 }
 
@@ -1820,9 +1820,23 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .map(|_| vk)
   }
 
+  #[inline]
+  fn check_height_and_ro(&self, height: u5) -> Result<(), Error> {
+    if self.arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    let max_height = self.opts.max_height();
+    if height > max_height {
+      return Err(Error::invalid_height(height, max_height));
+    }
+    Ok(())
+  }
+
   fn get_or_allocate_unlinked_node_in<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
+    height: u32,
     key: Key<'a, 'b>,
     value_size: u32,
     f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
@@ -1864,7 +1878,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+    let (nd, deallocator) = self.new_node(height, &k, trailer, value_size, &f).map_err(|e| {
       k.on_fail(&self.arena);
       e
     })?;
@@ -1881,6 +1895,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   fn allocate_unlinked_node_in<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
+    height: u32,
     key: Key<'a, 'b>,
     value_size: u32,
     f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
@@ -1905,7 +1920,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+    let (nd, deallocator) = self.new_node(height, &k, trailer, value_size, &f).map_err(|e| {
       k.on_fail(&self.arena);
       e
     })?;
@@ -2065,7 +2080,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, height, deallocator) = self.new_node(&k, trailer, value_size, &f).map_err(|e| {
+    let height = super::random_height(self.opts.max_height().into());
+    let (nd, deallocator) = self.new_node(height, &k, trailer, value_size, &f).map_err(|e| {
       k.on_fail(&self.arena);
       e
     })?;

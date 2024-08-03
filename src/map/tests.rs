@@ -3170,3 +3170,16 @@ fn test_allocate_in_map_anon_unify() {
     allocate_in(SkipMap::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
   })
 }
+
+#[test]
+fn test_estimited_size() {
+  let l = SkipMap::new().unwrap();
+
+  let h = l.random_height();
+  let size = l.estimated_node_size(h, 3, 3);
+  let allocated = l.allocated();
+  l.allocate_by_height(1, h, b"key", b"val");
+  let allocated2 = l.allocated();
+  let actual = allocated2 - allocated;
+  assert!(size - 7 - (mem::align_of::<u64>() - 1) < actual && actual < size);
+}

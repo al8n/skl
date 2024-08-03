@@ -40,7 +40,7 @@ impl core::fmt::Display for Error {
       Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
       Self::InvalidHeight { height, max_height } => write!(
         f,
-        "given height {height} is larger than the max height {max_height}"
+        "given height {height} is larger than the max height {max_height} or less than 1"
       ),
     }
   }

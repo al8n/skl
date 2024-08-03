@@ -1822,11 +1822,18 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   #[inline]
   fn check_height_and_ro(&self, height: u5) -> Result<(), Error> {
+    const MIN_HEIGHT: u5 = u5::new(1);
+
     if self.arena.read_only() {
       return Err(Error::read_only());
     }
 
     let max_height = self.opts.max_height();
+
+    if height < MIN_HEIGHT {
+      return Err(Error::invalid_height(height, max_height));
+    }
+
     if height > max_height {
       return Err(Error::invalid_height(height, max_height));
     }

@@ -1878,10 +1878,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, deallocator) = self.new_node(height, &k, trailer, value_size, &f).map_err(|e| {
-      k.on_fail(&self.arena);
-      e
-    })?;
+    let (nd, deallocator) = self
+      .new_node(height, &k, trailer, value_size, &f)
+      .map_err(|e| {
+        k.on_fail(&self.arena);
+        e
+      })?;
 
     Ok(Either::Left(UnlinkedNode::new(
       &self.arena,
@@ -1920,10 +1922,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let (nd, deallocator) = self.new_node(height, &k, trailer, value_size, &f).map_err(|e| {
-      k.on_fail(&self.arena);
-      e
-    })?;
+    let (nd, deallocator) = self
+      .new_node(height, &k, trailer, value_size, &f)
+      .map_err(|e| {
+        k.on_fail(&self.arena);
+        e
+      })?;
 
     Ok(UnlinkedNode::new(
       &self.arena,
@@ -2081,10 +2085,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     };
 
     let height = super::random_height(self.opts.max_height().into());
-    let (nd, deallocator) = self.new_node(height, &k, trailer, value_size, &f).map_err(|e| {
-      k.on_fail(&self.arena);
-      e
-    })?;
+    let (nd, deallocator) = self
+      .new_node(height, &k, trailer, value_size, &f)
+      .map_err(|e| {
+        k.on_fail(&self.arena);
+        e
+      })?;
 
     let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator);
 

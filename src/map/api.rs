@@ -236,17 +236,17 @@ impl<T, C> SkipMap<T, C> {
   }
 
   /// Returns a random generated height.
-  /// 
+  ///
   /// This method is useful when you want to check if the underlying allocator can allocate a node.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use skl::SkipMap;
-  /// 
+  ///
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
-  /// 
+  ///
   /// let needed = map.estimated_node_size(height, key_size, value_size);
   /// ```
   #[inline]
@@ -255,7 +255,7 @@ impl<T, C> SkipMap<T, C> {
   }
 
   /// Returns the estimated size of a node with the given height and key/value sizes.
-  /// 
+  ///
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
   pub fn estimated_node_size(&self, height: u5, key_size: u32, value_size: u32) -> usize {
@@ -502,7 +502,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<UnlinkedNode<'a, T>, Error> {
-    self.allocate_by_height(trailer, self.random_height(), key, value)    
+    self.allocate_by_height(trailer, self.random_height(), key, value)
   }
 
   /// Allocates a new node with a given height in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -516,7 +516,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// let map = SkipMap::new().unwrap();
   ///
   /// let random_height = map.random_height();
-  /// 
+  ///
   /// let unlinked_node = map.allocate_by_height(0, random_height, b"hello", b"world").unwrap();
   /// map.link(unlinked_node).unwrap();
   ///
@@ -590,7 +590,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// let map = SkipMap::new().unwrap();
   ///
   /// let random_height = map.random_height();
-  /// 
+  ///
   /// let unlinked_node = map.get_or_allocate_by_height(0, random_height, b"hello", b"world").unwrap().unwrap_left();
   /// map.link(unlinked_node).unwrap();
   ///
@@ -758,7 +758,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// let encoded_size = alice.encoded_size();
   ///
   /// let l = SkipMap::new().unwrap();
-  /// 
+  ///
   /// let random_height = l.random_height();
   ///
   /// let node = l.allocate_by_height_with_value::<core::convert::Infallible>(1, random_height, b"alice", encoded_size as u32, |mut val| {
@@ -951,7 +951,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// let encoded_size = alice.encoded_size();
   ///
   /// let l = SkipMap::new().unwrap();
-  /// 
+  ///
   /// let random_height = l.random_height();
   ///
   /// let node = l.get_or_allocate_by_height_with_value::<core::convert::Infallible>(1, random_height, b"alice", encoded_size as u32, |mut val| {
@@ -1193,7 +1193,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
     let key_size = key_size.into();
     let vk = self.fetch_vacant_key(key_size, key)?;
-    self.allocate_unlinked_node_in(trailer, height.into(), Key::Vacant(vk), val_size, val, Inserter::default())
+    self.allocate_unlinked_node_in(
+      trailer,
+      height.into(),
+      Key::Vacant(vk),
+      val_size,
+      val,
+      Inserter::default(),
+    )
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and

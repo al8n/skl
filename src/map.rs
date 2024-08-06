@@ -2021,6 +2021,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   fn update<'a, 'b: 'a, E>(
     &'a self,
     trailer: T,
+    height: u32,
     key: Key<'a, 'b>,
     value_size: u32,
     f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
@@ -2091,7 +2092,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       }
     };
 
-    let height = super::random_height(self.opts.max_height().into());
     let (nd, deallocator) = self
       .new_node(height, &k, trailer, value_size, &f)
       .map_err(|e| {

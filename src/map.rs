@@ -430,13 +430,11 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  fn set_value(&self, arena: &Arena, offset: u32, value_size: u32) -> Result<(), Error> {
+  fn set_value(&self, arena: &Arena, offset: u32, value_size: u32) {
     let (_, old_len) = self.value.swap(offset, value_size);
     if old_len != REMOVE {
       arena.increase_discarded(old_len);
     }
-
-    Ok(())
   }
 
   #[inline]
@@ -1951,7 +1949,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     success: Ordering,
     failure: Ordering,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+  ) -> UpdateOk<'a, 'b, T> {
     assert!(
       ptr::addr_eq(&self.arena, node.arena),
       "unlinked node is not from the same arena as the skipmap"
@@ -2003,18 +2001,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
           }
         }
 
-        return Ok(Either::Left(if old.is_removed() {
-          None
-        } else {
-          Some(old)
-        }));
+        return Either::Left(if old.is_removed() { None } else { Some(old) });
       }
     }
 
-    match value {
-      Some(_) => self.link_in(node, success, failure, upsert, ins),
-      None => self.link_in(node, success, failure, upsert, ins),
-    }
+    self.link_in(node, success, failure, upsert, ins)
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -2100,10 +2091,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       })?;
 
     let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator);
-
-    self
-      .link_in(node, success, failure, upsert, ins)
-      .map_err(Either::Right)
+    Ok(self.link_in(node, success, failure, upsert, ins))
   }
 
   fn link_in<'a, 'b: 'a>(
@@ -2113,7 +2101,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     failure: Ordering,
     upsert: bool,
     mut ins: Inserter<'a, T>,
-  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+  ) -> UpdateOk<'a, 'b, T> {
     let is_removed = node.value().is_none();
     let UnlinkedNode {
       arena,
@@ -2257,11 +2245,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
                 }
 
                 deallocator.dealloc(&self.arena);
-                return Ok(Either::Left(if old.is_removed() {
-                  None
-                } else {
-                  Some(old)
-                }));
+                return Either::Left(if old.is_removed() { None } else { Some(old) });
               }
 
               if let Some(p) = fr.found_key {
@@ -2300,7 +2284,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.meta().update_max_version(version);
     self.meta().update_min_version(version);
 
-    Ok(Either::Left(None))
+    Either::Left(None)
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -2313,27 +2297,29 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+  ) -> UpdateOk<'a, 'b, T> {
     match key {
-      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => old_node_ptr
-        .as_ref()
-        .set_value(&self.arena, value_offset, value_size)
-        .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
+      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => {
+        let old_node = old_node_ptr.as_ref();
+        old_node.set_value(&self.arena, value_offset, value_size);
+
+        Either::Left(if old.is_removed() { None } else { Some(old) })
+      }
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();
         let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
-          Ok(_) => Ok(Either::Left(None)),
+          Ok(_) => Either::Left(None),
           Err((offset, len)) => {
             let trailer = node.get_trailer_by_offset(&self.arena, offset);
             let value = node.get_value_by_offset(&self.arena, offset, len);
-            Ok(Either::Right(Err(VersionedEntryRef {
+            Either::Right(Err(VersionedEntryRef {
               arena: &self.arena,
               key,
               trailer,
               value,
               ptr: old_node_ptr,
-            })))
+            }))
           }
         }
       }

@@ -1785,20 +1785,69 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::read_only());
     }
 
-    self
-      .link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true)
-      .map(|old| {
-        old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
-            None
-          } else {
-            Some(EntryRef(old))
-          }
-        })
-      })
+    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true);
+
+    Ok(old.expect_left("insert must get InsertOk").and_then(|old| {
+      if old.is_removed() {
+        None
+      } else {
+        Some(EntryRef(old))
+      }
+    }))
+  }
+
+  /// Links a node into the [`SkipMap`].
+  ///
+  /// Use this method to link a [`UnlinkedNode`] that was allocated through `allocate*` APIs.
+  ///
+  /// # Panic
+  /// - If this [`SkipMap`] is read-only.
+  /// 
+  /// # Safety
+  /// - The caller must ensure that the [`SkipMap`] is not read-only.
+  /// 
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// let unlinked_node = map.allocate(0, b"hello", b"world").unwrap();
+  ///
+  /// // do something else
+  ///
+  /// unsafe { map.link_unchecked(unlinked_node); }
+  /// ```
+  pub unsafe fn link_unchecked<'a>(&'a self, node: UnlinkedNode<'a, T>) -> Option<EntryRef<'a, T>> {
+    assert!(!self.arena.read_only(), "SkipMap is read-only");
+
+    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true);
+
+    old.expect_left("insert must get InsertOk").and_then(|old| {
+      if old.is_removed() {
+        None
+      } else {
+        Some(EntryRef(old))
+      }
+    })
   }
 
   /// Gets an entry or links a node into the [`SkipMap`].
+  /// 
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// let unlinked_node = map.allocate(0, b"hello", b"world").unwrap();
+  ///
+  /// // do something else
+  ///
+  /// map.get_or_link(unlinked_node).unwrap();
+  /// ```
   pub fn get_or_link<'a>(
     &'a self,
     node: UnlinkedNode<'a, T>,
@@ -1807,17 +1856,53 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       return Err(Error::read_only());
     }
 
-    self
-      .link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false)
-      .map(|old| {
-        old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
-            None
-          } else {
-            Some(EntryRef(old))
-          }
-        })
-      })
+    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false);
+
+    Ok(old.expect_left("insert must get InsertOk").and_then(|old| {
+      if old.is_removed() {
+        None
+      } else {
+        Some(EntryRef(old))
+      }
+    }))
+  }
+
+  /// Gets an entry or links a node into the [`SkipMap`].
+  /// 
+  /// # Panic
+  /// - If this [`SkipMap`] is read-only.
+  /// 
+  /// # Safety
+  /// - The caller must ensure that the [`SkipMap`] is not read-only.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use skl::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// let unlinked_node = map.allocate(0, b"hello", b"world").unwrap();
+  ///
+  /// // do something else
+  ///
+  /// unsafe { map.get_or_link_unchecked(unlinked_node); }
+  /// ```
+  pub unsafe fn get_or_link_unchecked<'a>(
+    &'a self,
+    node: UnlinkedNode<'a, T>,
+  ) -> Option<EntryRef<'a, T>> {
+    assert!(!self.arena.read_only(), "SkipMap is read-only");
+
+    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false);
+
+    old.expect_left("insert must get InsertOk").and_then(|old| {
+      if old.is_removed() {
+        None
+      } else {
+        Some(EntryRef(old))
+      }
+    })
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.

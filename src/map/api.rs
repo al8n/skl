@@ -247,7 +247,7 @@ impl<T, C> SkipMap<T, C> {
   /// let map = SkipMap::<u64>::new().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = map.estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
+  /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
   /// ```
   #[inline]
   pub fn random_height(&self) -> u5 {
@@ -258,7 +258,7 @@ impl<T, C> SkipMap<T, C> {
   ///
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
-  pub fn estimated_node_size(&self, height: u5, key_size: u32, value_size: u32) -> usize {
+  pub fn estimated_node_size(height: u5, key_size: u32, value_size: u32) -> usize {
     let height: usize = height.into();
     7 // max padding
       + mem::size_of::<Node<T>>()

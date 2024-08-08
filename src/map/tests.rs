@@ -3176,7 +3176,7 @@ fn test_estimited_size() {
   let l = SkipMap::new().unwrap();
 
   let h = l.random_height();
-  let size = l.estimated_node_size(h, 3, 3);
+  let size = SkipMap::<u64>::estimated_node_size(h, 3, 3);
   let allocated = l.allocated();
   l.allocate_at_height(1, h, b"key", b"val");
   let allocated2 = l.allocated();

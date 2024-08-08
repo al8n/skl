@@ -1802,10 +1802,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// # Panic
   /// - If this [`SkipMap`] is read-only.
-  /// 
+  ///
   /// # Safety
   /// - The caller must ensure that the [`SkipMap`] is not read-only.
-  /// 
+  ///
   /// # Example
   ///
   /// ```rust
@@ -1834,7 +1834,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Gets an entry or links a node into the [`SkipMap`].
-  /// 
+  ///
   /// # Example
   ///
   /// ```rust
@@ -1868,15 +1868,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Gets an entry or links a node into the [`SkipMap`].
-  /// 
+  ///
   /// # Panic
   /// - If this [`SkipMap`] is read-only.
-  /// 
+  ///
   /// # Safety
   /// - The caller must ensure that the [`SkipMap`] is not read-only.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use skl::SkipMap;
   ///

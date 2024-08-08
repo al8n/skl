@@ -1,4 +1,4 @@
-use rarena_allocator::ArenaOptions;
+use rarena_allocator::{ArenaOptions, ArenaPosition};
 use ux2::u27;
 
 use super::*;
@@ -443,6 +443,44 @@ impl<T, C> SkipMap<T, C> {
     self.head = head;
     self.tail = tail;
     Ok(())
+  }
+
+  /// Rewind the underlying [`Arena`] to the given position.
+  /// 
+  /// It is common to use this method to rewind the ARENA to a previous state after a failed operation.
+  /// 
+  /// # Safety
+  /// - If the current position is larger than the given position,
+  ///   then the memory between the current position and the given position will be reclaimed,
+  ///   so must ensure the memory chunk between the current position and the given position will not
+  ///   be accessed anymore.
+  /// - This method is not thread safe.
+  /// 
+  /// # Example
+  /// 
+  /// ```rust
+  /// use skl::{SkipMap, ArenaPosition};
+  /// 
+  /// let map = SkipMap::new().unwrap();
+  /// 
+  /// let allocated = map.allocated();
+  /// 
+  /// {
+  ///   let n1 = map.allocate(0, b"hello", b"world").unwrap();
+  ///   let n2 = map.allocate(0, b"foo", b"bar").unwrap();
+  /// }
+  /// 
+  /// let intermediate = map.allocated();
+  /// assert!(intermediate > allocated);
+  /// 
+  /// // some conditions are failed
+  /// // rewind the ARENA to the position before the failed operation
+  /// unsafe { map.rewind(ArenaPosition::Start(allocated as u32)); }
+  /// 
+  /// assert_eq!(map.allocated(), allocated);
+  /// ```
+  pub unsafe fn rewind(&self, pos: ArenaPosition) {
+    self.arena.rewind(pos);
   }
 
   /// Flushes outstanding memory map modifications to disk.

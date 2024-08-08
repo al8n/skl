@@ -211,6 +211,7 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
     }
   }
 
+  /// Returns `true` if the key is a remove operation.
   #[inline]
   pub(crate) fn is_remove(&self) -> bool {
     matches!(

@@ -106,8 +106,8 @@ jobs:
       #     cargo +nightly build --no-default-features --features alloc --target ${{ matrix.target }} -Z build-std=core,alloc
       #   if: matrix.target == 'mips64-unknown-linux-gnuabi64'
 
-  test:
-    name: test
+  build:
+    name: build
     strategy:
       matrix:
         os:
@@ -138,7 +138,39 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test
-      run: cargo hack test --feature-powerset --exclude-no-default-features --exclude-features tracing
+      run: cargo hack build --feature-powerset --exclude-no-default-features --exclude-features tracing
+
+  test:
+    name: test
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cache cargo build and registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-test-
+    - name: Install Rust
+      # --no-self-update is necessary because the windows environment cannot self-update rustup.exe.
+      run: rustup update stable --no-self-update && rustup default stable
+    - name: Cache ~/.cargo
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo
+        key: ${{ runner.os }}-coverage-dotcargo
+    - name: Run test
+      run: cargo test --all-features
 
   sanitizer:
     name: sanitizer
@@ -271,6 +303,7 @@ jobs:
     needs: 
       - rustfmt
       - clippy
+      - build
       - test
       - sanitizer
       - valgrind

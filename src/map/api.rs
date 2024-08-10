@@ -331,6 +331,41 @@ impl<T, C> SkipMap<T, C> {
       })
   }
 
+  /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn map_mut_with_options_and_comparator_and_path_builder<PB, E>(
+    path_builder: PB,
+    opts: Options,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+    cmp: C,
+  ) -> Result<Self, Either<E, std::io::Error>>
+  where
+    PB: FnOnce() -> Result<std::path::PathBuf, E>,
+  {
+    let alignment = Node::<T>::ALIGN as usize;
+    let arena_opts = ArenaOptions::new()
+      .with_maximum_alignment(alignment)
+      .with_magic_version(CURRENT_VERSION)
+      .with_freelist(opts.freelist());
+    let arena =
+      Arena::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options)?;
+    Self::new_in(arena, cmp, opts.with_unify(true))
+      .map_err(invalid_data)
+      .and_then(|map| {
+        if map.magic_version() != opts.magic_version() {
+          Err(bad_magic_version())
+        } else if map.version() != CURRENT_VERSION {
+          Err(bad_version())
+        } else {
+          Ok(map)
+        }
+      })
+      .map_err(Either::Right)
+  }
+
   /// Like [`SkipMap::map`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -360,6 +395,42 @@ impl<T, C> SkipMap<T, C> {
         Ok(map)
       }
     })
+  }
+
+  /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn map_with_comparator_and_path_builder<PB, E>(
+    path_builder: PB,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+    cmp: C,
+    magic_version: u16,
+  ) -> Result<Self, Either<E, std::io::Error>>
+  where
+    PB: FnOnce() -> Result<std::path::PathBuf, E>,
+  {
+    let arena =
+      Arena::map_with_path_builder(path_builder, open_options, mmap_options, CURRENT_VERSION)?;
+    Self::new_in(
+      arena,
+      cmp,
+      Options::new()
+        .with_unify(true)
+        .with_magic_version(magic_version),
+    )
+    .map_err(invalid_data)
+    .and_then(|map| {
+      if map.magic_version() != magic_version {
+        Err(bad_magic_version())
+      } else if map.version() != CURRENT_VERSION {
+        Err(bad_version())
+      } else {
+        Ok(map)
+      }
+    })
+    .map_err(Either::Right)
   }
 
   /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
@@ -446,37 +517,37 @@ impl<T, C> SkipMap<T, C> {
   }
 
   /// Rewind the underlying [`Arena`] to the given position.
-  /// 
+  ///
   /// It is common to use this method to rewind the ARENA to a previous state after a failed operation.
-  /// 
+  ///
   /// # Safety
   /// - If the current position is larger than the given position,
   ///   then the memory between the current position and the given position will be reclaimed,
   ///   so must ensure the memory chunk between the current position and the given position will not
   ///   be accessed anymore.
   /// - This method is not thread safe.
-  /// 
+  ///
   /// # Example
-  /// 
+  ///
   /// ```rust
   /// use skl::{SkipMap, ArenaPosition};
-  /// 
+  ///
   /// let map = SkipMap::new().unwrap();
-  /// 
+  ///
   /// let allocated = map.allocated();
-  /// 
+  ///
   /// {
   ///   let n1 = map.allocate(0, b"hello", b"world").unwrap();
   ///   let n2 = map.allocate(0, b"foo", b"bar").unwrap();
   /// }
-  /// 
+  ///
   /// let intermediate = map.allocated();
   /// assert!(intermediate > allocated);
-  /// 
+  ///
   /// // some conditions are failed
   /// // rewind the ARENA to the position before the failed operation
   /// unsafe { map.rewind(ArenaPosition::Start(allocated as u32)); }
-  /// 
+  ///
   /// assert_eq!(map.allocated(), allocated);
   /// ```
   pub unsafe fn rewind(&self, pos: ArenaPosition) {

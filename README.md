@@ -74,6 +74,12 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
     cargo miri test --all-features
     ```
 
+## Q & A
+
+- How does the on-disk version `SkipMap` ensure crash safety or power failure resilience?
+  
+  Please see explanation, design and implementation details [here](details/crash_safety.md).
+
 ## Support Platforms
 
 | targets                       |   status  |

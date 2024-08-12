@@ -323,10 +323,17 @@ impl Link {
   }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum NodeState {
+  Initialized = 0,
+  Committed = 1,
+}
+
 #[repr(C)]
 struct Node<T> {
   // A byte slice is 24 bytes. We are trying to save space here.
-  /// Multiple parts of the value are encoded as a single uint64 so that it
+  /// Multiple parts of the value are encoded as a single u64 so that it
   /// can be atomically loaded and stored:
   ///   value offset: u32 (bits 0-31)
   ///   value size  : u32 (bits 32-63)
@@ -335,6 +342,7 @@ struct Node<T> {
   key_offset: u32,
   // Immutable. No need to lock to access key.
   key_size_and_height: u32,
+  // state: AtomicU8,
   trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out

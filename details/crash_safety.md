@@ -16,7 +16,7 @@ Before diving deeper, let's keep some important considerations in mind:
       prev_offset: AtomicU32,
     }
 
-    // Node size is 24 bytes in total
+    // Node size is 24 bytes in total (excluding `tower`)
     #[repr(C)]
     struct Node<T> {
       // Multiple parts of the value are encoded as a single u64 so that it

@@ -60,6 +60,16 @@
 
 Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for more details.
 
+## Q & A
+
+- How does the on-disk version `SkipMap` ensure crash safety or power failure resilience?
+  
+  Please see explanation, design and implementation details [here](details/crash_safety.md).
+
+- Does `SkipMap` support batch insertion? Or how to implemenet atomic batch insertion?
+  
+  No, but yes! Atomic batch insertion is not directly supported because this crate is a low level crate, and atomic batch insertion is a higher level feature. However, this crate provides all the fundamental functionalities to implement atomic batch insertion, there is also an [example](examples/atomic_batch_insertion.rs).
+
 ## Tests
 
 - `test`:
@@ -73,12 +83,6 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
     ```sh
     cargo miri test --all-features
     ```
-
-## Q & A
-
-- How does the on-disk version `SkipMap` ensure crash safety or power failure resilience?
-  
-  Please see explanation, design and implementation details [here](details/crash_safety.md).
 
 ## Support Platforms
 

@@ -55,8 +55,7 @@ impl<'a, Q, R, T, C> Iter<'a, T, C, Q, R>
 where
   C: Comparator,
   T: Trailer,
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
@@ -76,8 +75,7 @@ impl<'a, Q, R, T, C> Iterator for Iter<'a, T, C, Q, R>
 where
   C: Comparator,
   T: Trailer,
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   type Item = EntryRef<'a, T>;
@@ -100,8 +98,7 @@ impl<'a, Q, R, T, C> DoubleEndedIterator for Iter<'a, T, C, Q, R>
 where
   C: Comparator,
   T: Trailer,
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   fn next_back(&mut self) -> Option<Self::Item> {

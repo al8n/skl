@@ -16,7 +16,10 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::{cmp, ops::RangeBounds};
+use core::{
+  cmp,
+  ops::{Bound, RangeBounds},
+};
 
 /// A map implementation based on skiplist
 pub mod map;
@@ -91,10 +94,7 @@ pub trait Comparator: core::fmt::Debug {
   fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
 
   /// Returns if a is contained in range.
-  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>;
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool;
 }
 
 impl<C: Comparator> Comparator for std::sync::Arc<C> {
@@ -103,13 +103,8 @@ impl<C: Comparator> Comparator for std::sync::Arc<C> {
     (**self).compare(a, b)
   }
 
-  #[inline]
-  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-  {
-    (**self).contains(range, key)
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
+    (**self).contains(start_bound, end_bound, key)
   }
 }
 
@@ -119,13 +114,8 @@ impl<C: Comparator> Comparator for std::rc::Rc<C> {
     (**self).compare(a, b)
   }
 
-  #[inline]
-  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-  {
-    (**self).contains(range, key)
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
+    (**self).contains(start_bound, end_bound, key)
   }
 }
 
@@ -135,13 +125,8 @@ impl<C: Comparator> Comparator for std::boxed::Box<C> {
     (**self).compare(a, b)
   }
 
-  #[inline]
-  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-  {
-    (**self).contains(range, key)
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
+    (**self).contains(start_bound, end_bound, key)
   }
 }
 
@@ -156,12 +141,8 @@ impl Comparator for Ascend {
   }
 
   #[inline]
-  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-  {
-    range.contains(&key)
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
+    (start_bound, end_bound).contains(&key)
   }
 }
 
@@ -176,12 +157,8 @@ impl Comparator for Descend {
   }
 
   #[inline]
-  fn contains<'a, Q>(&self, range: &impl RangeBounds<Q>, key: &'a [u8]) -> bool
-  where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
-  {
-    range.contains(&key)
+  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
+    (start_bound, end_bound).contains(&key)
   }
 }
 

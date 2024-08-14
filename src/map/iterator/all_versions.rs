@@ -83,8 +83,7 @@ impl<'a, Q, R, T, C> AllVersionsIter<'a, T, C, Q, R>
 where
   C: Comparator,
   T: Trailer,
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
@@ -154,7 +153,11 @@ where
           }
         }
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(|b| b.borrow()),
+          self.range.end_bound().map(|b| b.borrow()),
+          nk,
+        ) {
           let ent = VersionedEntryRef {
             arena: &self.map.arena,
             key: nk,
@@ -200,7 +203,11 @@ where
           }
         }
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           let ent = VersionedEntryRef {
             arena: &self.map.arena,
             key: nk,
@@ -231,18 +238,22 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
           match upper {
             Bound::Included(upper) => {
-              if upper.lt(&nk) {
+              if self.map.cmp.compare(upper.borrow(), nk).is_lt() {
                 return None;
               }
             }
             Bound::Excluded(upper) => {
-              if upper.le(&nk) {
+              if self.map.cmp.compare(upper.borrow(), nk).is_le() {
                 return None;
               }
             }
@@ -272,18 +283,22 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
           match upper {
             Bound::Included(upper) => {
-              if upper.lt(&nk) {
+              if self.map.cmp.compare(upper.borrow(), nk).is_lt() {
                 return None;
               }
             }
             Bound::Excluded(upper) => {
-              if upper.le(&nk) {
+              if self.map.cmp.compare(upper.borrow(), nk).is_le() {
                 return None;
               }
             }
@@ -310,18 +325,22 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
           match lower {
             Bound::Included(lower) => {
-              if lower.gt(&nk) {
+              if self.map.cmp.compare(lower.borrow(), nk).is_gt() {
                 return None;
               }
             }
             Bound::Excluded(lower) => {
-              if lower.ge(&nk) {
+              if self.map.cmp.compare(lower.borrow(), nk).is_ge() {
                 return None;
               }
             }
@@ -349,18 +368,22 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
           match lower {
             Bound::Included(lower) => {
-              if lower.gt(&nk) {
+              if self.map.cmp.compare(lower.borrow(), nk).is_gt() {
                 return None;
               }
             }
             Bound::Excluded(lower) => {
-              if lower.ge(&nk) {
+              if self.map.cmp.compare(lower.borrow(), nk).is_ge() {
                 return None;
               }
             }
@@ -398,7 +421,11 @@ where
           continue;
         }
 
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           let ent = VersionedEntryRef {
             arena: &self.map.arena,
             key: nk,
@@ -440,7 +467,11 @@ where
         }
 
         let nk = node.get_key(&self.map.arena);
-        if self.map.cmp.contains(&self.range, nk) {
+        if self.map.cmp.contains(
+          self.range.start_bound().map(Borrow::borrow),
+          self.range.end_bound().map(Borrow::borrow),
+          nk,
+        ) {
           let ent = VersionedEntryRef {
             arena: &self.map.arena,
             key: nk,
@@ -461,8 +492,7 @@ impl<'a, Q, R, T, C> Iterator for AllVersionsIter<'a, T, C, Q, R>
 where
   C: Comparator,
   T: Trailer,
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   type Item = VersionedEntryRef<'a, T>;
@@ -512,8 +542,7 @@ impl<'a, Q, R, T, C> DoubleEndedIterator for AllVersionsIter<'a, T, C, Q, R>
 where
   C: Comparator,
   T: Trailer,
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   fn next_back(&mut self) -> Option<Self::Item> {

@@ -1242,26 +1242,30 @@ impl<C, T: Trailer> SkipMap<C, T> {
     &'a self,
     height: u32,
     key: &Key<'a, 'b>,
-    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     trailer: T,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    let (value_size, f) = value_builder.into_components();
     let (nd, deallocator) = match key {
-      Key::Occupied(key) => self.allocate_entry_node(
-        height,
-        trailer,
-        key.len() as u32,
-        |buf| {
-          buf.write(key).unwrap();
-          Ok(())
-        },
-        value_size,
-        f,
-      )?,
+      Key::Occupied(key) => {
+        let (value_size, f) = value_builder.unwrap().into_components();
+        self.allocate_entry_node(
+          height,
+          trailer,
+          key.len() as u32,
+          |buf| {
+            buf.write(key).unwrap();
+            Ok(())
+          },
+          value_size,
+          f,
+        )?
+      }
       Key::Vacant(key) => {
+        let (value_size, f) = value_builder.unwrap().into_components();
         self.allocate_value_node(height, trailer, key.len() as u32, key.offset, value_size, f)?
       }
       Key::Pointer { offset, len, .. } => {
+        let (value_size, f) = value_builder.unwrap().into_components();
         self.allocate_value_node(height, trailer, *len, *offset, value_size, f)?
       }
       Key::Remove(key) => self.allocate_key_node(
@@ -1862,7 +1866,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     mut ins: Inserter<'a, T>,
   ) -> Result<Either<UnlinkedNode<'a, T>, VersionedEntryRef<'a, T>>, Either<E, Error>> {
     let is_remove = key.is_remove();
@@ -1922,7 +1926,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     mut ins: Inserter<'a, T>,
   ) -> Result<UnlinkedNode<T>, Either<E, Error>> {
     // Safety: a fresh new Inserter, so safe here
@@ -2028,7 +2032,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, T>,
@@ -2345,14 +2349,14 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     old_node_ptr: NodePtr<T>,
     key: &Key<'a, 'b>,
     trailer: T,
-    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => old_node_ptr
         .as_ref()
-        .allocate_and_set_value(&self.arena, trailer, value_builder)
+        .allocate_and_set_value(&self.arena, trailer, value_builder.unwrap())
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();

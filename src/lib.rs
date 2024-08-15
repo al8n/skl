@@ -167,7 +167,7 @@ impl Comparator for Descend {
 /// # Safety
 /// The implementors must ensure that they can be reconstructed from a byte slice directly.
 /// e.g. struct includes `*const T` cannot be used as the trailer, because the pointer cannot be reconstructed from a byte slice directly.
-pub unsafe trait Trailer: Copy + core::fmt::Debug {}
+pub unsafe trait Trailer: core::fmt::Debug {}
 
 unsafe impl Trailer for u64 {}
 

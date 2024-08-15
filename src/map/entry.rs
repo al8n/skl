@@ -2,6 +2,19 @@ use rarena_allocator::Arena;
 
 use super::{u56, NodePtr};
 
+#[derive(Copy, Clone, Debug)]
+pub(super) struct ValuePartPointer {
+  offset: u32,
+  len: u32,
+}
+
+impl ValuePartPointer {
+  #[inline]
+  const fn new(offset: u32, len: u32) -> Self {
+    Self { offset, len }
+  } 
+}
+
 /// A versioned entry reference of the skipmap.
 ///
 /// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
@@ -9,26 +22,18 @@ use super::{u56, NodePtr};
 pub struct VersionedEntryRef<'a, T> {
   pub(super) arena: &'a Arena,
   pub(super) key: &'a [u8],
-  pub(super) trailer: T,
-  pub(super) value: Option<&'a [u8]>,
+  pub(super) value_part_pointer: ValuePartPointer,
   pub(super) version: u56,
   pub(super) ptr: NodePtr<T>,
 }
 
-impl<'a, T: Clone> Clone for VersionedEntryRef<'a, T> {
+impl<'a, T> Clone for VersionedEntryRef<'a, T> {
   fn clone(&self) -> Self {
-    Self {
-      arena: self.arena,
-      key: self.key,
-      trailer: self.trailer.clone(),
-      value: self.value,
-      ptr: self.ptr,
-      version: self.version,
-    }
+    *self
   }
 }
 
-impl<'a, T: Copy> Copy for VersionedEntryRef<'a, T> {}
+impl<'a, T> Copy for VersionedEntryRef<'a, T> {}
 
 impl<'a, T> VersionedEntryRef<'a, T> {
   /// Returns the reference to the key
@@ -39,33 +44,38 @@ impl<'a, T> VersionedEntryRef<'a, T> {
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub const fn value(&self) -> Option<&[u8]> {
-    self.value
+  pub fn value(&self) -> Option<&[u8]> {
+    unsafe {
+      let node = self.ptr.as_ref();
+      let value = node.get_value_by_offset(self.arena, self.value_part_pointer.offset, self.value_part_pointer.len);
+      value
+    }
   }
 
   /// Returns the trailer of the entry
   #[inline]
-  pub const fn trailer(&self) -> &T {
-    &self.trailer
+  pub fn trailer(&self) -> &T {
+    unsafe {
+      let node = self.ptr.as_ref();
+      let trailer = node.get_trailer_by_offset(self.arena, self.value_part_pointer.offset);
+      trailer
+    }
   }
 
   /// Returns if the entry is marked as removed
   #[inline]
-  pub const fn is_removed(&self) -> bool {
-    self.value.is_none()
+  pub fn is_removed(&self) -> bool {
+    self.value().is_none()
   }
 
   /// Returns the owned versioned entry,
   /// feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
-  pub fn to_owned(&self) -> VersionedEntry<T>
-  where
-    T: Clone,
-  {
+  pub fn to_owned(&self) -> VersionedEntry<T> {
     VersionedEntry {
       arena: self.arena.clone(),
-      trailer: self.trailer.clone(),
       ptr: self.ptr,
+      value_part_pointer: self.value_part_pointer,
     }
   }
 
@@ -76,21 +86,19 @@ impl<'a, T> VersionedEntryRef<'a, T> {
   }
 }
 
-impl<'a, T: Clone> From<VersionedEntryRef<'a, T>> for VersionedEntry<T> {
+impl<'a, T> From<VersionedEntryRef<'a, T>> for VersionedEntry<T> {
   fn from(entry: VersionedEntryRef<'a, T>) -> Self {
     entry.to_owned()
   }
 }
 
-impl<'a, T: Copy> VersionedEntryRef<'a, T> {
-  pub(super) fn from_node(node_ptr: NodePtr<T>, arena: &'a Arena) -> VersionedEntryRef<'a, T> {
+impl<'a, T> VersionedEntryRef<'a, T> {
+  pub(super) fn from_node(node_ptr: NodePtr<T>, arena: &'a Arena, value_offset: u32, value_len: u32) -> VersionedEntryRef<'a, T> {
     unsafe {
       let node = node_ptr.as_ref();
-      let (trailer, value) = node.get_value_and_trailer(arena);
       VersionedEntryRef {
         key: node.get_key(arena),
-        trailer,
-        value,
+        value_part_pointer: ValuePartPointer::new(value_offset, value_len),
         arena,
         ptr: node_ptr,
         version: node.version(),
@@ -105,21 +113,21 @@ impl<'a, T: Copy> VersionedEntryRef<'a, T> {
 #[derive(Debug)]
 pub struct VersionedEntry<T> {
   pub(super) arena: Arena,
-  pub(super) trailer: T,
   pub(super) ptr: NodePtr<T>,
+  pub(super) value_part_pointer: ValuePartPointer,
 }
 
-impl<T: Clone> Clone for VersionedEntry<T> {
+impl<T> Clone for VersionedEntry<T> {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
-      trailer: self.trailer.clone(),
       ptr: self.ptr,
+      value_part_pointer: self.value_part_pointer,
     }
   }
 }
 
-impl<'a, T: Clone> From<&'a VersionedEntry<T>> for VersionedEntryRef<'a, T> {
+impl<'a, T> From<&'a VersionedEntry<T>> for VersionedEntryRef<'a, T> {
   fn from(entry: &'a VersionedEntry<T>) -> VersionedEntryRef<'a, T> {
     entry.borrow()
   }
@@ -140,28 +148,29 @@ impl<T> VersionedEntry<T> {
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
       let node = self.ptr.as_ref();
-      let value = node.get_value(&self.arena);
+      let value = node.get_value_by_offset(&self.arena, self.value_part_pointer.offset, self.value_part_pointer.len);
       value
     }
   }
 
   /// Returns the trailer of the entry
   #[inline]
-  pub const fn trailer(&self) -> &T {
-    &self.trailer
+  pub fn trailer(&self) -> &T {
+    unsafe {
+      let node = self.ptr.as_ref();
+      let trailer = node.get_trailer_by_offset(&self.arena, self.value_part_pointer.offset);
+      trailer
+    }
   }
 
   /// Returns the borrowed entry reference
   #[inline]
   pub fn borrow(&self) -> VersionedEntryRef<'_, T>
-  where
-    T: Clone,
   {
     VersionedEntryRef {
       arena: &self.arena,
       key: self.key(),
-      trailer: self.trailer.clone(),
-      value: self.value(),
+      value_part_pointer: self.value_part_pointer,
       ptr: self.ptr,
       version: self.version(),
     }
@@ -262,7 +271,7 @@ impl<'a, T> EntryRef<'a, T> {
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub const fn value(&self) -> &[u8] {
+  pub fn value(&self) -> &[u8] {
     match self.0.value() {
       Some(value) => value,
       None => panic!("EntryRef's value cannot be `None`"),
@@ -271,7 +280,7 @@ impl<'a, T> EntryRef<'a, T> {
 
   /// Returns the trailer of the entry
   #[inline]
-  pub const fn trailer(&self) -> &T {
+  pub fn trailer(&self) -> &T {
     self.0.trailer()
   }
 

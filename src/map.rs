@@ -530,30 +530,30 @@ impl<T> Node<T> {
   }
 }
 
-impl<T: Copy> Node<T> {
+impl<T> Node<T> {
   #[inline]
-  unsafe fn get_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> T {
+  unsafe fn get_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> &'b T {
     let (offset, _) = self.value.load(Ordering::Acquire);
-    *arena.get_aligned_pointer(offset as usize)
+    &*arena.get_aligned_pointer(offset as usize)
   }
 
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_trailer_by_offset<'a, 'b: 'a>(&'a self, arena: &'b Arena, offset: u32) -> T {
-    *arena.get_aligned_pointer::<T>(offset as usize)
+  unsafe fn get_trailer_by_offset<'a, 'b: 'a>(&'a self, arena: &'b Arena, offset: u32) -> &'b T {
+    &*arena.get_aligned_pointer::<T>(offset as usize)
   }
 
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_value_and_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> (T, Option<&'b [u8]>) {
+  unsafe fn get_value_and_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> (&'b T, Option<&'b [u8]>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_aligned_pointer(offset as usize);
     #[cfg(not(feature = "unaligned"))]
-    let trailer = *ptr;
+    let trailer = &*ptr;
 
     if len == u32::MAX {
       return (trailer, None);
@@ -641,7 +641,7 @@ impl<'a, T> UnlinkedNode<'a, T> {
 impl<'a, T: Trailer> UnlinkedNode<'a, T> {
   /// Returns the trailer of the node.
   #[inline]
-  pub fn trailer(&self) -> T {
+  pub fn trailer(&self) -> &T {
     // Safety: the node is allocated by the arena.
     unsafe { self.ptr.as_ref().get_trailer(self.arena) }
   }
@@ -2319,20 +2319,10 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
       }
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();
-        let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Either::Left(None),
           Err((offset, len)) => {
-            let trailer = node.get_trailer_by_offset(&self.arena, offset);
-            let value = node.get_value_by_offset(&self.arena, offset, len);
-            Either::Right(Err(VersionedEntryRef {
-              arena: &self.arena,
-              key,
-              trailer,
-              value,
-              ptr: old_node_ptr,
-              version: node.version(),
-            }))
+            Either::Right(Err(VersionedEntryRef::from_node(old_node_ptr, &self.arena, offset, len)))
           }
         }
       }
@@ -2357,20 +2347,10 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();
-        let key = node.get_key(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => {
-            let trailer = node.get_trailer_by_offset(&self.arena, offset);
-            let value = node.get_value_by_offset(&self.arena, offset, len);
-            Ok(Either::Right(Err(VersionedEntryRef {
-              arena: &self.arena,
-              key,
-              trailer,
-              value,
-              ptr: old_node_ptr,
-              version: node.version(),
-            })))
+            Ok(Either::Right(Err(VersionedEntryRef::from_node(old_node_ptr, &self.arena, offset, len))))
           }
         }
       }
@@ -2385,11 +2365,20 @@ pub struct Inserter<'a, T> {
   _m: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, T: Copy> Default for Inserter<'a, T> {
+impl<'a, T> Default for Inserter<'a, T> {
   #[inline]
   fn default() -> Self {
     Self {
-      spl: [Splice::default(); super::MAX_HEIGHT],
+      spl: [
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+        Splice::default(), Splice::default(), Splice::default(), Splice::default(),
+      ],
       height: 0,
       _m: core::marker::PhantomData,
     }

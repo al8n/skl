@@ -408,7 +408,7 @@ impl<T> Node<T> {
     &self,
     arena: &'a Arena,
     trailer: T,
-    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>> {
     let (value_size, f) = value_builder.into_components();
     let mut bytes = arena
@@ -1242,7 +1242,7 @@ impl<C, T: Trailer> SkipMap<C, T> {
     &'a self,
     height: u32,
     key: &Key<'a, 'b>,
-    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     trailer: T,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
@@ -1866,7 +1866,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     mut ins: Inserter<'a, T>,
   ) -> Result<Either<UnlinkedNode<'a, T>, VersionedEntryRef<'a, T>>, Either<E, Error>> {
     let is_remove = key.is_remove();
@@ -1906,9 +1906,8 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
 
     let (nd, deallocator) = self
       .new_node(height, &k, value_builder, trailer)
-      .map_err(|e| {
+      .inspect_err(|_| {
         k.on_fail(&self.arena);
-        e
       })?;
 
     Ok(Either::Left(UnlinkedNode::new(
@@ -1926,7 +1925,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     mut ins: Inserter<'a, T>,
   ) -> Result<UnlinkedNode<T>, Either<E, Error>> {
     // Safety: a fresh new Inserter, so safe here
@@ -1948,9 +1947,8 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
 
     let (nd, deallocator) = self
       .new_node(height, &k, value_builder, trailer)
-      .map_err(|e| {
+      .inspect_err(|_| {
         k.on_fail(&self.arena);
-        e
       })?;
 
     Ok(UnlinkedNode::new(
@@ -2032,7 +2030,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, T>,
@@ -2100,9 +2098,8 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
 
     let (nd, deallocator) = self
       .new_node(height, &k, value_builder, trailer)
-      .map_err(|e| {
+      .inspect_err(|_| {
         k.on_fail(&self.arena);
-        e
       })?;
 
     let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator);
@@ -2349,7 +2346,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     old_node_ptr: NodePtr<T>,
     key: &Key<'a, 'b>,
     trailer: T,
-    value_builder: Option<ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
@@ -2531,10 +2528,4 @@ const fn decode_key_size_and_height(size: u32) -> (u32, u8) {
   let key_size = size >> 5;
   let height = (size & 0b11111) as u8;
   (key_size, height)
-}
-
-#[cold]
-#[inline(never)]
-fn noop<E>(_: &mut VacantBuffer<'_>) -> Result<(), E> {
-  Ok(())
 }

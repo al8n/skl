@@ -1,4 +1,4 @@
-use skl::SkipMap;
+use skl::{u56, SkipMap};
 use std::sync::Arc;
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -23,7 +23,7 @@ fn main() {
     let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
-      l.insert(0, &key(i), &new_value(i)).unwrap();
+      l.insert(u56::new(0), &key(i), &new_value(i)).unwrap();
       drop(w);
     });
   }
@@ -33,7 +33,11 @@ fn main() {
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
+      assert_eq!(
+        l.get(u56::new(0), &k).unwrap().value(),
+        new_value(i),
+        "broken: {i}"
+      );
       drop(w);
     });
   }

@@ -34,7 +34,7 @@ mod types;
 pub use types::*;
 
 pub use either;
-pub use map::{AllVersionsIter, SkipMap, UnlinkedNode};
+pub use map::{AllVersionsIter, KeyBuilder, SkipMap, UnlinkedNode, ValueBuilder};
 pub use rarena_allocator::{Arena, ArenaPosition, Error as ArenaError};
 pub use ux2::{u27, u5, u56};
 
@@ -167,26 +167,11 @@ impl Comparator for Descend {
 /// # Safety
 /// The implementors must ensure that they can be reconstructed from a byte slice directly.
 /// e.g. struct includes `*const T` cannot be used as the trailer, because the pointer cannot be reconstructed from a byte slice directly.
-pub unsafe trait Trailer: Copy + core::fmt::Debug {
-  /// Returns the version of the trailer.
-  fn version(&self) -> u64;
-}
+pub unsafe trait Trailer: Copy + core::fmt::Debug {}
 
-unsafe impl Trailer for u64 {
-  /// Returns the version of the trailer.
-  #[inline]
-  fn version(&self) -> u64 {
-    *self
-  }
-}
+unsafe impl Trailer for u64 {}
 
-unsafe impl Trailer for () {
-  /// Returns the version of the trailer.
-  #[inline]
-  fn version(&self) -> u64 {
-    0
-  }
-}
+unsafe impl Trailer for () {}
 
 mod sync {
   #[cfg(not(feature = "loom"))]

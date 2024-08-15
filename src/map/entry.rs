@@ -1,6 +1,6 @@
 use rarena_allocator::Arena;
 
-use super::{NodePtr, Trailer};
+use super::{u56, NodePtr};
 
 /// A versioned entry reference of the skipmap.
 ///
@@ -11,6 +11,7 @@ pub struct VersionedEntryRef<'a, T> {
   pub(super) key: &'a [u8],
   pub(super) trailer: T,
   pub(super) value: Option<&'a [u8]>,
+  pub(super) version: u56,
   pub(super) ptr: NodePtr<T>,
 }
 
@@ -22,6 +23,7 @@ impl<'a, T: Clone> Clone for VersionedEntryRef<'a, T> {
       trailer: self.trailer.clone(),
       value: self.value,
       ptr: self.ptr,
+      version: self.version,
     }
   }
 }
@@ -69,11 +71,8 @@ impl<'a, T> VersionedEntryRef<'a, T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u64
-  where
-    T: Trailer,
-  {
-    self.trailer.version()
+  pub fn version(&self) -> u56 {
+    self.version
   }
 }
 
@@ -94,6 +93,7 @@ impl<'a, T: Copy> VersionedEntryRef<'a, T> {
         value,
         arena,
         ptr: node_ptr,
+        version: node.version(),
       }
     }
   }
@@ -163,16 +163,17 @@ impl<T> VersionedEntry<T> {
       trailer: self.trailer.clone(),
       value: self.value(),
       ptr: self.ptr,
+      version: self.version(),
     }
   }
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u64
-  where
-    T: Trailer,
-  {
-    self.trailer.version()
+  pub fn version(&self) -> u56 {
+    unsafe {
+      let node = self.ptr.as_ref();
+      node.version()
+    }
   }
 }
 
@@ -227,10 +228,7 @@ impl<T> Entry<T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u64
-  where
-    T: Trailer,
-  {
+  pub fn version(&self) -> u56 {
     self.0.version()
   }
 }
@@ -288,10 +286,7 @@ impl<'a, T> EntryRef<'a, T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u64
-  where
-    T: Trailer,
-  {
+  pub fn version(&self) -> u56 {
     self.0.version()
   }
 }

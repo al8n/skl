@@ -5,7 +5,7 @@ use super::*;
 pub struct AllVersionsIter<'a, C, T, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
   pub(super) map: &'a SkipMap<C, T>,
   pub(super) nd: NodePtr<T>,
-  pub(super) version: u64,
+  pub(super) version: u56,
   pub(super) range: R,
   pub(super) all_versions: bool,
   pub(super) last: Option<VersionedEntryRef<'a, T>>,
@@ -33,7 +33,7 @@ where
   C: Comparator,
 {
   #[inline]
-  pub(crate) const fn new(version: u64, map: &'a SkipMap<C, T>, all_versions: bool) -> Self {
+  pub(crate) const fn new(version: u56, map: &'a SkipMap<C, T>, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -52,7 +52,7 @@ where
   Q: ?Sized + PartialOrd<&'a [u8]>,
 {
   #[inline]
-  pub(crate) fn range(version: u64, map: &'a SkipMap<C, T>, r: R, all_versions: bool) -> Self {
+  pub(crate) fn range(version: u56, map: &'a SkipMap<C, T>, r: R, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -135,7 +135,7 @@ where
 
         let node = self.nd.as_ref();
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
-        if trailer.version() > self.version {
+        if node.version() > self.version {
           continue;
         }
 
@@ -164,6 +164,7 @@ where
             trailer,
             value,
             ptr: self.nd,
+            version: node.version(),
           };
           self.last = Some(ent);
           return Some(ent);
@@ -185,7 +186,7 @@ where
 
         let node = self.nd.as_ref();
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
-        if trailer.version() > self.version {
+        if node.version() > self.version {
           continue;
         }
 
@@ -214,6 +215,7 @@ where
             trailer,
             value,
             ptr: self.nd,
+            version: node.version(),
           };
           self.last = Some(ent);
           return Some(ent);
@@ -411,7 +413,7 @@ where
         let nk = node.get_key(&self.map.arena);
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
 
-        if trailer.version() > self.version {
+        if node.version() > self.version {
           self.nd = self.map.get_next(self.nd, 0);
           continue;
         }
@@ -432,6 +434,7 @@ where
             trailer,
             value,
             ptr: self.nd,
+            version: node.version(),
           };
           self.last = Some(ent);
           return Some(ent);
@@ -456,7 +459,7 @@ where
         let node = self.nd.as_ref();
         let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
 
-        if trailer.version() > self.version {
+        if node.version() > self.version {
           self.nd = self.map.get_prev(self.nd, 0);
           continue;
         }
@@ -478,6 +481,7 @@ where
             trailer,
             value,
             ptr: self.nd,
+            version: node.version(),
           };
           return Some(ent);
         }

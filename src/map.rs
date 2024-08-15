@@ -18,6 +18,7 @@ use options::CompressionPolicy;
 use super::{sync::*, Arena, Ascend, Comparator, *};
 
 mod api;
+pub use api::*;
 
 use either::Either;
 
@@ -100,9 +101,9 @@ impl Meta {
     self.len.fetch_add(1, Ordering::Release);
   }
 
-  fn update_max_version(&self, version: u64) {
+  fn update_max_version(&self, version: u56) {
     let mut current = self.max_version.load(Ordering::Acquire);
-
+    let version = version.into();
     loop {
       if version <= current {
         return;
@@ -120,9 +121,9 @@ impl Meta {
     }
   }
 
-  fn update_min_version(&self, version: u64) {
+  fn update_min_version(&self, version: u56) {
     let mut current = self.min_version.load(Ordering::Acquire);
-
+    let version = version.into();
     loop {
       if version >= current {
         return;
@@ -398,13 +399,18 @@ impl<T> Node<T> {
   }
 
   #[inline]
+  fn version(&self) -> u56 {
+    u56::from_le_bytes(self.version)
+  }
+
+  #[inline]
   fn allocate_and_set_value<'a, E>(
     &self,
     arena: &'a Arena,
     trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<(), Either<E, Error>> {
+    let (value_size, f) = value_builder.into_components();
     let mut bytes = arena
       .alloc_aligned_bytes::<T>(value_size)
       .map_err(|e| Either::Right(e.into()))?;
@@ -569,7 +575,7 @@ pub struct UnlinkedNode<'a, T> {
   ptr: NodePtr<T>,
   deallocator: Deallocator,
   height: u32,
-  version: u64,
+  version: u56,
 }
 
 impl<'a, T> core::fmt::Debug for UnlinkedNode<'a, T> {
@@ -587,7 +593,7 @@ impl<'a, T> UnlinkedNode<'a, T> {
     arena: &'a Arena,
     ptr: NodePtr<T>,
     height: u32,
-    version: u64,
+    version: u56,
     deallocator: Deallocator,
   ) -> Self {
     Self {
@@ -613,7 +619,7 @@ impl<'a, T> UnlinkedNode<'a, T> {
 
   /// Returns the version of the node.
   #[inline]
-  pub const fn version(&self) -> u64 {
+  pub const fn version(&self) -> u56 {
     self.version
   }
 
@@ -1236,10 +1242,10 @@ impl<C, T: Trailer> SkipMap<C, T> {
     &'a self,
     height: u32,
     key: &Key<'a, 'b>,
+    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    let (value_size, f) = value_builder.into_components();
     let (nd, deallocator) = match key {
       Key::Occupied(key) => self.allocate_entry_node(
         height,
@@ -1323,7 +1329,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   }
 
   /// Returns the first entry in the map.
-  fn first_in(&self, version: u64) -> Option<NodePtr<T>> {
+  fn first_in(&self, version: u56) -> Option<NodePtr<T>> {
     // Safety: head node was definitely allocated by self.arena
     let nd = unsafe { self.get_next(self.head, 0) };
 
@@ -1339,7 +1345,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   }
 
   /// Returns the last entry in the map.
-  fn last_in(&self, version: u64) -> Option<NodePtr<T>> {
+  fn last_in(&self, version: u56) -> Option<NodePtr<T>> {
     // Safety: tail node was definitely allocated by self.arena
     let nd = unsafe { self.get_prev(self.tail, 0) };
 
@@ -1360,9 +1366,9 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn gt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn gt<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(u64::MIN, key, false, false); // find the key with the max version.
+      let (n, _) = self.find_near(u56::MIN, key, false, false); // find the key with the max version.
 
       let n = n?;
 
@@ -1380,9 +1386,9 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn lt<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn lt<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(u64::MAX, key, true, false); // find less or equal.
+      let (n, _) = self.find_near(u56::MAX, key, true, false); // find less or equal.
 
       let n = n?;
       if n.is_null() || n.ptr == self.head.ptr {
@@ -1399,10 +1405,9 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn ge<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn ge<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
-      // TODO: optimize find_near implementation, so that we can directly use version instead of u64::MIN
-      let (n, _) = self.find_near(u64::MAX, key, false, true); // find the key with the max version.
+      let (n, _) = self.find_near(u56::MAX, key, false, true); // find the key with the max version.
 
       let n = n?;
 
@@ -1420,9 +1425,9 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn le<'a, 'b: 'a>(&'a self, version: u64, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn le<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(u64::MIN, key, true, true); // find less or equal.
+      let (n, _) = self.find_near(u56::MIN, key, true, true); // find less or equal.
 
       let n = n?;
       if n.is_null() || n.ptr == self.head.ptr {
@@ -1433,14 +1438,14 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     }
   }
 
-  unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {
+  unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: u56) -> Option<NodePtr<T>> {
     let mut prev = self.get_prev(curr, 0);
 
     loop {
       let curr_node = curr.as_ref();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is greater than the given version, we should return.
-      let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
+      let version_cmp = curr_node.version().cmp(&version);
       if version_cmp == cmp::Ordering::Greater {
         return None;
       }
@@ -1459,7 +1464,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
         return Some(curr);
       }
 
-      let version_cmp = prev_node.get_trailer(&self.arena).version().cmp(&version);
+      let version_cmp = prev_node.version().cmp(&version);
 
       if version_cmp == cmp::Ordering::Equal {
         return Some(prev);
@@ -1474,14 +1479,14 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     }
   }
 
-  unsafe fn find_next_max_version(&self, mut curr: NodePtr<T>, version: u64) -> Option<NodePtr<T>> {
+  unsafe fn find_next_max_version(&self, mut curr: NodePtr<T>, version: u56) -> Option<NodePtr<T>> {
     let mut next = self.get_next(curr, 0);
 
     loop {
       let curr_node = curr.as_ref();
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
-      let version_cmp = curr_node.get_trailer(&self.arena).version().cmp(&version);
+      let version_cmp = curr_node.version().cmp(&version);
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
         return Some(curr);
       }
@@ -1496,7 +1501,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
 
       let next_node = next.as_ref();
       let next_key = next_node.get_key(&self.arena);
-      let version_cmp = next_node.get_trailer(&self.arena).version().cmp(&version);
+      let version_cmp = next_node.version().cmp(&version);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
@@ -1526,7 +1531,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   /// Returns the node found. The bool returned is true if the node has key equal to given key.
   unsafe fn find_near(
     &self,
-    version: u64,
+    version: u56,
     key: &[u8],
     less: bool,
     allow_equal: bool,
@@ -1563,7 +1568,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
       let cmp = self
         .cmp
         .compare(key, next_key)
-        .then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version));
+        .then_with(|| next_node.version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -1618,7 +1623,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
   unsafe fn find_splice<'a, 'b: 'a>(
     &'a self,
-    version: u64,
+    version: u56,
     key: &'b [u8],
     ins: &mut Inserter<T>,
     returned_when_found: bool,
@@ -1688,7 +1693,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   /// - `start` must be allocated by self's arena.
   unsafe fn find_splice_for_level(
     &self,
-    version: u64,
+    version: u56,
     key: &[u8],
     level: usize,
     start: NodePtr<T>,
@@ -1730,7 +1735,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
         _ => {}
       }
 
-      match cmp.then_with(|| next_node.get_trailer(&self.arena).version().cmp(&version)) {
+      match cmp.then_with(|| next_node.version().cmp(&version)) {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
           return FindResult {
@@ -1781,7 +1786,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
-  unsafe fn key_is_after_node(&self, nd: NodePtr<T>, version: u64, key: &[u8]) -> bool {
+  unsafe fn key_is_after_node(&self, nd: NodePtr<T>, version: u56, key: &[u8]) -> bool {
     let nd = &*nd.ptr;
     let nd_key = self
       .arena
@@ -1795,7 +1800,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
       cmp::Ordering::Less => true,
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
-        matches!(version.cmp(&nd.get_trailer(&self.arena).version()), cmp::Ordering::Less)
+        matches!(version.cmp(&nd.version()), cmp::Ordering::Less)
       }
     }
   }
@@ -1853,14 +1858,13 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
 
   fn get_or_allocate_unlinked_node_in<'a, 'b: 'a, E>(
     &'a self,
+    version: u56,
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_size: u32,
-    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
     mut ins: Inserter<'a, T>,
   ) -> Result<Either<UnlinkedNode<'a, T>, VersionedEntryRef<'a, T>>, Either<E, Error>> {
-    let version = trailer.version();
     let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
@@ -1897,7 +1901,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     };
 
     let (nd, deallocator) = self
-      .new_node(height, &k, trailer, value_size, &f)
+      .new_node(height, &k, value_builder, trailer)
       .map_err(|e| {
         k.on_fail(&self.arena);
         e
@@ -1914,15 +1918,13 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
 
   fn allocate_unlinked_node_in<'a, 'b: 'a, E>(
     &'a self,
+    version: u56,
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_size: u32,
-    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
     mut ins: Inserter<'a, T>,
   ) -> Result<UnlinkedNode<T>, Either<E, Error>> {
-    let version = trailer.version();
-
     // Safety: a fresh new Inserter, so safe here
     let (_, found_key, _) = unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
 
@@ -1941,7 +1943,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     };
 
     let (nd, deallocator) = self
-      .new_node(height, &k, trailer, value_size, &f)
+      .new_node(height, &k, value_builder, trailer)
       .map_err(|e| {
         k.on_fail(&self.arena);
         e
@@ -1967,9 +1969,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
       ptr::addr_eq(&self.arena, node.arena),
       "unlinked node is not from the same arena as the skipmap"
     );
-
-    let trailer = node.trailer();
-    let version = trailer.version();
+    let version = node.version();
 
     // SAFETY: node is allocated by the arena, so safe here
     let unlinked = unsafe { node.ptr.as_ref() };
@@ -2024,17 +2024,16 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   #[allow(clippy::too_many_arguments)]
   fn update<'a, 'b: 'a, E>(
     &'a self,
+    version: u56,
     trailer: T,
     height: u32,
     key: Key<'a, 'b>,
-    value_size: u32,
-    f: impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, T>,
     upsert: bool,
   ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
-    let version = trailer.version();
     let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
@@ -2060,8 +2059,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
               Key::pointer(&self.arena, k)
             },
             trailer,
-            value_size,
-            &f,
+            value_builder,
             success,
             failure,
           );
@@ -2097,7 +2095,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     };
 
     let (nd, deallocator) = self
-      .new_node(height, &k, trailer, value_size, &f)
+      .new_node(height, &k, value_builder, trailer)
       .map_err(|e| {
         k.on_fail(&self.arena);
         e
@@ -2332,6 +2330,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
               trailer,
               value,
               ptr: old_node_ptr,
+              version: node.version(),
             }))
           }
         }
@@ -2346,15 +2345,14 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
     old_node_ptr: NodePtr<T>,
     key: &Key<'a, 'b>,
     trailer: T,
-    value_size: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_builder: ValueBuilder<impl Fn(&mut VacantBuffer<'a>) -> Result<(), E>>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => old_node_ptr
         .as_ref()
-        .allocate_and_set_value(&self.arena, trailer, value_size, f)
+        .allocate_and_set_value(&self.arena, trailer, value_builder)
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();
@@ -2370,6 +2368,7 @@ impl<C: Comparator, T: Trailer> SkipMap<C, T> {
               trailer,
               value,
               ptr: old_node_ptr,
+              version: node.version(),
             })))
           }
         }

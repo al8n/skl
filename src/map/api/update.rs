@@ -658,7 +658,7 @@ impl<C: Comparator> SkipMap<C> {
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_with_key_builder_and_trailer`](SkipMap::compare_remove_with_key_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_with_builder_and_trailer`](SkipMap::compare_remove_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -699,19 +699,19 @@ impl<C: Comparator> SkipMap<C> {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_key_builder::<core::convert::Infallible>(1.into(), kb, 100)
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, 100)
   /// .unwrap();
   /// ```
-  pub fn get_or_remove_with_key_builder<'a, 'b: 'a, E>(
+  pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_key_builder(version, self.random_height(), key_builder)
+    self.get_or_remove_at_height_with_builder(version, self.random_height(), key_builder)
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height_with_key_builder_and_trailer`](SkipMap::compare_remove_at_height_with_key_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height_with_builder_and_trailer`](SkipMap::compare_remove_at_height_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -753,16 +753,16 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_key_builder::<core::convert::Infallible>(1.into(), height, kb)
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb)
   /// .unwrap();
   /// ```
-  pub fn get_or_remove_at_height_with_key_builder<'a, 'b: 'a, E>(
+  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: u56,
     height: u5,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_key_builder_and_trailer(version, height, key_builder, ())
+    self.get_or_remove_at_height_with_builder_and_trailer(version, height, key_builder, ())
   }
 }
 
@@ -1699,16 +1699,16 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_key_builder_and_trailer::<core::convert::Infallible>(1.into(), kb, 100)
+  /// l.get_or_remove_with_builder_and_trailer::<core::convert::Infallible>(1.into(), kb, 100)
   /// .unwrap();
   /// ```
-  pub fn get_or_remove_with_key_builder_and_trailer<'a, 'b: 'a, E>(
+  pub fn get_or_remove_with_builder_and_trailer<'a, 'b: 'a, E>(
     &'a self,
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_key_builder_and_trailer(
+    self.get_or_remove_at_height_with_builder_and_trailer(
       version,
       self.random_height(),
       key_builder,
@@ -1759,10 +1759,10 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_key_builder_and_trailer::<core::convert::Infallible>(1.into(), height, kb, 100)
+  /// l.get_or_remove_at_height_with_builder_and_trailer::<core::convert::Infallible>(1.into(), height, kb, 100)
   /// .unwrap();
   /// ```
-  pub fn get_or_remove_at_height_with_key_builder_and_trailer<'a, 'b: 'a, E>(
+  pub fn get_or_remove_at_height_with_builder_and_trailer<'a, 'b: 'a, E>(
     &'a self,
     version: u56,
     height: u5,

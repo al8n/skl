@@ -1131,7 +1131,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// let unlinked_node = map.allocate_remove_entry_with_key_builder::<core::convert::Infallible>(u56::new(0), kb).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_with_builder::<core::convert::Infallible>(u56::new(0), kb).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   /// let entry = map.get(0, b"hello").unwrap();
@@ -1143,16 +1143,15 @@ impl<C: Comparator> SkipMap<C> {
   /// map.link(unlinked_node).unwrap();
   /// ```
   #[inline]
-  pub fn allocate_remove_entry_with_key_builder<'a, E>(
+  pub fn allocate_remove_entry_with_builder<'a, E>(
     &'a self,
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
-    self.allocate_remove_entry_with_at_height_with_key_builder_and_trailer(
+    self.allocate_remove_entry_at_height_with_builder(
       version,
       self.random_height(),
       key_builder,
-      (),
     )
   }
 
@@ -1176,7 +1175,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// let unlinked_node = map.allocate_remove_entry_with_at_height_with_key_builder_and_trailer::<core::convert::Infallible>(u56::new(0), map.random_height(), kb).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_at_height_with_builder::<core::convert::Infallible>(u56::new(0), map.random_height(), kb).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   /// let entry = map.get(u56::new(0), b"hello").unwrap();
@@ -1187,13 +1186,13 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// map.link(unlinked_node).unwrap();
   /// ```
-  pub fn allocate_remove_entry_with_at_height_with_key_builder<'a, E>(
+  pub fn allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
     version: u56,
     height: u5,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
-    self.allocate_remove_entry_with_at_height_with_key_builder_and_trailer(
+    self.allocate_remove_entry_at_height_with_builder_and_trailer(
       version,
       height,
       key_builder,
@@ -1215,12 +1214,12 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// See examples in [`get_or_allocate_remove_entry`](SkipMap::get_or_allocate_remove_entry) and [`allocate_remove_entry_with`](SkipMap::allocate_remove_entry_with).
   #[inline]
-  pub fn get_or_allocate_remove_entry_with_key_builder<'a, E>(
+  pub fn get_or_allocate_remove_entry_with_builder<'a, E>(
     &'a self,
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Either<E, Error>> {
-    self.get_or_allocate_remove_entry_at_height_with_key_builder(
+    self.get_or_allocate_remove_entry_at_height_with_builder(
       version,
       self.random_height(),
       key_builder,
@@ -1240,13 +1239,13 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipMap::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_with_at_height`](SkipMap::allocate_remove_entry_with_at_height).
-  pub fn get_or_allocate_remove_entry_at_height_with_key_builder<'a, E>(
+  pub fn get_or_allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
     version: u56,
     height: u5,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Either<E, Error>> {
-    self.get_or_allocate_remove_entry_at_height_with_key_builder_and_trailer(
+    self.get_or_allocate_remove_entry_at_height_with_builder_and_trailer(
       version,
       height,
       key_builder,
@@ -2475,7 +2474,7 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///   Ok(())
   /// });
   ///
-  /// let unlinked_node = map.allocate_remove_entry_with::<core::convert::Infallible>(u56::new(0), kb, 100).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_builder_and_trailer::<core::convert::Infallible>(u56::new(0), kb, 100).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   /// let entry = map.get(0, b"hello").unwrap();
@@ -2487,13 +2486,13 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// map.link(unlinked_node).unwrap();
   /// ```
   #[inline]
-  pub fn allocate_remove_entry_with_key_builder_and_trailer<'a, E>(
+  pub fn allocate_remove_entry_builder_and_trailer<'a, E>(
     &'a self,
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<UnlinkedNode<'a, T>, Either<E, Error>> {
-    self.allocate_remove_entry_with_at_height_with_key_builder_and_trailer(
+    self.allocate_remove_entry_at_height_with_builder_and_trailer(
       version,
       self.random_height(),
       key_builder,
@@ -2521,7 +2520,7 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///   Ok(())
   /// });
   ///
-  /// let unlinked_node = map.allocate_remove_entry_with_at_height_with_key_builder_and_trailer::<core::convert::Infallible>(u56::new(0), map.random_height(), kb, 100).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_at_height_with_builder_and_trailer::<core::convert::Infallible>(u56::new(0), map.random_height(), kb, 100).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   /// let entry = map.get(u56::new(0), b"hello").unwrap();
@@ -2532,7 +2531,7 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///
   /// map.link(unlinked_node).unwrap();
   /// ```
-  pub fn allocate_remove_entry_with_at_height_with_key_builder_and_trailer<'a, E>(
+  pub fn allocate_remove_entry_at_height_with_builder_and_trailer<'a, E>(
     &'a self,
     version: u56,
     height: u5,
@@ -2568,13 +2567,13 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///
   /// See examples in [`get_or_allocate_remove_entry`](SkipMap::get_or_allocate_remove_entry) and [`allocate_remove_entry_with`](SkipMap::allocate_remove_entry_with).
   #[inline]
-  pub fn get_or_allocate_remove_entry_with_key_builder_and_trailer<'a, E>(
+  pub fn get_or_allocate_remove_entry_with_builder_and_trailer<'a, E>(
     &'a self,
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Either<UnlinkedNode<'a, T>, Option<EntryRef<'a, T>>>, Either<E, Error>> {
-    self.get_or_allocate_remove_entry_at_height_with_key_builder_and_trailer(
+    self.get_or_allocate_remove_entry_at_height_with_builder_and_trailer(
       version,
       self.random_height(),
       key_builder,
@@ -2594,8 +2593,8 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///
   /// # Example
   ///
-  /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipMap::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_with_at_height`](SkipMap::allocate_remove_entry_with_at_height).
-  pub fn get_or_allocate_remove_entry_at_height_with_key_builder_and_trailer<'a, E>(
+  /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipMap::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_at_height_with_builder`](SkipMap::allocate_remove_entry_at_height_with_builder).
+  pub fn get_or_allocate_remove_entry_at_height_with_builder_and_trailer<'a, E>(
     &'a self,
     version: u56,
     height: u5,

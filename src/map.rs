@@ -342,7 +342,10 @@ struct Node<T> {
   key_offset: u32,
   // Immutable. No need to lock to access key.
   key_size_and_height: u32,
-  // state: AtomicU8,
+  // The state of the node, 0 means initialized but not committed, 1 means committed.
+  state: AtomicU8,
+  // `u56` (7 bytes) for storing version (MVCC purpose)
+  version: [u8; 7],
   trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
@@ -383,6 +386,8 @@ impl<T> Node<T> {
       value: AtomicValuePointer::new(value_offset, 0),
       key_offset: 0,
       key_size_and_height: encode_key_size_and_height(0, max_height),
+      state: AtomicU8::new(NodeState::Committed as u8),
+      version: u56::new(0).to_le_bytes(),
       trailer: PhantomData,
     }
   }
@@ -643,7 +648,7 @@ impl<'a, T: Trailer> UnlinkedNode<'a, T> {
 /// is up to the user to process these shadow entries and tombstones
 /// appropriately during retrieval.
 #[derive(Debug)]
-pub struct SkipMap<T = u64, C = Ascend> {
+pub struct SkipMap<C = Ascend, T = ()> {
   arena: Arena,
   meta: NonNull<Meta>,
   head: NodePtr<T>,
@@ -659,10 +664,10 @@ pub struct SkipMap<T = u64, C = Ascend> {
 }
 
 // Safety: SkipMap is Sync and Send
-unsafe impl<T: Send, C: Comparator + Send> Send for SkipMap<T, C> {}
-unsafe impl<T: Sync, C: Comparator + Sync> Sync for SkipMap<T, C> {}
+unsafe impl<T: Send, C: Comparator + Send> Send for SkipMap<C, T> {}
+unsafe impl<T: Sync, C: Comparator + Sync> Sync for SkipMap<C, T> {}
 
-impl<T, C: Clone> Clone for SkipMap<T, C> {
+impl<C: Clone, T> Clone for SkipMap<C, T> {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
@@ -678,7 +683,7 @@ impl<T, C: Clone> Clone for SkipMap<T, C> {
   }
 }
 
-impl<T, C> Drop for SkipMap<T, C> {
+impl<C, T> Drop for SkipMap<C, T> {
   fn drop(&mut self) {
     if self.arena.refs() == 1 && !self.opts.unify() {
       unsafe {
@@ -688,7 +693,7 @@ impl<T, C> Drop for SkipMap<T, C> {
   }
 }
 
-impl<T, C> SkipMap<T, C> {
+impl<C, T> SkipMap<C, T> {
   fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
     let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
 
@@ -1226,7 +1231,7 @@ impl<T, C> SkipMap<T, C> {
   }
 }
 
-impl<T: Trailer, C> SkipMap<T, C> {
+impl<C, T: Trailer> SkipMap<C, T> {
   fn new_node<'a, 'b: 'a, E>(
     &'a self,
     height: u32,
@@ -1289,7 +1294,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   }
 }
 
-impl<T: Trailer, C: Comparator> SkipMap<T, C> {
+impl<C: Comparator, T: Trailer> SkipMap<C, T> {
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.

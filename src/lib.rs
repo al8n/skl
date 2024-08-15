@@ -36,7 +36,7 @@ pub use types::*;
 pub use either;
 pub use map::{AllVersionsIter, SkipMap, UnlinkedNode};
 pub use rarena_allocator::{Arena, ArenaPosition, Error as ArenaError};
-pub use ux2::{u27, u5};
+pub use ux2::{u27, u5, u56};
 
 const MAX_HEIGHT: usize = 32;
 

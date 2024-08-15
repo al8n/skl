@@ -2,40 +2,40 @@ use super::*;
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct Iter<'a, T, C, Q: ?Sized = &'static [u8], R = core::ops::RangeFull>(
-  AllVersionsIter<'a, T, C, Q, R>,
+pub struct Iter<'a, C, T, Q: ?Sized = &'static [u8], R = core::ops::RangeFull>(
+  AllVersionsIter<'a, C, T, Q, R>,
 );
 
-impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for Iter<'a, T, C, Q, R> {
+impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for Iter<'a, C, T, Q, R> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, R: Copy, Q: Copy, T: Copy, C> Copy for Iter<'a, T, C, Q, R> {}
+impl<'a, R: Copy, Q: Copy, T: Copy, C> Copy for Iter<'a, C, T, Q, R> {}
 
-impl<'a, T, C> Iter<'a, T, C>
+impl<'a, C, T> Iter<'a, C, T>
 where
   C: Comparator,
 {
   #[inline]
-  pub(crate) const fn new(version: u64, map: &'a SkipMap<T, C>) -> Self {
+  pub(crate) const fn new(version: u64, map: &'a SkipMap<C, T>) -> Self {
     Self(AllVersionsIter::new(version, map, false))
   }
 }
 
-impl<'a, Q, R, T, C> Iter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> Iter<'a, C, T, Q, R>
 where
   &'a [u8]: PartialOrd<Q>,
   Q: ?Sized + PartialOrd<&'a [u8]>,
 {
   #[inline]
-  pub(crate) fn range(version: u64, map: &'a SkipMap<T, C>, r: R) -> Self {
+  pub(crate) fn range(version: u64, map: &'a SkipMap<C, T>, r: R) -> Self {
     Self(AllVersionsIter::range(version, map, r, false))
   }
 }
 
-impl<'a, Q: ?Sized, R, T, C> Iter<'a, T, C, Q, R> {
+impl<'a, Q: ?Sized, R, C, T> Iter<'a, C, T, Q, R> {
   /// Returns the bounds of the iterator.
   #[inline]
   pub const fn bounds(&self) -> &R {
@@ -43,7 +43,7 @@ impl<'a, Q: ?Sized, R, T, C> Iter<'a, T, C, Q, R> {
   }
 }
 
-impl<'a, Q: ?Sized, R, T: Clone, C> Iter<'a, T, C, Q, R> {
+impl<'a, Q: ?Sized, R, T: Clone, C> Iter<'a, C, T, Q, R> {
   /// Returns the entry at the current position of the iterator.
   #[inline]
   pub fn entry(&self) -> Option<EntryRef<'a, T>> {
@@ -51,7 +51,7 @@ impl<'a, Q: ?Sized, R, T: Clone, C> Iter<'a, T, C, Q, R> {
   }
 }
 
-impl<'a, Q, R, T, C> Iter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> Iter<'a, C, T, Q, R>
 where
   C: Comparator,
   T: Trailer,
@@ -71,7 +71,7 @@ where
   }
 }
 
-impl<'a, Q, R, T, C> Iterator for Iter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> Iterator for Iter<'a, C, T, Q, R>
 where
   C: Comparator,
   T: Trailer,
@@ -94,7 +94,7 @@ where
   }
 }
 
-impl<'a, Q, R, T, C> DoubleEndedIterator for Iter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> DoubleEndedIterator for Iter<'a, C, T, Q, R>
 where
   C: Comparator,
   T: Trailer,

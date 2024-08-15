@@ -3,7 +3,7 @@ use ux2::u27;
 
 use super::*;
 
-impl<T> SkipMap<T> {
+impl<T> SkipMap<Ascend, T> {
   /// Create a new skipmap with default options.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -105,7 +105,7 @@ impl<T> SkipMap<T> {
   }
 }
 
-impl<T, C> SkipMap<T, C> {
+impl<C, T> SkipMap<C, T> {
   /// Returns the underlying ARENA allocator used by the skipmap.
   ///
   /// This is a low level API, you should not use this method unless you know what you are doing.
@@ -584,7 +584,7 @@ impl<T, C> SkipMap<T, C> {
   }
 }
 
-impl<T: Trailer, C: Comparator> SkipMap<T, C> {
+impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
   /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
@@ -3180,19 +3180,19 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub const fn iter(&self, version: u64) -> iterator::Iter<T, C> {
+  pub const fn iter(&self, version: u64) -> iterator::Iter<C, T> {
     iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub const fn iter_all_versions(&self, version: u64) -> iterator::AllVersionsIter<T, C> {
+  pub const fn iter_all_versions(&self, version: u64) -> iterator::AllVersionsIter<C, T> {
     iterator::AllVersionsIter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::Iter<'a, T, C, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: u64, range: R) -> iterator::Iter<'a, C, T, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
@@ -3207,7 +3207,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     &'a self,
     version: u64,
     range: R,
-  ) -> iterator::AllVersionsIter<'a, T, C, Q, R>
+  ) -> iterator::AllVersionsIter<'a, C, T, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,

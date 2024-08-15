@@ -2,8 +2,8 @@ use super::*;
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct AllVersionsIter<'a, T, C, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
-  pub(super) map: &'a SkipMap<T, C>,
+pub struct AllVersionsIter<'a, C, T, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
+  pub(super) map: &'a SkipMap<C, T>,
   pub(super) nd: NodePtr<T>,
   pub(super) version: u64,
   pub(super) range: R,
@@ -12,7 +12,7 @@ pub struct AllVersionsIter<'a, T, C, Q: ?Sized = &'static [u8], R = core::ops::R
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for AllVersionsIter<'a, T, C, Q, R> {
+impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for AllVersionsIter<'a, C, T, Q, R> {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
@@ -26,14 +26,14 @@ impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for AllVersionsIter<'a, T, C, Q,
   }
 }
 
-impl<'a, R: Copy, Q: Copy, T: Copy, C> Copy for AllVersionsIter<'a, T, C, Q, R> {}
+impl<'a, R: Copy, Q: Copy, T: Copy, C> Copy for AllVersionsIter<'a, C, T, Q, R> {}
 
-impl<'a, T, C> AllVersionsIter<'a, T, C>
+impl<'a, C, T> AllVersionsIter<'a, C, T>
 where
   C: Comparator,
 {
   #[inline]
-  pub(crate) const fn new(version: u64, map: &'a SkipMap<T, C>, all_versions: bool) -> Self {
+  pub(crate) const fn new(version: u64, map: &'a SkipMap<C, T>, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -46,13 +46,13 @@ where
   }
 }
 
-impl<'a, Q, R, T, C> AllVersionsIter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> AllVersionsIter<'a, C, T, Q, R>
 where
   &'a [u8]: PartialOrd<Q>,
   Q: ?Sized + PartialOrd<&'a [u8]>,
 {
   #[inline]
-  pub(crate) fn range(version: u64, map: &'a SkipMap<T, C>, r: R, all_versions: bool) -> Self {
+  pub(crate) fn range(version: u64, map: &'a SkipMap<C, T>, r: R, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -65,7 +65,7 @@ where
   }
 }
 
-impl<'a, Q: ?Sized, R, T, C> AllVersionsIter<'a, T, C, Q, R> {
+impl<'a, Q: ?Sized, R, C, T> AllVersionsIter<'a, C, T, Q, R> {
   /// Returns the bounds of the iterator.
   #[inline]
   pub const fn bounds(&self) -> &R {
@@ -79,7 +79,7 @@ impl<'a, Q: ?Sized, R, T, C> AllVersionsIter<'a, T, C, Q, R> {
   }
 }
 
-impl<'a, Q, R, T, C> AllVersionsIter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> AllVersionsIter<'a, C, T, Q, R>
 where
   C: Comparator,
   T: Trailer,
@@ -488,7 +488,7 @@ where
   }
 }
 
-impl<'a, Q, R, T, C> Iterator for AllVersionsIter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> Iterator for AllVersionsIter<'a, C, T, Q, R>
 where
   C: Comparator,
   T: Trailer,
@@ -538,7 +538,7 @@ where
   }
 }
 
-impl<'a, Q, R, T, C> DoubleEndedIterator for AllVersionsIter<'a, T, C, Q, R>
+impl<'a, Q, R, C, T> DoubleEndedIterator for AllVersionsIter<'a, C, T, Q, R>
 where
   C: Comparator,
   T: Trailer,

@@ -19,7 +19,7 @@ impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for AllVersionsIter<'a, C, T, Q,
       nd: self.nd,
       version: self.version,
       range: self.range.clone(),
-      last: self.last.clone(),
+      last: self.last,
       all_versions: self.all_versions,
       _phantom: core::marker::PhantomData,
     }
@@ -134,7 +134,7 @@ where
         }
 
         let node = self.nd.as_ref();
-        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
         if node.version() > self.version {
           continue;
         }
@@ -158,14 +158,7 @@ where
           self.range.end_bound().map(|b| b.borrow()),
           nk,
         ) {
-          let ent = VersionedEntryRef {
-            arena: &self.map.arena,
-            key: nk,
-            trailer,
-            value,
-            ptr: self.nd,
-            version: node.version(),
-          };
+          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent);
           return Some(ent);
         }
@@ -185,7 +178,7 @@ where
         }
 
         let node = self.nd.as_ref();
-        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
         if node.version() > self.version {
           continue;
         }
@@ -209,14 +202,7 @@ where
           self.range.end_bound().map(Borrow::borrow),
           nk,
         ) {
-          let ent = VersionedEntryRef {
-            arena: &self.map.arena,
-            key: nk,
-            trailer,
-            value,
-            ptr: self.nd,
-            version: node.version(),
-          };
+          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent);
           return Some(ent);
         }
@@ -411,7 +397,7 @@ where
       unsafe {
         let node = self.nd.as_ref();
         let nk = node.get_key(&self.map.arena);
-        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {
           self.nd = self.map.get_next(self.nd, 0);
@@ -428,14 +414,7 @@ where
           self.range.end_bound().map(Borrow::borrow),
           nk,
         ) {
-          let ent = VersionedEntryRef {
-            arena: &self.map.arena,
-            key: nk,
-            trailer,
-            value,
-            ptr: self.nd,
-            version: node.version(),
-          };
+          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent);
           return Some(ent);
         }
@@ -457,7 +436,7 @@ where
         }
 
         let node = self.nd.as_ref();
-        let (trailer, value) = node.get_value_and_trailer(&self.map.arena);
+        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {
           self.nd = self.map.get_prev(self.nd, 0);
@@ -475,14 +454,7 @@ where
           self.range.end_bound().map(Borrow::borrow),
           nk,
         ) {
-          let ent = VersionedEntryRef {
-            arena: &self.map.arena,
-            key: nk,
-            trailer,
-            value,
-            ptr: self.nd,
-            version: node.version(),
-          };
+          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           return Some(ent);
         }
 

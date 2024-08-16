@@ -47,7 +47,7 @@ impl<'a, Q: ?Sized, R, T: Clone, C> Iter<'a, C, T, Q, R> {
   /// Returns the entry at the current position of the iterator.
   #[inline]
   pub fn entry(&self) -> Option<EntryRef<'a, T>> {
-    self.0.last.clone().map(EntryRef)
+    self.0.last.map(EntryRef)
   }
 }
 

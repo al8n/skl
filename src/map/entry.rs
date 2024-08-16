@@ -10,9 +10,9 @@ pub(super) struct ValuePartPointer {
 
 impl ValuePartPointer {
   #[inline]
-  const fn new(offset: u32, len: u32) -> Self {
+  pub(super) const fn new(offset: u32, len: u32) -> Self {
     Self { offset, len }
-  } 
+  }
 }
 
 /// A versioned entry reference of the skipmap.
@@ -47,7 +47,11 @@ impl<'a, T> VersionedEntryRef<'a, T> {
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
       let node = self.ptr.as_ref();
-      let value = node.get_value_by_offset(self.arena, self.value_part_pointer.offset, self.value_part_pointer.len);
+      let value = node.get_value_by_offset(
+        self.arena,
+        self.value_part_pointer.offset,
+        self.value_part_pointer.len,
+      );
       value
     }
   }
@@ -93,12 +97,32 @@ impl<'a, T> From<VersionedEntryRef<'a, T>> for VersionedEntry<T> {
 }
 
 impl<'a, T> VersionedEntryRef<'a, T> {
-  pub(super) fn from_node(node_ptr: NodePtr<T>, arena: &'a Arena, value_offset: u32, value_len: u32) -> VersionedEntryRef<'a, T> {
+  #[inline]
+  pub(super) fn from_node(node_ptr: NodePtr<T>, arena: &'a Arena) -> VersionedEntryRef<'a, T> {
+    unsafe {
+      let node = node_ptr.as_ref();
+      let (offset, len) = node.trailer_offset_and_value_size();
+      VersionedEntryRef {
+        key: node.get_key(arena),
+        value_part_pointer: ValuePartPointer::new(offset, len),
+        arena,
+        ptr: node_ptr,
+        version: node.version(),
+      }
+    }
+  }
+
+  #[inline]
+  pub(super) fn from_node_with_pointer(
+    node_ptr: NodePtr<T>,
+    arena: &'a Arena,
+    pointer: ValuePartPointer,
+  ) -> VersionedEntryRef<'a, T> {
     unsafe {
       let node = node_ptr.as_ref();
       VersionedEntryRef {
         key: node.get_key(arena),
-        value_part_pointer: ValuePartPointer::new(value_offset, value_len),
+        value_part_pointer: pointer,
         arena,
         ptr: node_ptr,
         version: node.version(),
@@ -148,7 +172,11 @@ impl<T> VersionedEntry<T> {
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
       let node = self.ptr.as_ref();
-      let value = node.get_value_by_offset(&self.arena, self.value_part_pointer.offset, self.value_part_pointer.len);
+      let value = node.get_value_by_offset(
+        &self.arena,
+        self.value_part_pointer.offset,
+        self.value_part_pointer.len,
+      );
       value
     }
   }
@@ -165,8 +193,7 @@ impl<T> VersionedEntry<T> {
 
   /// Returns the borrowed entry reference
   #[inline]
-  pub fn borrow(&self) -> VersionedEntryRef<'_, T>
-  {
+  pub fn borrow(&self) -> VersionedEntryRef<'_, T> {
     VersionedEntryRef {
       arena: &self.arena,
       key: self.key(),
@@ -248,15 +275,15 @@ impl<T> Entry<T> {
 #[derive(Debug)]
 pub struct EntryRef<'a, T>(pub(crate) VersionedEntryRef<'a, T>);
 
-impl<'a, T: Clone> Clone for EntryRef<'a, T> {
+impl<'a, T> Clone for EntryRef<'a, T> {
   fn clone(&self) -> Self {
-    Self(self.0.clone())
+    *self
   }
 }
 
-impl<'a, T: Copy> Copy for EntryRef<'a, T> {}
+impl<'a, T> Copy for EntryRef<'a, T> {}
 
-impl<'a, T: Clone> From<EntryRef<'a, T>> for Entry<T> {
+impl<'a, T> From<EntryRef<'a, T>> for Entry<T> {
   fn from(entry: EntryRef<'a, T>) -> Self {
     entry.to_owned()
   }
@@ -286,10 +313,7 @@ impl<'a, T> EntryRef<'a, T> {
 
   /// Returns the owned entry, feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
-  pub fn to_owned(&self) -> Entry<T>
-  where
-    T: Clone,
-  {
+  pub fn to_owned(&self) -> Entry<T> {
     Entry(self.0.to_owned())
   }
 

@@ -717,17 +717,14 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
       let n = n?;
       let node = n.as_ref();
       let node_key = node.get_key(&self.arena);
-      let (trailer, value) = node.get_value_and_trailer(&self.arena);
+      let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
-        return value.map(|val| {
-          EntryRef(VersionedEntryRef {
-            version: node.version(),
-            arena: &self.arena,
-            key: node_key,
-            trailer,
-            value: Some(val),
-            ptr: n,
-          })
+        return value.map(|_| {
+          EntryRef(VersionedEntryRef::from_node_with_pointer(
+            n,
+            &self.arena,
+            pointer,
+          ))
         });
       }
 
@@ -739,15 +736,12 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
         return None;
       }
 
-      value.map(|val| {
-        EntryRef(VersionedEntryRef {
-          version: node.version(),
-          arena: &self.arena,
-          key: node_key,
-          trailer,
-          value: Some(val),
-          ptr: n,
-        })
+      value.map(|_| {
+        EntryRef(VersionedEntryRef::from_node_with_pointer(
+          n,
+          &self.arena,
+          pointer,
+        ))
       })
     }
   }
@@ -784,16 +778,13 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
       let n = n?;
       let node = n.as_ref();
       let node_key = node.get_key(&self.arena);
-      let (trailer, value) = node.get_value_and_trailer(&self.arena);
+      let (_, _, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
-        return Some(VersionedEntryRef {
-          arena: &self.arena,
-          key: node_key,
-          version: node.version(),
-          trailer,
-          value,
-          ptr: n,
-        });
+        return Some(VersionedEntryRef::from_node_with_pointer(
+          n,
+          &self.arena,
+          pointer,
+        ));
       }
 
       if !matches!(self.cmp.compare(key, node_key), cmp::Ordering::Equal) {
@@ -804,14 +795,11 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
         return None;
       }
 
-      Some(VersionedEntryRef {
-        arena: &self.arena,
-        key: node_key,
-        version: node.version(),
-        trailer,
-        value,
-        ptr: n,
-      })
+      Some(VersionedEntryRef::from_node_with_pointer(
+        n,
+        &self.arena,
+        pointer,
+      ))
     }
   }
 

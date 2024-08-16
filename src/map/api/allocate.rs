@@ -1148,11 +1148,7 @@ impl<C: Comparator> SkipMap<C> {
     version: u56,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
-    self.allocate_remove_entry_at_height_with_builder(
-      version,
-      self.random_height(),
-      key_builder,
-    )
+    self.allocate_remove_entry_at_height_with_builder(version, self.random_height(), key_builder)
   }
 
   /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1192,12 +1188,7 @@ impl<C: Comparator> SkipMap<C> {
     height: u5,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
-    self.allocate_remove_entry_at_height_with_builder_and_trailer(
-      version,
-      height,
-      key_builder,
-      (),
-    )
+    self.allocate_remove_entry_at_height_with_builder_and_trailer(version, height, key_builder, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and

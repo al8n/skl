@@ -3,9 +3,9 @@ use super::*;
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
 pub struct AllVersionsIter<'a, C, T, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
-  pub(super) map: &'a SkipMap<C, T>,
+  pub(super) map: &'a SkipList<C, T>,
   pub(super) nd: NodePtr<T>,
-  pub(super) version: u56,
+  pub(super) version: Version,
   pub(super) range: R,
   pub(super) all_versions: bool,
   pub(super) last: Option<VersionedEntryRef<'a, T>>,
@@ -33,7 +33,7 @@ where
   C: Comparator,
 {
   #[inline]
-  pub(crate) const fn new(version: u56, map: &'a SkipMap<C, T>, all_versions: bool) -> Self {
+  pub(crate) const fn new(version: Version, map: &'a SkipList<C, T>, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -52,7 +52,7 @@ where
   Q: ?Sized + PartialOrd<&'a [u8]>,
 {
   #[inline]
-  pub(crate) fn range(version: u56, map: &'a SkipMap<C, T>, r: R, all_versions: bool) -> Self {
+  pub(crate) fn range(version: Version, map: &'a SkipList<C, T>, r: R, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,

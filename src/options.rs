@@ -4,7 +4,7 @@ pub use rarena_allocator::{MmapOptions, OpenOptions};
 
 pub use rarena_allocator::Freelist;
 
-use ux2::{u27, u5};
+use crate::{Height, KeySize};
 
 /// Configuration for the compression policy of the key in [`SkipMap`](super::SkipMap).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -21,8 +21,8 @@ pub enum CompressionPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Options {
   max_value_size: u32,
-  max_key_size: u27,
-  max_height: u5,
+  max_key_size: KeySize,
+  max_height: Height,
   magic_version: u16,
   capacity: u32,
   unify: bool,
@@ -43,8 +43,8 @@ impl Options {
   pub const fn new() -> Self {
     Self {
       max_value_size: u32::MAX,
-      max_key_size: u27::MAX,
-      max_height: u5::new(20),
+      max_key_size: KeySize::MAX,
+      max_height: Height::new(),
       capacity: 1024,
       unify: false,
       magic_version: 0,
@@ -152,17 +152,17 @@ impl Options {
   ///
   /// The maximum size of the key is `u27::MAX`.
   ///
-  /// Default is `u27::MAX`.
+  /// Default is `65535`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u27};
+  /// use skl::{Options, KeySize};
   ///
-  /// let options = Options::new().with_max_key_size(u27::new(1024));
+  /// let options = Options::new().with_max_key_size(KeySize::new());
   /// ```
   #[inline]
-  pub const fn with_max_key_size(mut self, size: u27) -> Self {
+  pub const fn with_max_key_size(mut self, size: KeySize) -> Self {
     self.max_key_size = size;
     self
   }
@@ -174,12 +174,12 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u5};
+  /// use skl::{Options, Height};
   ///
-  /// let options = Options::new().with_max_height(u5::new(20));
+  /// let options = Options::new().with_max_height(Height::new());
   /// ```
   #[inline]
-  pub const fn with_max_height(mut self, height: u5) -> Self {
+  pub const fn with_max_height(mut self, height: Height) -> Self {
     self.max_height = height;
     self
   }
@@ -203,7 +203,7 @@ impl Options {
 
   /// Returns the maximum size of the value.
   ///
-  /// Default is `u32::MAX`.
+  /// Default is `u32::MAX`. The maximum size of the value is `u32::MAX - header`.
   ///
   /// # Example
   ///
@@ -221,37 +221,37 @@ impl Options {
   ///
   /// The maximum size of the key is `u27::MAX`.
   ///
-  /// Default is `u27::MAX`.
+  /// Default is `65535`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u27};
+  /// use skl::{Options, KeySize};
   ///
-  /// let options = Options::new().with_max_key_size(u27::new(1024));
+  /// let options = Options::new().with_max_key_size(KeySize::new());
   ///
-  /// assert_eq!(options.max_key_size(), u27::new(1024));
+  /// assert_eq!(options.max_key_size(), u16::MAX);
   /// ```
   #[inline]
-  pub const fn max_key_size(&self) -> u27 {
+  pub const fn max_key_size(&self) -> KeySize {
     self.max_key_size
   }
 
   /// Returns the maximum height.
   ///
-  /// Default is `20`. The maximum height is `u5::MAX`. The minimum height is `1`.
+  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
   ///
   /// # Example
   ///
   /// ```
   /// use skl::{Options, u5};
   ///
-  /// let options = Options::new().with_max_height(u5::new(5));
+  /// let options = Options::new().with_max_height(5);
   ///
-  /// assert_eq!(options.max_height(), u5::new(5));
+  /// assert_eq!(options.max_height(), Height::from(5));
   /// ```
   #[inline]
-  pub const fn max_height(&self) -> u5 {
+  pub const fn max_height(&self) -> Height {
     self.max_height
   }
 

@@ -1,5 +1,4 @@
 use rarena_allocator::{ArenaOptions, ArenaPosition};
-use ux2::u27;
 
 use super::*;
 
@@ -10,7 +9,7 @@ macro_rules! builder {
   ($($name:ident($size:ident)),+ $(,)?) => {
     $(
       paste::paste! {
-        #[doc = "A " [< $name: snake>] " builder for the [`SkipMap`], which requires the " [< $name: snake>] " size for accurate allocation and a closure to build the " [< $name: snake>]]
+        #[doc = "A " [< $name: snake>] " builder for the [`SkipList`], which requires the " [< $name: snake>] " size for accurate allocation and a closure to build the " [< $name: snake>]]
         #[derive(Copy, Clone, Debug)]
         pub struct [< $name Builder >] <F> {
           size: $size,
@@ -47,12 +46,12 @@ macro_rules! builder {
   };
 }
 
-builder!(Value(u32), Key(u27));
+builder!(Value(u32), Key(KeySize));
 
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer) -> Result<(), E>>>;
 
-impl<T> SkipMap<Ascend, T> {
+impl<T> SkipList<Ascend, T> {
   /// Create a new skipmap with default options.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -60,7 +59,7 @@ impl<T> SkipMap<Ascend, T> {
   ///
   ///
   ///
-  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
+  /// **What the difference between this method and [`SkipList::mmap_anon`]?**
   ///
   /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
   ///    Even if we are working with raw pointers with `Box::into_raw`,
@@ -68,16 +67,16 @@ impl<T> SkipMap<Ascend, T> {
   ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///    especially if you're frequently accessing or modifying it.
   ///
-  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
+  /// 2. Where as [`SkipList::mmap_anon`] will use mmap anonymous to require memory from the OS.
   ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
-  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
+  /// [`SkipList::mmap_anon`]: #method.mmap_anon
   pub fn new() -> Result<Self, Error> {
     Self::with_options(Options::new())
   }
 
-  /// Like [`SkipMap::new`], but with [`Options`].
+  /// Like [`SkipList::new`], but with [`Options`].
   #[inline]
   pub fn with_options(opts: Options) -> Result<Self, Error> {
     Self::with_options_and_comparator(opts, Ascend)
@@ -99,7 +98,7 @@ impl<T> SkipMap<Ascend, T> {
     Self::map_mut_with_options(path, Options::new(), open_options, mmap_options)
   }
 
-  /// Like [`SkipMap::map_mut`], but with [`Options`].
+  /// Like [`SkipList::map_mut`], but with [`Options`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_mut_with_options<P: AsRef<std::path::Path>>(
@@ -127,26 +126,26 @@ impl<T> SkipMap<Ascend, T> {
 
   /// Create a new memory map backed skipmap with default options.
   ///
-  /// **What the difference between this method and [`SkipMap::new`]?**
+  /// **What the difference between this method and [`SkipList::new`]?**
   ///
   /// 1. This method will use mmap anonymous to require memory from the OS directly.
   ///    If you require very large contiguous memory regions, this method might be more suitable because
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
-  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  /// 2. Where as [`SkipList::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
   ///    Even if we are working with raw pointers with `Box::into_raw`,
   ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
   ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///    especially if you're frequently accessing or modifying it.
   ///
-  /// [`SkipMap::new`]: #method.new
+  /// [`SkipList::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
     Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
   }
 
-  /// Like [`SkipMap::map_anon`], but with [`Options`].
+  /// Like [`SkipList::map_anon`], but with [`Options`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub fn map_anon_with_options(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
@@ -154,7 +153,7 @@ impl<T> SkipMap<Ascend, T> {
   }
 }
 
-impl<C, T> SkipMap<C, T> {
+impl<C, T> SkipList<C, T> {
   /// Returns the underlying ARENA allocator used by the skipmap.
   ///
   /// This is a low level API, you should not use this method unless you know what you are doing.
@@ -166,7 +165,7 @@ impl<C, T> SkipMap<C, T> {
   /// # Example
   ///
   /// ```ignore
-  /// use skl::{SkipMap, OpenOptions, MmapOptinos};
+  /// use skl::{SkipList, OpenOptions, MmapOptinos};
   ///
   /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
   ///
@@ -175,7 +174,7 @@ impl<C, T> SkipMap<C, T> {
   ///   version: u32,
   /// }
   ///
-  /// let map = SkipMap::map_mut(
+  /// let map = SkipList::map_mut(
   ///   "/path/to/file",
   ///   OpenOptions::create_new(Some(1000)).read(true).write(true),
   ///   MmapOptions::default(),
@@ -192,9 +191,9 @@ impl<C, T> SkipMap<C, T> {
     &self.arena
   }
 
-  /// Returns the offset of the data section in the `SkipMap`.
+  /// Returns the offset of the data section in the `SkipList`.
   ///
-  /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,
+  /// By default, `SkipList` will allocate meta, head node, and tail node in the ARENA,
   /// and the data section will be allocated after the tail node.
   ///
   /// This method will return the offset of the data section in the ARENA.
@@ -203,15 +202,15 @@ impl<C, T> SkipMap<C, T> {
     self.data_offset as usize
   }
 
-  /// Returns the version number of the [`SkipMap`].
+  /// Returns the version number of the [`SkipList`].
   #[inline]
   pub const fn version(&self) -> u16 {
     self.arena.magic_version()
   }
 
-  /// Returns the magic version number of the [`SkipMap`].
+  /// Returns the magic version number of the [`SkipList`].
   ///
-  /// This value can be used to check the compatibility for application using [`SkipMap`].
+  /// This value can be used to check the compatibility for application using [`SkipList`].
   #[inline]
   pub const fn magic_version(&self) -> u16 {
     self.meta().magic_version()
@@ -254,7 +253,7 @@ impl<C, T> SkipMap<C, T> {
     self.len() == 0
   }
 
-  /// Gets the number of pointers to this `SkipMap` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
+  /// Gets the number of pointers to this `SkipList` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
   #[inline]
   pub fn refs(&self) -> usize {
     self.arena.refs()
@@ -291,40 +290,40 @@ impl<C, T> SkipMap<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::SkipList;
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipList::<u64>::new().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
+  /// let needed = SkipList::<u64>::estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
   /// ```
   #[inline]
-  pub fn random_height(&self) -> u5 {
-    u5::try_from(random_height(u8::from(self.opts.max_height())) as u8).unwrap()
+  pub fn random_height(&self) -> Height {
+    random_height(self.opts.max_height())
   }
 
   /// Returns the estimated size of a node with the given height and key/value sizes.
   ///
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
-  pub fn estimated_node_size(height: u5, key_size: u32, value_size: u32) -> usize {
+  pub fn estimated_node_size(height: Height, key_size: impl Into<usize>, value_size: u32) -> usize {
     let height: usize = height.into();
     7 // max padding
       + mem::size_of::<Node<T>>()
       + mem::size_of::<Link>() * height
-      + key_size as usize
+      + key_size.into()
       + mem::align_of::<T>() - 1 // max trailer padding
       + mem::size_of::<T>()
       + value_size as usize
   }
 
-  /// Like [`SkipMap::new`], but with a custom [`Comparator`].
+  /// Like [`SkipList::new`], but with a custom [`Comparator`].
   #[inline]
   pub fn with_comparator(cmp: C) -> Result<Self, Error> {
     Self::with_options_and_comparator(Options::new(), cmp)
   }
 
-  /// Like [`SkipMap::new`], but with [`Options`] and a custom [`Comparator`].
+  /// Like [`SkipList::new`], but with [`Options`] and a custom [`Comparator`].
   #[inline]
   pub fn with_options_and_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
     let arena_opts = ArenaOptions::new()
@@ -337,7 +336,7 @@ impl<C, T> SkipMap<C, T> {
     Self::new_in(arena, cmp, opts)
   }
 
-  /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
+  /// Like [`SkipList::map_mut`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -350,7 +349,7 @@ impl<C, T> SkipMap<C, T> {
     Self::map_mut_with_options_and_comparator(path, Options::new(), open_options, mmap_options, cmp)
   }
 
-  /// Like [`SkipMap::map_mut`], but with [`Options`] and a custom [`Comparator`].
+  /// Like [`SkipList::map_mut`], but with [`Options`] and a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -380,7 +379,7 @@ impl<C, T> SkipMap<C, T> {
       })
   }
 
-  /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  /// Like [`SkipList::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -415,7 +414,7 @@ impl<C, T> SkipMap<C, T> {
       .map_err(Either::Right)
   }
 
-  /// Like [`SkipMap::map`], but with a custom [`Comparator`].
+  /// Like [`SkipList::map`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -446,7 +445,7 @@ impl<C, T> SkipMap<C, T> {
     })
   }
 
-  /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  /// Like [`SkipList::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -482,7 +481,7 @@ impl<C, T> SkipMap<C, T> {
     .map_err(Either::Right)
   }
 
-  /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
+  /// Like [`SkipList::map_anon`], but with a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -490,7 +489,7 @@ impl<C, T> SkipMap<C, T> {
     Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, cmp)
   }
 
-  /// Like [`SkipMap::map_anon`], but with [`Options`] and a custom [`Comparator`].
+  /// Like [`SkipList::map_anon`], but with [`Options`] and a custom [`Comparator`].
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -519,7 +518,7 @@ impl<C, T> SkipMap<C, T> {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = SkipMap::new(1000).unwrap();
+  /// let map = SkipList::new(1000).unwrap();
   ///
   /// map.insert(1, b"hello", b"world").unwrap();
   ///
@@ -579,9 +578,9 @@ impl<C, T> SkipMap<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipMap, ArenaPosition};
+  /// use skl::{SkipList, ArenaPosition};
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipList::new().unwrap();
   ///
   /// let allocated = map.allocated();
   ///
@@ -633,18 +632,18 @@ impl<C, T> SkipMap<C, T> {
   }
 }
 
-impl<T: Trailer, C: Comparator> SkipMap<C, T> {
+impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](SkipMap::contains_key_versioned).
+  /// you can use [`contains_key_versioned`](SkipList::contains_key_versioned).
   ///
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::SkipList;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipList::new().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -654,7 +653,7 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> bool {
+  pub fn contains_key<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
     self.get(version, key).is_some()
   }
 
@@ -663,9 +662,9 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::SkipList;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipList::new().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -675,31 +674,31 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> bool {
+  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: u56) -> Option<EntryRef<'_, T>> {
+  pub fn first(&self, version: impl Into<Version>) -> Option<EntryRef<'_, T>> {
     self.iter(version).seek_lower_bound(Bound::Unbounded)
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: u56) -> Option<EntryRef<'_, T>> {
+  pub fn last(&self, version: impl Into<Version>) -> Option<EntryRef<'_, T>> {
     self.iter(version).seek_upper_bound(Bound::Unbounded)
   }
 
   /// Returns the value associated with the given key, if it exists.
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
-  /// you can use [`get_versioned`](SkipMap::get_versioned).
+  /// you can use [`get_versioned`](SkipList::get_versioned).
   ///
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::SkipList;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipList::new().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -710,7 +709,8 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   ///
   /// assert!(map.get(1, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(&'a self, version: u56, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+    let version = version.into();
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -753,9 +753,9 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipMap;
+  /// use skl::SkipList;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipList::new().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -769,9 +769,10 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// ```
   pub fn get_versioned<'a, 'b: 'a>(
     &'a self,
-    version: u56,
+    version: impl Into<Version>,
     key: &'b [u8],
   ) -> Option<VersionedEntryRef<'a, T>> {
+    let version = version.into();
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -807,7 +808,7 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// If no such element is found then `None` is returned.
   pub fn upper_bound<'a, 'b: 'a>(
     &'a self,
-    version: u56,
+    version: impl Into<Version>,
     upper: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, T>> {
     self.iter(version).seek_upper_bound(upper)
@@ -817,7 +818,7 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
   /// If no such element is found then `None` is returned.
   pub fn lower_bound<'a, 'b: 'a>(
     &'a self,
-    version: u56,
+    version: impl Into<Version>,
     lower: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, T>> {
     self.iter(version).seek_lower_bound(lower)
@@ -825,32 +826,32 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub const fn iter(&self, version: u56) -> iterator::Iter<C, T> {
-    iterator::Iter::new(version, self)
+  pub fn iter(&self, version: impl Into<Version>) -> iterator::Iter<C, T> {
+    iterator::Iter::new(version.into(), self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub const fn iter_all_versions(&self, version: u56) -> iterator::AllVersionsIter<C, T> {
-    iterator::AllVersionsIter::new(version, self, true)
+  pub fn iter_all_versions(&self, version: impl Into<Version>) -> iterator::AllVersionsIter<C, T> {
+    iterator::AllVersionsIter::new(version.into(), self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: u56, range: R) -> iterator::Iter<'a, C, T, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: impl Into<Version>, range: R) -> iterator::Iter<'a, C, T, Q, R>
   where
     &'a [u8]: PartialOrd<Q>,
     Q: ?Sized + PartialOrd<&'a [u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::Iter::range(version, self, range)
+    iterator::Iter::range(version.into(), self, range)
   }
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
   pub fn range_all_versions<'a, Q, R>(
     &'a self,
-    version: u56,
+    version: impl Into<Version>,
     range: R,
   ) -> iterator::AllVersionsIter<'a, C, T, Q, R>
   where
@@ -858,6 +859,6 @@ impl<T: Trailer, C: Comparator> SkipMap<C, T> {
     Q: ?Sized + PartialOrd<&'a [u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::AllVersionsIter::range(version, self, range, true)
+    iterator::AllVersionsIter::range(version.into(), self, range, true)
   }
 }

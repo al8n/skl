@@ -1,4 +1,4 @@
-use ux2::u5;
+use super::Height;
 
 /// Error type for the [`SkipMap`](crate::SkipMap).
 ///
@@ -20,10 +20,10 @@ pub enum Error {
   /// Indicates that the height of the [`SkipMap`](super::SkipMap) is too large.
   InvalidHeight {
     /// The height of the [`SkipMap`](super::SkipMap).
-    height: u5,
+    height: Height,
 
     /// The max height of the [`SkipMap`](super::SkipMap).
-    max_height: u5,
+    max_height: Height,
   },
 
   /// Arena too small
@@ -62,7 +62,8 @@ impl Error {
     Self::Arena(rarena_allocator::Error::ReadOnly)
   }
 
-  pub(crate) const fn invalid_height(height: u5, max_height: u5) -> Self {
+  #[inline]
+  pub(crate) const fn invalid_height(height: Height, max_height: Height) -> Self {
     Self::InvalidHeight { height, max_height }
   }
 }

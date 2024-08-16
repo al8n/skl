@@ -1,6 +1,6 @@
 use rarena_allocator::Arena;
 
-use super::{u56, NodePtr};
+use super::{NodePtr, Version};
 
 #[derive(Copy, Clone, Debug)]
 pub(super) struct ValuePartPointer {
@@ -23,7 +23,7 @@ pub struct VersionedEntryRef<'a, T> {
   pub(super) arena: &'a Arena,
   pub(super) key: &'a [u8],
   pub(super) value_part_pointer: ValuePartPointer,
-  pub(super) version: u56,
+  pub(super) version: Version,
   pub(super) ptr: NodePtr<T>,
 }
 
@@ -85,7 +85,7 @@ impl<'a, T> VersionedEntryRef<'a, T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u56 {
+  pub fn version(&self) -> Version {
     self.version
   }
 }
@@ -205,7 +205,7 @@ impl<T> VersionedEntry<T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u56 {
+  pub fn version(&self) -> Version {
     unsafe {
       let node = self.ptr.as_ref();
       node.version()
@@ -264,7 +264,7 @@ impl<T> Entry<T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u56 {
+  pub fn version(&self) -> Version {
     self.0.version()
   }
 }
@@ -319,7 +319,7 @@ impl<'a, T> EntryRef<'a, T> {
 
   /// Returns the version of the entry
   #[inline]
-  pub fn version(&self) -> u56 {
+  pub fn version(&self) -> Version {
     self.0.version()
   }
 }

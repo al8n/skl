@@ -21,7 +21,16 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-/// A map implementation based on skiplist
+/// A versioned skipmap implementation.
+pub mod versioned;
+
+/// A versioned skipmap implementation with trailer support.
+pub mod trailed;
+
+/// Skiplist implementation.
+pub mod base;
+
+/// A skipmap based on the [`SkipList`](base::SkipList).
 pub mod map;
 
 /// Options for the [`SkipMap`](crate::SkipMap).
@@ -33,39 +42,40 @@ pub use options::{MmapOptions, OpenOptions};
 mod types;
 pub use types::*;
 
+pub use base::{AllVersionsIter, KeyBuilder, UnlinkedNode, ValueBuilder};
 pub use either;
-pub use map::{AllVersionsIter, KeyBuilder, SkipMap, UnlinkedNode, ValueBuilder};
 pub use rarena_allocator::{Arena, ArenaPosition, Error as ArenaError};
 pub use ux2::{u27, u5, u56};
 
-const MAX_HEIGHT: usize = 32;
+const MAX_HEIGHT: usize = 1 << 5;
+const MIN_VERSION: Version = Version::MIN;
 
 #[cfg(feature = "std")]
-fn random_height(max_height: u8) -> u32 {
+fn random_height(max_height: Height) -> Height {
   use rand::{thread_rng, Rng};
   let mut rng = thread_rng();
   let rnd: u32 = rng.gen();
   let mut h = 1;
-  let max_height = max_height as usize;
+  let max_height = max_height.to_usize();
 
   while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;
   }
-  h as u32
+  Height::from_u8_unchecked(h as u8)
 }
 
 #[cfg(not(feature = "std"))]
-fn random_height(max_height: u8) -> u32 {
+fn random_height(max_height: Height) -> Height {
   use rand::{rngs::OsRng, Rng};
 
-  let max_height = max_height as usize;
+  let max_height = max_height.to_usize();
   let rnd: u32 = OsRng.gen();
   let mut h = 1;
 
   while h < max_height && rnd <= PROBABILITIES[h] {
     h += 1;
   }
-  h as u32
+  Height::from_u8_unchecked(h as u8)
 }
 
 /// Precompute the skiplist probabilities so that only a single random number

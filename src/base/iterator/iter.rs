@@ -19,7 +19,7 @@ where
   C: Comparator,
 {
   #[inline]
-  pub(crate) const fn new(version: u56, map: &'a SkipMap<C, T>) -> Self {
+  pub(crate) const fn new(version: Version, map: &'a SkipList<C, T>) -> Self {
     Self(AllVersionsIter::new(version, map, false))
   }
 }
@@ -30,7 +30,7 @@ where
   Q: ?Sized + PartialOrd<&'a [u8]>,
 {
   #[inline]
-  pub(crate) fn range(version: u56, map: &'a SkipMap<C, T>, r: R) -> Self {
+  pub(crate) fn range(version: Version, map: &'a SkipList<C, T>, r: R) -> Self {
     Self(AllVersionsIter::range(version, map, r, false))
   }
 }

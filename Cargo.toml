@@ -43,6 +43,7 @@ tracing = ["dep:tracing", "rarena-allocator/tracing"]
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
+derive_more = "0.99"
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }

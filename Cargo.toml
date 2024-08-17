@@ -51,6 +51,7 @@ rarena-allocator = { version = "0.1", default-features = false }
 arbitrary-int = { version = "1.2", default-features = false }
 paste = "1"
 
+time = { version = "0.3", optional = true, features = ["std"] }
 tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]

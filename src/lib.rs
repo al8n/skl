@@ -174,13 +174,186 @@ impl Comparator for Descend {
 /// A trait for extra information that can be stored with entry in the skiplist.
 ///
 /// # Safety
-/// The implementors must ensure that they can be reconstructed from a byte slice directly.
-/// e.g. struct includes `*const T` cannot be used as the trailer, because the pointer cannot be reconstructed from a byte slice directly.
-pub unsafe trait Trailer: core::fmt::Debug {}
+/// - The implementors must ensure that they can be reconstructed from a byte slice directly.
+///   e.g. struct includes `*const T` cannot be used as the trailer, because the pointer is invalid
+///   after restart the program.
+/// - The implementors must ensure that they can be safely convert from `*const [u8]` to `*const T`
+pub unsafe trait Trailer: core::fmt::Debug {
+  /// Returns `true` if the trailer is valid. If a trailer is not valid, it will be ignored when
+  /// read or iterated, but users can still access such entry through `get_versioned` or `iter_all_versions`.
+  fn is_valid(&self) -> bool;
+}
 
-unsafe impl Trailer for u64 {}
+macro_rules! dummy_trailer {
+  ($($t:ty),+ $(,)?) => {
+    $(
+      unsafe impl Trailer for $t {
+        #[inline]
+        fn is_valid(&self) -> bool {
+          true
+        }
+      }
 
-unsafe impl Trailer for () {}
+      unsafe impl<const N: usize> Trailer for [$t; N] {
+        #[inline]
+        fn is_valid(&self) -> bool {
+          true
+        }
+      }
+    )*
+  };
+}
+
+dummy_trailer!(
+  (),
+  u8,
+  u16,
+  u32,
+  u64,
+  u128,
+  usize,
+  i8,
+  i16,
+  i32,
+  i64,
+  i128,
+  isize,
+  core::sync::atomic::AtomicUsize,
+  core::sync::atomic::AtomicIsize,
+  core::sync::atomic::AtomicU8,
+  core::sync::atomic::AtomicI8,
+  core::sync::atomic::AtomicU16,
+  core::sync::atomic::AtomicI16,
+  core::sync::atomic::AtomicU32,
+  core::sync::atomic::AtomicI32,
+  core::sync::atomic::AtomicU64,
+  core::sync::atomic::AtomicI64,
+  core::sync::atomic::AtomicBool,
+);
+
+/// Time related trailers.
+#[cfg(feature = "time")]
+pub mod ttl {
+  use super::Trailer;
+  use ::time::OffsetDateTime;
+
+  macro_rules! methods {
+    ($ident:ident($inner:ident: $from:ident <-> $into:ident)) => {
+      impl core::fmt::Display for $ident {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+          write!(
+            f,
+            "{}",
+            OffsetDateTime::$from(self.0).expect("valid timestamp")
+          )
+        }
+      }
+
+      impl core::fmt::Debug for $ident {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+          write!(
+            f,
+            "{}",
+            OffsetDateTime::$from(self.0).expect("valid timestamp")
+          )
+        }
+      }
+
+      impl From<$ident> for $inner {
+        fn from(ts: $ident) -> Self {
+          ts.0
+        }
+      }
+
+      impl TryFrom<$inner> for $ident {
+        type Error = time::error::ComponentRange;
+
+        fn try_from(value: $inner) -> Result<Self, Self::Error> {
+          OffsetDateTime::$from(value).map(|t| Self(t.$into()))
+        }
+      }
+    };
+  }
+
+  macro_rules! timestamp {
+    ($(
+      [$($meta:meta)*]
+      $ident:ident($inner:ident: $from:ident <-> $into:ident)
+    ),+ $(,)?) => {
+      $(
+        $(
+          #[$meta]
+        )*
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $ident($inner);
+
+        methods!($ident($inner: $from <-> $into));
+
+        impl $ident {
+          /// Returns the current timestamp.
+          #[inline]
+          pub fn now() -> Self {
+            Self(OffsetDateTime::now_utc().$into())
+          }
+        }
+      )*
+    };
+  }
+
+  timestamp!(
+    [doc = "A utc timestamp [`Trailer`] implementation."]
+    Timestamp(i64: from_unix_timestamp <-> unix_timestamp),
+    [doc = "A utc timestamp with nanoseconds [`Trailer`] implementation."]
+    TimestampNanos(i128: from_unix_timestamp_nanos <-> unix_timestamp_nanos),
+  );
+
+  dummy_trailer!(Timestamp, TimestampNanos);
+
+  macro_rules! ttl {
+    ($(
+      [$($meta:meta)*]
+      $ident:ident($inner:ident: $from:ident <-> $into:ident)
+    ),+ $(,)?) => {
+      $(
+        $(
+          #[$meta]
+        )*
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $ident($inner);
+
+        methods!($ident($inner: $from <-> $into));
+
+        impl $ident {
+          /// Creates a new ttl.
+          #[inline]
+          pub fn new(ttl: std::time::Duration) -> Self {
+            Self((OffsetDateTime::now_utc() + ttl).$into())
+          }
+
+          /// Returns `true` if the ttl is expired.
+          #[inline]
+          pub fn is_expired(&self) -> bool {
+            OffsetDateTime::now_utc().$into() > self.0
+          }
+        }
+
+        unsafe impl Trailer for $ident {
+          #[inline]
+          fn is_valid(&self) -> bool {
+            !self.is_expired()
+          }
+        }
+      )*
+    };
+  }
+
+  ttl!(
+    [doc = "A ttl [`Trailer`] implementation."]
+    Ttl(i64: from_unix_timestamp <-> unix_timestamp),
+    [doc = "A ttl with nanoseconds [`Trailer`] implementation."]
+    TtlNanos(i128: from_unix_timestamp_nanos <-> unix_timestamp_nanos),
+  );
+}
 
 mod sync {
   #[cfg(not(feature = "loom"))]

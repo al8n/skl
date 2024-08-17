@@ -157,7 +157,7 @@ fn full_in(l: impl FnOnce(usize) -> SkipList) {
   let mut found_arena_full = false;
 
   for i in 0..100 {
-    if let Err(e) = l.get_or_insert(0u32, &make_int_key(i), &make_value(i)) {
+    if let Err(e) = l.get_or_insert(0u32, &make_int_key(i), &make_value(i), ()) {
       assert!(matches!(
         e,
         Error::Arena(ArenaError::InsufficientSpace { .. })
@@ -249,9 +249,9 @@ fn test_full_map_anon_unify() {
 
 fn basic_in(mut l: SkipList) {
   // Try adding values.
-  l.get_or_insert(0u8, b"key1", &make_value(1)).unwrap();
-  l.get_or_insert(0u8, b"key3", &make_value(3)).unwrap();
-  l.get_or_insert(0u8, b"key2", &make_value(2)).unwrap();
+  l.get_or_insert(0u8, b"key1", &make_value(1), ()).unwrap();
+  l.get_or_insert(0u8, b"key3", &make_value(3), ()).unwrap();
+  l.get_or_insert(0u8, b"key2", &make_value(2), ()).unwrap();
   assert_eq!(l.comparator(), &Ascend);
 
   {
@@ -272,8 +272,8 @@ fn basic_in(mut l: SkipList) {
     assert_eq!(ent.version(), 0);
   }
 
-  l.get_or_insert(1u8, "a".as_bytes(), &[]).unwrap();
-  l.get_or_insert(2u8, "a".as_bytes(), &[]).unwrap();
+  l.get_or_insert(1u8, "a".as_bytes(), &[], ()).unwrap();
+  l.get_or_insert(2u8, "a".as_bytes(), &[], ()).unwrap();
 
   {
     let mut it = l.iter_all_versions(2u8);
@@ -288,8 +288,8 @@ fn basic_in(mut l: SkipList) {
     assert_eq!(ent.version(), 1);
   }
 
-  l.get_or_insert(2u8, "b".as_bytes(), &[]).unwrap();
-  l.get_or_insert(1u8, "b".as_bytes(), &[]).unwrap();
+  l.get_or_insert(2u8, "b".as_bytes(), &[], ()).unwrap();
+  l.get_or_insert(1u8, "b".as_bytes(), &[], ()).unwrap();
 
   {
     let mut it = l.iter_all_versions(2u8);
@@ -309,9 +309,9 @@ fn basic_in(mut l: SkipList) {
     assert_eq!(ent.version(), 1);
   }
 
-  l.get_or_insert(2u8, b"b", &[]).unwrap().unwrap();
+  l.get_or_insert(2u8, b"b", &[], ()).unwrap().unwrap();
 
-  assert!(l.get_or_insert(2u8, b"c", &[]).unwrap().is_none());
+  assert!(l.get_or_insert(2u8, b"c", &[], ()).unwrap().is_none());
 
   unsafe {
     l.clear().unwrap();
@@ -377,10 +377,10 @@ fn test_basic_map_anon_unify() {
 }
 
 fn iter_all_versions_mvcc(l: SkipList) {
-  l.get_or_insert(1u8, b"a", b"a1").unwrap();
-  l.get_or_insert(3u8, b"a", b"a2").unwrap();
-  l.get_or_insert(1u8, b"c", b"c1").unwrap();
-  l.get_or_insert(3u8, b"c", b"c2").unwrap();
+  l.get_or_insert(1u8, b"a", b"a1", ()).unwrap();
+  l.get_or_insert(3u8, b"a", b"a2", ()).unwrap();
+  l.get_or_insert(1u8, b"c", b"c1", ()).unwrap();
+  l.get_or_insert(3u8, b"c", b"c2", ()).unwrap();
 
   let mut it = l.iter_all_versions(0u8);
   let mut num = 0;
@@ -510,9 +510,9 @@ fn test_iter_all_versions_mvcc_map_anon_unify() {
 fn ordering() {
   let l = SkipList::with_options_and_comparator(TEST_OPTIONS, Descend).unwrap();
 
-  l.get_or_insert(1u8, b"a1", b"a1").unwrap();
-  l.get_or_insert(2u8, b"a2", b"a2").unwrap();
-  l.get_or_insert(3u8, b"a3", b"a3").unwrap();
+  l.get_or_insert(1u8, b"a1", b"a1", ()).unwrap();
+  l.get_or_insert(2u8, b"a2", b"a2", ()).unwrap();
+  l.get_or_insert(3u8, b"a3", b"a3", ()).unwrap();
 
   let mut it = l.iter_all_versions(3u8);
   for i in (1..=3).rev() {
@@ -528,10 +528,10 @@ fn test_ordering() {
 }
 
 fn get_mvcc(l: SkipList) {
-  l.get_or_insert(1u8, b"a", b"a1").unwrap();
-  l.get_or_insert(3u8, b"a", b"a2").unwrap();
-  l.get_or_insert(1u8, b"c", b"c1").unwrap();
-  l.get_or_insert(3u8, b"c", b"c2").unwrap();
+  l.get_or_insert(1u8, b"a", b"a1", ()).unwrap();
+  l.get_or_insert(3u8, b"a", b"a2", ()).unwrap();
+  l.get_or_insert(1u8, b"c", b"c1", ()).unwrap();
+  l.get_or_insert(3u8, b"c", b"c2", ()).unwrap();
 
   let ent = l.get(1u8, b"a").unwrap();
   assert_eq!(ent.key(), b"a");
@@ -627,11 +627,11 @@ fn test_get_mvcc_map_anon_unify() {
 }
 
 fn gt_in(l: SkipList) {
-  l.get_or_insert(1u8, b"a", b"a1").unwrap();
-  l.get_or_insert(3u8, b"a", b"a2").unwrap();
-  l.get_or_insert(1u8, b"c", b"c1").unwrap();
-  l.get_or_insert(3u8, b"c", b"c2").unwrap();
-  l.get_or_insert(5u8, b"c", b"c3").unwrap();
+  l.get_or_insert(1u8, b"a", b"a1", ()).unwrap();
+  l.get_or_insert(3u8, b"a", b"a2", ()).unwrap();
+  l.get_or_insert(1u8, b"c", b"c1", ()).unwrap();
+  l.get_or_insert(3u8, b"c", b"c2", ()).unwrap();
+  l.get_or_insert(5u8, b"c", b"c3", ()).unwrap();
 
   assert!(l.lower_bound(0u8, Bound::Excluded(b"a")).is_none());
   assert!(l.lower_bound(0u8, Bound::Excluded(b"b")).is_none());
@@ -750,10 +750,10 @@ fn test_gt_map_anon_unify() {
 }
 
 fn ge_in(l: SkipList) {
-  l.get_or_insert(1u8, b"a", b"a1").unwrap();
-  l.get_or_insert(3u8, b"a", b"a2").unwrap();
-  l.get_or_insert(1u8, b"c", b"c1").unwrap();
-  l.get_or_insert(3u8, b"c", b"c2").unwrap();
+  l.get_or_insert(1u8, b"a", b"a1", ()).unwrap();
+  l.get_or_insert(3u8, b"a", b"a2", ()).unwrap();
+  l.get_or_insert(1u8, b"c", b"c1", ()).unwrap();
+  l.get_or_insert(3u8, b"c", b"c2", ()).unwrap();
 
   assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
   assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
@@ -871,10 +871,10 @@ fn test_ge_map_anon_unify() {
 }
 
 fn le_in(l: SkipList) {
-  l.get_or_insert(1u8, b"a", b"a1").unwrap();
-  l.get_or_insert(3u8, b"a", b"a2").unwrap();
-  l.get_or_insert(1u8, b"c", b"c1").unwrap();
-  l.get_or_insert(3u8, b"c", b"c2").unwrap();
+  l.get_or_insert(1u8, b"a", b"a1", ()).unwrap();
+  l.get_or_insert(3u8, b"a", b"a2", ()).unwrap();
+  l.get_or_insert(1u8, b"c", b"c1", ()).unwrap();
+  l.get_or_insert(3u8, b"c", b"c2", ()).unwrap();
 
   assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
   assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
@@ -1006,10 +1006,10 @@ fn test_le_map_anon_unify() {
 }
 
 fn lt_in(l: SkipList) {
-  l.get_or_insert(1u8, b"a", b"a1").unwrap();
-  l.get_or_insert(3u8, b"a", b"a2").unwrap();
-  l.get_or_insert(1u8, b"c", b"c1").unwrap();
-  l.get_or_insert(3u8, b"c", b"c2").unwrap();
+  l.get_or_insert(1u8, b"a", b"a1", ()).unwrap();
+  l.get_or_insert(3u8, b"a", b"a2", ()).unwrap();
+  l.get_or_insert(1u8, b"c", b"c1", ()).unwrap();
+  l.get_or_insert(3u8, b"c", b"c2", ()).unwrap();
 
   assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"a")).is_none());
   assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"b")).is_none());
@@ -1125,7 +1125,7 @@ fn test_basic_large_testcases_in(l: Arc<SkipList>) {
   let n = 1000;
 
   for i in 0..n {
-    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
+    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
       .unwrap();
   }
 
@@ -1207,7 +1207,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipList>) {
     let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
+      l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
         .unwrap();
       drop(w);
     });
@@ -1313,7 +1313,7 @@ fn test_concurrent_basic_2pc_runner(l: Arc<SkipList>) {
     std::thread::spawn(move || {
       let k = key(i);
       let v = new_value(i);
-      let node = l.allocate(MIN_VERSION, &k, &v).unwrap();
+      let node = l.allocate(MIN_VERSION, &k, &v, ()).unwrap();
       std::thread::sleep(std::time::Duration::from_millis(rand::random::<u8>() as u64));
       l.link(node).unwrap();
       drop(w);
@@ -1416,7 +1416,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipList>) {
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &big_value(i))
+      l.get_or_insert(MIN_VERSION, &key(i), &big_value(i), ())
         .unwrap();
     });
   }
@@ -1517,7 +1517,7 @@ fn concurrent_one_key(l: Arc<SkipList>) {
     let wg = wg.add(1);
     let l = l.clone();
     std::thread::spawn(move || {
-      let _ = l.get_or_insert(MIN_VERSION, b"thekey", &make_value(i));
+      let _ = l.get_or_insert(MIN_VERSION, b"thekey", &make_value(i), ());
       wg.done();
     });
   }
@@ -1624,7 +1624,7 @@ fn iter_all_versions_next(l: SkipList) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
@@ -1693,7 +1693,7 @@ fn range_next(l: SkipList) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
@@ -1767,7 +1767,7 @@ fn iter_all_versions_prev(l: SkipList) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
@@ -1831,7 +1831,7 @@ fn range_prev(l: SkipList) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
@@ -1904,7 +1904,7 @@ fn iter_all_versions_seek_ge(l: SkipList) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v))
+    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v), ())
       .unwrap();
   }
 
@@ -1940,7 +1940,7 @@ fn iter_all_versions_seek_ge(l: SkipList) {
   let ent = it.seek_lower_bound(Bound::Included(b"99999"));
   assert!(ent.is_none());
 
-  l.get_or_insert(MIN_VERSION, &[], &[]).unwrap();
+  l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
@@ -2003,7 +2003,7 @@ fn iter_all_versions_seek_lt(l: SkipList) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v))
+    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v), ())
       .unwrap();
   }
 
@@ -2025,7 +2025,7 @@ fn iter_all_versions_seek_lt(l: SkipList) {
   assert_eq!(ent.key(), make_int_key(1990));
   assert_eq!(ent.value().unwrap(), make_value(1990));
 
-  l.get_or_insert(MIN_VERSION, &[], &[]).unwrap();
+  l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
   assert!(l.lt(MIN_VERSION, &[]).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
@@ -2086,7 +2086,7 @@ fn test_iter_all_versions_seek_lt_map_anon_unify() {
 
 fn range(l: SkipList) {
   for i in 1..10 {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
@@ -2220,17 +2220,17 @@ fn iter_latest(l: SkipList) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(1u8, &make_int_key(i), &make_value(i + 1000))
+    l.get_or_insert(1u8, &make_int_key(i), &make_value(i + 1000), ())
       .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(2u8, &make_int_key(i), &make_value(i + 1000))
+    l.get_or_insert(2u8, &make_int_key(i), &make_value(i + 1000), ())
       .unwrap();
   }
 
@@ -2294,17 +2294,17 @@ fn range_latest(l: SkipList) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(1u8, &make_int_key(i), &make_value(i + 1000))
+    l.get_or_insert(1u8, &make_int_key(i), &make_value(i + 1000), ())
       .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(2u8, &make_int_key(i), &make_value(i + 1000))
+    l.get_or_insert(2u8, &make_int_key(i), &make_value(i + 1000), ())
       .unwrap();
   }
 
@@ -2379,7 +2379,7 @@ fn test_reopen_mmap() {
       let map_options = MmapOptions::default();
       let l = SkipList::map_mut(&p, open_options, map_options).unwrap();
       for i in 0..1000 {
-        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
+        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
           .unwrap();
       }
       l.flush().unwrap();
@@ -2418,7 +2418,8 @@ fn test_reopen_mmap2() {
       let mut data = (0..1000).collect::<Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
       for i in data {
-        l.get_or_insert(i as u32, &key(i), &new_value(i)).unwrap();
+        l.get_or_insert(i as u32, &key(i), &new_value(i), ())
+          .unwrap();
       }
       l.flush_async().unwrap();
       assert_eq!(l.max_version(), 999);
@@ -2482,7 +2483,7 @@ fn get_or_insert_with_value(l: SkipList) {
     Ok(())
   });
 
-  l.get_or_insert_with_value_builder::<()>(1u8, b"alice", vb)
+  l.get_or_insert_with_value_builder::<()>(1u8, b"alice", vb, ())
     .unwrap();
 }
 
@@ -2570,7 +2571,8 @@ fn get_or_insert_with(l: SkipList) {
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<()>(1u8, kb, vb).unwrap();
+  l.get_or_insert_with_builders::<()>(1u8, kb, vb, ())
+    .unwrap();
 }
 
 #[test]
@@ -2621,7 +2623,7 @@ fn insert_in(l: SkipList) {
   let k = 0u64.to_le_bytes();
   for i in 0..100 {
     let v = new_value(i);
-    let old = l.insert(MIN_VERSION, &k, &v).unwrap();
+    let old = l.insert(MIN_VERSION, &k, &v, ()).unwrap();
     if let Some(old) = old {
       assert_eq!(old.key(), k);
       assert_eq!(old.value(), new_value(i - 1));
@@ -2708,7 +2710,7 @@ fn insert_with_value(l: SkipList) {
     Ok(())
   });
 
-  l.insert_with_value_builder::<()>(1u8, b"alice", vb)
+  l.insert_with_value_builder::<()>(1u8, b"alice", vb, ())
     .unwrap();
 
   let alice2 = Person {
@@ -2736,7 +2738,7 @@ fn insert_with_value(l: SkipList) {
   });
 
   let old = l
-    .insert_with_value_builder::<()>(1u8, b"alice", vb)
+    .insert_with_value_builder::<()>(1u8, b"alice", vb, ())
     .unwrap()
     .unwrap();
 
@@ -2826,7 +2828,7 @@ fn insert_with(l: SkipList) {
     Ok(())
   });
 
-  l.insert_with_builders::<()>(1u8, kb, vb).unwrap();
+  l.insert_with_builders::<()>(1u8, kb, vb, ()).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -2851,7 +2853,10 @@ fn insert_with(l: SkipList) {
     );
     Ok(())
   });
-  let old = l.insert_with_builders::<()>(1u8, kb, vb).unwrap().unwrap();
+  let old = l
+    .insert_with_builders::<()>(1u8, kb, vb, ())
+    .unwrap()
+    .unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
@@ -2908,16 +2913,16 @@ fn test_insert_with_map_anon_unify() {
 fn get_or_remove(l: SkipList) {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v).unwrap();
+    l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
-    let old = l.get_or_remove(MIN_VERSION, &k).unwrap().unwrap();
+    let old = l.get_or_remove(MIN_VERSION, &k, ()).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
 
-    let old = l.get_or_remove(MIN_VERSION, &k).unwrap().unwrap();
+    let old = l.get_or_remove(MIN_VERSION, &k, ()).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
   }
@@ -2977,20 +2982,20 @@ fn test_get_or_remove_map_anon_unify() {
 fn remove(l: SkipList) {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v).unwrap();
+    l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // no race, remove should succeed
     let old = l
-      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
 
     // key already removed
     let old = l
-      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
   }
@@ -3049,20 +3054,20 @@ fn test_remove_map_anon_unify() {
 fn remove2(l: SkipList) {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v).unwrap();
+    l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // not found, remove should succeed
     let old = l
-      .compare_remove(1u8, &k, Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(1u8, &k, (), Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
 
     // no-race, remove should succeed
     let old = l
-      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
   }
@@ -3119,13 +3124,13 @@ fn test_remove2_map_anon_unify() {
 }
 
 fn allocate_in(map: SkipList) {
-  let unlinked_node = map.allocate(MIN_VERSION, b"hello", b"world").unwrap();
+  let unlinked_node = map.allocate(MIN_VERSION, b"hello", b"world", ()).unwrap();
   map.link(unlinked_node).unwrap();
 
   let entry = map.get(MIN_VERSION, b"hello").unwrap();
   assert_eq!(entry.value(), b"world");
 
-  let unlinked_node2 = map.allocate(MIN_VERSION, b"hello", b"rust").unwrap();
+  let unlinked_node2 = map.allocate(MIN_VERSION, b"hello", b"rust", ()).unwrap();
   map.link(unlinked_node2).unwrap();
 
   let entry = map.get(MIN_VERSION, b"hello").unwrap();
@@ -3183,7 +3188,7 @@ fn test_estimited_size() {
   let h = l.random_height();
   let size = SkipList::<u64>::estimated_node_size(h, 3usize, 3);
   let allocated = l.allocated();
-  l.allocate_at_height(1u8, h, b"key", b"val");
+  l.allocate_at_height(1u8, h, b"key", b"val", ());
   let allocated2 = l.allocated();
   let actual = allocated2 - allocated;
   assert!(size - 7 - (mem::align_of::<u64>() - 1) < actual && actual < size);

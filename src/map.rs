@@ -612,7 +612,7 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
-    self.0.allocate(MIN_VERSION, key, value)
+    self.0.allocate(MIN_VERSION, key, value, ())
   }
 
   /// Allocates a new node with a given height in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -642,7 +642,9 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
-    self.0.allocate_at_height(MIN_VERSION, height, key, value)
+    self
+      .0
+      .allocate_at_height(MIN_VERSION, height, key, value, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -669,7 +671,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Error> {
     self
       .0
-      .get_or_allocate_at_height(MIN_VERSION, self.random_height(), key, value)
+      .get_or_allocate_at_height(MIN_VERSION, self.random_height(), key, value, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -699,7 +701,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Error> {
     self
       .0
-      .get_or_allocate_at_height(MIN_VERSION, height, key, value)
+      .get_or_allocate_at_height(MIN_VERSION, height, key, value, ())
   }
 
   /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -794,6 +796,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key,
       value_builder,
+      (),
     )
   }
 
@@ -888,7 +891,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
     self
       .0
-      .allocate_at_height_with_value_builder(MIN_VERSION, height, key, value_builder)
+      .allocate_at_height_with_value_builder(MIN_VERSION, height, key, value_builder, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -984,6 +987,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key,
       value_builder,
+      (),
     )
   }
 
@@ -1078,7 +1082,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .get_or_allocate_at_height_with_value_builder(MIN_VERSION, height, key, value_builder)
+      .get_or_allocate_at_height_with_value_builder(MIN_VERSION, height, key, value_builder, ())
   }
 
   /// Allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1183,6 +1187,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key_builder,
       value_builder,
+      (),
     )
   }
 
@@ -1286,7 +1291,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
     self
       .0
-      .allocate_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder)
+      .allocate_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1335,7 +1340,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -1358,7 +1363,7 @@ impl<C: Comparator> SkipMap<C> {
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -1386,6 +1391,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key_builder,
       value_builder,
+      (),
     )
   }
 
@@ -1436,7 +1442,7 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::<u64>::new().unwrap();
   /// let random_height = l.random_height();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -1459,7 +1465,7 @@ impl<C: Comparator> SkipMap<C> {
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -1485,7 +1491,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .get_or_allocate_at_height_builders(MIN_VERSION, height, key_builder, value_builder)
+      .get_or_allocate_at_height_builders(MIN_VERSION, height, key_builder, value_builder, ())
   }
 
   /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1519,7 +1525,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
     self
       .0
-      .allocate_remove_entry_at_height(MIN_VERSION, self.random_height(), key)
+      .allocate_remove_entry_at_height(MIN_VERSION, self.random_height(), key, ())
   }
 
   /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1555,7 +1561,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
     self
       .0
-      .allocate_remove_entry_at_height(MIN_VERSION, height, key)
+      .allocate_remove_entry_at_height(MIN_VERSION, height, key, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1611,7 +1617,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Error> {
     self
       .0
-      .get_or_allocate_remove_entry_at_height(MIN_VERSION, self.random_height(), key)
+      .get_or_allocate_remove_entry_at_height(MIN_VERSION, self.random_height(), key, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1668,7 +1674,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Error> {
     self
       .0
-      .get_or_allocate_remove_entry_at_height(MIN_VERSION, height, key)
+      .get_or_allocate_remove_entry_at_height(MIN_VERSION, height, key, ())
   }
 
   /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1686,7 +1692,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"hello").unwrap();
   ///   Ok(())
   /// });
@@ -1711,6 +1717,7 @@ impl<C: Comparator> SkipMap<C> {
       MIN_VERSION,
       self.random_height(),
       key_builder,
+      (),
     )
   }
 
@@ -1729,7 +1736,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"hello").unwrap();
   ///   Ok(())
   /// });
@@ -1752,7 +1759,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
     self
       .0
-      .allocate_remove_entry_at_height_with_builder(MIN_VERSION, height, key_builder)
+      .allocate_remove_entry_at_height_with_builder(MIN_VERSION, height, key_builder, ())
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1777,6 +1784,7 @@ impl<C: Comparator> SkipMap<C> {
       MIN_VERSION,
       self.random_height(),
       key_builder,
+      (),
     )
   }
 
@@ -1800,7 +1808,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Either<E, Error>> {
     self
       .0
-      .get_or_allocate_remove_entry_at_height_with_builder(MIN_VERSION, height, key_builder)
+      .get_or_allocate_remove_entry_at_height_with_builder(MIN_VERSION, height, key_builder, ())
   }
 }
 
@@ -1816,7 +1824,7 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.0.insert(MIN_VERSION, key, value)
+    self.0.insert(MIN_VERSION, key, value, ())
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -1842,7 +1850,7 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.0.insert_at_height(MIN_VERSION, height, key, value)
+    self.0.insert_at_height(MIN_VERSION, height, key, value, ())
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -1903,6 +1911,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key,
       value_builder,
+      (),
     )
   }
 
@@ -1962,7 +1971,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .insert_at_height_with_value_builder(MIN_VERSION, height, key, value_builder)
+      .insert_at_height_with_value_builder(MIN_VERSION, height, key, value_builder, ())
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
@@ -1979,7 +1988,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
     self
       .0
-      .get_or_insert_at_height(MIN_VERSION, self.random_height(), key, value)
+      .get_or_insert_at_height(MIN_VERSION, self.random_height(), key, value, ())
   }
 
   /// Inserts a new key-value pair at height if it does not yet exist.
@@ -1996,7 +2005,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
     self
       .0
-      .get_or_insert_at_height(MIN_VERSION, height, key, value)
+      .get_or_insert_at_height(MIN_VERSION, height, key, value, ())
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -2052,7 +2061,13 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_value_builder(self.random_height(), key, value_builder)
+    self.0.get_or_insert_at_height_with_value_builder(
+      MIN_VERSION,
+      self.random_height(),
+      key,
+      value_builder,
+      (),
+    )
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -2113,7 +2128,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .get_or_insert_at_height_with_value_builder(MIN_VERSION, height, key, value_builder)
+      .get_or_insert_at_height_with_value_builder(MIN_VERSION, height, key, value_builder, ())
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -2154,7 +2169,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -2179,6 +2194,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key_builder,
       value_builder,
+      (),
     )
   }
 
@@ -2220,7 +2236,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -2244,7 +2260,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .insert_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder)
+      .insert_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder, ())
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -2283,7 +2299,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -2308,6 +2324,7 @@ impl<C: Comparator> SkipMap<C> {
       self.random_height(),
       key_builder,
       value_builder,
+      (),
     )
   }
 
@@ -2347,7 +2364,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -2368,9 +2385,13 @@ impl<C: Comparator> SkipMap<C> {
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self
-      .0
-      .get_or_insert_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder)
+    self.0.get_or_insert_at_height_with_builders(
+      MIN_VERSION,
+      height,
+      key_builder,
+      value_builder,
+      (),
+    )
   }
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
@@ -2408,7 +2429,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
     self
       .0
-      .compare_remove_at_height(MIN_VERSION, height, key, success, failure)
+      .compare_remove_at_height(MIN_VERSION, height, key, (), success, failure)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -2448,7 +2469,7 @@ impl<C: Comparator> SkipMap<C> {
     height: Height,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.0.get_or_remove_at_height(MIN_VERSION, height, key)
+    self.0.get_or_remove_at_height(MIN_VERSION, height, key, ())
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -2489,7 +2510,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -2502,7 +2523,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .get_or_remove_at_height_with_builder(MIN_VERSION, self.random_height(), key_builder)
+      .get_or_remove_at_height_with_builder(MIN_VERSION, self.random_height(), key_builder, ())
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -2543,7 +2564,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let l = SkipMap::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -2558,7 +2579,7 @@ impl<C: Comparator> SkipMap<C> {
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
     self
       .0
-      .get_or_remove_at_height_with_builder(MIN_VERSION, height, key_builder)
+      .get_or_remove_at_height_with_builder(MIN_VERSION, height, key_builder, ())
   }
 
   /// Links a node into the [`SkipMap`].

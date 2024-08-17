@@ -1,6 +1,6 @@
 use super::*;
 
-impl<C: Comparator> SkipList<C> {
+impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipList::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
@@ -12,8 +12,9 @@ impl<C: Comparator> SkipList<C> {
     version: impl Into<Version>,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.insert_with_trailer(version, key, value, ())
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    self.insert_at_height(version, self.random_height(), key, value, trailer)
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -25,22 +26,51 @@ impl<C: Comparator> SkipList<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipList;
+  /// use skl::{SkipList, Ascend, time::Ttl};
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(Version::new(), height, b"hello", b"world").unwrap();
+  /// map.insert_at_height(Version::new(), height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   /// ```
-  #[inline]
   pub fn insert_at_height<'a, 'b: 'a>(
     &'a self,
     version: impl Into<Version>,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.insert_at_height_with_trailer(version, height, key, value, ())
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    self.check_height_and_ro(height)?;
+
+    let copy = |buf: &mut VacantBuffer| {
+      let _ = buf.write(value);
+      Ok(())
+    };
+    let val_len = value.len() as u32;
+
+    self
+      .update::<Infallible>(
+        version,
+        trailer,
+        height.into(),
+        Key::Occupied(key),
+        Some(ValueBuilder::new(val_len, copy)),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+        Inserter::default(),
+        true,
+      )
+      .map(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
+      .map_err(|e| e.expect_right("must be map::Error"))
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -58,7 +88,7 @@ impl<C: Comparator> SkipList<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
+  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -79,7 +109,7 @@ impl<C: Comparator> SkipList<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -87,7 +117,7 @@ impl<C: Comparator> SkipList<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -96,12 +126,19 @@ impl<C: Comparator> SkipList<C> {
     version: impl Into<Version>,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.insert_at_height_with_value_builder(version, self.random_height(), key, value_builder)
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    self.insert_at_height_with_value_builder(
+      version,
+      self.random_height(),
+      key,
+      value_builder,
+      trailer,
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_value_builder`](SkipList::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height_with_value_builder`](SkipList::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -115,7 +152,7 @@ impl<C: Comparator> SkipList<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
+  /// use skl::{SkipList, ValueBuilder, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -136,7 +173,7 @@ impl<C: Comparator> SkipList<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -145,7 +182,7 @@ impl<C: Comparator> SkipList<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb)
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
@@ -154,8 +191,31 @@ impl<C: Comparator> SkipList<C> {
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.insert_at_height_with_value_builder_and_trailer(version, height, key, value_builder, ())
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    self.check_height_and_ro(height).map_err(Either::Right)?;
+
+    self
+      .update(
+        version,
+        trailer,
+        height.into(),
+        Key::Occupied(key),
+        Some(value_builder),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+        Inserter::default(),
+        true,
+      )
+      .map(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
@@ -170,8 +230,9 @@ impl<C: Comparator> SkipList<C> {
     version: impl Into<Version>,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.get_or_insert_at_height(version, self.random_height(), key, value)
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    self.get_or_insert_at_height(version, self.random_height(), key, value, trailer)
   }
 
   /// Inserts a new key-value pair at height if it does not yet exist.
@@ -186,8 +247,38 @@ impl<C: Comparator> SkipList<C> {
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.get_or_insert_at_height_with_trailer(version, height, key, value, ())
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    self.check_height_and_ro(height)?;
+
+    let copy = |buf: &mut VacantBuffer| {
+      let _ = buf.write(value);
+      Ok(())
+    };
+    let val_len = value.len() as u32;
+
+    self
+      .update::<Infallible>(
+        version,
+        trailer,
+        height.into(),
+        Key::Occupied(key),
+        Some(ValueBuilder::new(val_len, copy)),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+        Inserter::default(),
+        false,
+      )
+      .map(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
+      .map_err(|e| e.expect_right("must be map::Error"))
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -206,7 +297,7 @@ impl<C: Comparator> SkipList<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
+  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -227,14 +318,14 @@ impl<C: Comparator> SkipList<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb)
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -243,12 +334,14 @@ impl<C: Comparator> SkipList<C> {
     version: impl Into<Version>,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
     self.get_or_insert_at_height_with_value_builder(
       version,
       self.random_height(),
       key,
       value_builder,
+      trailer,
     )
   }
 
@@ -268,7 +361,7 @@ impl<C: Comparator> SkipList<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
+  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -289,7 +382,7 @@ impl<C: Comparator> SkipList<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -298,28 +391,44 @@ impl<C: Comparator> SkipList<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb)
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
-  #[inline]
   pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     version: impl Into<Version>,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_value_builder_and_trailer(
-      version,
-      height,
-      key,
-      value_builder,
-      (),
-    )
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    self.check_height_and_ro(height).map_err(Either::Right)?;
+
+    self
+      .update(
+        version,
+        trailer,
+        height.into(),
+        Key::Occupied(key),
+        Some(value_builder),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+        Inserter::default(),
+        false,
+      )
+      .map(|old| {
+        old.expect_left("insert must get InsertOk").and_then(|old| {
+          if old.is_removed() {
+            None
+          } else {
+            Some(EntryRef(old))
+          }
+        })
+      })
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders_and_trailer`](SkipList::get_or_insert_with_builders_and_trailer), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](SkipList::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -356,7 +465,7 @@ impl<C: Comparator> SkipList<C> {
   ///
   /// let l = SkipList::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -367,7 +476,7 @@ impl<C: Comparator> SkipList<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb)
+  /// l.insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -376,12 +485,19 @@ impl<C: Comparator> SkipList<C> {
     version: impl Into<Version>,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.insert_at_height_with_builders(version, self.random_height(), key_builder, value_builder)
+    trailer: T,
+  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    self.insert_at_height_with_builders(
+      version,
+      self.random_height(),
+      key_builder,
+      value_builder,
+      trailer,
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders_and_trailer`](SkipList::get_or_insert_with_builders_and_trailer), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](SkipList::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -395,7 +511,7 @@ impl<C: Comparator> SkipList<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -416,9 +532,9 @@ impl<C: Comparator> SkipList<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -430,892 +546,10 @@ impl<C: Comparator> SkipList<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb)
+  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
-  #[inline]
   pub fn insert_at_height_with_builders<'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.insert_at_height_with_builders_and_trailer(version, height, key_builder, value_builder, ())
-  }
-
-  /// Inserts a new key if it does not yet exist.
-  ///
-  /// Unlike [`insert_with_builders`](SkipList::insert_with_builders), this method will not update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb)
-  /// .unwrap();
-  /// ```
-  #[inline]
-  pub fn get_or_insert_with_builders<'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_builders_and_trailer(
-      version,
-      self.random_height(),
-      key_builder,
-      value_builder,
-      (),
-    )
-  }
-
-  /// Inserts a new key if it does not yet exist.
-  ///
-  /// Unlike [`insert_at_height_with_builders`](SkipList::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb)
-  /// .unwrap();
-  /// ```
-  pub fn get_or_insert_at_height_with_builders<'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_builders_and_trailer(
-      version,
-      height,
-      key_builder,
-      value_builder,
-      (),
-    )
-  }
-
-  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
-  ///
-  /// Unlike [`get_or_remove`](SkipList::get_or_remove), this method will remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)`:
-  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
-  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
-  #[inline]
-  pub fn compare_remove<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.compare_remove_at_height(version, self.random_height(), key, success, failure)
-  }
-
-  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
-  ///
-  /// Unlike [`get_or_remove_at_height`](SkipList::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)`:
-  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
-  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
-  pub fn compare_remove_at_height<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key: &'b [u8],
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.compare_remove_at_height_with_trailer(version, height, key, (), success, failure)
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipList::compare_remove), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  #[inline]
-  pub fn get_or_remove<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.get_or_remove_at_height(version, self.random_height(), key)
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipList::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// map.insert(0, b"hello", b"world").unwrap();
-  ///
-  /// let height = map.random_height();
-  /// map.get_or_remove_at_height(0, height, b"hello").unwrap();
-  /// ```
-  #[inline]
-  pub fn get_or_remove_at_height<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.get_or_remove_at_height_with_trailer(version, height, key, ())
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_with_builder_and_trailer`](SkipList::compare_remove_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, 100)
-  /// .unwrap();
-  /// ```
-  pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_builder(version, self.random_height(), key_builder)
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height_with_builder_and_trailer`](SkipList::compare_remove_at_height_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb)
-  /// .unwrap();
-  /// ```
-  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_builder_and_trailer(version, height, key_builder, ())
-  }
-}
-
-impl<T: Trailer, C: Comparator> SkipList<C, T> {
-  /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_trailer`](SkipList::get_or_insert_with_trailer), this method will update the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  #[inline]
-  pub fn insert_with_trailer<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
-    self.insert_at_height_with_trailer(version, self.random_height(), key, value, trailer)
-  }
-
-  /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height_with_trailer`](SkipList::get_or_insert_at_height_with_trailer), this method will update the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::<u64>::new().unwrap();
-  ///
-  /// let height = map.random_height();
-  /// map.insert_at_height_with_trailer(Version::new(), height, b"hello", b"world", 100).unwrap();
-  /// ```
-  pub fn insert_at_height_with_trailer<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
-    self.check_height_and_ro(height)?;
-
-    let copy = |buf: &mut VacantBuffer| {
-      let _ = buf.write(value);
-      Ok(())
-    };
-    let val_len = value.len() as u32;
-
-    self
-      .update::<Infallible>(
-        version,
-        trailer,
-        height.into(),
-        Key::Occupied(key),
-        Some(ValueBuilder::new(val_len, copy)),
-        Ordering::Relaxed,
-        Ordering::Relaxed,
-        Inserter::default(),
-        true,
-      )
-      .map(|old| {
-        old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
-            None
-          } else {
-            Some(EntryRef(old))
-          }
-        })
-      })
-      .map_err(|e| e.expect_right("must be map::Error"))
-  }
-
-  /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_value_builder_and_trailer`](SkipList::get_or_insert_with_value_builder_and_trailer), this method will update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<u64>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// l.insert_with_value_builder_and_trailer::<core::convert::Infallible>(1.into(), b"alice", vb, 100)
-  /// .unwrap();
-  /// ```
-  #[inline]
-  pub fn insert_with_value_builder_and_trailer<'a, 'b: 'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.insert_at_height_with_value_builder_and_trailer(
-      version,
-      self.random_height(),
-      key,
-      value_builder,
-      trailer,
-    )
-  }
-
-  /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height_with_value_builder_and_trailer`](SkipList::get_or_insert_at_height_with_value_builder_and_trailer), this method will update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<u64>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder_and_trailer::<core::convert::Infallible>(1.into(), height, b"alice", vb, 100)
-  /// .unwrap();
-  /// ```
-  pub fn insert_at_height_with_value_builder_and_trailer<'a, 'b: 'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key: &'b [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
-
-    self
-      .update(
-        version,
-        trailer,
-        height.into(),
-        Key::Occupied(key),
-        Some(value_builder),
-        Ordering::Relaxed,
-        Ordering::Relaxed,
-        Inserter::default(),
-        true,
-      )
-      .map(|old| {
-        old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
-            None
-          } else {
-            Some(EntryRef(old))
-          }
-        })
-      })
-  }
-
-  /// Inserts a new key-value pair if it does not yet exist.
-  ///
-  /// Unlike [`insert_with_trailer`](SkipList::insert_with_trailer), this method will not update the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
-  /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  #[inline]
-  pub fn get_or_insert_with_trailer<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
-    self.get_or_insert_at_height_with_trailer(version, self.random_height(), key, value, trailer)
-  }
-
-  /// Inserts a new key-value pair at height if it does not yet exist.
-  ///
-  /// Unlike [`insert_at_height_with_trailer`](SkipList::insert_at_height_with_trailer), this method will not update the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
-  /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  pub fn get_or_insert_at_height_with_trailer<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
-    self.check_height_and_ro(height)?;
-
-    let copy = |buf: &mut VacantBuffer| {
-      let _ = buf.write(value);
-      Ok(())
-    };
-    let val_len = value.len() as u32;
-
-    self
-      .update::<Infallible>(
-        version,
-        trailer,
-        height.into(),
-        Key::Occupied(key),
-        Some(ValueBuilder::new(val_len, copy)),
-        Ordering::Relaxed,
-        Ordering::Relaxed,
-        Inserter::default(),
-        false,
-      )
-      .map(|old| {
-        old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
-            None
-          } else {
-            Some(EntryRef(old))
-          }
-        })
-      })
-      .map_err(|e| e.expect_right("must be map::Error"))
-  }
-
-  /// Inserts a new key if it does not yet exist.
-  ///
-  /// Unlike [`insert_with_value_builder_and_trailer`](SkipList::insert_with_value_builder_and_trailer), this method will not update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
-  /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<u64>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  /// l.get_or_insert_with_value_builder_and_trailer::<core::convert::Infallible>(1.into(), b"alice", vb, 100)
-  /// .unwrap();
-  /// ```
-  #[inline]
-  pub fn get_or_insert_with_value_builder_and_trailer<'a, 'b: 'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_value_builder_and_trailer(
-      version,
-      self.random_height(),
-      key,
-      value_builder,
-      trailer,
-    )
-  }
-
-  /// Inserts a new key if it does not yet exist.
-  ///
-  /// Unlike [`insert_at_height_with_value_builder_and_trailer`](SkipList::insert_at_height_with_value_builder_and_trailer), this method will not update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
-  /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<u64>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder_and_trailer::<core::convert::Infallible>(1.into(), height, b"alice", vb, 100)
-  /// .unwrap();
-  /// ```
-  pub fn get_or_insert_at_height_with_value_builder_and_trailer<'a, 'b: 'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    height: Height,
-    key: &'b [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
-
-    self
-      .update(
-        version,
-        trailer,
-        height.into(),
-        Key::Occupied(key),
-        Some(value_builder),
-        Ordering::Relaxed,
-        Ordering::Relaxed,
-        Inserter::default(),
-        false,
-      )
-      .map(|old| {
-        old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
-            None
-          } else {
-            Some(EntryRef(old))
-          }
-        })
-      })
-  }
-
-  /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders_and_trailer`](SkipList::get_or_insert_with_builders_and_trailer), this method will update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// l.insert_with_builders_and_trailer::<core::convert::Infallible>(1.into(), kb, vb, 100)
-  /// .unwrap();
-  /// ```
-  #[inline]
-  pub fn insert_with_builders_and_trailer<'a, E>(
-    &'a self,
-    version: impl Into<Version>,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.insert_at_height_with_builders_and_trailer(
-      version,
-      self.random_height(),
-      key_builder,
-      value_builder,
-      trailer,
-    )
-  }
-
-  /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders_and_trailer`](SkipList::get_or_insert_with_builders_and_trailer), this method will update the value if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// - Returns `Ok(None)` if the key was successfully inserted.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<u64>::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.insert_at_height_with_builders_and_trailer::<core::convert::Infallible>(1.into(), height, kb, vb, 100)
-  /// .unwrap();
-  /// ```
-  pub fn insert_at_height_with_builders_and_trailer<'a, E>(
     &'a self,
     version: impl Into<Version>,
     height: Height,
@@ -1353,7 +587,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_builders_and_trailer`](SkipList::insert_with_builders_and_trailer), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_builders`](SkipList::insert_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -1364,7 +598,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1385,9 +619,9 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<u64>::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -1398,18 +632,18 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders_and_trailer::<core::convert::Infallible>(1.into(), kb, vb, 100)
+  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn get_or_insert_with_builders_and_trailer<'a, E>(
+  pub fn get_or_insert_with_builders<'a, E>(
     &'a self,
     version: impl Into<Version>,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_builders_and_trailer(
+    self.get_or_insert_at_height_with_builders(
       version,
       self.random_height(),
       key_builder,
@@ -1420,7 +654,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_builders_and_trailer`](SkipList::insert_at_height_with_builders_and_trailer), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_builders`](SkipList::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -1431,7 +665,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1452,9 +686,9 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<u64>::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -1466,10 +700,10 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders_and_trailer::<core::convert::Infallible>(1.into(), height, kb, vb, 100)
+  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
-  pub fn get_or_insert_at_height_with_builders_and_trailer<'a, E>(
+  pub fn get_or_insert_at_height_with_builders<'a, E>(
     &'a self,
     version: impl Into<Version>,
     height: Height,
@@ -1509,14 +743,14 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove_with_trailer`](SkipList::get_or_remove_with_trailer), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove`](SkipList::get_or_remove), this method will remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
-  pub fn compare_remove_with_trailer<'a, 'b: 'a>(
+  pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
     version: impl Into<Version>,
     key: &'b [u8],
@@ -1524,7 +758,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     success: Ordering,
     failure: Ordering,
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
-    self.compare_remove_at_height_with_trailer(
+    self.compare_remove_at_height(
       version,
       self.random_height(),
       key,
@@ -1536,13 +770,13 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove_at_height_with_trailer`](SkipList::get_or_remove_at_height_with_trailer), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove_at_height`](SkipList::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
-  pub fn compare_remove_at_height_with_trailer<'a, 'b: 'a>(
+  pub fn compare_remove_at_height<'a, 'b: 'a>(
     &'a self,
     version: impl Into<Version>,
     height: Height,
@@ -1593,13 +827,13 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
   #[inline]
-  pub fn get_or_remove_with_trailer<'a, 'b: 'a>(
+  pub fn get_or_remove<'a, 'b: 'a>(
     &'a self,
     version: impl Into<Version>,
     key: &'b [u8],
     trailer: T,
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
-    self.get_or_remove_at_height_with_trailer(version, self.random_height(), key, trailer)
+    self.get_or_remove_at_height(version, self.random_height(), key, trailer)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -1611,16 +845,16 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::SkipList;
+  /// use skl::{SkipList, Ascend, time::Ttl};
   ///
-  /// let map = SkipList::<u64>::new().unwrap();
+  /// let map = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
   /// map.insert(Version::new(), b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height_with_trailer(Version::new(), height, b"hello", 100).unwrap();
+  /// map.get_or_remove_at_height(Version::new(), height, b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   /// ```
-  pub fn get_or_remove_at_height_with_trailer<'a, 'b: 'a>(
+  pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
     version: impl Into<Version>,
     height: Height,
@@ -1658,7 +892,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_with_trailer`](SkipList::compare_remove_with_trailer), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove`](SkipList::compare_remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -1672,7 +906,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder};
+  /// use skl::{SkipList, KeyBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1693,31 +927,26 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<u64>::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_builder_and_trailer::<core::convert::Infallible>(1.into(), kb, 100)
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
-  pub fn get_or_remove_with_builder_and_trailer<'a, 'b: 'a, E>(
+  pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: impl Into<Version>,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_builder_and_trailer(
-      version,
-      self.random_height(),
-      key_builder,
-      trailer,
-    )
+    self.get_or_remove_at_height_with_builder(version, self.random_height(), key_builder, trailer)
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height_with_trailer`](SkipList::compare_remove_at_height_with_trailer), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height`](SkipList::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -1731,7 +960,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder};
+  /// use skl::{SkipList, KeyBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1752,17 +981,17 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<u64>::new().unwrap();
+  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
   ///
-  /// let kb = KeyBuilder::new(u27::new(5), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder_and_trailer::<core::convert::Infallible>(1.into(), height, kb, 100)
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
-  pub fn get_or_remove_at_height_with_builder_and_trailer<'a, 'b: 'a, E>(
+  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: impl Into<Version>,
     height: Height,

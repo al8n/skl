@@ -523,9 +523,9 @@ impl<C, T> SkipList<C, T> {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = SkipList::new(1000).unwrap();
+  /// let map = SkipList::new().unwrap();
   ///
-  /// map.insert(1, b"hello", b"world").unwrap();
+  /// map.insert(1u8, b"hello", b"world").unwrap();
   ///
   /// let data = map.get(b"hello").unwrap();
   ///
@@ -590,8 +590,8 @@ impl<C, T> SkipList<C, T> {
   /// let allocated = map.allocated();
   ///
   /// {
-  ///   let n1 = map.allocate(0, b"hello", b"world").unwrap();
-  ///   let n2 = map.allocate(0, b"foo", b"bar").unwrap();
+  ///   let n1 = map.allocate(0u8, b"hello", b"world").unwrap();
+  ///   let n2 = map.allocate(0u8, b"foo", b"bar").unwrap();
   /// }
   ///
   /// let intermediate = map.allocated();
@@ -650,12 +650,12 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let map = SkipList::new().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1u8, b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1, b"hello"));
-  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// assert!(!map.contains_key(1u8, b"hello"));
+  /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
   pub fn contains_key<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
@@ -671,12 +671,12 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let map = SkipList::new().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1u8, b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1, b"hello"));
-  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// assert!(!map.contains_key(1u8, b"hello"));
+  /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
   pub fn contains_key_versioned<'a, 'b: 'a>(
@@ -709,14 +709,14 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let map = SkipList::new().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// let ent = map.get(0, b"hello").unwrap();
+  /// let ent = map.get(0u8, b"hello").unwrap();
   /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1u8, b"hello").unwrap();
   ///
-  /// assert!(map.get(1, b"hello").is_none());
+  /// assert!(map.get(1u8, b"hello").is_none());
   /// ```
   pub fn get<'a, 'b: 'a>(
     &'a self,
@@ -770,13 +770,13 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// let map = SkipList::new().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1u8, b"hello").unwrap();
   ///
-  /// assert!(map.get(1, b"hello").is_none());
+  /// assert!(map.get(1u8, b"hello").is_none());
   ///
-  /// let ent = map.get_versioned(1, b"hello").unwrap();
+  /// let ent = map.get_versioned(1u8, b"hello").unwrap();
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```

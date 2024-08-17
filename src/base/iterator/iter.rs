@@ -26,8 +26,7 @@ where
 
 impl<'a, Q, R, C, T> Iter<'a, C, T, Q, R>
 where
-  &'a [u8]: PartialOrd<Q>,
-  Q: ?Sized + PartialOrd<&'a [u8]>,
+  Q: ?Sized + Borrow<[u8]>,
 {
   #[inline]
   pub(crate) fn range(version: Version, map: &'a SkipList<C, T>, r: R) -> Self {

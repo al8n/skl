@@ -1,4 +1,4 @@
-use core::sync::atomic::Ordering;
+use core::{borrow::Borrow, sync::atomic::Ordering};
 
 use rarena_allocator::{Arena, ArenaPosition};
 
@@ -7,7 +7,6 @@ use super::{
   *,
 };
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use either::Either;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -487,12 +486,6 @@ impl<C> SkipMap<C> {
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.0.flush_async()
   }
-
-  #[cfg(all(test, feature = "std"))]
-  #[inline]
-  pub(crate) fn with_yield_now(self) -> Self {
-    Self(self.0.with_yield_now())
-  }
 }
 
 impl<C: Comparator> SkipMap<C> {
@@ -537,7 +530,11 @@ impl<C: Comparator> SkipMap<C> {
   /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
+  pub fn contains_key_versioned<'a, 'b: 'a>(
+    &'a self,
+    version: impl Into<Version>,
+    key: &'b [u8],
+  ) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
@@ -572,7 +569,11 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// assert!(map.get(1, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> Option<EntryRef<'a, ()>> {
+  pub fn get<'a, 'b: 'a>(
+    &'a self,
+    version: impl Into<Version>,
+    key: &'b [u8],
+  ) -> Option<EntryRef<'a, ()>> {
     self.0.get(version, key)
   }
 
@@ -641,8 +642,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn range<'a, Q, R>(&'a self, version: impl Into<Version>, range: R) -> Iter<'a, C, (), Q, R>
   where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
     self.0.range(version, range)
@@ -656,8 +656,7 @@ impl<C: Comparator> SkipMap<C> {
     range: R,
   ) -> AllVersionsIter<'a, C, (), Q, R>
   where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
     self.0.range_all_versions(version, range)

@@ -1,4 +1,4 @@
-use core::sync::atomic::Ordering;
+use core::{borrow::Borrow, sync::atomic::Ordering};
 
 use rarena_allocator::{Arena, ArenaPosition};
 
@@ -7,7 +7,6 @@ use super::{
   *,
 };
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 use either::Either;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -487,12 +486,6 @@ impl<C> SkipMap<C> {
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.0.flush_async()
   }
-
-  #[cfg(all(test, feature = "std"))]
-  #[inline]
-  pub(crate) fn with_yield_now(self) -> Self {
-    Self(self.0.with_yield_now())
-  }
 }
 
 impl<C: Comparator> SkipMap<C> {
@@ -517,12 +510,12 @@ impl<C: Comparator> SkipMap<C> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self,) -> Option<EntryRef<'_, ()>> {
+  pub fn first(&self) -> Option<EntryRef<'_, ()>> {
     self.0.first(MIN_VERSION)
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self,) -> Option<EntryRef<'_, ()>> {
+  pub fn last(&self) -> Option<EntryRef<'_, ()>> {
     self.0.last(MIN_VERSION)
   }
 
@@ -562,13 +555,13 @@ impl<C: Comparator> SkipMap<C> {
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self,) -> Iter<C, ()> {
+  pub fn iter(&self) -> Iter<C, ()> {
     self.0.iter(MIN_VERSION)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self,) -> AllVersionsIter<C, ()> {
+  pub fn iter_all_versions(&self) -> AllVersionsIter<C, ()> {
     self.0.iter_all_versions(MIN_VERSION)
   }
 
@@ -576,8 +569,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn range<'a, Q, R>(&'a self, range: R) -> Iter<'a, C, (), Q, R>
   where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
     self.0.range(MIN_VERSION, range)
@@ -587,8 +579,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn range_all_versions<'a, Q, R>(&'a self, range: R) -> AllVersionsIter<'a, C, (), Q, R>
   where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
     self.0.range_all_versions(MIN_VERSION, range)
@@ -798,9 +789,12 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
-    self
-      .0
-      .allocate_at_height_with_value_builder(MIN_VERSION, self.random_height(), key, value_builder)
+    self.0.allocate_at_height_with_value_builder(
+      MIN_VERSION,
+      self.random_height(),
+      key,
+      value_builder,
+    )
   }
 
   /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1046,7 +1040,7 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new().unwrap();
   ///
   /// let random_height = l.random_height();
-  /// 
+  ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
@@ -1559,7 +1553,9 @@ impl<C: Comparator> SkipMap<C> {
     height: Height,
     key: &'b [u8],
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
-    self.0.allocate_remove_entry_at_height(MIN_VERSION, height, key)
+    self
+      .0
+      .allocate_remove_entry_at_height(MIN_VERSION, height, key)
   }
 
   /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1711,9 +1707,11 @@ impl<C: Comparator> SkipMap<C> {
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
-    self
-      .0
-      .allocate_remove_entry_at_height_with_builder(MIN_VERSION, self.random_height(), key_builder)
+    self.0.allocate_remove_entry_at_height_with_builder(
+      MIN_VERSION,
+      self.random_height(),
+      key_builder,
+    )
   }
 
   /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
@@ -1900,9 +1898,12 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self
-      .0
-      .insert_at_height_with_value_builder(MIN_VERSION, self.random_height(), key, value_builder)
+    self.0.insert_at_height_with_value_builder(
+      MIN_VERSION,
+      self.random_height(),
+      key,
+      value_builder,
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -1993,7 +1994,9 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
-    self.0.get_or_insert_at_height(MIN_VERSION, height, key, value)
+    self
+      .0
+      .get_or_insert_at_height(MIN_VERSION, height, key, value)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -2049,11 +2052,7 @@ impl<C: Comparator> SkipMap<C> {
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_value_builder(
-      self.random_height(),
-      key,
-      value_builder,
-    )
+    self.get_or_insert_at_height_with_value_builder(self.random_height(), key, value_builder)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -2175,9 +2174,12 @@ impl<C: Comparator> SkipMap<C> {
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
-    self
-      .0
-      .insert_at_height_with_builders(MIN_VERSION, self.random_height(), key_builder, value_builder)
+    self.0.insert_at_height_with_builders(
+      MIN_VERSION,
+      self.random_height(),
+      key_builder,
+      value_builder,
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -2603,7 +2605,10 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// unsafe { map.link_unchecked(unlinked_node); }
   /// ```
-  pub unsafe fn link_unchecked<'a>(&'a self, node: UnlinkedNode<'a, ()>) -> Option<EntryRef<'a, ()>> {
+  pub unsafe fn link_unchecked<'a>(
+    &'a self,
+    node: UnlinkedNode<'a, ()>,
+  ) -> Option<EntryRef<'a, ()>> {
     self.0.link_unchecked(node)
   }
 

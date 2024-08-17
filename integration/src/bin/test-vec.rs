@@ -1,5 +1,5 @@
 use integration::{big_value, key, new_value};
-use skl::*;
+use skl::{map::SkipMap, *};
 
 fn main() {
   {
@@ -8,7 +8,7 @@ fn main() {
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(0, &key(i), &new_value(i)).unwrap();
+        l.insert(&key(i), &new_value(i)).unwrap();
         drop(l);
       });
     }
@@ -19,7 +19,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
+        assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
         drop(l);
       });
     }
@@ -34,7 +34,7 @@ fn main() {
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(0, &key(i), &big_value(i)).unwrap();
+        l.insert(&key(i), &big_value(i)).unwrap();
       });
     }
     while l.refs() > 1 {
@@ -45,7 +45,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap().value(), big_value(i), "broken: {i}");
+        assert_eq!(l.get(&k).unwrap().value(), big_value(i), "broken: {i}");
       });
     }
     while l.refs() > 1 {

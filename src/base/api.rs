@@ -1,3 +1,5 @@
+use core::borrow::Borrow;
+
 use rarena_allocator::{ArenaOptions, ArenaPosition};
 
 use super::*;
@@ -19,7 +21,10 @@ macro_rules! builder {
         impl<F> [< $name Builder >]<F> {
           #[doc = "Creates a new `" [<$name Builder>] "` with the given size and builder closure."]
           #[inline]
-          pub const fn new(size: $size, f: F) -> Self {
+          pub const fn new<E>(size: $size, f: F) -> Self
+          where
+            F: for<'a> FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+          {
             Self { size, f }
           }
 
@@ -674,7 +679,11 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
+  pub fn contains_key_versioned<'a, 'b: 'a>(
+    &'a self,
+    version: impl Into<Version>,
+    key: &'b [u8],
+  ) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
@@ -709,7 +718,11 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// assert!(map.get(1, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+  pub fn get<'a, 'b: 'a>(
+    &'a self,
+    version: impl Into<Version>,
+    key: &'b [u8],
+  ) -> Option<EntryRef<'a, T>> {
     let version = version.into();
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -838,10 +851,13 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: impl Into<Version>, range: R) -> iterator::Iter<'a, C, T, Q, R>
+  pub fn range<'a, Q, R>(
+    &'a self,
+    version: impl Into<Version>,
+    range: R,
+  ) -> iterator::Iter<'a, C, T, Q, R>
   where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
     iterator::Iter::range(version.into(), self, range)
@@ -855,8 +871,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     range: R,
   ) -> iterator::AllVersionsIter<'a, C, T, Q, R>
   where
-    &'a [u8]: PartialOrd<Q>,
-    Q: ?Sized + PartialOrd<&'a [u8]>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
     iterator::AllVersionsIter::range(version.into(), self, range, true)

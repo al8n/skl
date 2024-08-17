@@ -1472,7 +1472,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     }
   }
 
-  unsafe fn find_prev_max_version(&self, mut curr: NodePtr<T>, version: Version) -> Option<NodePtr<T>> {
+  unsafe fn find_prev_max_version(
+    &self,
+    mut curr: NodePtr<T>,
+    version: Version,
+  ) -> Option<NodePtr<T>> {
     let mut prev = self.get_prev(curr, 0);
 
     loop {
@@ -1513,7 +1517,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     }
   }
 
-  unsafe fn find_next_max_version(&self, mut curr: NodePtr<T>, version: Version) -> Option<NodePtr<T>> {
+  unsafe fn find_next_max_version(
+    &self,
+    mut curr: NodePtr<T>,
+    version: Version,
+  ) -> Option<NodePtr<T>> {
     let mut next = self.get_next(curr, 0);
 
     loop {

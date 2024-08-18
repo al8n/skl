@@ -278,7 +278,6 @@ impl<T> NodePtr<T> {
     success: Ordering,
     failure: Ordering,
   ) -> Result<u32, u32> {
-    #[cfg(not(feature = "unaligned"))]
     self
       .tower(arena, idx)
       .prev_offset
@@ -560,7 +559,7 @@ impl<T> Node<T> {
   ) -> (&'b T, Option<&'b [u8]>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_aligned_pointer(offset as usize);
-    #[cfg(not(feature = "unaligned"))]
+
     let trailer = &*ptr;
 
     if len == u32::MAX {
@@ -581,7 +580,7 @@ impl<T> Node<T> {
   ) -> (&'b T, Option<&'b [u8]>, ValuePartPointer) {
     let (offset, len) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_aligned_pointer(offset as usize);
-    #[cfg(not(feature = "unaligned"))]
+
     let trailer = &*ptr;
 
     if len == u32::MAX {

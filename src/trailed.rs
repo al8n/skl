@@ -3,7 +3,7 @@ use core::{borrow::Borrow, sync::atomic::Ordering};
 use rarena_allocator::{Arena, ArenaPosition};
 
 use super::{
-  base::{AllVersionsIter, EntryRef, Error, Iter, SkipList, VersionedEntryRef},
+  base::{EntryRef, Error, Iter, SkipList},
   *,
 };
 
@@ -135,7 +135,7 @@ impl<T, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```ignore
-  /// use skl::{versioned::SkipMap, OpenOptions, MmapOptinos};
+  /// use skl::{trailed::SkipMap, OpenOptions, MmapOptinos};
   ///
   /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
   ///
@@ -260,7 +260,7 @@ impl<T, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::versioned::SkipMap;
+  /// use skl::trailed::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
@@ -415,7 +415,7 @@ impl<T, C> SkipMap<T, C> {
   /// ```ignore
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(1u8, b"hello", b"world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
   /// let data = map.get(b"hello").unwrap();
   ///
@@ -441,7 +441,7 @@ impl<T, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{versioned::SkipMap, ArenaPosition};
+  /// use skl::{trailed::SkipMap, ArenaPosition};
   ///
   /// let map = SkipMap::new().unwrap();
   ///
@@ -489,15 +489,15 @@ impl<T, C> SkipMap<T, C> {
 }
 
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
-  /// Allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// let unlinked_node = map.allocate(0u8, b"hello", b"world").unwrap();
   /// map.link(unlinked_node).unwrap();
@@ -520,15 +520,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .allocate_at_height(MIN_VERSION, self.0.random_height(), key, value, trailer)
   }
 
-  /// Allocates a new node with a given height in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node with a given height in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// let random_height = map.random_height();
   ///
@@ -554,20 +554,20 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .allocate_at_height(MIN_VERSION, height, key, value, trailer)
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
   /// ```rust
-  /// use skl::*;
+  /// use skl::{*, tailed::SkipMap};
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
-  /// let unlinked_node = map.get_or_allocate(Version::new(), b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
+  /// let unlinked_node = map.get_or_allocate(b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
   /// map.link(unlinked_node).unwrap();
   ///
-  /// let entry = map.get_or_allocate(Version::new(), b"hello", b"rust", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let entry = map.get_or_allocate(b"hello", b"rust", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   /// assert_eq!(entry.value(), b"world");
   /// ```
   #[inline]
@@ -582,22 +582,22 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .get_or_allocate_at_height(MIN_VERSION, self.0.random_height(), key, value, trailer)
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::{*};
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let random_height = map.random_height();
   ///
-  /// let unlinked_node = map.get_or_allocate_at_height(Version::new(), random_height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
+  /// let unlinked_node = map.get_or_allocate_at_height(random_height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
   /// map.link(unlinked_node).unwrap();
   ///
-  /// let entry = map.get_or_allocate_at_height(Version::new(), random_height, b"hello", b"rust", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let entry = map.get_or_allocate_at_height(random_height, b"hello", b"rust", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   /// assert_eq!(entry.value(), b"world");
   /// ```
   pub fn get_or_allocate_at_height<'a, 'b: 'a>(
@@ -612,8 +612,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .get_or_allocate_at_height(MIN_VERSION, height, key, value, trailer)
   }
 
-  /// Allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -621,7 +621,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -656,7 +656,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -664,14 +664,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.allocate_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let node = l.allocate_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -682,13 +682,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.allocate_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// let node = l.allocate_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 2);
@@ -696,7 +696,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   #[inline]
   pub fn allocate_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-
     trailer: T,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -710,8 +709,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -719,7 +718,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -754,7 +753,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let random_height = l.random_height();
   ///
@@ -764,14 +763,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.allocate_at_height_with_value_builder::<core::convert::Infallible>(1.into(), random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let node = l.allocate_at_height_with_value_builder::<core::convert::Infallible>(random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -782,13 +781,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.allocate_at_height_with_value_builder::<core::convert::Infallible>(1.into(), random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// let node = l.allocate_at_height_with_value_builder::<core::convert::Infallible>(random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 2);
@@ -806,14 +805,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .allocate_at_height_with_value_builder(MIN_VERSION, height, key, value_builder, trailer)
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// Allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -821,7 +820,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -856,7 +855,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -864,14 +863,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.get_or_allocate_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let node = l.get_or_allocate_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap().unwrap_left();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -882,7 +881,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let entry = l.get_or_allocate_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let entry = l.get_or_allocate_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   ///
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
@@ -904,14 +903,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
   ///
-  /// Allocates a new node in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -919,7 +918,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -954,7 +953,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let random_height = l.random_height();
   ///
@@ -964,14 +963,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.get_or_allocate_at_height_with_value_builder::<core::convert::Infallible>(1.into(), random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let node = l.get_or_allocate_at_height_with_value_builder::<core::convert::Infallible>(random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap().unwrap_left();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -982,7 +981,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let entry = l.get_or_allocate_at_height_with_value_builder::<core::convert::Infallible>(1.into(), random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let entry = l.get_or_allocate_at_height_with_value_builder::<core::convert::Infallible>(random_height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   ///
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
@@ -1004,8 +1003,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Allocates a new node with the given key and value size in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key-value pair and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -1013,7 +1012,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, KeyBuilder, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1048,7 +1047,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(b"alice", |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1061,14 +1060,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.allocate_with::<core::convert::Infallible>(1u8, kb, vb)
+  /// let node = l.allocate_with::<core::convert::Infallible>(kb, vb)
   /// .unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -1079,14 +1078,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.allocate_with::<core::convert::Infallible>(1u8, kb, vb)
+  /// let node = l.allocate_with::<core::convert::Infallible>(kb, vb)
   /// .unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 2);
@@ -1106,8 +1105,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Allocates a new node with the given key and value size in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key-value pair and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -1115,7 +1114,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, u27};
+  /// use skl::{trailed::SkipMap, time::Ttl, u27};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1150,42 +1149,45 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
-  /// let node = l.allocate_with::<core::convert::Infallible>(1u8, 5u8.into(), |key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
-  /// }, encoded_size as u32, |mut val| {
+  /// });
+  ///
+  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
-  /// })
+  /// });
+  ///
+  /// let node = l.allocate_at_height_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
   ///
-  /// let node = l.allocate_with::<core::convert::Infallible>(1u8, 5u8.into(), |key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// }, encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&2u32.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
-  /// })
+  /// });
+  ///
+  /// let node = l.allocate_at_height_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 2);
@@ -1206,8 +1208,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key-value pair and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -1215,7 +1217,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1250,7 +1252,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1263,14 +1265,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.get_or_allocate_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let node = l.get_or_allocate_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap().unwrap_left();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -1286,7 +1288,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let entry = l.get_or_allocate_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let entry = l.get_or_allocate_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap().unwrap_right();
   ///
   /// let person = PersonRef::try_from(entry.value()).unwrap();
@@ -1308,8 +1310,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node with the given key and value size in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to insert a key-value pair and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -1317,7 +1319,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1352,7 +1354,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   /// let random_height = l.random_height();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
@@ -1366,14 +1368,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let node = l.get_or_allocate_at_height_builders::<core::convert::Infallible>(1.into(), random_height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let node = l.get_or_allocate_at_height_builders::<core::convert::Infallible>(random_height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap().unwrap_left();
   ///
   /// // do something else
   ///
   /// l.link(node).unwrap();
   ///
-  /// let entry = l.get(1u8, b"alice").unwrap();
+  /// let entry = l.get(b"alice").unwrap();
   /// let person = PersonRef::try_from(entry.value()).unwrap();
   /// assert_eq!(person.name, "Alice");
   /// assert_eq!(person.id, 1);
@@ -1389,7 +1391,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let entry = l.get_or_allocate_at_height_builders::<core::convert::Infallible>(1.into(), random_height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// let entry = l.get_or_allocate_at_height_builders::<core::convert::Infallible>(random_height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap().unwrap_right();
   ///
   /// let person = PersonRef::try_from(entry.value()).unwrap();
@@ -1412,29 +1414,29 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::u64<>::new().unwrap();
+  /// let map = SkipMap::u64<>::new().unwrap();
   ///
-  /// map.insert(Version::new(), b"hello", b"world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// let unlinked_node = map.allocate_remove_entry(Version::new(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry(b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   ///
-  /// let entry = map.get(Version::new(), b"hello").unwrap();
+  /// let entry = map.get(b"hello").unwrap();
   /// assert_eq!(entry.value(), b"world");
   ///
   /// map.link(unlinked_node).unwrap();
   ///
   /// // now we cannot get the hello entry, because of the node is linked and marked as removed.
-  /// let entry = map.get(Version::new(), b"hello");
+  /// let entry = map.get(b"hello");
   /// assert!(entry.is_none());
   /// ```
   pub fn allocate_remove_entry<'a, 'b: 'a>(
@@ -1447,29 +1449,29 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .allocate_remove_entry_at_height(MIN_VERSION, self.random_height(), key, trailer)
   }
 
-  /// Allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
-  /// map.insert(Version::new(), b"hello", b"world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// let unlinked_node = map.allocate_remove_entry_at_height(Version::new(), map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_at_height(map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   ///
-  /// let entry = map.get(Version::new(), b"hello").unwrap();
+  /// let entry = map.get(b"hello").unwrap();
   /// assert_eq!(entry.value(), b"world");
   ///
   /// map.link(unlinked_node).unwrap();
   ///
   /// // now we cannot get the hello entry, because of the node is linked and marked as removed.
-  /// let entry = map.get(Version::new(), b"hello");
+  /// let entry = map.get(b"hello");
   /// assert!(entry.is_none());
   /// ```
   #[inline]
@@ -1484,8 +1486,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .allocate_remove_entry_at_height(MIN_VERSION, height, key, trailer)
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
@@ -1495,12 +1497,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// use skl::*;
   /// use core::sync::atomic::Ordering;
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
-  /// map.insert(Version::new(), b"hello", b"world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// map.compare_remove(Version::new(), b"hello", Ordering::Relaxed, Ordering::Relaxed).unwrap();
-  /// let unlinked_node = map.get_or_allocate_remove_entry(Version::new(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// map.compare_remove(b"hello", Ordering::Relaxed, Ordering::Relaxed).unwrap();
+  /// let unlinked_node = map.get_or_allocate_remove_entry(b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   /// assert!(unlinked_node.is_none());
   /// ```
   ///
@@ -1509,11 +1511,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
   /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// let unlinked_node = map.get_or_allocate_remove_entry(Version::new(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let unlinked_node = map.get_or_allocate_remove_entry(b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   /// assert_eq!(unlinked_node.unwrap().value(), b"world");
   /// ```
   ///
@@ -1522,9 +1524,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
-  /// let unlinked_node = map.get_or_allocate_remove_entry(Version::new(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
+  /// let unlinked_node = map.get_or_allocate_remove_entry(b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
   ///
   /// assert_eq!(unlinked_node.key(), b"hello");
   /// assert!(unlinked_node.value().is_none());
@@ -1542,8 +1544,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .get_or_allocate_remove_entry_at_height(MIN_VERSION, self.random_height(), key, trailer)
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// # Example
   ///
@@ -1553,12 +1555,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// use skl::*;
   /// use core::sync::atomic::Ordering;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
   /// map.compare_remove(0u8, b"hello", Ordering::Relaxed, Ordering::Relaxed).unwrap();
-  /// let unlinked_node = map.get_or_allocate_remove_entry_at_height(Version::new(), map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let unlinked_node = map.get_or_allocate_remove_entry_at_height(map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   /// assert!(unlinked_node.is_none());
   /// ```
   ///
@@ -1567,11 +1569,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// let unlinked_node = map.get_or_allocate_remove_entry_at_height(Version::new(), map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
+  /// let unlinked_node = map.get_or_allocate_remove_entry_at_height(map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_right();
   /// assert_eq!(unlinked_node.unwrap().value(), b"world");
   /// ```
   ///
@@ -1580,9 +1582,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
-  /// let unlinked_node = map.get_or_allocate_remove_entry_at_height(Version::new(), map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
+  /// let unlinked_node = map.get_or_allocate_remove_entry_at_height(map.random_height(), b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap().unwrap_left();
   ///
   /// assert_eq!(unlinked_node.key(), b"hello");
   /// assert!(unlinked_node.value().is_none());
@@ -1600,8 +1602,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .get_or_allocate_remove_entry_at_height(MIN_VERSION, height, key, trailer)
   }
 
-  /// Allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to remove a key and you know the key size but you do not have the key
   /// at this moment.
@@ -1609,9 +1611,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, u27, KeyBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, u27, KeyBuilder};
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
   /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
@@ -1620,7 +1622,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let unlinked_node = map.allocate_remove_entry_builder::<core::convert::Infallible>(Version::new(), kb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_builder::<core::convert::Infallible>(kb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
   /// let entry = map.get(0u8, b"hello").unwrap();
@@ -1632,7 +1634,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// map.link(unlinked_node).unwrap();
   /// ```
   #[inline]
-  pub fn allocate_remove_entry_builder<'a, E>(
+  pub fn allocate_remove_entry_with_builder<'a, E>(
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -1645,8 +1647,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// This method is useful when you want to remove a key and you know the key size but you do not have the key
   /// at this moment.
@@ -1654,9 +1656,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, time::Ttl, u27, KeyBuilder};
+  /// use skl::{trailed::SkipMap, time::Ttl, u27, KeyBuilder};
   ///
-  /// let map = SkipList::<Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ttl>::new().unwrap();
   ///
   /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
@@ -1665,10 +1667,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// let unlinked_node = map.allocate_remove_entry_at_height_with_builder::<core::convert::Infallible>(Version::new(), map.random_height(), kb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// let unlinked_node = map.allocate_remove_entry_at_height_with_builder::<core::convert::Infallible>(map.random_height(), kb, Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   ///
   /// // we can still get the hello entry, because of the node is not linked yet.
-  /// let entry = map.get(Version::new(), b"hello").unwrap();
+  /// let entry = map.get(b"hello").unwrap();
   ///
   /// assert_eq!(entry.value(), b"world");
   ///
@@ -1687,8 +1689,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
       .allocate_remove_entry_at_height_with_builder(MIN_VERSION, height, key_builder, trailer)
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// If the key is already removed, it will return `Either::Right(None)`.
   /// If the key is not removed, it will return `Either::Right(Some(EntryRef))`.
@@ -1699,7 +1701,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// # Example
   ///
-  /// See examples in [`get_or_allocate_remove_entry`](SkipList::get_or_allocate_remove_entry) and [`allocate_remove_entry_with`](SkipList::allocate_remove_entry_with).
+  /// See examples in [`get_or_allocate_remove_entry`](SkipMap::get_or_allocate_remove_entry) and [`allocate_remove_entry_with_builder`](SkipMap::allocate_remove_entry_with_builder).
   #[inline]
   pub fn get_or_allocate_remove_entry_with_builder<'a, E>(
     &'a self,
@@ -1714,8 +1716,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipList`] without linking it, this node is ready for insertion, and
-  /// the caller can link it through [`SkipList::link`] or [`SkipList::get_or_link`].
+  /// Gets an [`EntryRef`] corresponding to the key or allocates a new node which is marked as removed in the [`SkipMap`] without linking it, this node is ready for insertion, and
+  /// the caller can link it through [`SkipMap::link`] or [`SkipMap::get_or_link`].
   ///
   /// If the key is already removed, it will return `Either::Right(None)`.
   /// If the key is not removed, it will return `Either::Right(Some(EntryRef))`.
@@ -1726,7 +1728,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// # Example
   ///
-  /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipList::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_at_height_with_builder`](SkipList::allocate_remove_entry_at_height_with_builder).
+  /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipMap::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_at_height_with_builder`](SkipMap::allocate_remove_entry_at_height_with_builder).
   pub fn get_or_allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
     height: Height,
@@ -1741,7 +1743,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     )
   }
 
-  /// Links a node into the [`SkipList`].
+  /// Links a node into the [`SkipMap`].
   ///
   /// Use this method to link a [`UnlinkedNode`] that was allocated through `allocate*` APIs.
   ///
@@ -1750,7 +1752,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// let unlinked_node = map.allocate(0u8, b"hello", b"world").unwrap();
   ///
@@ -1762,22 +1764,22 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.0.link(node)
   }
 
-  /// Links a node into the [`SkipList`].
+  /// Links a node into the [`SkipMap`].
   ///
   /// Use this method to link a [`UnlinkedNode`] that was allocated through `allocate*` APIs.
   ///
   /// # Panic
-  /// - If this [`SkipList`] is read-only.
+  /// - If this [`SkipMap`] is read-only.
   ///
   /// # Safety
-  /// - The caller must ensure that the [`SkipList`] is not read-only.
+  /// - The caller must ensure that the [`SkipMap`] is not read-only.
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// let unlinked_node = map.allocate(0u8, b"hello", b"world").unwrap();
   ///
@@ -1789,14 +1791,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.0.link_unchecked(node)
   }
 
-  /// Gets an entry or links a node into the [`SkipList`].
+  /// Gets an entry or links a node into the [`SkipMap`].
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// let unlinked_node = map.allocate(0u8, b"hello", b"world").unwrap();
   ///
@@ -1811,22 +1813,22 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.0.get_or_link(node)
   }
 
-  /// Gets an entry or links a node into the [`SkipList`].
+  /// Gets an entry or links a node into the [`SkipMap`].
   ///
   /// # Panic
-  /// - If this [`SkipList`] is read-only.
+  /// - If this [`SkipMap`] is read-only.
   ///
   /// # Safety
-  /// - The caller must ensure that the [`SkipList`] is not read-only.
+  /// - The caller must ensure that the [`SkipMap`] is not read-only.
   ///
   /// # Example
   ///
   /// ```rust
   /// use skl::*;
   ///
-  /// let map = SkipList::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
-  /// let unlinked_node = map.allocate(Version::new(), b"hello", b"world").unwrap();
+  /// let unlinked_node = map.allocate(b"hello", b"world").unwrap();
   ///
   /// // do something else
   ///
@@ -1842,7 +1844,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert`](SkipList::get_or_insert), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert`](SkipMap::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -1859,7 +1861,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height`](SkipList::get_or_insert_at_height), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height`](SkipMap::get_or_insert_at_height), this method will update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -1867,12 +1869,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, Ascend, time::Ttl};
   ///
-  /// let map = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(Version::new(), height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// map.insert_at_height(height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   /// ```
   pub fn insert_at_height<'a, 'b: 'a>(
     &'a self,
@@ -1887,7 +1889,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_value_builder`](SkipList::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_value_builder`](SkipMap::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -1901,7 +1903,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1922,7 +1924,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1930,7 +1932,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -1950,7 +1952,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height_with_value_builder`](SkipList::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height_with_value_builder`](SkipMap::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -1964,7 +1966,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder, time::Ttl};
+  /// use skl::{trailed::SkipMap, ValueBuilder, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1985,7 +1987,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1994,7 +1996,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
@@ -2011,7 +2013,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Inserts a new key-value pair if it does not yet exist.
   ///
-  /// Unlike [`insert`](SkipList::insert), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert`](SkipMap::insert), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -2029,7 +2031,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Inserts a new key-value pair at height if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height`](SkipList::insert_at_height), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height`](SkipMap::insert_at_height), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -2047,7 +2049,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_value_builder`](SkipList::insert_with_value_builder), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_value_builder`](SkipMap::insert_with_value_builder), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -2061,7 +2063,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2082,14 +2084,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -2110,7 +2112,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_value_builder`](SkipList::insert_at_height_with_value_builder), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_value_builder`](SkipMap::insert_at_height_with_value_builder), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -2124,7 +2126,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2145,7 +2147,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -2154,7 +2156,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
@@ -2174,7 +2176,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipList::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -2188,7 +2190,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{trailed::SkipMap, u27, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2209,7 +2211,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -2222,7 +2224,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -2242,7 +2244,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipList::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -2256,7 +2258,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2277,7 +2279,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ttl>::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -2291,7 +2293,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_at_height_with_builders::<core::convert::Infallible>(height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn insert_at_height_with_builders<'a, E>(
@@ -2308,7 +2310,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_builders`](SkipList::insert_with_builders), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_builders`](SkipMap::insert_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -2319,7 +2321,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2340,7 +2342,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -2353,7 +2355,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   #[inline]
@@ -2374,7 +2376,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_builders`](SkipList::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_builders`](SkipMap::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -2385,7 +2387,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2406,7 +2408,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -2420,7 +2422,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn get_or_insert_at_height_with_builders<'a, E>(
@@ -2441,7 +2443,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove`](SkipList::get_or_remove), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
@@ -2467,7 +2469,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove_at_height`](SkipList::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove_at_height`](SkipMap::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
@@ -2487,7 +2489,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipList::compare_remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -2503,7 +2505,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipList::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -2511,14 +2513,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, Ascend, time::Ttl};
   ///
-  /// let map = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let map = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
-  /// map.insert(Version::new(), b"hello", b"world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(Version::new(), height, b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// map.get_or_remove_at_height(height, b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
   /// ```
   pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
@@ -2532,7 +2534,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipList::compare_remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -2546,7 +2548,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, KeyBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2567,13 +2569,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(kb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
@@ -2590,7 +2592,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipList::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -2604,7 +2606,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{SkipList, KeyBuilder, Ascend, time::Ttl};
+  /// use skl::{trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -2625,14 +2627,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(height, kb, Ttl::new(std::time::Duration::from_secs(60)))
   /// .unwrap();
   /// ```
   pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
@@ -2662,39 +2664,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
+  /// map.get_or_remove(b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
+  /// assert!(!map.contains_key(b"hello"));
+  /// assert!(map.contains_key_versioned(b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
-    self.0.contains_key(version, key)
-  }
-
-  /// Returns `true` if the key exists in the map, even if it is marked as removed.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipMap;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
-  ///
-  /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
-  /// ```
-  #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> bool {
-    self.get_versioned(version, key).is_some()
+  pub fn contains_key<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> bool {
+    self.0.contains_key(MIN_VERSION, key)
   }
 
   /// Returns the first entry in the map.
@@ -2724,65 +2701,24 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// let ent = map.get(0u8, b"hello").unwrap();
   /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
+  /// map.get_or_remove(b"hello").unwrap();
   ///
-  /// assert!(map.get(1u8, b"hello").is_none());
+  /// assert!(map.get(b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> Option<EntryRef<'a, T>> {
-    self.0.get(version, key)
-  }
-
-  /// Returns the value associated with the given key, if it exists.
-  ///
-  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipMap;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// map.insert(0.into(), b"hello", b"world").unwrap();
-  ///
-  /// map.get_or_remove(1.into(), b"hello").unwrap();
-  ///
-  /// assert!(map.get(1.into(), b"hello").is_none());
-  ///
-  /// let ent = map.get_versioned(1.into(), b"hello").unwrap();
-  /// // value is None because the entry is marked as removed.
-  /// assert!(ent.value().is_none());
-  /// ```
-  pub fn get_versioned<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> Option<VersionedEntryRef<'a, T>> {
-    self.0.get_versioned(version, key)
+  pub fn get<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+    self.0.get(MIN_VERSION, key)
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
-    self.0.upper_bound(version, upper)
+  pub fn upper_bound<'a, 'b: 'a>(&'a self, upper: Bound<&'b [u8]>) -> Option<EntryRef<'a, T>> {
+    self.0.upper_bound(MIN_VERSION, upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
-    self.0.lower_bound(version, lower)
+  pub fn lower_bound<'a, 'b: 'a>(&'a self, lower: Bound<&'b [u8]>) -> Option<EntryRef<'a, T>> {
+    self.0.lower_bound(MIN_VERSION, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -2791,33 +2727,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.0.iter(version)
   }
 
-  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
-  #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> AllVersionsIter<C, T> {
-    self.0.iter_all_versions(version)
-  }
-
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: impl Into<Version>, range: R) -> Iter<'a, C, T, Q, R>
+  pub fn range<'a, Q, R>(&'a self, range: R) -> Iter<'a, C, T, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    self.0.range(version, range)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range_all_versions<'a, Q, R>(
-    &'a self,
-    version: impl Into<Version>,
-    range: R,
-  ) -> AllVersionsIter<'a, C, T, Q, R>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    self.0.range_all_versions(version, range)
+    self.0.range(MIN_VERSION, range)
   }
 }

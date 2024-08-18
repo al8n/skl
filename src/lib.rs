@@ -233,7 +233,7 @@ dummy_trailer!(
 
 /// Time related trailers.
 #[cfg(feature = "time")]
-pub mod ttl {
+pub mod time {
   use super::Trailer;
   use ::time::OffsetDateTime;
 

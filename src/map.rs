@@ -3,7 +3,7 @@ use core::{borrow::Borrow, sync::atomic::Ordering};
 use rarena_allocator::{Arena, ArenaPosition};
 
 use super::{
-  base::{AllVersionsIter, EntryRef, Error, Iter, SkipList},
+  base::{EntryRef, Error, Iter, SkipList},
   *,
 };
 
@@ -559,12 +559,6 @@ impl<C: Comparator> SkipMap<C> {
     self.0.iter(MIN_VERSION)
   }
 
-  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
-  #[inline]
-  pub fn iter_all_versions(&self) -> AllVersionsIter<C, ()> {
-    self.0.iter_all_versions(MIN_VERSION)
-  }
-
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
   pub fn range<'a, Q, R>(&'a self, range: R) -> Iter<'a, C, (), Q, R>
@@ -573,16 +567,6 @@ impl<C: Comparator> SkipMap<C> {
     R: RangeBounds<Q> + 'a,
   {
     self.0.range(MIN_VERSION, range)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range_all_versions<'a, Q, R>(&'a self, range: R) -> AllVersionsIter<'a, C, (), Q, R>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    self.0.range_all_versions(MIN_VERSION, range)
   }
 }
 

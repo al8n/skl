@@ -345,7 +345,13 @@ struct Node<T> {
   // The state of the node, 0 means initialized but not committed, 1 means committed.
   state: AtomicU8,
   // `u56` (7 bytes) for storing version (MVCC purpose)
-  version: [u8; 7],
+  version1: u8,
+  version2: u8,
+  version3: u8,
+  version4: u8,
+  version5: u8,
+  version6: u8,
+  version7: u8,
   trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
@@ -382,12 +388,19 @@ impl<T> Node<T> {
 
   #[inline]
   fn full(value_offset: u32, max_height: u8) -> Self {
+    let [version1, version2, version3, version4, version5, version6, version7] = MIN_VERSION.to_le_bytes();
     Self {
       value: AtomicValuePointer::new(value_offset, 0),
       key_offset: 0,
       key_size_and_height: encode_key_size_and_height(0, max_height),
       state: AtomicU8::new(NodeState::Committed as u8),
-      version: MIN_VERSION.to_le_bytes(),
+      version1,
+      version2,
+      version3,
+      version4,
+      version5,
+      version6,
+      version7,
       trailer: PhantomData,
     }
   }
@@ -398,8 +411,28 @@ impl<T> Node<T> {
   }
 
   #[inline]
+  fn set_version(&mut self, version: Version) {
+    let [version1, version2, version3, version4, version5, version6, version7] = version.to_le_bytes();
+    self.version1 = version1;
+    self.version2 = version2;
+    self.version3 = version3;
+    self.version4 = version4;
+    self.version5 = version5;
+    self.version6 = version6;
+    self.version7 = version7;
+  }
+
+  #[inline]
   fn version(&self) -> Version {
-    Version::from_le_bytes(self.version)
+    Version::from_le_bytes([
+      self.version1,
+      self.version2,
+      self.version3,
+      self.version4,
+      self.version5,
+      self.version6,
+      self.version7,
+    ])
   }
 
   #[inline]
@@ -831,6 +864,7 @@ impl<C, T> SkipList<C, T> {
   /// Allocates a `Node`, key, trailer and value
   fn allocate_entry_node<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: u32,
     trailer: T,
     key_size: u32,
@@ -871,6 +905,7 @@ impl<C, T> SkipList<C, T> {
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
+      node_ref.set_version(version);
       key.detach();
       let (_, key_deallocate_info) = self
         .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
@@ -900,6 +935,7 @@ impl<C, T> SkipList<C, T> {
   /// Allocates a `Node` and trailer
   fn allocate_node_in<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: u32,
     trailer: T,
     key_offset: u32,
@@ -930,6 +966,7 @@ impl<C, T> SkipList<C, T> {
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
+      node_ref.set_version(version);
 
       trailer_ref.detach();
       node.detach();
@@ -950,6 +987,7 @@ impl<C, T> SkipList<C, T> {
   /// Allocates a `Node`, key and trailer
   fn allocate_key_node<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: u32,
     trailer: T,
     key_size: u32,
@@ -987,6 +1025,7 @@ impl<C, T> SkipList<C, T> {
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
+      node_ref.set_version(version);
 
       key.detach();
       let (_, key_deallocate_info) = self
@@ -1013,6 +1052,7 @@ impl<C, T> SkipList<C, T> {
   /// Allocates a `Node`, trailer and value
   fn allocate_value_node<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: u32,
     trailer: T,
     key_size: u32,
@@ -1046,6 +1086,7 @@ impl<C, T> SkipList<C, T> {
       node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
+      node_ref.set_version(version);
 
       trailer_and_value.detach();
       let (_, value_deallocate_info) = self
@@ -1269,6 +1310,7 @@ impl<C, T> SkipList<C, T> {
 impl<C, T: Trailer> SkipList<C, T> {
   fn new_node<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: u32,
     key: &Key<'a, 'b>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
@@ -1278,6 +1320,7 @@ impl<C, T: Trailer> SkipList<C, T> {
       Key::Occupied(key) => {
         let (value_size, f) = value_builder.unwrap().into_components();
         self.allocate_entry_node(
+          version,
           height,
           trailer,
           key.len() as u32,
@@ -1291,13 +1334,14 @@ impl<C, T: Trailer> SkipList<C, T> {
       }
       Key::Vacant(key) => {
         let (value_size, f) = value_builder.unwrap().into_components();
-        self.allocate_value_node(height, trailer, key.len() as u32, key.offset, value_size, f)?
+        self.allocate_value_node(version, height, trailer, key.len() as u32, key.offset, value_size, f)?
       }
       Key::Pointer { offset, len, .. } => {
         let (value_size, f) = value_builder.unwrap().into_components();
-        self.allocate_value_node(height, trailer, *len, *offset, value_size, f)?
+        self.allocate_value_node(version, height, trailer, *len, *offset, value_size, f)?
       }
       Key::Remove(key) => self.allocate_key_node(
+        version,
         height,
         trailer,
         key.len() as u32,
@@ -1308,10 +1352,10 @@ impl<C, T: Trailer> SkipList<C, T> {
         REMOVE,
       )?,
       Key::RemoveVacant(key) => {
-        self.allocate_node_in(height, trailer, key.offset, key.len() as u32, REMOVE)?
+        self.allocate_node_in(version, height, trailer, key.offset, key.len() as u32, REMOVE)?
       }
       Key::RemovePointer { offset, len, .. } => {
-        self.allocate_node_in(height, trailer, *offset, *len, REMOVE)?
+        self.allocate_node_in(version, height, trailer, *offset, *len, REMOVE)?
       }
     };
 
@@ -1836,7 +1880,6 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     match self
       .cmp
       .compare(nd_key, key)
-      // .then_with(|| version.cmp(&nd.version))
     {
       cmp::Ordering::Less => true,
       cmp::Ordering::Greater => false,
@@ -1937,7 +1980,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     };
 
     let (nd, deallocator) = self
-      .new_node(height, &k, value_builder, trailer)
+      .new_node(version, height, &k, value_builder, trailer)
       .inspect_err(|_| {
         k.on_fail(&self.arena);
       })?;
@@ -1979,7 +2022,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     };
 
     let (nd, deallocator) = self
-      .new_node(height, &k, value_builder, trailer)
+      .new_node(version, height, &k, value_builder, trailer)
       .inspect_err(|_| {
         k.on_fail(&self.arena);
       })?;
@@ -2131,7 +2174,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     };
 
     let (nd, deallocator) = self
-      .new_node(height, &k, value_builder, trailer)
+      .new_node(version, height, &k, value_builder, trailer)
       .inspect_err(|_| {
         k.on_fail(&self.arena);
       })?;

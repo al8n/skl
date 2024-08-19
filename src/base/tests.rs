@@ -2417,19 +2417,28 @@ fn test_reopen_mmap2() {
       let l = SkipList::map_mut_with_comparator(&p, open_options, map_options, Ascend).unwrap();
       let mut data = (0..1000).collect::<Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
-      for i in data {
+      for i in &data {
+        let i = *i;
         l.get_or_insert(i as u32, &key(i), &new_value(i), ())
           .unwrap();
       }
       l.flush_async().unwrap();
       assert_eq!(l.max_version(), 999);
       assert_eq!(l.min_version(), 0);
+
+      for i in data {
+        let k = key(i);
+        let ent = l.get(i as u32, &k).unwrap();
+        assert_eq!(new_value(i), ent.value());
+        assert_eq!(ent.version(), i as u64);
+        assert_eq!(ent.key(), k);
+      }
     }
 
     let open_options = OpenOptions::default().read(true);
     let map_options = MmapOptions::default();
-    let l = SkipList::<Ascend, u64>::map_with_comparator(&p, open_options, map_options, Ascend, 0)
-      .unwrap();
+    let l =
+      SkipList::<_, ()>::map_with_comparator(&p, open_options, map_options, Ascend, 0).unwrap();
     assert_eq!(1000, l.len());
     let mut data = (0..1000).collect::<Vec<usize>>();
     data.shuffle(&mut rand::thread_rng());

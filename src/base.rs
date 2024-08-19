@@ -544,23 +544,6 @@ impl<T> Node<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_value_by_offset<'a, 'b: 'a>(
-    &'a self,
-    arena: &'b Arena,
-    offset: u32,
-    len: u32,
-  ) -> Option<&'b [u8]> {
-    if len == u32::MAX {
-      return None;
-    }
-    let align_offset = Self::align_offset(offset);
-    Some(arena.get_bytes(align_offset as usize + mem::size_of::<T>(), len as usize))
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
   unsafe fn get_value_by_value_offset<'a, 'b: 'a>(
     &'a self,
     arena: &'b Arena,
@@ -601,27 +584,6 @@ impl<T> Node<T> {
   #[inline]
   unsafe fn get_trailer_by_offset<'a, 'b: 'a>(&'a self, arena: &'b Arena, offset: u32) -> &'b T {
     &*arena.get_aligned_pointer::<T>(offset as usize)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_value_and_trailer<'a, 'b: 'a>(
-    &'a self,
-    arena: &'b Arena,
-  ) -> (&'b T, Option<&'b [u8]>) {
-    let (offset, len) = self.value.load(Ordering::Acquire);
-    let ptr = arena.get_aligned_pointer(offset as usize);
-
-    let trailer = &*ptr;
-
-    if len == u32::MAX {
-      return (trailer, None);
-    }
-
-    let value_offset = arena.offset(ptr as _) + mem::size_of::<T>();
-    (trailer, Some(arena.get_bytes(value_offset, len as usize)))
   }
 
   /// ## Safety
@@ -790,7 +752,7 @@ impl<C, T> Drop for SkipList<C, T> {
 impl<C, T> SkipList<C, T> {
   fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
     let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
-
+    std::println!("construct {data_offset}");
     if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
       return Ok(Self::construct(
@@ -873,7 +835,6 @@ impl<C, T> SkipList<C, T> {
     let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
     let tail_end =
       tail_offset + mem::size_of::<Node<T>>() + mem::size_of::<Link>() * max_height as usize;
-
     let trailer_end = if trailer_size != 0 {
       let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
       trailer_offset + trailer_size
@@ -893,13 +854,14 @@ impl<C, T> SkipList<C, T> {
     version: Version,
     height: u32,
     trailer: T,
-    key_size: u32,
-    kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-    value_size: u32,
-    vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    let (key_size, kf) = key_builder.into_components();
+    let (value_size, vf) = value_builder.into_components();
+
     self
-      .check_node_size(height, key_size, value_size)
+      .check_node_size(height, key_size.to_u32(), value_size)
       .map_err(Either::Right)?;
 
     unsafe {
@@ -912,7 +874,7 @@ impl<C, T> SkipList<C, T> {
 
       let mut key = self
         .arena
-        .alloc_bytes(key_size)
+        .alloc_bytes(key_size.to_u32())
         .map_err(|e| Either::Right(e.into()))?;
       let key_offset = key.offset();
       let key_cap = key.capacity();
@@ -1083,9 +1045,9 @@ impl<C, T> SkipList<C, T> {
     trailer: T,
     key_size: u32,
     key_offset: u32,
-    value_size: u32,
-    vf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    let (value_size, vf) = value_builder.into_components();
     self
       .check_node_size(height, key_size, value_size)
       .map_err(Either::Right)?;
@@ -1344,36 +1306,29 @@ impl<C, T: Trailer> SkipList<C, T> {
   ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
       Key::Occupied(key) => {
-        let (value_size, f) = value_builder.unwrap().into_components();
-        self.allocate_entry_node(
-          version,
-          height,
-          trailer,
-          key.len() as u32,
-          |buf| {
-            buf.write(key).unwrap();
-            Ok(())
-          },
-          value_size,
-          f,
-        )?
+        let kb = KeyBuilder::new(KeySize::from_u32_unchecked(key.len() as u32), |buf| {
+          buf.write(key).expect("buffer must be large enough for key");
+          Ok(())
+        });
+        let vb = value_builder.unwrap();
+        self.allocate_entry_node(version, height, trailer, kb, vb)?
       }
-      Key::Vacant(key) => {
-        let (value_size, f) = value_builder.unwrap().into_components();
-        self.allocate_value_node(
-          version,
-          height,
-          trailer,
-          key.len() as u32,
-          key.offset,
-          value_size,
-          f,
-        )?
-      }
-      Key::Pointer { offset, len, .. } => {
-        let (value_size, f) = value_builder.unwrap().into_components();
-        self.allocate_value_node(version, height, trailer, *len, *offset, value_size, f)?
-      }
+      Key::Vacant(key) => self.allocate_value_node(
+        version,
+        height,
+        trailer,
+        key.len() as u32,
+        key.offset,
+        value_builder.unwrap(),
+      )?,
+      Key::Pointer { offset, len, .. } => self.allocate_value_node(
+        version,
+        height,
+        trailer,
+        *len,
+        *offset,
+        value_builder.unwrap(),
+      )?,
       Key::Remove(key) => self.allocate_key_node(
         version,
         height,

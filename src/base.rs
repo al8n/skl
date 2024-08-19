@@ -710,6 +710,7 @@ pub struct SkipList<C = Ascend, T = ()> {
   head: NodePtr<T>,
   tail: NodePtr<T>,
   data_offset: u32,
+  on_disk: bool,
   opts: Options,
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
@@ -728,6 +729,7 @@ impl<C: Clone, T> Clone for SkipList<C, T> {
     Self {
       arena: self.arena.clone(),
       meta: self.meta,
+      on_disk: self.on_disk,
       head: self.head,
       tail: self.tail,
       data_offset: self.data_offset,
@@ -741,9 +743,16 @@ impl<C: Clone, T> Clone for SkipList<C, T> {
 
 impl<C, T> Drop for SkipList<C, T> {
   fn drop(&mut self) {
-    if self.arena.refs() == 1 && !self.opts.unify() {
-      unsafe {
-        let _ = Box::from_raw(self.meta.as_ptr());
+    if self.arena.refs() == 1 {
+      if !self.opts.unify() {
+        unsafe {
+          let _ = Box::from_raw(self.meta.as_ptr());
+        }
+      }
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(windows)))]
+      if self.arena.is_mmap() {
+        let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
       }
     }
   }
@@ -752,9 +761,9 @@ impl<C, T> Drop for SkipList<C, T> {
 impl<C, T> SkipList<C, T> {
   fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
     let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
-    std::println!("construct {data_offset}");
     if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
+
       return Ok(Self::construct(
         arena,
         meta,
@@ -1276,6 +1285,7 @@ impl<C, T> SkipList<C, T> {
     cmp: C,
   ) -> Self {
     Self {
+      on_disk: arena.is_on_disk(),
       arena,
       meta,
       head,

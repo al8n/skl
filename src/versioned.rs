@@ -57,10 +57,11 @@ impl SkipMap {
   /// **Note:** The capacity stands for how many memory mmaped,
   /// it does not mean the skipmap can store `cap` entries.
   ///
-  /// `lock`: whether to lock the underlying file or not
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_mut<P: AsRef<std::path::Path>>(
+  pub unsafe fn map_mut<P: AsRef<std::path::Path>>(
     path: P,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
@@ -69,9 +70,12 @@ impl SkipMap {
   }
 
   /// Like [`SkipMap::map_mut`], but with [`Options`].
+  ///
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_mut_with_options<P: AsRef<std::path::Path>>(
+  pub unsafe fn map_mut_with_options<P: AsRef<std::path::Path>>(
     path: P,
     opts: Options,
     open_options: OpenOptions,
@@ -82,10 +86,11 @@ impl SkipMap {
 
   /// Open an exist file and mmap it to create skipmap.
   ///
-  /// `lock`: whether to lock the underlying file or not
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map<P: AsRef<std::path::Path>>(
+  pub unsafe fn map<P: AsRef<std::path::Path>>(
     path: P,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
@@ -293,10 +298,13 @@ impl<C> SkipMap<C> {
   }
 
   /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
+  ///
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
+  pub unsafe fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
@@ -306,10 +314,13 @@ impl<C> SkipMap<C> {
   }
 
   /// Like [`SkipMap::map_mut`], but with [`Options`] and a custom [`Comparator`].
+  ///
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_mut_with_options_and_comparator<P: AsRef<std::path::Path>>(
+  pub unsafe fn map_mut_with_options_and_comparator<P: AsRef<std::path::Path>>(
     path: P,
     opts: Options,
     open_options: OpenOptions,
@@ -321,10 +332,13 @@ impl<C> SkipMap<C> {
   }
 
   /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  ///
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_mut_with_options_and_comparator_and_path_builder<PB, E>(
+  pub unsafe fn map_mut_with_options_and_comparator_and_path_builder<PB, E>(
     path_builder: PB,
     opts: Options,
     open_options: OpenOptions,
@@ -345,10 +359,13 @@ impl<C> SkipMap<C> {
   }
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`].
+  ///
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_with_comparator<P: AsRef<std::path::Path>>(
+  pub unsafe fn map_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
@@ -359,10 +376,13 @@ impl<C> SkipMap<C> {
   }
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  ///
+  /// # Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_with_comparator_and_path_builder<PB, E>(
+  pub unsafe fn map_with_comparator_and_path_builder<PB, E>(
     path_builder: PB,
     open_options: OpenOptions,
     mmap_options: MmapOptions,

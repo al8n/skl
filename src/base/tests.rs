@@ -121,7 +121,7 @@ fn test_empty_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_empty_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_empty_map_mut");
     let open_options = OpenOptions::default()
@@ -202,7 +202,7 @@ fn test_full_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_full_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_full_map_mut");
 
@@ -346,7 +346,7 @@ fn test_basic_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_basic_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_basic_map_mut");
     let open_options = OpenOptions::default()
@@ -473,7 +473,7 @@ fn test_iter_all_versions_mvcc_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versions_mvcc_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -596,7 +596,7 @@ fn test_get_mvcc_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_get_mvcc_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_get_mvcc_map_mut");
     let open_options = OpenOptions::default()
@@ -719,7 +719,7 @@ fn test_gt_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_gt_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_gt_map_mut");
     let open_options = OpenOptions::default()
@@ -840,7 +840,7 @@ fn test_ge_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_ge_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_ge_map_mut");
     let open_options = OpenOptions::default()
@@ -975,7 +975,7 @@ fn test_le_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_le_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_le_map_mut");
     let open_options = OpenOptions::default()
@@ -1099,7 +1099,7 @@ fn test_lt_map_mut() {
     .read(true)
     .write(true);
   let map_options = MmapOptions::default();
-  lt_in(SkipList::map_mut(p, open_options, map_options).unwrap());
+  lt_in(unsafe { SkipList::map_mut(p, open_options, map_options).unwrap() });
 }
 
 #[test]
@@ -1160,7 +1160,7 @@ fn test_basic_large_testcases_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_basic_large_testcases_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -1258,7 +1258,7 @@ fn test_concurrent_basic_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_concurrent_basic_map_mut");
     let open_options = OpenOptions::default()
@@ -1365,7 +1365,7 @@ fn test_concurrent_basic_2pc_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_basic_2pc_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_concurrent_basic_2pc_map_mut");
     let open_options = OpenOptions::default()
@@ -1463,7 +1463,7 @@ fn test_concurrent_basic_big_values_unify() {
 #[test]
 #[cfg(all(feature = "memmap", not(miri)))]
 fn test_concurrent_basic_big_values_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -1580,7 +1580,7 @@ fn test_concurrent_one_key_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_concurrent_one_key_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_concurrent_one_key_map_mut");
     let open_options = OpenOptions::default()
@@ -1655,7 +1655,7 @@ fn test_iter_all_versions_next_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versions_next_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -1731,7 +1731,7 @@ fn test_range_next_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_next_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_range_next_map_mut");
     let open_options = OpenOptions::default()
@@ -1793,7 +1793,7 @@ fn test_iter_all_versions_next_back() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versions_prev_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -1869,7 +1869,7 @@ fn test_range_prev_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_prev_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_range_prev_map_mut");
     let open_options = OpenOptions::default()
@@ -1964,7 +1964,7 @@ fn test_iter_all_versions_seek_ge_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versions_seek_ge_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -2050,7 +2050,7 @@ fn test_iter_all_versions_seek_lt_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_all_versions_seek_lt_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -2186,7 +2186,7 @@ fn test_range_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_range_map_mut");
     let open_options = OpenOptions::default()
@@ -2260,7 +2260,7 @@ fn test_iter_latest_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_iter_latest_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_iter_latest_map_mut");
     let open_options = OpenOptions::default()
@@ -2334,7 +2334,7 @@ fn test_range_latest_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_range_latest_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_range_latest_map_mut");
     let open_options = OpenOptions::default()
@@ -2368,7 +2368,7 @@ fn test_range_latest_map_anon_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_reopen_mmap() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("reopen_skipmap");
     {
@@ -2403,7 +2403,7 @@ fn test_reopen_mmap() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_reopen_mmap2() {
-  run(|| {
+  run(|| unsafe {
     use rand::seq::SliceRandom;
 
     let dir = tempfile::tempdir().unwrap();
@@ -2514,7 +2514,7 @@ fn test_get_or_insert_with_value_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_get_or_insert_with_value_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -2598,7 +2598,7 @@ fn test_get_or_insert_with_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_get_or_insert_with_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_get_or_insert_with_map_mut");
     let open_options = OpenOptions::default()
@@ -2662,7 +2662,7 @@ fn test_insert_in_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_insert_in_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_insert_in_map_mut");
     let open_options = OpenOptions::default()
@@ -2773,7 +2773,7 @@ fn test_insert_with_value_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_insert_with_value_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir
       .path()
@@ -2889,7 +2889,7 @@ fn test_insert_with_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_insert_with_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_insert_with_map_mut");
     let open_options = OpenOptions::default()
@@ -2958,7 +2958,7 @@ fn test_get_or_remove_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_get_or_remove_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_get_or_remove_map_mut");
     let open_options = OpenOptions::default()
@@ -3030,7 +3030,7 @@ fn test_remove_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_remove_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_remove_map_mut");
     let open_options = OpenOptions::default()
@@ -3102,7 +3102,7 @@ fn test_remove2_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_remove2_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_remove2_map_mut");
     let open_options = OpenOptions::default()
@@ -3117,7 +3117,7 @@ fn test_remove2_map_mut() {
 #[test]
 #[cfg(feature = "memmap")]
 fn test_remove2_map_anon() {
-  run(|| {
+  run(|| unsafe {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
     remove2(SkipList::map_anon(map_options).unwrap());
   })
@@ -3160,7 +3160,7 @@ fn test_allocate_in_unify() {
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
 fn test_allocate_in_map_mut() {
-  run(|| {
+  run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_allocate_in_map_mut");
     let open_options = OpenOptions::default()

@@ -1,7 +1,7 @@
 use criterion::*;
 use parking_lot::Mutex;
 use rand::prelude::*;
-use skl::*;
+use skl::{map::SkipMap, *};
 use std::{
   collections::*,
   sync::{atomic::*, *},
@@ -25,11 +25,11 @@ fn fixed_map_round(
 
 fn fixed_skiplist_round(l: &SkipMap, case: &(Vec<u8>, bool), exp: &Vec<u8>) {
   if case.1 {
-    if let Some(v) = l.get(0, &case.0) {
+    if let Some(v) = l.get(&case.0) {
       assert_eq!(v.value(), exp);
     }
   } else {
-    l.insert(0, &case.0, exp).unwrap();
+    l.insert(&case.0, exp).unwrap();
   }
 }
 
@@ -182,7 +182,7 @@ fn bench_write_fixed_skiplist(c: &mut Criterion) {
     b.iter_batched(
       || random_key(&mut rng),
       |key| {
-        list.insert(0, &key, &value).unwrap();
+        list.insert(&key, &value).unwrap();
       },
       BatchSize::SmallInput,
     )

@@ -2,16 +2,31 @@ use rarena_allocator::Arena;
 
 use super::{NodePtr, Version};
 
-#[derive(Copy, Clone, Debug)]
-pub(super) struct ValuePartPointer {
-  offset: u32,
-  len: u32,
+#[derive(Debug)]
+pub(super) struct ValuePartPointer<T> {
+  trailer_offset: u32,
+  value_offset: u32,
+  value_len: u32,
+  _m: core::marker::PhantomData<T>,
 }
 
-impl ValuePartPointer {
+impl<T> Clone for ValuePartPointer<T> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<T> Copy for ValuePartPointer<T> {}
+
+impl<T> ValuePartPointer<T> {
   #[inline]
-  pub(super) const fn new(offset: u32, len: u32) -> Self {
-    Self { offset, len }
+  pub(super) const fn new(trailer_offset: u32, value_offset: u32, value_len: u32) -> Self {
+    Self {
+      trailer_offset,
+      value_offset,
+      value_len,
+      _m: core::marker::PhantomData,
+    }
   }
 }
 
@@ -22,7 +37,7 @@ impl ValuePartPointer {
 pub struct VersionedEntryRef<'a, T> {
   pub(super) arena: &'a Arena,
   pub(super) key: &'a [u8],
-  pub(super) value_part_pointer: ValuePartPointer,
+  pub(super) value_part_pointer: ValuePartPointer<T>,
   pub(super) version: Version,
   pub(super) ptr: NodePtr<T>,
 }
@@ -47,10 +62,10 @@ impl<'a, T> VersionedEntryRef<'a, T> {
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
       let node = self.ptr.as_ref();
-      let value = node.get_value_by_offset(
+      let value = node.get_value_by_value_offset(
         self.arena,
-        self.value_part_pointer.offset,
-        self.value_part_pointer.len,
+        self.value_part_pointer.value_offset,
+        self.value_part_pointer.value_len,
       );
       value
     }
@@ -61,7 +76,7 @@ impl<'a, T> VersionedEntryRef<'a, T> {
   pub fn trailer(&self) -> &T {
     unsafe {
       let node = self.ptr.as_ref();
-      let trailer = node.get_trailer_by_offset(self.arena, self.value_part_pointer.offset);
+      let trailer = node.get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset);
       trailer
     }
   }
@@ -101,10 +116,10 @@ impl<'a, T> VersionedEntryRef<'a, T> {
   pub(super) fn from_node(node_ptr: NodePtr<T>, arena: &'a Arena) -> VersionedEntryRef<'a, T> {
     unsafe {
       let node = node_ptr.as_ref();
-      let (offset, len) = node.trailer_offset_and_value_size();
+      let vp = node.trailer_offset_and_value_size();
       VersionedEntryRef {
         key: node.get_key(arena),
-        value_part_pointer: ValuePartPointer::new(offset, len),
+        value_part_pointer: vp,
         arena,
         ptr: node_ptr,
         version: node.version(),
@@ -116,7 +131,7 @@ impl<'a, T> VersionedEntryRef<'a, T> {
   pub(super) fn from_node_with_pointer(
     node_ptr: NodePtr<T>,
     arena: &'a Arena,
-    pointer: ValuePartPointer,
+    pointer: ValuePartPointer<T>,
   ) -> VersionedEntryRef<'a, T> {
     unsafe {
       let node = node_ptr.as_ref();
@@ -138,7 +153,7 @@ impl<'a, T> VersionedEntryRef<'a, T> {
 pub struct VersionedEntry<T> {
   pub(super) arena: Arena,
   pub(super) ptr: NodePtr<T>,
-  pub(super) value_part_pointer: ValuePartPointer,
+  pub(super) value_part_pointer: ValuePartPointer<T>,
 }
 
 impl<T> Clone for VersionedEntry<T> {
@@ -172,10 +187,10 @@ impl<T> VersionedEntry<T> {
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
       let node = self.ptr.as_ref();
-      let value = node.get_value_by_offset(
+      let value = node.get_value_by_value_offset(
         &self.arena,
-        self.value_part_pointer.offset,
-        self.value_part_pointer.len,
+        self.value_part_pointer.value_offset,
+        self.value_part_pointer.value_len,
       );
       value
     }
@@ -186,7 +201,7 @@ impl<T> VersionedEntry<T> {
   pub fn trailer(&self) -> &T {
     unsafe {
       let node = self.ptr.as_ref();
-      let trailer = node.get_trailer_by_offset(&self.arena, self.value_part_pointer.offset);
+      let trailer = node.get_trailer_by_offset(&self.arena, self.value_part_pointer.trailer_offset);
       trailer
     }
   }

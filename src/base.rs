@@ -388,7 +388,8 @@ impl<T> Node<T> {
 
   #[inline]
   fn full(value_offset: u32, max_height: u8) -> Self {
-    let [version1, version2, version3, version4, version5, version6, version7] = MIN_VERSION.to_le_bytes();
+    let [version1, version2, version3, version4, version5, version6, version7] =
+      MIN_VERSION.to_le_bytes();
     Self {
       value: AtomicValuePointer::new(value_offset, 0),
       key_offset: 0,
@@ -412,7 +413,8 @@ impl<T> Node<T> {
 
   #[inline]
   fn set_version(&mut self, version: Version) {
-    let [version1, version2, version3, version4, version5, version6, version7] = version.to_le_bytes();
+    let [version1, version2, version3, version4, version5, version6, version7] =
+      version.to_le_bytes();
     self.version1 = version1;
     self.version2 = version2;
     self.version3 = version3;
@@ -555,9 +557,28 @@ impl<T> Node<T> {
     Some(arena.get_bytes(align_offset as usize + mem::size_of::<T>(), len as usize))
   }
 
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  pub(super) fn trailer_offset_and_value_size(&self) -> (u32, u32) {
-    self.value.load(Ordering::Acquire)
+  unsafe fn get_value_by_value_offset<'a, 'b: 'a>(
+    &'a self,
+    arena: &'b Arena,
+    offset: u32,
+    len: u32,
+  ) -> Option<&'b [u8]> {
+    if len == u32::MAX {
+      return None;
+    }
+
+    Some(arena.get_bytes(offset as usize, len as usize))
+  }
+
+  #[inline]
+  pub(super) fn trailer_offset_and_value_size(&self) -> ValuePartPointer<T> {
+    let (offset, len) = self.value.load(Ordering::Acquire);
+    let align_offset = Self::align_offset(offset);
+    ValuePartPointer::new(align_offset, align_offset + mem::size_of::<T>() as u32, len)
   }
 
   #[inline]
@@ -610,21 +631,26 @@ impl<T> Node<T> {
   unsafe fn get_value_and_trailer_with_pointer<'a, 'b: 'a>(
     &'a self,
     arena: &'b Arena,
-  ) -> (&'b T, Option<&'b [u8]>, ValuePartPointer) {
+  ) -> (&'b T, Option<&'b [u8]>, ValuePartPointer<T>) {
     let (offset, len) = self.value.load(Ordering::Acquire);
     let ptr = arena.get_aligned_pointer(offset as usize);
 
+    let align_offset = Arena::align_offset::<T>(offset);
     let trailer = &*ptr;
 
     if len == u32::MAX {
-      return (trailer, None, ValuePartPointer::new(offset, len));
+      return (
+        trailer,
+        None,
+        ValuePartPointer::new(offset, align_offset + mem::size_of::<T>() as u32, len),
+      );
     }
 
-    let value_offset = arena.offset(ptr as _) + mem::size_of::<T>();
+    let value_offset = align_offset + mem::size_of::<T>() as u32;
     (
       trailer,
-      Some(arena.get_bytes(value_offset, len as usize)),
-      ValuePartPointer::new(offset, len),
+      Some(arena.get_bytes(value_offset as usize, len as usize)),
+      ValuePartPointer::new(offset, value_offset as u32, len),
     )
   }
 }
@@ -1334,7 +1360,15 @@ impl<C, T: Trailer> SkipList<C, T> {
       }
       Key::Vacant(key) => {
         let (value_size, f) = value_builder.unwrap().into_components();
-        self.allocate_value_node(version, height, trailer, key.len() as u32, key.offset, value_size, f)?
+        self.allocate_value_node(
+          version,
+          height,
+          trailer,
+          key.len() as u32,
+          key.offset,
+          value_size,
+          f,
+        )?
       }
       Key::Pointer { offset, len, .. } => {
         let (value_size, f) = value_builder.unwrap().into_components();
@@ -1351,9 +1385,14 @@ impl<C, T: Trailer> SkipList<C, T> {
         },
         REMOVE,
       )?,
-      Key::RemoveVacant(key) => {
-        self.allocate_node_in(version, height, trailer, key.offset, key.len() as u32, REMOVE)?
-      }
+      Key::RemoveVacant(key) => self.allocate_node_in(
+        version,
+        height,
+        trailer,
+        key.offset,
+        key.len() as u32,
+        REMOVE,
+      )?,
       Key::RemovePointer { offset, len, .. } => {
         self.allocate_node_in(version, height, trailer, *offset, *len, REMOVE)?
       }
@@ -1877,10 +1916,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       .arena
       .get_bytes(nd.key_offset as usize, nd.key_size() as usize);
 
-    match self
-      .cmp
-      .compare(nd_key, key)
-    {
+    match self.cmp.compare(nd_key, key) {
       cmp::Ordering::Less => true,
       cmp::Ordering::Greater => false,
       cmp::Ordering::Equal => {
@@ -2401,7 +2437,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
           Err((offset, len)) => Either::Right(Err(VersionedEntryRef::from_node_with_pointer(
             old_node_ptr,
             &self.arena,
-            ValuePartPointer::new(offset, len),
+            ValuePartPointer::new(
+              offset,
+              Arena::align_offset::<T>(offset) + mem::size_of::<T>() as u32,
+              len,
+            ),
           ))),
         }
       }
@@ -2432,7 +2472,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
             VersionedEntryRef::from_node_with_pointer(
               old_node_ptr,
               &self.arena,
-              ValuePartPointer::new(offset, len),
+              ValuePartPointer::new(
+                offset,
+                Arena::align_offset::<T>(offset) + mem::size_of::<T>() as u32,
+                len,
+              ),
             ),
           ))),
         }

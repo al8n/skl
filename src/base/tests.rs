@@ -248,90 +248,88 @@ fn test_full_map_anon_unify() {
 }
 
 fn basic_in(mut l: SkipList) {
-  // // Try adding values.
-  // l.get_or_insert(0u8, b"key1", &make_value(1), ()).unwrap();
-  // l.get_or_insert(0u8, b"key3", &make_value(3), ()).unwrap();
-  // l.get_or_insert(0u8, b"key2", &make_value(2), ()).unwrap();
-  // assert_eq!(l.comparator(), &Ascend);
+  // Try adding values.
+  l.get_or_insert(0u8, b"key1", &make_value(1), ()).unwrap();
+  l.get_or_insert(0u8, b"key3", &make_value(3), ()).unwrap();
+  l.get_or_insert(0u8, b"key2", &make_value(2), ()).unwrap();
+  assert_eq!(l.comparator(), &Ascend);
 
-  // {
-  //   let mut it = l.iter_all_versions(0u8);
-  //   let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
-  //   assert_eq!(ent.key(), b"key1");
-  //   assert_eq!(ent.value().unwrap(), &make_value(1));
-  //   assert_eq!(ent.version(), 0);
+  {
+    let mut it = l.iter_all_versions(0u8);
+    let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
+    assert_eq!(ent.key(), b"key1");
+    assert_eq!(ent.value().unwrap(), &make_value(1));
+    assert_eq!(ent.version(), 0);
 
-  //   let ent = it.seek_lower_bound(Bound::Included(b"key2")).unwrap();
-  //   assert_eq!(ent.key(), b"key2");
-  //   assert_eq!(ent.value().unwrap(), &make_value(2));
-  //   assert_eq!(ent.version(), 0);
+    let ent = it.seek_lower_bound(Bound::Included(b"key2")).unwrap();
+    assert_eq!(ent.key(), b"key2");
+    assert_eq!(ent.value().unwrap(), &make_value(2));
+    assert_eq!(ent.version(), 0);
 
-  //   let ent = it.seek_lower_bound(Bound::Included(b"key3")).unwrap();
-  //   assert_eq!(ent.key(), b"key3");
-  //   assert_eq!(ent.value().unwrap(), &make_value(3));
-  //   assert_eq!(ent.version(), 0);
-  // }
+    let ent = it.seek_lower_bound(Bound::Included(b"key3")).unwrap();
+    assert_eq!(ent.key(), b"key3");
+    assert_eq!(ent.value().unwrap(), &make_value(3));
+    assert_eq!(ent.version(), 0);
+  }
 
   l.get_or_insert(1u8, "a".as_bytes(), &[], ()).unwrap();
-  println!("{:?}", l.allocator().allocated_memory());
   l.get_or_insert(2u8, "a".as_bytes(), &[], ()).unwrap();
-  println!("{:?}", l.allocator().allocated_memory());
 
-  // {
-  //   let mut it = l.iter_all_versions(2u8);
-  //   let ent = it.seek_lower_bound(Bound::Included(b"a")).unwrap();
-  //   assert_eq!(ent.key(), b"a");
-  //   assert_eq!(ent.value().unwrap(), &[]);
-  //   assert_eq!(ent.version(), 2);
+  {
+    let mut it = l.iter_all_versions(2u8);
+    let ent = it.seek_lower_bound(Bound::Included(b"a")).unwrap();
+    assert_eq!(ent.key(), b"a");
+    assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.version(), 2);
 
-  //   let ent = it.next().unwrap();
-  //   assert_eq!(ent.key(), b"a");
-  //   assert_eq!(ent.value().unwrap(), &[]);
-  //   assert_eq!(ent.version(), 1);
-  // }
+    let ent = it.next().unwrap();
+    assert_eq!(ent.key(), b"a");
+    assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.version(), 1);
+  }
 
-  // l.get_or_insert(2u8, "b".as_bytes(), &[], ()).unwrap();
-  // l.get_or_insert(1u8, "b".as_bytes(), &[], ()).unwrap();
+  l.get_or_insert(2u8, "b".as_bytes(), &[], ()).unwrap();
+  l.get_or_insert(1u8, "b".as_bytes(), &[], ()).unwrap();
 
-  // {
-  //   let mut it = l.iter_all_versions(2u8);
-  //   let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
-  //   assert_eq!(ent.key(), b"b");
-  //   assert_eq!(ent.value().unwrap(), &[]);
-  //   assert_eq!(ent.version(), 2);
+  {
+    let mut it = l.iter_all_versions(2u8);
+    let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
+    assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.version(), 2);
 
-  //   let ent = it.next().unwrap();
-  //   assert_eq!(ent.key(), b"b");
-  //   assert_eq!(ent.value().unwrap(), &[]);
-  //   assert_eq!(ent.version(), 1);
+    let ent = it.next().unwrap();
+    assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.version(), 1);
 
-  //   let ent = it.entry().unwrap();
-  //   assert_eq!(ent.key(), b"b");
-  //   assert_eq!(ent.value().unwrap(), &[]);
-  //   assert_eq!(ent.version(), 1);
-  // }
+    let ent = it.entry().unwrap();
+    assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.version(), 1);
+  }
 
-  // l.get_or_insert(2u8, b"b", &[], ()).unwrap().unwrap();
+  l.get_or_insert(2u8, b"b", &[], ()).unwrap().unwrap();
 
-  // assert!(l.get_or_insert(2u8, b"c", &[], ()).unwrap().is_none());
+  assert!(l.get_or_insert(2u8, b"c", &[], ()).unwrap().is_none());
 
-  // unsafe {
-  //   l.clear().unwrap();
-  // }
+  unsafe {
+    l.clear().unwrap();
+  }
 
-  // let l = l.clone();
-  // {
-  //   let mut it = l.iter_all_versions(0u8);
-  //   assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
-  //   assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
-  // }
-  // assert!(l.is_empty());
+  let l = l.clone();
+  {
+    let mut it = l.iter_all_versions(0u8);
+    assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+    assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
+  }
+  assert!(l.is_empty());
 
-  // #[cfg(feature = "memmap")]
-  // l.flush().unwrap();
+  #[cfg(feature = "memmap")]
+  l.flush().unwrap();
 
-  // #[cfg(feature = "memmap")]
-  // l.flush_async().unwrap();
+  #[cfg(feature = "memmap")]
+  l.flush_async().unwrap();
 }
 
 #[test]
@@ -2420,7 +2418,8 @@ fn test_reopen_mmap2() {
       let mut data = (0..1000).collect::<Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
       for i in data {
-        l.get_or_insert(i as u32, &key(i), &new_value(i), ()).unwrap();
+        l.get_or_insert(i as u32, &key(i), &new_value(i), ())
+          .unwrap();
       }
       l.flush_async().unwrap();
       assert_eq!(l.max_version(), 999);
@@ -2572,7 +2571,8 @@ fn get_or_insert_with(l: SkipList) {
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<()>(1u8, kb, vb, ()).unwrap();
+  l.get_or_insert_with_builders::<()>(1u8, kb, vb, ())
+    .unwrap();
 }
 
 #[test]
@@ -2853,7 +2853,10 @@ fn insert_with(l: SkipList) {
     );
     Ok(())
   });
-  let old = l.insert_with_builders::<()>(1u8, kb, vb, ()).unwrap().unwrap();
+  let old = l
+    .insert_with_builders::<()>(1u8, kb, vb, ())
+    .unwrap()
+    .unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));

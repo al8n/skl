@@ -119,10 +119,21 @@ fn test_empty_unify() {
 
 #[test]
 #[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
+// #[cfg_attr(miri, ignore)]
 fn test_empty_map_mut() {
-  run(|| unsafe {
-    let dir = tempfile::tempdir().unwrap();
+  // run(|| unsafe {
+  //   let dir = tempfile::tempdir().unwrap();
+  //   let p = dir.path().join("test_skipmap_empty_map_mut");
+  //   let open_options = OpenOptions::default()
+  //     .create_new(Some(1000))
+  //     .read(true)
+  //     .write(true);
+  //   let map_options = MmapOptions::default();
+
+  //   let x = SkipList::map_mut(p, open_options, map_options).unwrap();
+  //   empty_in(x);
+  // })
+  let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("test_skipmap_empty_map_mut");
     let open_options = OpenOptions::default()
       .create_new(Some(1000))
@@ -130,8 +141,8 @@ fn test_empty_map_mut() {
       .write(true);
     let map_options = MmapOptions::default();
 
-    empty_in(SkipList::map_mut(p, open_options, map_options).unwrap());
-  })
+    let x = unsafe { SkipList::map_mut(p, open_options, map_options).unwrap() };
+    empty_in(x);
 }
 
 #[test]
@@ -2387,7 +2398,7 @@ fn test_reopen_mmap() {
 
     let open_options = OpenOptions::default().read(true);
     let map_options = MmapOptions::default();
-    let l = SkipList::<Ascend, u64>::map(&p, open_options, map_options, 0).unwrap();
+    let l = SkipList::<Ascend, ()>::map(&p, open_options, map_options, 0).unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
       let k = key(i);

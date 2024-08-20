@@ -3,7 +3,7 @@ use super::Height;
 /// Error type for the [`SkipMap`](crate::SkipMap).
 ///
 /// [`SkipMap`]: crate::SkipMap
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Error {
   /// Indicates that the arena is full
   Arena(rarena_allocator::Error),
@@ -28,6 +28,11 @@ pub enum Error {
 
   /// Arena too small
   ArenaTooSmall,
+
+  /// I/O error
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  IO(std::io::Error),
 }
 
 impl core::fmt::Display for Error {
@@ -42,6 +47,8 @@ impl core::fmt::Display for Error {
         f,
         "given height {height} is larger than the max height {max_height} or less than 1"
       ),
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      Self::IO(e) => write!(f, "{e}"),
     }
   }
 }
@@ -65,6 +72,13 @@ impl Error {
   #[inline]
   pub(crate) const fn invalid_height(height: Height, max_height: Height) -> Self {
     Self::InvalidHeight { height, max_height }
+  }
+}
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+impl From<std::io::Error> for Error {
+  fn from(e: std::io::Error) -> Self {
+    Self::IO(e)
   }
 }
 

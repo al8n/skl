@@ -29,7 +29,7 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
-use rarena_allocator::Error as ArenaError;
+use rarena_allocator::{BytesRefMut, Error as ArenaError};
 
 #[cfg(test)]
 mod tests;
@@ -857,6 +857,108 @@ impl<C, T> SkipList<C, T> {
     Ok(trailer_end as u32)
   }
 
+  #[inline]
+  fn allocate_pure_node(&self, height: u32) -> Result<BytesRefMut, ArenaError> {
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    {
+      let ondisk_mmap = self.arena.is_on_disk_and_mmap();
+      if ondisk_mmap {
+        self
+          .arena
+          .alloc_aligned_bytes_within_page::<Node<T>>(height * Link::SIZE as u32)
+      } else {
+        self
+          .arena
+          .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
+      }
+    }
+
+    #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+    {
+      self
+        .arena
+        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
+    }
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[inline]
+  fn msync_new_entry(
+    &self,
+    // (offset, size)
+    (node_offset, node_size): (u32, u32),
+    // (offset, size)
+    key: Option<(u32, u32)>,
+    // (offset, size)
+    value: Option<(u32, u32)>,
+  ) -> Result<(), Error> {
+    use arrayvec::ArrayVec;
+
+    if self.arena.is_on_disk_and_mmap() {
+      fn calculate_page_bounds(offset: u32, size: u32, page_size: u32) -> (u32, u32) {
+        let start_page = offset / page_size;
+        let end_page = (offset + size) / page_size;
+        (start_page, end_page)
+      }
+
+      let page_size = self.arena.page_size() as u32;
+      let mut ranges = ArrayVec::<(u32, u32), 3>::new_const();
+      ranges.push(calculate_page_bounds(node_offset, node_size, page_size));
+
+      if let Some((offset, size)) = key {
+        ranges.push(calculate_page_bounds(offset, size, page_size));
+      }
+
+      if let Some((offset, size)) = value {
+        ranges.push(calculate_page_bounds(offset, size, page_size));
+      }
+
+      let len = ranges.len();
+
+      match len {
+        1 => {
+          return self
+            .arena
+            .flush_range(node_offset as usize, node_size as usize)
+            .map_err(Into::into);
+        }
+        2..=3 => {
+          // Sort ranges by start page
+          ranges.sort_by_key(|&(start, _)| start);
+
+          let mut merged_ranges = ArrayVec::<(u32, u32), 3>::new_const();
+
+          for (start, end) in ranges {
+            match merged_ranges.last_mut() {
+              None => {
+                merged_ranges.push((start, end));
+              }
+              // no overlap
+              Some((_, last_end)) if *last_end < start => {
+                merged_ranges.push((start, end));
+              }
+              // overlap
+              Some((_, last)) => {
+                *last = (*last).max(end);
+              }
+            }
+          }
+
+          for (start, end) in merged_ranges {
+            let spo = (start * page_size) as usize;
+            let epo = (end * page_size) as usize;
+            self.arena.flush_range(spo, (epo - spo).max(1))?;
+          }
+
+          return Ok(());
+        }
+        _ => unreachable!(),
+      }
+    }
+
+    Ok(())
+  }
+
   /// Allocates a `Node`, key, trailer and value
   fn allocate_entry_node<'a, 'b: 'a, E>(
     &'a self,
@@ -875,8 +977,7 @@ impl<C, T> SkipList<C, T> {
 
     unsafe {
       let mut node = self
-        .arena
-        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
+        .allocate_pure_node(height)
         .map_err(|e| Either::Right(e.into()))?;
       let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
       let node_offset = node.offset();
@@ -918,13 +1019,32 @@ impl<C, T> SkipList<C, T> {
         )
         .map_err(Either::Left)?;
       node.detach();
+
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: Some(key_deallocate_info),
+        value: Some(value_deallocate_info),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = self
+        .msync_new_entry(
+          (node_offset as u32, node.capacity() as u32),
+          Some((key_offset as u32, key.capacity() as u32)),
+          Some((
+            trailer_and_value.memory_offset() as u32,
+            trailer_and_value.memory_capacity() as u32,
+          )),
+        )
+      {
+        deallocator.dealloc(&self.arena);
+
+        return Err(Either::Right(e));
+      }
+
       Ok((
         NodePtr::new(node_ptr as _, node_offset as u32),
-        Deallocator {
-          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-          key: Some(key_deallocate_info),
-          value: Some(value_deallocate_info),
-        },
+        deallocator,
       ))
     }
   }
@@ -967,16 +1087,34 @@ impl<C, T> SkipList<C, T> {
 
       trailer_ref.detach();
       node.detach();
+
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: None,
+        value: Some(Pointer::new(
+          trailer_offset as u32,
+          mem::size_of::<T>() as u32,
+        )),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = self
+        .msync_new_entry(
+          (node_offset as u32, node.capacity() as u32),
+          None,
+          Some((
+            trailer_ref.memory_offset() as u32,
+            trailer_ref.memory_size() as u32,
+          )),
+        )
+      {
+        deallocator.dealloc(&self.arena);
+        return Err(Either::Right(e));
+      }
+
       Ok((
         NodePtr::new(node_ptr as _, node_offset as u32),
-        Deallocator {
-          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-          key: None,
-          value: Some(Pointer::new(
-            trailer_offset as u32,
-            mem::size_of::<T>() as u32,
-          )),
-        },
+        deallocator,
       ))
     }
   }
@@ -1032,16 +1170,33 @@ impl<C, T> SkipList<C, T> {
       trailer_ref.detach();
       node.detach();
 
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: Some(key_deallocate_info),
+        value: Some(Pointer::new(
+          trailer_offset as u32,
+          mem::size_of::<T>() as u32,
+        )),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = self
+        .msync_new_entry(
+          (node_offset as u32, node.capacity() as u32),
+          Some((key_offset as u32, key.capacity() as u32)),
+          Some((
+            trailer_ref.memory_offset() as u32,
+            trailer_ref.memory_size() as u32,
+          )),
+        )
+      {
+        deallocator.dealloc(&self.arena);
+        return Err(Either::Right(e));
+      }
+
       Ok((
         NodePtr::new(node_ptr as _, node_offset as u32),
-        Deallocator {
-          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-          key: Some(key_deallocate_info),
-          value: Some(Pointer::new(
-            trailer_offset as u32,
-            mem::size_of::<T>() as u32,
-          )),
-        },
+        deallocator,
       ))
     }
   }
@@ -1098,13 +1253,30 @@ impl<C, T> SkipList<C, T> {
 
       node.detach();
 
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: None,
+        value: Some(value_deallocate_info),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = self
+        .msync_new_entry(
+          (node_offset as u32, node.capacity() as u32),
+          None,
+          Some((
+            trailer_and_value.memory_offset() as u32,
+            trailer_and_value.memory_capacity() as u32,
+          )),
+        )
+      {
+        deallocator.dealloc(&self.arena);
+        return Err(Either::Right(e));
+      }
+
       Ok((
         NodePtr::new(node_ptr as _, node_offset as u32),
-        Deallocator {
-          node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-          key: None,
-          value: Some(value_deallocate_info),
-        },
+        deallocator,
       ))
     }
   }

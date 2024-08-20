@@ -392,7 +392,9 @@ impl<C, T> SkipList<C, T> {
         } else {
           // Lock the memory of first page to prevent it from being swapped out.
           unsafe {
-            map.arena.mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
           }
 
           Ok(map)
@@ -434,7 +436,9 @@ impl<C, T> SkipList<C, T> {
         } else {
           // Lock the memory of first page to prevent it from being swapped out.
           unsafe {
-            map.arena.mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
           }
 
           Ok(map)
@@ -474,7 +478,9 @@ impl<C, T> SkipList<C, T> {
       } else {
         // Lock the memory of first page to prevent it from being swapped out.
         unsafe {
-          map.arena.mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          map
+            .arena
+            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
         }
 
         Ok(map)
@@ -517,7 +523,9 @@ impl<C, T> SkipList<C, T> {
       } else {
         // Lock the memory of first page to prevent it from being swapped out.
         unsafe {
-          map.arena.mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          map
+            .arena
+            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
         }
         Ok(map)
       }
@@ -553,7 +561,9 @@ impl<C, T> SkipList<C, T> {
       .and_then(|map| {
         // Lock the memory of first page to prevent it from being swapped out.
         unsafe {
-          map.arena.mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          map
+            .arena
+            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
         }
         Ok(map)
       })

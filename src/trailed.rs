@@ -1787,33 +1787,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     self.0.link(node)
   }
 
-  /// Links a node into the [`SkipMap`].
-  ///
-  /// Use this method to link a [`UnlinkedNode`] that was allocated through `allocate*` APIs.
-  ///
-  /// # Panic
-  /// - If this [`SkipMap`] is read-only.
-  ///
-  /// # Safety
-  /// - The caller must ensure that the [`SkipMap`] is not read-only.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::*;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// let unlinked_node = map.allocate(0u8, b"hello", b"world").unwrap();
-  ///
-  /// // do something else
-  ///
-  /// unsafe { map.link_unchecked(unlinked_node); }
-  /// ```
-  pub unsafe fn link_unchecked<'a>(&'a self, node: UnlinkedNode<'a, T>) -> Option<EntryRef<'a, T>> {
-    self.0.link_unchecked(node)
-  }
-
   /// Gets an entry or links a node into the [`SkipMap`].
   ///
   /// # Example
@@ -1834,34 +1807,6 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
     node: UnlinkedNode<'a, T>,
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
     self.0.get_or_link(node)
-  }
-
-  /// Gets an entry or links a node into the [`SkipMap`].
-  ///
-  /// # Panic
-  /// - If this [`SkipMap`] is read-only.
-  ///
-  /// # Safety
-  /// - The caller must ensure that the [`SkipMap`] is not read-only.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::*;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// let unlinked_node = map.allocate(b"hello", b"world").unwrap();
-  ///
-  /// // do something else
-  ///
-  /// unsafe { map.get_or_link_unchecked(unlinked_node); }
-  /// ```
-  pub unsafe fn get_or_link_unchecked<'a>(
-    &'a self,
-    node: UnlinkedNode<'a, T>,
-  ) -> Option<EntryRef<'a, T>> {
-    self.0.get_or_link_unchecked(node)
   }
 }
 

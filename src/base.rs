@@ -412,6 +412,39 @@ impl<T> Node<T> {
   }
 
   #[inline]
+  fn is_committed(&self) -> bool {
+    self.state.load(Ordering::Acquire) == NodeState::Committed as u8
+  }
+
+  #[inline]
+  fn init_state(&mut self, ondisk_mmap: bool) {
+    if ondisk_mmap {
+      self.state = AtomicU8::new(NodeState::Initialized as u8);
+    } else {
+      self.state = AtomicU8::new(NodeState::Committed as u8);
+    }
+  }
+
+  #[inline]
+  unsafe fn commit(&self, offset: u32, arena: &Arena) -> std::io::Result<()> {
+    let h = self.height() as usize;
+    let node_size = mem::size_of::<Self>();
+    let full_node_size = node_size + h * Link::SIZE;
+    self
+      .state
+      .store(NodeState::Committed as u8, Ordering::Release);
+    arena.flush_range(offset as usize, full_node_size)
+  }
+
+  #[inline]
+  unsafe fn sync(&self, offset: u32, arena: &Arena) -> std::io::Result<()> {
+    let h = self.height() as usize;
+    let node_size = mem::size_of::<Self>();
+    let full_node_size = node_size + h * Link::SIZE;
+    arena.flush_range(offset as usize, full_node_size)
+  }
+
+  #[inline]
   fn set_version(&mut self, version: Version) {
     let [version1, version2, version3, version4, version5, version6, version7] =
       version.to_le_bytes();
@@ -477,6 +510,13 @@ impl<T> Node<T> {
     let (_, old_len) = self.value.swap(trailer_offset as u32, value_size);
     if old_len != REMOVE {
       arena.increase_discarded(old_len);
+    }
+
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    {
+      if arena.is_on_disk_and_mmap() {
+        bytes.flush().map_err(|e| Either::Right(e.into()))?;
+      }
     }
 
     Ok(())
@@ -1004,6 +1044,13 @@ impl<C, T> SkipList<C, T> {
       node_ref.key_offset = key_offset as u32;
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
       node_ref.set_version(version);
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let ondisk_mmap = self.arena.is_on_disk_and_mmap();
+      #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+      let ondisk_mmap = false;
+      node_ref.init_state(ondisk_mmap);
+
       key.detach();
       let (_, key_deallocate_info) = self
         .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
@@ -1027,25 +1074,20 @@ impl<C, T> SkipList<C, T> {
       };
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self
-        .msync_new_entry(
-          (node_offset as u32, node.capacity() as u32),
-          Some((key_offset as u32, key.capacity() as u32)),
-          Some((
-            trailer_and_value.memory_offset() as u32,
-            trailer_and_value.memory_capacity() as u32,
-          )),
-        )
-      {
+      if let Err(e) = self.msync_new_entry(
+        (node_offset as u32, node.capacity() as u32),
+        Some((key_offset as u32, key.capacity() as u32)),
+        Some((
+          trailer_and_value.memory_offset() as u32,
+          trailer_and_value.memory_capacity() as u32,
+        )),
+      ) {
         deallocator.dealloc(&self.arena);
 
         return Err(Either::Right(e));
       }
 
-      Ok((
-        NodePtr::new(node_ptr as _, node_offset as u32),
-        deallocator,
-      ))
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
     }
   }
 
@@ -1085,6 +1127,12 @@ impl<C, T> SkipList<C, T> {
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
       node_ref.set_version(version);
 
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let ondisk_mmap = self.arena.is_on_disk_and_mmap();
+      #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+      let ondisk_mmap = false;
+      node_ref.init_state(ondisk_mmap);
+
       trailer_ref.detach();
       node.detach();
 
@@ -1098,24 +1146,19 @@ impl<C, T> SkipList<C, T> {
       };
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self
-        .msync_new_entry(
-          (node_offset as u32, node.capacity() as u32),
-          None,
-          Some((
-            trailer_ref.memory_offset() as u32,
-            trailer_ref.memory_size() as u32,
-          )),
-        )
-      {
+      if let Err(e) = self.msync_new_entry(
+        (node_offset as u32, node.capacity() as u32),
+        None,
+        Some((
+          trailer_ref.memory_offset() as u32,
+          trailer_ref.memory_size() as u32,
+        )),
+      ) {
         deallocator.dealloc(&self.arena);
         return Err(Either::Right(e));
       }
 
-      Ok((
-        NodePtr::new(node_ptr as _, node_offset as u32),
-        deallocator,
-      ))
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
     }
   }
 
@@ -1162,6 +1205,12 @@ impl<C, T> SkipList<C, T> {
       node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
       node_ref.set_version(version);
 
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let ondisk_mmap = self.arena.is_on_disk_and_mmap();
+      #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+      let ondisk_mmap = false;
+      node_ref.init_state(ondisk_mmap);
+
       key.detach();
       let (_, key_deallocate_info) = self
         .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
@@ -1180,24 +1229,19 @@ impl<C, T> SkipList<C, T> {
       };
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self
-        .msync_new_entry(
-          (node_offset as u32, node.capacity() as u32),
-          Some((key_offset as u32, key.capacity() as u32)),
-          Some((
-            trailer_ref.memory_offset() as u32,
-            trailer_ref.memory_size() as u32,
-          )),
-        )
-      {
+      if let Err(e) = self.msync_new_entry(
+        (node_offset as u32, node.capacity() as u32),
+        Some((key_offset as u32, key.capacity() as u32)),
+        Some((
+          trailer_ref.memory_offset() as u32,
+          trailer_ref.memory_size() as u32,
+        )),
+      ) {
         deallocator.dealloc(&self.arena);
         return Err(Either::Right(e));
       }
 
-      Ok((
-        NodePtr::new(node_ptr as _, node_offset as u32),
-        deallocator,
-      ))
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
     }
   }
 
@@ -1239,6 +1283,11 @@ impl<C, T> SkipList<C, T> {
       node_ref.key_offset = key_offset;
       node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
       node_ref.set_version(version);
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      let ondisk_mmap = self.arena.is_on_disk_and_mmap();
+      #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+      let ondisk_mmap = false;
+      node_ref.init_state(ondisk_mmap);
 
       trailer_and_value.detach();
       let (_, value_deallocate_info) = self
@@ -1260,24 +1309,19 @@ impl<C, T> SkipList<C, T> {
       };
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self
-        .msync_new_entry(
-          (node_offset as u32, node.capacity() as u32),
-          None,
-          Some((
-            trailer_and_value.memory_offset() as u32,
-            trailer_and_value.memory_capacity() as u32,
-          )),
-        )
-      {
+      if let Err(e) = self.msync_new_entry(
+        (node_offset as u32, node.capacity() as u32),
+        None,
+        Some((
+          trailer_and_value.memory_offset() as u32,
+          trailer_and_value.memory_capacity() as u32,
+        )),
+      ) {
         deallocator.dealloc(&self.arena);
         return Err(Either::Right(e));
       }
 
-      Ok((
-        NodePtr::new(node_ptr as _, node_offset as u32),
-        deallocator,
-      ))
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
     }
   }
 
@@ -1558,26 +1602,61 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_prev(&self, nd: NodePtr<T>, height: usize) -> NodePtr<T> {
-    if nd.is_null() {
-      return NodePtr::NULL;
-    }
+  unsafe fn get_prev(&self, mut nd: NodePtr<T>, height: usize) -> NodePtr<T> {
+    loop {
+      if nd.is_null() {
+        return NodePtr::NULL;
+      }
 
-    let offset = nd.prev_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-    NodePtr::new(ptr as _, offset)
+      let offset = nd.prev_offset(&self.arena, height);
+      let ptr = self.arena.get_pointer(offset as usize);
+      let prev = NodePtr::new(ptr as _, offset);
+      // the prev node is not committed, skip it for now.
+      if !prev.as_ref().is_committed() {
+        nd = prev;
+        continue;
+      }
+
+      return prev;
+    }
   }
 
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_next(&self, nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
+  unsafe fn get_next(&self, mut nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
+    loop {
+      if nptr.is_null() {
+        return NodePtr::NULL;
+      }
+
+      let offset = nptr.next_offset(&self.arena, height);
+      let ptr = self.arena.get_pointer(offset as usize);
+
+      let next = NodePtr::new(ptr as _, offset);
+      // the next node is not committed, skip it for now.
+      if !next.as_ref().is_committed() {
+        nptr = next;
+        continue;
+      }
+
+      return next;
+    }
+  }
+
+  /// ## Safety
+  ///
+  /// - The caller must ensure that the node is allocated by the arena.
+  #[inline]
+  unsafe fn get_next_allow_uncommitted(&self, nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
     if nptr.is_null() {
       return NodePtr::NULL;
     }
+
     let offset = nptr.next_offset(&self.arena, height);
     let ptr = self.arena.get_pointer(offset as usize);
+
     NodePtr::new(ptr as _, offset)
   }
 
@@ -1803,6 +1882,13 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     loop {
       // Assume x.key < key.
       let next = self.get_next(x, level);
+
+      // if next is not committed, we should continue to find.
+      if !next.is_null() && !next.as_ref().is_committed() {
+        x = next;
+        continue;
+      }
+
       if next.is_null() || next.ptr == self.tail.ptr {
         // x.key < key < END OF LIST
         if level > 0 {
@@ -1880,6 +1966,8 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     }
   }
 
+  /// Find the place to insert the key.
+  ///
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
   unsafe fn find_splice<'a, 'b: 'a>(
@@ -1903,7 +1991,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       // Our cached height is equal to the list height.
       while level < list_height as usize {
         let spl = &ins.spl[level];
-        if self.get_next(spl.prev, level).ptr != spl.next.ptr {
+        if self.get_next_allow_uncommitted(spl.prev, level).ptr != spl.next.ptr {
           level += 1;
           // One or more nodes have been inserted between the splice at this
           // level.
@@ -1949,7 +2037,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     (found, found_key, None)
   }
 
-  /// ## Safety
+  /// Find the splice for the given level.
+  ///
+  /// # Safety
   /// - `level` is less than `MAX_HEIGHT`.
   /// - `start` must be allocated by self's arena.
   unsafe fn find_splice_for_level(
@@ -1963,7 +2053,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
 
     loop {
       // Assume prev.key < key.
-      let next = self.get_next(prev, level);
+      let next = self.get_next_allow_uncommitted(prev, level);
       if next.ptr == self.tail.ptr {
         // Tail node, so done.
         return FindResult {
@@ -2011,7 +2101,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         cmp::Ordering::Equal => {
           return FindResult {
             splice: Splice { prev, next },
-            found: true,
+            found: next_node.is_committed(),
             found_key,
             curr: Some(next),
           };
@@ -2215,7 +2305,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     success: Ordering,
     failure: Ordering,
     upsert: bool,
-  ) -> UpdateOk<'a, 'b, T> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
     assert!(
       ptr::addr_eq(&self.arena, node.arena),
       "unlinked node is not from the same arena as the skipmap"
@@ -2265,7 +2355,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
           }
         }
 
-        return Either::Left(if old.is_removed() { None } else { Some(old) });
+        return Ok(Either::Left(if old.is_removed() {
+          None
+        } else {
+          Some(old)
+        }));
       }
     }
 
@@ -2291,7 +2385,6 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     // Safety: a fresh new Inserter, so safe here
     let found_key = unsafe {
       let (found, found_key, ptr) = self.find_splice(version, key.as_ref(), &mut ins, true);
-
       if found_key.is_some() {
         key.on_fail(&self.arena);
       }
@@ -2352,8 +2445,15 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         k.on_fail(&self.arena);
       })?;
 
-    let node = UnlinkedNode::new(&self.arena, nd, height, version, deallocator);
-    Ok(self.link_in(node, success, failure, upsert, ins))
+    self
+      .link_in(
+        UnlinkedNode::new(&self.arena, nd, height, version, deallocator),
+        success,
+        failure,
+        upsert,
+        ins,
+      )
+      .map_err(Either::Right)
   }
 
   fn link_in<'a, 'b: 'a>(
@@ -2363,7 +2463,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     failure: Ordering,
     upsert: bool,
     mut ins: Inserter<'a, T>,
-  ) -> UpdateOk<'a, 'b, T> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
     let is_removed = node.value().is_none();
     let UnlinkedNode {
       arena,
@@ -2377,6 +2477,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     // level, we cannot create a node in the level above because it would have
     // discovered the node in the base level.
     let mut invalid_data_splice = false;
+
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    let ondisk_mmap = self.arena.is_on_disk_and_mmap();
 
     for i in 0..(height as usize) {
       let mut prev = ins.spl[i].prev;
@@ -2409,6 +2512,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
           let prev_offset = prev.offset;
           let next_offset = next.offset;
           nd.write_tower(&self.arena, i, prev_offset, next_offset);
+
+          #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+          if ondisk_mmap {
+            nd.as_ref().sync(nd.offset, &self.arena)?;
+          }
 
           // Check whether next has an updated link to prev. If it does not,
           // that can mean one of two things:
@@ -2458,6 +2566,12 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                 std::thread::yield_now();
               }
 
+              #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+              if ondisk_mmap {
+                prev.as_ref().sync(prev.offset, &self.arena)?;
+              }
+
+              #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
               let _ = next.cas_prev_offset(
                 &self.arena,
                 i,
@@ -2466,6 +2580,22 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                 Ordering::SeqCst,
                 Ordering::Acquire,
               );
+
+              #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+              if next
+                .cas_prev_offset(
+                  &self.arena,
+                  i,
+                  prev_offset,
+                  nd.offset,
+                  Ordering::SeqCst,
+                  Ordering::Acquire,
+                )
+                .is_ok()
+                && ondisk_mmap
+              {
+                next.as_ref().sync(next.offset, &self.arena)?;
+              }
 
               break;
             }
@@ -2491,6 +2621,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                   let curr = nd.as_ref();
                   let (new_value_offset, new_value_size) = curr.value.load(Ordering::Acquire);
                   deallocator.dealloc_node_and_key(&self.arena);
+
                   return self.upsert_value(
                     old,
                     node_ptr,
@@ -2507,7 +2638,11 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                 }
 
                 deallocator.dealloc(&self.arena);
-                return Either::Left(if old.is_removed() { None } else { Some(old) });
+                return Ok(Either::Left(if old.is_removed() {
+                  None
+                } else {
+                  Some(old)
+                }));
               }
 
               if let Some(p) = fr.found_key {
@@ -2546,7 +2681,14 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     self.meta().update_max_version(version);
     self.meta().update_min_version(version);
 
-    Either::Left(None)
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    if ondisk_mmap {
+      unsafe {
+        nd.as_mut().commit(nd.offset, &self.arena)?;
+      }
+    }
+
+    Ok(Either::Left(None))
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -2559,25 +2701,49 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> UpdateOk<'a, 'b, T> {
+  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    let ondisk_mmap = self.arena.is_on_disk_and_mmap();
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => {
         let old_node = old_node_ptr.as_ref();
         old_node.set_value(&self.arena, value_offset, value_size);
 
-        Either::Left(if old.is_removed() { None } else { Some(old) })
+        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+        {
+          if ondisk_mmap {
+            old_node.sync(old_node_ptr.offset, &self.arena)?;
+          }
+        }
+
+        Ok(Either::Left(if old.is_removed() {
+          None
+        } else {
+          Some(old)
+        }))
       }
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();
         match node.clear_value(&self.arena, success, failure) {
-          Ok(_) => Either::Left(None),
-          Err((offset, len)) => Either::Right(Err(VersionedEntryRef::from_node_with_pointer(
-            old_node_ptr,
-            &self.arena,
-            ValuePartPointer::new(
-              offset,
-              Arena::align_offset::<T>(offset) + mem::size_of::<T>() as u32,
-              len,
+          Ok(_) => {
+            #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+            {
+              if ondisk_mmap {
+                node.sync(old_node_ptr.offset, &self.arena)?;
+              }
+            }
+
+            Ok(Either::Left(None))
+          }
+          Err((offset, len)) => Ok(Either::Right(Err(
+            VersionedEntryRef::from_node_with_pointer(
+              old_node_ptr,
+              &self.arena,
+              ValuePartPointer::new(
+                offset,
+                Arena::align_offset::<T>(offset) + mem::size_of::<T>() as u32,
+                len,
+              ),
             ),
           ))),
         }

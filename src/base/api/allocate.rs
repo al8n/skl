@@ -1393,7 +1393,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
       return Err(Error::read_only());
     }
 
-    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true);
+    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true)?;
 
     Ok(old.expect_left("insert must get InsertOk").and_then(|old| {
       if old.is_removed() {
@@ -1402,43 +1402,6 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
         Some(EntryRef(old))
       }
     }))
-  }
-
-  /// Links a node into the [`SkipList`].
-  ///
-  /// Use this method to link a [`UnlinkedNode`] that was allocated through `allocate*` APIs.
-  ///
-  /// # Panic
-  /// - If this [`SkipList`] is read-only.
-  ///
-  /// # Safety
-  /// - The caller must ensure that the [`SkipList`] is not read-only.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::*;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// let unlinked_node = map.allocate(0u8, b"hello", b"world").unwrap();
-  ///
-  /// // do something else
-  ///
-  /// unsafe { map.link_unchecked(unlinked_node); }
-  /// ```
-  pub unsafe fn link_unchecked<'a>(&'a self, node: UnlinkedNode<'a, T>) -> Option<EntryRef<'a, T>> {
-    assert!(!self.arena.read_only(), "SkipList is read-only");
-
-    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, true);
-
-    old.expect_left("insert must get InsertOk").and_then(|old| {
-      if old.is_removed() {
-        None
-      } else {
-        Some(EntryRef(old))
-      }
-    })
   }
 
   /// Gets an entry or links a node into the [`SkipList`].
@@ -1464,7 +1427,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
       return Err(Error::read_only());
     }
 
-    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false);
+    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false)?;
 
     Ok(old.expect_left("insert must get InsertOk").and_then(|old| {
       if old.is_removed() {
@@ -1473,43 +1436,5 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
         Some(EntryRef(old))
       }
     }))
-  }
-
-  /// Gets an entry or links a node into the [`SkipList`].
-  ///
-  /// # Panic
-  /// - If this [`SkipList`] is read-only.
-  ///
-  /// # Safety
-  /// - The caller must ensure that the [`SkipList`] is not read-only.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::*;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// let unlinked_node = map.allocate(Version::new(), b"hello", b"world").unwrap();
-  ///
-  /// // do something else
-  ///
-  /// unsafe { map.get_or_link_unchecked(unlinked_node); }
-  /// ```
-  pub unsafe fn get_or_link_unchecked<'a>(
-    &'a self,
-    node: UnlinkedNode<'a, T>,
-  ) -> Option<EntryRef<'a, T>> {
-    assert!(!self.arena.read_only(), "SkipList is read-only");
-
-    let old = self.link_node_in(node, Ordering::Relaxed, Ordering::Relaxed, false);
-
-    old.expect_left("insert must get InsertOk").and_then(|old| {
-      if old.is_removed() {
-        None
-      } else {
-        Some(EntryRef(old))
-      }
-    })
   }
 }

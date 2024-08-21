@@ -937,7 +937,7 @@ impl<C, T> SkipList<C, T> {
     if self.arena.is_on_disk_and_mmap() {
       fn calculate_page_bounds(offset: u32, size: u32, page_size: u32) -> (u32, u32) {
         let start_page = offset / page_size;
-        let end_page = (offset + size) / page_size;
+        let end_page = (offset + size).saturating_sub(1) / page_size;
         (start_page, end_page)
       }
 
@@ -1602,17 +1602,27 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_prev(&self, mut nd: NodePtr<T>, height: usize) -> NodePtr<T> {
+  unsafe fn get_prev(&self, mut nd: NodePtr<T>, height: usize, ignore_invalid_trailer: bool) -> NodePtr<T> {
     loop {
       if nd.is_null() {
         return NodePtr::NULL;
       }
 
+      if nd.ptr == self.head.ptr {
+        return self.head;
+      }
+
       let offset = nd.prev_offset(&self.arena, height);
       let ptr = self.arena.get_pointer(offset as usize);
       let prev = NodePtr::new(ptr as _, offset);
+      let prev_node = prev.as_ref();
       // the prev node is not committed, skip it for now.
-      if !prev.as_ref().is_committed() {
+      if !prev_node.is_committed() {
+        nd = prev;
+        continue;
+      }
+
+      if ignore_invalid_trailer && !prev_node.get_trailer(&self.arena).is_valid() {
         nd = prev;
         continue;
       }
@@ -1625,18 +1635,28 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_next(&self, mut nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
+  unsafe fn get_next(&self, mut nptr: NodePtr<T>, height: usize, ignore_invalid_trailer: bool) -> NodePtr<T> {
     loop {
       if nptr.is_null() {
         return NodePtr::NULL;
+      }
+
+      if nptr.ptr == self.tail.ptr {
+        return self.tail;
       }
 
       let offset = nptr.next_offset(&self.arena, height);
       let ptr = self.arena.get_pointer(offset as usize);
 
       let next = NodePtr::new(ptr as _, offset);
+      let next_node = next.as_ref();
       // the next node is not committed, skip it for now.
-      if !next.as_ref().is_committed() {
+      if !next_node.is_committed() {
+        nptr = next;
+        continue;
+      }
+
+      if ignore_invalid_trailer && !next_node.get_trailer(&self.arena).is_valid() {
         nptr = next;
         continue;
       }
@@ -1661,9 +1681,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   }
 
   /// Returns the first entry in the map.
-  fn first_in(&self, version: Version) -> Option<NodePtr<T>> {
+  fn first_in(&self, version: Version, ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
     // Safety: head node was definitely allocated by self.arena
-    let nd = unsafe { self.get_next(self.head, 0) };
+    let nd = unsafe { self.get_next(self.head, 0, ignore_invalid_trailer) };
 
     if nd.is_null() || nd.ptr == self.tail.ptr {
       return None;
@@ -1672,14 +1692,14 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     unsafe {
       let node = nd.as_ref();
       let curr_key = node.get_key(&self.arena);
-      self.ge(version, curr_key)
+      self.ge(version, curr_key, ignore_invalid_trailer)
     }
   }
 
   /// Returns the last entry in the map.
-  fn last_in(&self, version: Version) -> Option<NodePtr<T>> {
+  fn last_in(&self, version: Version, ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
     // Safety: tail node was definitely allocated by self.arena
-    let nd = unsafe { self.get_prev(self.tail, 0) };
+    let nd = unsafe { self.get_prev(self.tail, 0, ignore_invalid_trailer) };
 
     if nd.is_null() || nd.ptr == self.head.ptr {
       return None;
@@ -1688,7 +1708,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     unsafe {
       let node = nd.as_ref();
       let curr_key = node.get_key(&self.arena);
-      self.le(version, curr_key)
+      self.le(version, curr_key, ignore_invalid_trailer)
     }
   }
 
@@ -1698,9 +1718,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn gt<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn gt<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8], ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(Version::MIN, key, false, false); // find the key with the max version.
+      let (n, _) = self.find_near(Version::MIN, key, false, false, ignore_invalid_trailer); // find the key with the max version.
 
       let n = n?;
 
@@ -1708,7 +1728,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         return None;
       }
 
-      self.find_next_max_version(n, version)
+      self.find_next_max_version(n, version, ignore_invalid_trailer)
     }
   }
 
@@ -1718,16 +1738,16 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn lt<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn lt<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8], ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(Version::MAX, key, true, false); // find less or equal.
+      let (n, _) = self.find_near(Version::MAX, key, true, false, ignore_invalid_trailer); // find less or equal.
 
       let n = n?;
       if n.is_null() || n.ptr == self.head.ptr {
         return None;
       }
 
-      self.find_prev_max_version(n, version)
+      self.find_prev_max_version(n, version, ignore_invalid_trailer)
     }
   }
 
@@ -1737,9 +1757,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn ge<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn ge<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8], ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(Version::MAX, key, false, true); // find the key with the max version.
+      let (n, _) = self.find_near(Version::MAX, key, false, true, ignore_invalid_trailer); // find the key with the max version.
 
       let n = n?;
 
@@ -1747,7 +1767,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         return None;
       }
 
-      self.find_next_max_version(n, version)
+      self.find_next_max_version(n, version, ignore_invalid_trailer)
     }
   }
 
@@ -1757,16 +1777,16 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn le<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<NodePtr<T>> {
+  fn le<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8], ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
     unsafe {
-      let (n, _) = self.find_near(Version::MIN, key, true, true); // find less or equal.
+      let (n, _) = self.find_near(Version::MIN, key, true, true, ignore_invalid_trailer); // find less or equal.
 
       let n = n?;
       if n.is_null() || n.ptr == self.head.ptr {
         return None;
       }
 
-      self.find_prev_max_version(n, version)
+      self.find_prev_max_version(n, version, ignore_invalid_trailer)
     }
   }
 
@@ -1774,8 +1794,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     &self,
     mut curr: NodePtr<T>,
     version: Version,
+    ignore_invalid_trailer: bool
   ) -> Option<NodePtr<T>> {
-    let mut prev = self.get_prev(curr, 0);
+    let mut prev = self.get_prev(curr, 0, ignore_invalid_trailer);
 
     loop {
       let curr_node = curr.as_ref();
@@ -1811,7 +1832,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       }
 
       curr = prev;
-      prev = self.get_prev(curr, 0);
+      prev = self.get_prev(curr, 0, ignore_invalid_trailer);
     }
   }
 
@@ -1819,8 +1840,9 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     &self,
     mut curr: NodePtr<T>,
     version: Version,
+    ignore_invalid_trailer: bool
   ) -> Option<NodePtr<T>> {
-    let mut next = self.get_next(curr, 0);
+    let mut next = self.get_next(curr, 0, ignore_invalid_trailer);
 
     loop {
       let curr_node = curr.as_ref();
@@ -1859,7 +1881,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       }
 
       curr = next;
-      next = self.get_next(curr, 0);
+      next = self.get_next(curr, 0, ignore_invalid_trailer);
     }
   }
 
@@ -1875,21 +1897,23 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     key: &[u8],
     less: bool,
     allow_equal: bool,
+    ignore_invalid_trailer: bool,
   ) -> (Option<NodePtr<T>>, bool) {
     let mut x = self.head;
     let mut level = self.height() as usize - 1;
 
     loop {
       // Assume x.key < key.
-      let next = self.get_next(x, level);
+      let next = self.get_next(x, level, ignore_invalid_trailer);
+      let is_next_null = next.is_null();
 
       // if next is not committed, we should continue to find.
-      if !next.is_null() && !next.as_ref().is_committed() {
+      if !is_next_null && !next.as_ref().is_committed() {
         x = next;
         continue;
       }
 
-      if next.is_null() || next.ptr == self.tail.ptr {
+      if is_next_null || next.ptr == self.tail.ptr {
         // x.key < key < END OF LIST
         if level > 0 {
           // Can descend further to iterate closer to the end.
@@ -1931,7 +1955,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
 
           if !less {
             // We want >, so go to base level to grab the next bigger node.
-            return (Some(self.get_next(next, 0)), false);
+            return (Some(self.get_next(next, 0, ignore_invalid_trailer)), false);
           }
 
           // We want <. If not base level, we should go closer in the next level.
@@ -2180,7 +2204,16 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         }
         Either::Left(e)
       })
-      .map(|_| vk)
+      .and_then(|_| {
+        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+        {
+          let ondisk_mmap = self.arena.is_on_disk_and_mmap();
+          if ondisk_mmap {
+            self.arena.flush_range(key_offset, key_size).map_err(|e| Either::Right(e.into()))?;
+          }
+        }
+        Ok(vk)
+      })
   }
 
   #[inline]

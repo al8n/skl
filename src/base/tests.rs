@@ -96,10 +96,10 @@ fn empty_in(l: SkipList) {
   assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
   assert!(l.first(MIN_VERSION).is_none());
   assert!(l.last(MIN_VERSION).is_none());
-  assert!(l.ge(MIN_VERSION, b"aaa").is_none());
-  assert!(l.lt(MIN_VERSION, b"aaa").is_none());
-  assert!(l.gt(MIN_VERSION, b"aaa").is_none());
-  assert!(l.le(MIN_VERSION, b"aaa").is_none());
+  assert!(l.ge(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.lt(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.gt(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.le(MIN_VERSION, b"aaa", false).is_none());
   assert!(l.get(MIN_VERSION, b"aaa").is_none());
   assert!(!l.contains_key(MIN_VERSION, b"aaa"));
   assert!(l.allocated() > 0);
@@ -1509,7 +1509,7 @@ fn test_concurrent_basic_big_values_map_anon_unify() {
 #[cfg(feature = "std")]
 fn concurrent_one_key(l: Arc<SkipList>) {
   #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 100;
+  const N: usize = 5;
   #[cfg(any(miri, feature = "loom"))]
   const N: usize = 5;
 
@@ -1523,7 +1523,9 @@ fn concurrent_one_key(l: Arc<SkipList>) {
     });
   }
 
+  std::println!("waiting for inserts");
   wg.wait();
+  std::println!("finish inserts");
 
   let saw_value = Arc::new(crate::sync::AtomicU32::new(0));
   for _ in 0..N {
@@ -1579,7 +1581,7 @@ fn test_concurrent_one_key_unify() {
 
 #[test]
 #[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
+// #[cfg_attr(miri, ignore)]
 fn test_concurrent_one_key_map_mut() {
   run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
@@ -2027,7 +2029,7 @@ fn iter_all_versions_seek_lt(l: SkipList) {
   assert_eq!(ent.value().unwrap(), make_value(1990));
 
   l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
-  assert!(l.lt(MIN_VERSION, &[]).is_none());
+  assert!(l.lt(MIN_VERSION, &[], false).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());

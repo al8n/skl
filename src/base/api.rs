@@ -782,7 +782,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ) -> Option<EntryRef<'a, T>> {
     let version = version.into();
     unsafe {
-      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
 
       let n = n?;
       let node = n.as_ref();
@@ -844,7 +844,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ) -> Option<VersionedEntryRef<'a, T>> {
     let version = version.into();
     unsafe {
-      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
 
       let n = n?;
       let node = n.as_ref();

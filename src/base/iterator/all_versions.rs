@@ -126,7 +126,7 @@ where
   fn next_in(&mut self) -> Option<VersionedEntryRef<T>> {
     loop {
       unsafe {
-        self.nd = self.map.get_next(self.nd, 0);
+        self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
 
         if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
           return None;
@@ -170,7 +170,7 @@ where
   fn prev(&mut self) -> Option<VersionedEntryRef<T>> {
     loop {
       unsafe {
-        self.nd = self.map.get_prev(self.nd, 0);
+        self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
 
         if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
           return None;
@@ -213,7 +213,7 @@ where
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_ge(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
-    self.nd = self.map.ge(self.version, key)?;
+    self.nd = self.map.ge(self.version, key, !self.all_versions)?;
     if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
       return None;
     }
@@ -247,7 +247,7 @@ where
             Bound::Unbounded => {}
           }
 
-          self.nd = self.map.get_next(self.nd, 0);
+          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
         }
       }
     }
@@ -257,7 +257,7 @@ where
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_gt(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
-    self.nd = self.map.gt(self.version, key)?;
+    self.nd = self.map.gt(self.version, key, self.all_versions)?;
 
     if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
       return None;
@@ -292,7 +292,7 @@ where
             Bound::Unbounded => {}
           }
 
-          self.nd = self.map.get_next(self.nd, 0);
+          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
         }
       }
     }
@@ -302,7 +302,7 @@ where
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_le(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
-    self.nd = self.map.le(self.version, key)?;
+    self.nd = self.map.le(self.version, key, self.all_versions)?;
 
     loop {
       unsafe {
@@ -334,7 +334,7 @@ where
             Bound::Unbounded => {}
           }
 
-          self.nd = self.map.get_prev(self.nd, 0);
+          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
         }
       }
     }
@@ -346,7 +346,7 @@ where
   fn seek_lt(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
     // NB: the top-level AllVersionsIter has already adjusted key based on
     // the upper-bound.
-    self.nd = self.map.lt(self.version, key)?;
+    self.nd = self.map.lt(self.version, key, self.all_versions)?;
 
     loop {
       unsafe {
@@ -377,7 +377,7 @@ where
             Bound::Unbounded => {}
           }
 
-          self.nd = self.map.get_prev(self.nd, 0);
+          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
         }
       }
     }
@@ -386,7 +386,7 @@ where
   /// Seeks position at the first entry in map. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
   fn first(&mut self) -> Option<VersionedEntryRef<'a, T>> {
-    self.nd = self.map.first_in(self.version)?;
+    self.nd = self.map.first_in(self.version, self.all_versions)?;
 
     loop {
       if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
@@ -399,12 +399,12 @@ where
         let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {
-          self.nd = self.map.get_next(self.nd, 0);
+          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
           continue;
         }
 
         if !self.all_versions && value.is_none() {
-          self.nd = self.map.get_next(self.nd, 0);
+          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
           continue;
         }
 
@@ -418,7 +418,7 @@ where
           return Some(ent);
         }
 
-        self.nd = self.map.get_next(self.nd, 0);
+        self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
       }
     }
   }
@@ -426,7 +426,7 @@ where
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
   fn last(&mut self) -> Option<VersionedEntryRef<'a, T>> {
-    self.nd = self.map.last_in(self.version)?;
+    self.nd = self.map.last_in(self.version, self.all_versions)?;
 
     loop {
       unsafe {
@@ -438,12 +438,12 @@ where
         let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {
-          self.nd = self.map.get_prev(self.nd, 0);
+          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
           continue;
         }
 
         if !self.all_versions && value.is_none() {
-          self.nd = self.map.get_prev(self.nd, 0);
+          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
           continue;
         }
 
@@ -457,7 +457,7 @@ where
           return Some(ent);
         }
 
-        self.nd = self.map.get_prev(self.nd, 0);
+        self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
       }
     }
   }

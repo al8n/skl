@@ -715,7 +715,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
+  pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
     self.get(version, key).is_some()
   }
 
@@ -736,21 +736,17 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> bool {
+  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: impl Into<Version>) -> Option<EntryRef<'_, T>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, T>> {
     self.iter(version).seek_lower_bound(Bound::Unbounded)
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: impl Into<Version>) -> Option<EntryRef<'_, T>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, T>> {
     self.iter(version).seek_upper_bound(Bound::Unbounded)
   }
 
@@ -775,12 +771,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// assert!(map.get(1u8, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> Option<EntryRef<'a, T>> {
-    let version = version.into();
+  pub fn get<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
 
@@ -839,10 +830,9 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_versioned<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
   ) -> Option<VersionedEntryRef<'a, T>> {
-    let version = version.into();
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
 
@@ -878,7 +868,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// If no such element is found then `None` is returned.
   pub fn upper_bound<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     upper: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, T>> {
     self.iter(version).seek_upper_bound(upper)
@@ -888,7 +878,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// If no such element is found then `None` is returned.
   pub fn lower_bound<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     lower: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, T>> {
     self.iter(version).seek_lower_bound(lower)
@@ -896,41 +886,37 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: impl Into<Version>) -> iterator::Iter<C, T> {
-    iterator::Iter::new(version.into(), self)
+  pub fn iter(&self, version: Version) -> iterator::Iter<C, T> {
+    iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: impl Into<Version>) -> iterator::AllVersionsIter<C, T> {
-    iterator::AllVersionsIter::new(version.into(), self, true)
+  pub fn iter_all_versions(&self, version: Version) -> iterator::AllVersionsIter<C, T> {
+    iterator::AllVersionsIter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(
-    &'a self,
-    version: impl Into<Version>,
-    range: R,
-  ) -> iterator::Iter<'a, C, T, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> iterator::Iter<'a, C, T, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::Iter::range(version.into(), self, range)
+    iterator::Iter::range(version, self, range)
   }
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
   pub fn range_all_versions<'a, Q, R>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     range: R,
   ) -> iterator::AllVersionsIter<'a, C, T, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
   {
-    iterator::AllVersionsIter::range(version.into(), self, range, true)
+    iterator::AllVersionsIter::range(version, self, range, true)
   }
 }

@@ -23,7 +23,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn allocate<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
     trailer: T,
@@ -54,7 +54,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn allocate_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -100,7 +100,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_allocate<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
     trailer: T,
@@ -128,7 +128,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_allocate_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -240,7 +240,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn allocate_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     trailer: T,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -339,7 +339,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn allocate_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -441,7 +441,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_allocate_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -541,7 +541,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_allocate_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -649,7 +649,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn allocate_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -749,7 +749,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn allocate_at_height_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -858,7 +858,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_allocate_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -962,7 +962,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_allocate_at_height_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -1013,7 +1013,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn allocate_remove_entry<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     trailer: T,
   ) -> Result<UnlinkedNode<'a, T>, Error> {
@@ -1048,7 +1048,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn allocate_remove_entry_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     trailer: T,
@@ -1115,7 +1115,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_allocate_remove_entry<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     trailer: T,
   ) -> Result<Either<UnlinkedNode<'a, T>, Option<EntryRef<'a, T>>>, Error> {
@@ -1171,7 +1171,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_allocate_remove_entry_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     trailer: T,
@@ -1232,7 +1232,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn allocate_remove_entry_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<UnlinkedNode<'a, T>, Either<E, Error>> {
@@ -1277,7 +1277,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -1313,7 +1313,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_allocate_remove_entry_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Either<UnlinkedNode<'a, T>, Option<EntryRef<'a, T>>>, Either<E, Error>> {
@@ -1340,7 +1340,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipList::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_at_height_with_builder`](SkipList::allocate_remove_entry_at_height_with_builder).
   pub fn get_or_allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,

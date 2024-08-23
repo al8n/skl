@@ -9,7 +9,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn insert<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
     trailer: T,
@@ -35,7 +35,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn insert_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -123,7 +123,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -187,7 +187,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -227,7 +227,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_insert<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
     trailer: T,
@@ -243,7 +243,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   pub fn get_or_insert_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -331,7 +331,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -396,7 +396,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -482,7 +482,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn insert_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -551,7 +551,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn insert_at_height_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -638,7 +638,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_insert_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
@@ -705,7 +705,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_insert_at_height_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -752,7 +752,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     trailer: T,
     success: Ordering,
@@ -778,7 +778,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   pub fn compare_remove_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     trailer: T,
@@ -829,7 +829,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   #[inline]
   pub fn get_or_remove<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     trailer: T,
   ) -> Result<Option<EntryRef<'a, T>>, Error> {
@@ -856,7 +856,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     trailer: T,
@@ -938,7 +938,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
@@ -993,7 +993,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   /// ```
   pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,

@@ -1,10 +1,12 @@
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-use arbitrary_int::{u27, u5, u56, Number, TryNewError, UInt};
+use arbitrary_int::{u27, u5, Number, TryNewError};
 
-const MAX_U56: u64 = (1 << 56) - 1;
 const MAX_U5: u8 = (1 << 5) - 1;
 const MAX_U27: u32 = (1 << 27) - 1;
+
+/// Version, used for MVCC purpose, it is a 56-bit unsigned integer.
+pub type Version = u64;
 
 /// Returns when the bytes are too large to be written to the vacant buffer.
 #[derive(Debug, Default, Clone, Copy)]
@@ -640,18 +642,6 @@ macro_rules! ux_wrapper {
 }
 
 ux_wrapper! {
-  [doc = "Version, used for MVCC purpose, it is a 56-bit unsigned integer."]
-  Version(u56 < u64) {
-    min: 0,
-    default: 0,
-    bits: 56,
-    ord: [u8, u16, u32, u64, usize],
-    signed_ord: [i8, i16, i32, i64, isize],
-    ops: [u8, u16, u32, u64, usize],
-    try_from: [u64, usize],
-    from: [u8, u16, u32],
-    into: [u64, u128],
-  },
   [doc = "Height which is used to configure the maximum tower height of a skiplist, it is a 5-bit unsigned integer."]
   Height(u5 < u8) {
     min: 1,

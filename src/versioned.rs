@@ -529,7 +529,7 @@ impl<C: Comparator> SkipMap<C> {
   /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: impl Into<Version>, key: &'b [u8]) -> bool {
+  pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
     self.0.contains_key(version, key)
   }
 
@@ -550,11 +550,7 @@ impl<C: Comparator> SkipMap<C> {
   /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> bool {
+  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
@@ -589,11 +585,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// assert!(map.get(1u8, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(
-    &'a self,
-    version: impl Into<Version>,
-    key: &'b [u8],
-  ) -> Option<EntryRef<'a, ()>> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<EntryRef<'a, ()>> {
     self.0.get(version, key)
   }
 
@@ -620,7 +612,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_versioned<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
   ) -> Option<VersionedEntryRef<'a, ()>> {
     self.0.get_versioned(version, key)
@@ -630,7 +622,7 @@ impl<C: Comparator> SkipMap<C> {
   /// If no such element is found then `None` is returned.
   pub fn upper_bound<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     upper: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, ()>> {
     self.0.upper_bound(version, upper)
@@ -640,7 +632,7 @@ impl<C: Comparator> SkipMap<C> {
   /// If no such element is found then `None` is returned.
   pub fn lower_bound<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     lower: Bound<&'b [u8]>,
   ) -> Option<EntryRef<'a, ()>> {
     self.0.lower_bound(version, lower)
@@ -660,7 +652,7 @@ impl<C: Comparator> SkipMap<C> {
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: impl Into<Version>, range: R) -> Iter<'a, C, (), Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> Iter<'a, C, (), Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
@@ -672,7 +664,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn range_all_versions<'a, Q, R>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     range: R,
   ) -> AllVersionsIter<'a, C, (), Q, R>
   where
@@ -706,7 +698,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn allocate<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
@@ -736,7 +728,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn allocate_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -763,7 +755,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_allocate<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Error> {
@@ -793,7 +785,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_allocate_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -887,7 +879,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn allocate_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
@@ -985,7 +977,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn allocate_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -1080,7 +1072,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_allocate_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Either<E, Error>> {
@@ -1175,7 +1167,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_allocate_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -1279,7 +1271,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn allocate_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
@@ -1386,7 +1378,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn allocate_at_height_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -1485,7 +1477,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_allocate_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Either<UnlinkedNode<'a, ()>, EntryRef<'a, ()>>, Either<E, Error>> {
@@ -1588,7 +1580,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_allocate_at_height_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -1625,7 +1617,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn allocate_remove_entry<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
     self
@@ -1661,7 +1653,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn allocate_remove_entry_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
   ) -> Result<UnlinkedNode<'a, ()>, Error> {
@@ -1719,7 +1711,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_allocate_remove_entry<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Error> {
     self
@@ -1776,7 +1768,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_allocate_remove_entry_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Error> {
@@ -1819,7 +1811,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn allocate_remove_entry_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
     self.0.allocate_remove_entry_at_height_with_builder(
@@ -1863,7 +1855,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<UnlinkedNode<'a, ()>, Either<E, Error>> {
@@ -1888,7 +1880,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_allocate_remove_entry_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Either<E, Error>> {
     self.0.get_or_allocate_remove_entry_at_height_with_builder(
@@ -1914,7 +1906,7 @@ impl<C: Comparator> SkipMap<C> {
   /// See examples in [`get_or_allocate_remove_entry_at_height`](SkipMap::get_or_allocate_remove_entry_at_height) and [`allocate_remove_entry_with_at_height`](SkipMap::allocate_remove_entry_with_at_height).
   pub fn get_or_allocate_remove_entry_at_height_with_builder<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Either<UnlinkedNode<'a, ()>, Option<EntryRef<'a, ()>>>, Either<E, Error>> {
@@ -1933,7 +1925,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn insert<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
@@ -1959,7 +1951,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn insert_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -2017,7 +2009,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
@@ -2080,7 +2072,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -2099,7 +2091,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_insert<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
@@ -2116,7 +2108,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   pub fn get_or_insert_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
@@ -2176,7 +2168,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
@@ -2240,7 +2232,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -2305,7 +2297,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn insert_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
@@ -2374,7 +2366,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn insert_at_height_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -2437,7 +2429,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_insert_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
@@ -2503,7 +2495,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_insert_at_height_with_builders<'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -2524,7 +2516,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
@@ -2542,7 +2534,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   pub fn compare_remove_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
     success: Ordering,
@@ -2561,7 +2553,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_remove<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
     self.get_or_remove_at_height(version, self.random_height(), key)
@@ -2588,7 +2580,7 @@ impl<C: Comparator> SkipMap<C> {
   #[inline]
   pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, ()>>, Error> {
@@ -2642,7 +2634,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {
     self
@@ -2698,7 +2690,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
-    version: impl Into<Version>,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, ()>>, Either<E, Error>> {

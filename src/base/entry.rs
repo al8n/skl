@@ -1,4 +1,4 @@
-use rarena_allocator::Arena;
+use rarena_allocator::sync::Arena;
 
 use super::{NodePtr, Version};
 

@@ -29,7 +29,7 @@ pub use entry::*;
 mod iterator;
 pub use iterator::*;
 
-use rarena_allocator::{BytesRefMut, Error as ArenaError};
+use rarena_allocator::{sync::BytesRefMut, Error as ArenaError};
 
 #[cfg(test)]
 mod tests;
@@ -1648,17 +1648,26 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       let offset = nptr.next_offset(&self.arena, height);
       let ptr = self.arena.get_pointer(offset as usize);
 
-      let next = NodePtr::new(ptr as _, offset);
+      let next = NodePtr::<T>::new(ptr as _, offset);
       let next_node = next.as_ref();
-      // the next node is not committed, skip it for now.
-      if !next_node.is_committed() {
-        nptr = next;
-        continue;
-      }
 
       if ignore_invalid_trailer && !next_node.get_trailer(&self.arena).is_valid() {
         nptr = next;
         continue;
+      }
+
+      // the next node is not committed, skip it for now.
+      if !next_node.is_committed() {
+        if self.arena.read_only() {
+          nptr = next;
+          continue;
+        }
+
+        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+        {
+          self.help_commit(next, next_node);
+          return NodePtr::new(ptr as _, offset);
+        }
       }
 
       return next;
@@ -2125,7 +2134,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         cmp::Ordering::Equal => {
           return FindResult {
             splice: Splice { prev, next },
-            found: next_node.is_committed(),
+            found: true,
             found_key,
             curr: Some(next),
           };
@@ -2569,6 +2578,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
             if prev_next_offset == next_offset {
               // Ok, case #1 is true, so help the other thread along by
               // updating the next node's prev link.
+              #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
               let _ = next.cas_prev_offset(
                 &self.arena,
                 i,
@@ -2577,6 +2587,22 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                 Ordering::SeqCst,
                 Ordering::Acquire,
               );
+
+              #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+              if next
+                .cas_prev_offset(
+                  &self.arena,
+                  i,
+                  next_prev_offset,
+                  prev_offset,
+                  Ordering::SeqCst,
+                  Ordering::Acquire,
+                )
+                .is_ok()
+                && ondisk_mmap
+              {
+                let _ = next.as_ref().sync(next.offset, &self.arena);
+              }
             }
           }
 

@@ -140,7 +140,7 @@ Ensure that the `Node` and its associated `Link`s (without the key and value par
 **Scenario:** This step can lead to multiple scenarios, but the most complex involves the previous node in page1, the new node in page2, and the next node in page3. After the new node is constructed and flushed, the possible outcomes are:
 
 1. **page1 Flushed, page3 Changes Lost:** The previous node points to the new node, but the new node's `next_offset` is incorrect, leading to inconsistencies.
-2. **page1 Changes Lost, page3 Flushed:** The previous node's pointer remains unchanged, but the new node is linked to the next node, creating a disjointed list.
+2. **page1 Changes Lost, page3 Flushed:** This situation is impossible, because we only update next node after we make sure changes in page1 is flushed.
 3. **page1 and page3 Changes Lost:** The new node is not linked to the skiplist, which is safe as the skiplist remains in its old valid state.
 
 **Solution:**

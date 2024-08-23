@@ -1,6 +1,6 @@
 use core::{borrow::Borrow, sync::atomic::Ordering};
 
-use rarena_allocator::{Arena, ArenaPosition};
+use rarena_allocator::{sync::Arena, ArenaPosition};
 
 use super::{
   base::{EntryRef, Error, Iter, SkipList},

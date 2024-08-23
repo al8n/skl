@@ -44,7 +44,7 @@ pub use types::*;
 
 pub use base::{AllVersionsIter, KeyBuilder, UnlinkedNode, ValueBuilder};
 pub use either;
-pub use rarena_allocator::{Arena, ArenaPosition, Error as ArenaError};
+pub use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;

@@ -395,6 +395,493 @@ impl<T> Node<T> {
   }
 
   #[inline]
+  unsafe fn fill_vacant_key<'a, E>(
+    arena: &'a Arena,
+    size: u32,
+    offset: u32,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<(u32, Pointer), E> {
+    let buf = arena.get_bytes_mut(offset as usize, size as usize);
+    let mut oval = VacantBuffer::new(size as usize, offset, buf);
+    if let Err(e) = f(&mut oval) {
+      arena.dealloc(offset, size);
+      return Err(e);
+    }
+
+    let len = oval.len();
+    let remaining = oval.remaining();
+    if remaining != 0 {
+      #[cfg(feature = "tracing")]
+      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
+      let deallocated = arena.dealloc(offset + len as u32, remaining as u32);
+      if deallocated {
+        return Ok((
+          oval.len() as u32,
+          Pointer::new(offset, size - remaining as u32),
+        ));
+      }
+    }
+    Ok((oval.len() as u32, Pointer::new(offset, size)))
+  }
+
+  #[inline]
+  unsafe fn fill_vacant_value<'a, E>(
+    arena: &'a Arena,
+    offset: u32,
+    size: u32,
+    value_size: u32,
+    value_offset: u32,
+    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+  ) -> Result<(u32, Pointer), E> {
+    let buf = arena.get_bytes_mut(value_offset as usize, value_size as usize);
+    let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
+    if let Err(e) = f(&mut oval) {
+      arena.dealloc(offset, size);
+      return Err(e);
+    }
+
+    let len = oval.len();
+    let remaining = oval.remaining();
+    if remaining != 0 {
+      #[cfg(feature = "tracing")]
+      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
+      let deallocated = arena.dealloc(value_offset + len as u32, remaining as u32);
+
+      if deallocated {
+        return Ok((
+          oval.len() as u32,
+          Pointer::new(offset, size - remaining as u32),
+        ));
+      }
+    }
+
+    Ok((oval.len() as u32, Pointer::new(offset, size)))
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[inline]
+  fn msync_new_entry(
+    arena: &Arena,
+    // (offset, size)
+    (node_offset, node_size): (u32, u32),
+    // (offset, size)
+    key: Option<(u32, u32)>,
+    // (offset, size)
+    value: Option<(u32, u32)>,
+  ) -> Result<(), Error> {
+    use arrayvec::ArrayVec;
+
+    if arena.is_on_disk_and_mmap() {
+      fn calculate_page_bounds(offset: u32, size: u32, page_size: u32) -> (u32, u32) {
+        let start_page = offset / page_size;
+        let end_page = (offset + size).saturating_sub(1) / page_size;
+        (start_page, end_page)
+      }
+
+      let page_size = arena.page_size() as u32;
+      let mut ranges = ArrayVec::<(u32, u32), 3>::new_const();
+      ranges.push(calculate_page_bounds(node_offset, node_size, page_size));
+
+      if let Some((offset, size)) = key {
+        ranges.push(calculate_page_bounds(offset, size, page_size));
+      }
+
+      if let Some((offset, size)) = value {
+        ranges.push(calculate_page_bounds(offset, size, page_size));
+      }
+
+      let len = ranges.len();
+
+      match len {
+        1 => {
+          return arena
+            .flush_range(node_offset as usize, node_size as usize)
+            .map_err(Into::into);
+        }
+        2..=3 => {
+          // Sort ranges by start page
+          ranges.sort_by_key(|&(start, _)| start);
+
+          let mut merged_ranges = ArrayVec::<(u32, u32), 3>::new_const();
+
+          for (start, end) in ranges {
+            match merged_ranges.last_mut() {
+              None => {
+                merged_ranges.push((start, end));
+              }
+              // no overlap
+              Some((_, last_end)) if *last_end < start => {
+                merged_ranges.push((start, end));
+              }
+              // overlap
+              Some((_, last)) => {
+                *last = (*last).max(end);
+              }
+            }
+          }
+
+          for (start, end) in merged_ranges {
+            let spo = (start * page_size) as usize;
+            let epo = (end * page_size) as usize;
+            arena.flush_range(spo, (epo - spo).max(1))?;
+          }
+
+          return Ok(());
+        }
+        _ => unreachable!(),
+      }
+    }
+
+    Ok(())
+  }
+
+  #[inline]
+  fn allocate_pure_node(arena: &Arena, height: u32) -> Result<BytesRefMut, ArenaError> {
+    arena.alloc_aligned_bytes::<Self>(height * Link::SIZE as u32)
+  }
+
+  /// Allocates a `Node`, key, trailer and value
+  fn allocate_entry_node<'a, 'b: 'a, E>(
+    arena: &'a Arena,
+    version: Version,
+    height: u32,
+    trailer: T,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    opts: &Options,
+  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    let (key_size, kf) = key_builder.into_components();
+    let (value_size, vf) = value_builder.into_components();
+
+    Self::check_node_size(
+      height,
+      opts.max_height().into(),
+      key_size.to_u32(),
+      opts.max_key_size().into(),
+      value_size,
+      opts.max_value_size(),
+    )
+    .map_err(Either::Right)?;
+
+    unsafe {
+      let mut node =
+        Self::allocate_pure_node(arena, height).map_err(|e| Either::Right(e.into()))?;
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
+
+      let mut key = arena
+        .alloc_bytes(key_size.to_u32())
+        .map_err(|e| Either::Right(e.into()))?;
+      let key_offset = key.offset();
+      let key_cap = key.capacity();
+      let mut trailer_and_value = arena
+        .alloc_aligned_bytes::<T>(value_size)
+        .map_err(|e| Either::Right(e.into()))?;
+      let trailer_offset = trailer_and_value.offset();
+      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
+      trailer_ptr.write(trailer);
+
+      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
+
+      // Safety: the node is well aligned
+      let node_ref = &mut *node_ptr;
+      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
+      node_ref.key_offset = key_offset as u32;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
+      node_ref.set_version(version);
+
+      key.detach();
+      let (_, key_deallocate_info) =
+        Self::fill_vacant_key(arena, key_cap as u32, key_offset as u32, kf)
+          .map_err(Either::Left)?;
+      trailer_and_value.detach();
+      let (_, value_deallocate_info) = Self::fill_vacant_value(
+        arena,
+        trailer_offset as u32,
+        trailer_and_value.capacity() as u32,
+        value_size,
+        value_offset,
+        vf,
+      )
+      .map_err(Either::Left)?;
+      node.detach();
+
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: Some(key_deallocate_info),
+        value: Some(value_deallocate_info),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = Self::msync_new_entry(
+        arena,
+        (node_offset as u32, node.capacity() as u32),
+        Some((key_offset as u32, key.capacity() as u32)),
+        Some((
+          trailer_and_value.memory_offset() as u32,
+          trailer_and_value.memory_capacity() as u32,
+        )),
+      ) {
+        deallocator.dealloc(arena);
+
+        return Err(Either::Right(e));
+      }
+
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
+    }
+  }
+
+  /// Allocates a `Node` and trailer
+  fn allocate_node_in<'a, 'b: 'a, E>(
+    arena: &'a Arena,
+    version: Version,
+    height: u32,
+    trailer: T,
+    key_offset: u32,
+    key_size: u32,
+    value_size: u32,
+    opts: &Options,
+  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    Self::check_node_size(
+      height,
+      opts.max_height().into(),
+      key_size,
+      opts.max_key_size().into(),
+      value_size,
+      opts.max_value_size().into(),
+    )
+    .map_err(Either::Right)?;
+
+    unsafe {
+      let mut node = arena
+        .alloc_aligned_bytes::<Self>(height * Link::SIZE as u32)
+        .map_err(|e| Either::Right(e.into()))?;
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
+
+      let mut trailer_ref = arena.alloc::<T>().map_err(|e| Either::Right(e.into()))?;
+      let trailer_offset = trailer_ref.offset();
+      trailer_ref.write(trailer);
+
+      // Safety: the node is well aligned
+      let node_ref = &mut *node_ptr;
+      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
+      node_ref.key_offset = key_offset;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
+      node_ref.set_version(version);
+
+      trailer_ref.detach();
+      node.detach();
+
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: None,
+        value: Some(Pointer::new(
+          trailer_offset as u32,
+          mem::size_of::<T>() as u32,
+        )),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = Self::msync_new_entry(
+        arena,
+        (node_offset as u32, node.capacity() as u32),
+        None,
+        Some((
+          trailer_ref.memory_offset() as u32,
+          trailer_ref.memory_size() as u32,
+        )),
+      ) {
+        deallocator.dealloc(arena);
+        return Err(Either::Right(e));
+      }
+
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
+    }
+  }
+
+  /// Allocates a `Node`, key and trailer
+  fn allocate_key_node<'a, 'b: 'a, E>(
+    arena: &'a Arena,
+    version: Version,
+    height: u32,
+    trailer: T,
+    key_size: u32,
+    kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+    value_size: u32,
+  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    self
+      .check_node_size(height, key_size, value_size)
+      .map_err(Either::Right)?;
+
+    unsafe {
+      let mut node = arena
+        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
+        .map_err(|e| Either::Right(e.into()))?;
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
+
+      let mut key = arena
+        .alloc_bytes(key_size)
+        .map_err(|e| Either::Right(e.into()))?;
+      let key_offset = key.offset();
+      let key_cap = key.capacity();
+
+      let mut trailer_ref = arena.alloc::<T>().map_err(|e| Either::Right(e.into()))?;
+      let trailer_offset = trailer_ref.offset();
+      trailer_ref.write(trailer);
+
+      // Safety: the node is well aligned
+      let node_ref = &mut *node_ptr;
+      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
+      node_ref.key_offset = key_offset as u32;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
+      node_ref.set_version(version);
+
+      key.detach();
+      let (_, key_deallocate_info) =
+        Self::fill_vacant_key(arena, key_cap as u32, key_offset as u32, kf)
+          .map_err(Either::Left)?;
+
+      trailer_ref.detach();
+      node.detach();
+
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: Some(key_deallocate_info),
+        value: Some(Pointer::new(
+          trailer_offset as u32,
+          mem::size_of::<T>() as u32,
+        )),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = Self::msync_new_entry(
+        arena,
+        (node_offset as u32, node.capacity() as u32),
+        Some((key_offset as u32, key.capacity() as u32)),
+        Some((
+          trailer_ref.memory_offset() as u32,
+          trailer_ref.memory_size() as u32,
+        )),
+      ) {
+        deallocator.dealloc(arena);
+        return Err(Either::Right(e));
+      }
+
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
+    }
+  }
+
+  /// Allocates a `Node`, trailer and value
+  fn allocate_value_node<'a, 'b: 'a, E>(
+    arena: &'a Arena,
+    version: Version,
+    height: u32,
+    trailer: T,
+    key_size: u32,
+    key_offset: u32,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    opts: &Options,
+  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    let (value_size, vf) = value_builder.into_components();
+    Self::check_node_size(
+      height,
+      opts.max_height().into(),
+      key_size,
+      opts.max_key_size().into(),
+      value_size,
+      opts.max_value_size(),
+    )
+    .map_err(Either::Right)?;
+
+    unsafe {
+      let mut node = arena
+        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
+        .map_err(|e| Either::Right(e.into()))?;
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
+
+      let mut trailer_and_value = arena
+        .alloc_aligned_bytes::<T>(value_size)
+        .map_err(|e| Either::Right(e.into()))?;
+      let trailer_offset = trailer_and_value.offset();
+      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
+      trailer_ptr.write(trailer);
+      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
+
+      // Safety: the node is well aligned
+      let node_ref = &mut *node_ptr;
+      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
+      node_ref.key_offset = key_offset;
+      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
+      node_ref.set_version(version);
+
+      trailer_and_value.detach();
+      let (_, value_deallocate_info) = Self::fill_vacant_value(
+        arena,
+        trailer_offset as u32,
+        trailer_and_value.capacity() as u32,
+        value_size,
+        value_offset,
+        vf,
+      )
+      .map_err(Either::Left)?;
+
+      node.detach();
+
+      let deallocator = Deallocator {
+        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
+        key: None,
+        value: Some(value_deallocate_info),
+      };
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      if let Err(e) = Self::msync_new_entry(
+        arena,
+        (node_offset as u32, node.capacity() as u32),
+        None,
+        Some((
+          trailer_and_value.memory_offset() as u32,
+          trailer_and_value.memory_capacity() as u32,
+        )),
+      ) {
+        deallocator.dealloc(arena);
+        return Err(Either::Right(e));
+      }
+
+      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
+    }
+  }
+
+  fn allocate_full_node(arena: &Arena, max_height: u8) -> Result<NodePtr<T>, ArenaError> {
+    // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
+    unsafe {
+      let mut node =
+        arena.alloc_aligned_bytes::<Node<T>>(((max_height as usize) * Link::SIZE) as u32)?;
+
+      // Safety: node and trailer do not need to be dropped.
+      node.detach();
+
+      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
+      let node_offset = node.offset();
+
+      let trailer_offset = if mem::size_of::<T>() != 0 {
+        let mut trailer = arena.alloc::<T>()?;
+        trailer.detach();
+        trailer.offset()
+      } else {
+        arena.allocated()
+      };
+
+      let node = &mut *node_ptr;
+      *node = Node::<T>::full(trailer_offset as u32, max_height);
+
+      Ok(NodePtr::new(node_ptr as _, node_offset as u32))
+    }
+  }
+
+  #[inline]
   fn allocate_and_set_value<'a, E>(
     &self,
     arena: &'a Arena,
@@ -441,6 +928,42 @@ impl<T> Node<T> {
       if arena.is_on_disk_and_mmap() {
         bytes.flush().map_err(|e| Either::Right(e.into()))?;
       }
+    }
+
+    Ok(())
+  }
+
+  #[inline]
+  fn check_node_size(
+    height: u32,
+    max_height: u32,
+    key_size: u32,
+    max_key_size: u32,
+    mut value_size: u32,
+    max_value_size: u32,
+  ) -> Result<(), Error> {
+    if height < 1 || height > max_height {
+      panic!("height cannot be less than one or greater than the max height");
+    }
+
+    if key_size > max_key_size {
+      return Err(Error::KeyTooLarge(key_size as u64));
+    }
+
+    // if value_size is u32::MAX, it means that the value is removed.
+    value_size = if value_size == u32::MAX {
+      0
+    } else {
+      value_size
+    };
+
+    if value_size > max_value_size {
+      return Err(Error::ValueTooLarge(value_size as u64));
+    }
+
+    let entry_size = (value_size as u64 + key_size as u64) + Self::size(height as u8) as u64;
+    if entry_size > u32::MAX as u64 {
+      return Err(Error::EntryTooLarge(entry_size));
     }
 
     Ok(())
@@ -755,8 +1278,8 @@ impl<C, T> SkipList<C, T> {
     };
 
     let max_height: u8 = opts.max_height().into();
-    let head = Self::allocate_full_node(&arena, max_height)?;
-    let tail = Self::allocate_full_node(&arena, max_height)?;
+    let head = Node::<T>::allocate_full_node(&arena, max_height)?;
+    let tail = Node::<T>::allocate_full_node(&arena, max_height)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -822,421 +1345,6 @@ impl<C, T> SkipList<C, T> {
   }
 
   #[inline]
-  fn allocate_pure_node(&self, height: u32) -> Result<BytesRefMut, ArenaError> {
-    self
-      .arena
-      .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
-  }
-
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[inline]
-  fn msync_new_entry(
-    &self,
-    // (offset, size)
-    (node_offset, node_size): (u32, u32),
-    // (offset, size)
-    key: Option<(u32, u32)>,
-    // (offset, size)
-    value: Option<(u32, u32)>,
-  ) -> Result<(), Error> {
-    use arrayvec::ArrayVec;
-
-    if self.arena.is_on_disk_and_mmap() {
-      fn calculate_page_bounds(offset: u32, size: u32, page_size: u32) -> (u32, u32) {
-        let start_page = offset / page_size;
-        let end_page = (offset + size).saturating_sub(1) / page_size;
-        (start_page, end_page)
-      }
-
-      let page_size = self.arena.page_size() as u32;
-      let mut ranges = ArrayVec::<(u32, u32), 3>::new_const();
-      ranges.push(calculate_page_bounds(node_offset, node_size, page_size));
-
-      if let Some((offset, size)) = key {
-        ranges.push(calculate_page_bounds(offset, size, page_size));
-      }
-
-      if let Some((offset, size)) = value {
-        ranges.push(calculate_page_bounds(offset, size, page_size));
-      }
-
-      let len = ranges.len();
-
-      match len {
-        1 => {
-          return self
-            .arena
-            .flush_range(node_offset as usize, node_size as usize)
-            .map_err(Into::into);
-        }
-        2..=3 => {
-          // Sort ranges by start page
-          ranges.sort_by_key(|&(start, _)| start);
-
-          let mut merged_ranges = ArrayVec::<(u32, u32), 3>::new_const();
-
-          for (start, end) in ranges {
-            match merged_ranges.last_mut() {
-              None => {
-                merged_ranges.push((start, end));
-              }
-              // no overlap
-              Some((_, last_end)) if *last_end < start => {
-                merged_ranges.push((start, end));
-              }
-              // overlap
-              Some((_, last)) => {
-                *last = (*last).max(end);
-              }
-            }
-          }
-
-          for (start, end) in merged_ranges {
-            let spo = (start * page_size) as usize;
-            let epo = (end * page_size) as usize;
-            self.arena.flush_range(spo, (epo - spo).max(1))?;
-          }
-
-          return Ok(());
-        }
-        _ => unreachable!(),
-      }
-    }
-
-    Ok(())
-  }
-
-  /// Allocates a `Node`, key, trailer and value
-  fn allocate_entry_node<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    let (key_size, kf) = key_builder.into_components();
-    let (value_size, vf) = value_builder.into_components();
-
-    self
-      .check_node_size(height, key_size.to_u32(), value_size)
-      .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = self
-        .allocate_pure_node(height)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut key = self
-        .arena
-        .alloc_bytes(key_size.to_u32())
-        .map_err(|e| Either::Right(e.into()))?;
-      let key_offset = key.offset();
-      let key_cap = key.capacity();
-      let mut trailer_and_value = self
-        .arena
-        .alloc_aligned_bytes::<T>(value_size)
-        .map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_and_value.offset();
-      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
-      trailer_ptr.write(trailer);
-
-      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset as u32;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
-      node_ref.set_version(version);
-
-      key.detach();
-      let (_, key_deallocate_info) = self
-        .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
-        .map_err(Either::Left)?;
-      trailer_and_value.detach();
-      let (_, value_deallocate_info) = self
-        .fill_vacant_value(
-          trailer_offset as u32,
-          trailer_and_value.capacity() as u32,
-          value_size,
-          value_offset,
-          vf,
-        )
-        .map_err(Either::Left)?;
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: Some(key_deallocate_info),
-        value: Some(value_deallocate_info),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self.msync_new_entry(
-        (node_offset as u32, node.capacity() as u32),
-        Some((key_offset as u32, key.capacity() as u32)),
-        Some((
-          trailer_and_value.memory_offset() as u32,
-          trailer_and_value.memory_capacity() as u32,
-        )),
-      ) {
-        deallocator.dealloc(&self.arena);
-
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  /// Allocates a `Node` and trailer
-  fn allocate_node_in<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_offset: u32,
-    key_size: u32,
-    value_size: u32,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self
-      .check_node_size(height, key_size, value_size)
-      .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = self
-        .arena
-        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut trailer_ref = self
-        .arena
-        .alloc::<T>()
-        .map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_ref.offset();
-      trailer_ref.write(trailer);
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
-      node_ref.set_version(version);
-
-      trailer_ref.detach();
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: None,
-        value: Some(Pointer::new(
-          trailer_offset as u32,
-          mem::size_of::<T>() as u32,
-        )),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self.msync_new_entry(
-        (node_offset as u32, node.capacity() as u32),
-        None,
-        Some((
-          trailer_ref.memory_offset() as u32,
-          trailer_ref.memory_size() as u32,
-        )),
-      ) {
-        deallocator.dealloc(&self.arena);
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  /// Allocates a `Node`, key and trailer
-  fn allocate_key_node<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_size: u32,
-    kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-    value_size: u32,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self
-      .check_node_size(height, key_size, value_size)
-      .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = self
-        .arena
-        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut key = self
-        .arena
-        .alloc_bytes(key_size)
-        .map_err(|e| Either::Right(e.into()))?;
-      let key_offset = key.offset();
-      let key_cap = key.capacity();
-
-      let mut trailer_ref = self
-        .arena
-        .alloc::<T>()
-        .map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_ref.offset();
-      trailer_ref.write(trailer);
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset as u32;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
-      node_ref.set_version(version);
-
-      key.detach();
-      let (_, key_deallocate_info) = self
-        .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
-        .map_err(Either::Left)?;
-
-      trailer_ref.detach();
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: Some(key_deallocate_info),
-        value: Some(Pointer::new(
-          trailer_offset as u32,
-          mem::size_of::<T>() as u32,
-        )),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self.msync_new_entry(
-        (node_offset as u32, node.capacity() as u32),
-        Some((key_offset as u32, key.capacity() as u32)),
-        Some((
-          trailer_ref.memory_offset() as u32,
-          trailer_ref.memory_size() as u32,
-        )),
-      ) {
-        deallocator.dealloc(&self.arena);
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  /// Allocates a `Node`, trailer and value
-  fn allocate_value_node<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_size: u32,
-    key_offset: u32,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    let (value_size, vf) = value_builder.into_components();
-    self
-      .check_node_size(height, key_size, value_size)
-      .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = self
-        .arena
-        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut trailer_and_value = self
-        .arena
-        .alloc_aligned_bytes::<T>(value_size)
-        .map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_and_value.offset();
-      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
-      trailer_ptr.write(trailer);
-      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
-      node_ref.set_version(version);
-
-      trailer_and_value.detach();
-      let (_, value_deallocate_info) = self
-        .fill_vacant_value(
-          trailer_offset as u32,
-          trailer_and_value.capacity() as u32,
-          value_size,
-          value_offset,
-          vf,
-        )
-        .map_err(Either::Left)?;
-
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: None,
-        value: Some(value_deallocate_info),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = self.msync_new_entry(
-        (node_offset as u32, node.capacity() as u32),
-        None,
-        Some((
-          trailer_and_value.memory_offset() as u32,
-          trailer_and_value.memory_capacity() as u32,
-        )),
-      ) {
-        deallocator.dealloc(&self.arena);
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  fn allocate_full_node(arena: &Arena, max_height: u8) -> Result<NodePtr<T>, ArenaError> {
-    // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
-    unsafe {
-      let mut node =
-        arena.alloc_aligned_bytes::<Node<T>>(((max_height as usize) * Link::SIZE) as u32)?;
-
-      // Safety: node and trailer do not need to be dropped.
-      node.detach();
-
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let trailer_offset = if mem::size_of::<T>() != 0 {
-        let mut trailer = arena.alloc::<T>()?;
-        trailer.detach();
-        trailer.offset()
-      } else {
-        arena.allocated()
-      };
-
-      let node = &mut *node_ptr;
-      *node = Node::<T>::full(trailer_offset as u32, max_height);
-
-      Ok(NodePtr::new(node_ptr as _, node_offset as u32))
-    }
-  }
-
-  #[inline]
   fn allocate_meta(arena: &Arena, magic_version: u16) -> Result<NonNull<Meta>, ArenaError> {
     // Safety: meta does not need to be dropped, and it is recoverable.
     unsafe {
@@ -1253,74 +1361,6 @@ impl<C, T> SkipList<C, T> {
       });
       Ok(meta.as_mut_ptr())
     }
-  }
-
-  #[inline]
-  unsafe fn fill_vacant_key<'a, E>(
-    &'a self,
-    size: u32,
-    offset: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(u32, Pointer), E> {
-    let buf = self.arena.get_bytes_mut(offset as usize, size as usize);
-    let mut oval = VacantBuffer::new(size as usize, offset, buf);
-    if let Err(e) = f(&mut oval) {
-      self.arena.dealloc(offset, size);
-      return Err(e);
-    }
-
-    let len = oval.len();
-    let remaining = oval.remaining();
-    if remaining != 0 {
-      #[cfg(feature = "tracing")]
-      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-      let deallocated = self.arena.dealloc(offset + len as u32, remaining as u32);
-      if deallocated {
-        return Ok((
-          oval.len() as u32,
-          Pointer::new(offset, size - remaining as u32),
-        ));
-      }
-    }
-    Ok((oval.len() as u32, Pointer::new(offset, size)))
-  }
-
-  #[inline]
-  unsafe fn fill_vacant_value<'a, E>(
-    &'a self,
-    offset: u32,
-    size: u32,
-    value_size: u32,
-    value_offset: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(u32, Pointer), E> {
-    let buf = self
-      .arena
-      .get_bytes_mut(value_offset as usize, value_size as usize);
-    let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
-    if let Err(e) = f(&mut oval) {
-      self.arena.dealloc(offset, size);
-      return Err(e);
-    }
-
-    let len = oval.len();
-    let remaining = oval.remaining();
-    if remaining != 0 {
-      #[cfg(feature = "tracing")]
-      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-      let deallocated = self
-        .arena
-        .dealloc(value_offset + len as u32, remaining as u32);
-
-      if deallocated {
-        return Ok((
-          oval.len() as u32,
-          Pointer::new(offset, size - remaining as u32),
-        ));
-      }
-    }
-
-    Ok((oval.len() as u32, Pointer::new(offset, size)))
   }
 
   #[inline]
@@ -1341,37 +1381,6 @@ impl<C, T> SkipList<C, T> {
       let tail = NodePtr::new(tail_ptr as _, tail_offset as u32);
       (NonNull::new_unchecked(meta as _), head, tail)
     }
-  }
-
-  #[inline]
-  fn check_node_size(&self, height: u32, key_size: u32, mut value_size: u32) -> Result<(), Error> {
-    let max_height: u32 = self.opts.max_height().into();
-    if height < 1 || height > max_height {
-      panic!("height cannot be less than one or greater than the max height");
-    }
-
-    let max_key_size: u32 = self.opts.max_key_size().into();
-    if key_size > max_key_size {
-      return Err(Error::KeyTooLarge(key_size as u64));
-    }
-
-    // if value_size is u32::MAX, it means that the value is removed.
-    value_size = if value_size == u32::MAX {
-      0
-    } else {
-      value_size
-    };
-
-    if value_size > self.opts.max_value_size() {
-      return Err(Error::ValueTooLarge(value_size as u64));
-    }
-
-    let entry_size = (value_size as u64 + key_size as u64) + Node::<T>::size(height as u8) as u64;
-    if entry_size > u32::MAX as u64 {
-      return Err(Error::EntryTooLarge(entry_size));
-    }
-
-    Ok(())
   }
 
   #[inline]
@@ -2720,70 +2729,6 @@ impl<T> Default for Splice<T> {
   }
 }
 
-struct Deallocator {
-  node: Option<Pointer>,
-  key: Option<Pointer>,
-  value: Option<Pointer>,
-}
-
-impl Deallocator {
-  #[inline]
-  fn dealloc(self, arena: &Arena) {
-    unsafe {
-      if let Some(ptr) = self.node {
-        arena.dealloc(ptr.offset, ptr.size);
-      }
-
-      if let Some(ptr) = self.key {
-        arena.dealloc(ptr.offset, ptr.size);
-      }
-
-      if let Some(ptr) = self.value {
-        arena.dealloc(ptr.offset, ptr.size);
-      }
-    }
-  }
-
-  #[inline]
-  fn dealloc_node_and_key(self, arena: &Arena) {
-    unsafe {
-      if let Some(ptr) = self.node {
-        arena.dealloc(ptr.offset, ptr.size);
-      }
-
-      if let Some(ptr) = self.key {
-        arena.dealloc(ptr.offset, ptr.size);
-      }
-    }
-  }
-
-  #[inline]
-  fn dealloc_key_by_ref(&mut self, arena: &Arena) {
-    if let Some(ptr) = self.key.take() {
-      unsafe {
-        arena.dealloc(ptr.offset, ptr.size);
-      }
-    }
-  }
-}
-
-struct Pointer {
-  offset: u32,
-  size: u32,
-  height: Option<u8>,
-}
-
-impl Pointer {
-  #[inline]
-  const fn new(offset: u32, size: u32) -> Self {
-    Self {
-      offset,
-      size,
-      height: None,
-    }
-  }
-}
-
 impl<'a, 'b: 'a> Key<'a, 'b> {
   #[inline]
   const fn pointer(arena: &'a super::Arena, pointer: Pointer) -> Self {
@@ -2811,29 +2756,4 @@ struct FindResult<T> {
   found_key: Option<Pointer>,
   splice: Splice<T>,
   curr: Option<NodePtr<T>>,
-}
-
-#[inline]
-const fn encode_value_pointer(offset: u32, val_size: u32) -> u64 {
-  (val_size as u64) << 32 | offset as u64
-}
-
-#[inline]
-const fn decode_value_pointer(value: u64) -> (u32, u32) {
-  let offset = value as u32;
-  let val_size = (value >> 32) as u32;
-  (offset, val_size)
-}
-
-#[inline]
-const fn encode_key_size_and_height(key_size: u32, height: u8) -> u32 {
-  // first 27 bits for key_size, last 5 bits for height.
-  key_size << 5 | height as u32
-}
-
-#[inline]
-const fn decode_key_size_and_height(size: u32) -> (u32, u8) {
-  let key_size = size >> 5;
-  let height = (size & 0b11111) as u8;
-  (key_size, height)
 }

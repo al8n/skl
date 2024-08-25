@@ -46,6 +46,8 @@ pub use base::{AllVersionsIter, KeyBuilder, UnlinkedNode, ValueBuilder};
 pub use either;
 pub use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 
+mod allocator;
+
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
 
@@ -169,6 +171,48 @@ impl Comparator for Descend {
   fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
     (start_bound, end_bound).contains(&key)
   }
+}
+
+struct Pointer {
+  offset: u32,
+  size: u32,
+  height: Option<u8>,
+}
+
+impl Pointer {
+  #[inline]
+  const fn new(offset: u32, size: u32) -> Self {
+    Self {
+      offset,
+      size,
+      height: None,
+    }
+  }
+}
+
+#[inline]
+const fn encode_value_pointer(offset: u32, val_size: u32) -> u64 {
+  (val_size as u64) << 32 | offset as u64
+}
+
+#[inline]
+const fn decode_value_pointer(value: u64) -> (u32, u32) {
+  let offset = value as u32;
+  let val_size = (value >> 32) as u32;
+  (offset, val_size)
+}
+
+#[inline]
+const fn encode_key_size_and_height(key_size: u32, height: u8) -> u32 {
+  // first 27 bits for key_size, last 5 bits for height.
+  key_size << 5 | height as u32
+}
+
+#[inline]
+const fn decode_key_size_and_height(size: u32) -> (u32, u8) {
+  let key_size = size >> 5;
+  let height = (size & 0b11111) as u8;
+  (key_size, height)
 }
 
 /// A trait for extra information that can be stored with entry in the skiplist.

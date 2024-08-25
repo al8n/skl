@@ -62,13 +62,10 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
 
 ## Q & A
 
-- How does the on-disk version `SkipMap` ensure crash safety or power failure resilience?
+- Does the on-disk version `SkipMap` ensure crash safety or power failure resilience?
   
-  Please see explanation, design and implementation details [here](details/crash_safety.md).
-
-- Does `SkipMap` support batch update? Or how to implemenet atomic batch update?
-  
-  No, but yes! Atomic batch update is not directly supported because this crate is a low level crate, and atomic batch update is a higher level feature. However, this crate provides all the fundamental functionalities to implement atomic batch update, there is also an [example](examples/atomic_batch_update.rs).
+  No, on-disk version `SkipMap` does not ensure crash safety or power failure resilience. Hence, it is not recommended to directly
+  use the `SkipMap` as a durable database. It is recommended to use the on-disk version `SkipMap` as a final frozen file for quick lookup.
 
 ## Tests
 

@@ -192,11 +192,11 @@ impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantBuffer<'a> {
   }
 }
 
-pub(crate) enum Key<'a, 'b: 'a> {
+pub(crate) enum Key<'a, 'b: 'a, A> {
   Occupied(&'b [u8]),
   Vacant(VacantBuffer<'a>),
   Pointer {
-    arena: &'a super::Arena,
+    arena: &'a A,
     offset: u32,
     len: u32,
   },
@@ -204,15 +204,15 @@ pub(crate) enum Key<'a, 'b: 'a> {
   #[allow(dead_code)]
   RemoveVacant(VacantBuffer<'a>),
   RemovePointer {
-    arena: &'a super::Arena,
+    arena: &'a A,
     offset: u32,
     len: u32,
   },
 }
 
-impl<'a, 'b: 'a> Key<'a, 'b> {
+impl<'a, 'b: 'a, A: crate::allocator::Allocator> Key<'a, 'b, A> {
   #[inline]
-  pub(crate) fn on_fail(&self, arena: &super::Arena) {
+  pub(crate) fn on_fail(&self, arena: &A) {
     match self {
       Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } | Self::RemovePointer { .. } => {}
       Self::Vacant(key) | Self::RemoveVacant(key) => unsafe {
@@ -220,7 +220,9 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
       },
     }
   }
+}
 
+impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
   /// Returns `true` if the key is a remove operation.
   #[inline]
   pub(crate) fn is_remove(&self) -> bool {
@@ -231,7 +233,7 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
   }
 }
 
-impl<'a, 'b: 'a> AsRef<[u8]> for Key<'a, 'b> {
+impl<'a, 'b: 'a, A: crate::allocator::Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
   #[inline]
   fn as_ref(&self) -> &[u8] {
     match self {

@@ -3,7 +3,7 @@ use core::{borrow::Borrow, sync::atomic::Ordering};
 use rarena_allocator::{sync::Arena, ArenaPosition};
 
 use super::{
-  base::{AllVersionsIter, EntryRef, Error, Iter, SkipList, VersionedEntryRef},
+  base::{AllVersionsIter, EntryRef, Iter, SkipList, VersionedEntryRef},
   *,
 };
 

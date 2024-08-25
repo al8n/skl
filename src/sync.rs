@@ -1,3 +1,8 @@
+use rarena_allocator::{
+  sync::{Arena, BytesRefMut, RefMut},
+  Error as ArenaError,
+};
+
 use core::{
   cmp,
   convert::Infallible,
@@ -15,38 +20,40 @@ use crate::{Key, Trailer, VacantBuffer};
 use error::{bad_magic_version, bad_version, invalid_data};
 use options::CompressionPolicy;
 
-use super::{common::*, Arena, Ascend, Comparator, *};
+use crate::allocator::{
+  Allocator as BaseAllocator, Deallocator, Header, Link as _, Node as BaseNode,
+  NodePointer as BaseNodePointer, ValuePartPointer, ValuePointer as _,
+};
 
-mod api;
-pub use api::*;
+use super::{common::*, Ascend, Comparator, *};
+
+// mod api;
+// pub use api::*;
 
 use either::Either;
 
-mod error;
-pub use error::Error;
 mod entry;
 pub use entry::*;
 mod iterator;
-pub use iterator::*;
+// pub use iterator::*;
 
-use rarena_allocator::{sync::BytesRefMut, Error as ArenaError};
-
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 const CURRENT_VERSION: u16 = 0;
 
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
 
-type UpdateOk<'a, 'b, T> = Either<
-  Option<VersionedEntryRef<'a, T>>,
-  Result<VersionedEntryRef<'a, T>, VersionedEntryRef<'a, T>>,
+type UpdateOk<'a, 'b, A> = Either<
+  Option<VersionedEntryRef<'a, A>>,
+  Result<VersionedEntryRef<'a, A>, VersionedEntryRef<'a, A>>,
 >;
 
+/// a
 #[derive(Debug)]
 #[repr(C)]
-struct Meta {
+pub struct Meta {
   /// The maximum MVCC version of the skiplist. CAS.
   max_version: AtomicU64,
   /// The minimum MVCC version of the skiplist. CAS.
@@ -58,7 +65,7 @@ struct Meta {
   reserved_byte: u8,
 }
 
-impl Meta {
+impl Header for Meta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
@@ -72,7 +79,7 @@ impl Meta {
   }
 
   #[inline]
-  const fn magic_version(&self) -> u16 {
+  fn magic_version(&self) -> u16 {
     self.magic_version
   }
 
@@ -138,6 +145,19 @@ impl Meta {
       }
     }
   }
+
+  #[inline]
+  fn compare_exchange_height_weak(
+    &self,
+    current: u8,
+    new: u8,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<u8, u8> {
+    self
+      .height
+      .compare_exchange_weak(current, new, success, failure)
+  }
 }
 
 #[repr(C, align(8))]
@@ -186,6 +206,24 @@ impl AtomicValuePointer {
   }
 }
 
+impl crate::allocator::ValuePointer for AtomicValuePointer {
+  const REMOVE: u32 = REMOVE;
+
+  #[inline]
+  fn load(&self) -> (u32, u32) {
+    decode_value_pointer(AtomicU64::load(&self.0, Ordering::Acquire))
+  }
+
+  #[inline]
+  fn swap(&self, offset: u32, len: u32) -> (u32, u32) {
+    decode_value_pointer(
+      self
+        .0
+        .swap(encode_value_pointer(offset, len), Ordering::AcqRel),
+    )
+  }
+}
+
 #[derive(Debug)]
 struct NodePtr<T> {
   ptr: *mut Node<T>,
@@ -200,58 +238,32 @@ impl<T> Clone for NodePtr<T> {
 
 impl<T> Copy for NodePtr<T> {}
 
-impl<T> NodePtr<T> {
+impl<T: core::fmt::Debug + Trailer> BaseNodePointer for NodePtr<T> {
   const NULL: Self = Self {
     ptr: ptr::null_mut(),
     offset: 0,
   };
 
-  #[inline]
-  const fn new(ptr: *mut u8, offset: u32) -> Self {
-    Self {
-      ptr: ptr.cast(),
-      offset,
-    }
-  }
+  type Node = Node<T>;
 
   #[inline]
-  const fn is_null(&self) -> bool {
+  fn is_null(&self) -> bool {
     self.offset == 0
   }
 
-  /// ## Safety
-  /// - the pointer must be valid
-  #[inline]
-  unsafe fn as_ref(&self) -> &Node<T> {
-    &*self.ptr.cast()
+  fn offset(&self) -> u32 {
+    self.offset
   }
 
-  /// ## Safety
-  /// - the pointer must be valid
-  #[inline]
-  unsafe fn as_mut(&self) -> &mut Node<T> {
-    &mut *self.ptr.cast()
-  }
-
-  #[inline]
-  unsafe fn tower(&self, arena: &Arena, idx: usize) -> &Link {
-    let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
-    let tower_ptr = arena.get_pointer(tower_ptr_offset);
-    &*tower_ptr.cast()
-  }
-
-  #[inline]
-  unsafe fn write_tower(&self, arena: &Arena, idx: usize, prev_offset: u32, next_offset: u32) {
-    let tower_ptr_offset = self.offset as usize + Node::<T>::SIZE + idx * Link::SIZE;
-    let tower_ptr: *mut Link = arena.get_pointer_mut(tower_ptr_offset).cast();
-    *tower_ptr = Link::new(next_offset, prev_offset);
+  fn ptr(&self) -> *mut Self::Node {
+    self.ptr
   }
 
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  unsafe fn next_offset(&self, arena: &Arena, idx: usize) -> u32 {
+  unsafe fn next_offset<A: BaseAllocator>(&self, arena: &A, idx: usize) -> u32 {
     self.tower(arena, idx).next_offset.load(Ordering::Acquire)
   }
 
@@ -259,7 +271,7 @@ impl<T> NodePtr<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  unsafe fn prev_offset(&self, arena: &Arena, idx: usize) -> u32 {
+  unsafe fn prev_offset<A: BaseAllocator>(&self, arena: &A, idx: usize) -> u32 {
     self.tower(arena, idx).prev_offset.load(Ordering::Acquire)
   }
 
@@ -267,9 +279,9 @@ impl<T> NodePtr<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  unsafe fn cas_prev_offset(
+  unsafe fn cas_prev_offset<A: BaseAllocator>(
     &self,
-    arena: &Arena,
+    arena: &A,
     idx: usize,
     current: u32,
     new: u32,
@@ -286,9 +298,9 @@ impl<T> NodePtr<T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
-  unsafe fn cas_next_offset(
+  unsafe fn cas_next_offset<A: BaseAllocator>(
     &self,
-    arena: &Arena,
+    arena: &A,
     idx: usize,
     current: u32,
     new: u32,
@@ -299,6 +311,28 @@ impl<T> NodePtr<T> {
       .tower(arena, idx)
       .next_offset
       .compare_exchange(current, new, success, failure)
+  }
+
+  #[inline]
+  fn new(ptr: *mut u8, offset: u32) -> Self {
+    Self {
+      ptr: ptr.cast(),
+      offset,
+    }
+  }
+
+  /// ## Safety
+  /// - the pointer must be valid
+  #[inline]
+  unsafe fn as_ref(&self) -> &Node<T> {
+    &*self.ptr.cast()
+  }
+
+  /// ## Safety
+  /// - the pointer must be valid
+  #[inline]
+  unsafe fn as_mut(&self) -> &mut Node<T> {
+    &mut *self.ptr.cast()
   }
 }
 
@@ -311,13 +345,25 @@ struct Link {
 
 impl Link {
   const SIZE: usize = mem::size_of::<Self>();
+}
 
+impl crate::allocator::Link for Link {
   #[inline]
   fn new(next_offset: u32, prev_offset: u32) -> Self {
     Self {
       next_offset: AtomicU32::new(next_offset),
       prev_offset: AtomicU32::new(prev_offset),
     }
+  }
+
+  #[inline]
+  fn store_next_offset(&self, offset: u32, ordering: Ordering) {
+    self.next_offset.store(offset, ordering);
+  }
+
+  #[inline]
+  fn store_prev_offset(&self, offset: u32, ordering: Ordering) {
+    self.prev_offset.store(offset, ordering);
   }
 }
 
@@ -395,582 +441,7 @@ impl<T> Node<T> {
   }
 
   #[inline]
-  unsafe fn fill_vacant_key<'a, E>(
-    arena: &'a Arena,
-    size: u32,
-    offset: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(u32, Pointer), E> {
-    let buf = arena.get_bytes_mut(offset as usize, size as usize);
-    let mut oval = VacantBuffer::new(size as usize, offset, buf);
-    if let Err(e) = f(&mut oval) {
-      arena.dealloc(offset, size);
-      return Err(e);
-    }
-
-    let len = oval.len();
-    let remaining = oval.remaining();
-    if remaining != 0 {
-      #[cfg(feature = "tracing")]
-      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-      let deallocated = arena.dealloc(offset + len as u32, remaining as u32);
-      if deallocated {
-        return Ok((
-          oval.len() as u32,
-          Pointer::new(offset, size - remaining as u32),
-        ));
-      }
-    }
-    Ok((oval.len() as u32, Pointer::new(offset, size)))
-  }
-
-  #[inline]
-  unsafe fn fill_vacant_value<'a, E>(
-    arena: &'a Arena,
-    offset: u32,
-    size: u32,
-    value_size: u32,
-    value_offset: u32,
-    f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<(u32, Pointer), E> {
-    let buf = arena.get_bytes_mut(value_offset as usize, value_size as usize);
-    let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
-    if let Err(e) = f(&mut oval) {
-      arena.dealloc(offset, size);
-      return Err(e);
-    }
-
-    let len = oval.len();
-    let remaining = oval.remaining();
-    if remaining != 0 {
-      #[cfg(feature = "tracing")]
-      tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-      let deallocated = arena.dealloc(value_offset + len as u32, remaining as u32);
-
-      if deallocated {
-        return Ok((
-          oval.len() as u32,
-          Pointer::new(offset, size - remaining as u32),
-        ));
-      }
-    }
-
-    Ok((oval.len() as u32, Pointer::new(offset, size)))
-  }
-
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[inline]
-  fn msync_new_entry(
-    arena: &Arena,
-    // (offset, size)
-    (node_offset, node_size): (u32, u32),
-    // (offset, size)
-    key: Option<(u32, u32)>,
-    // (offset, size)
-    value: Option<(u32, u32)>,
-  ) -> Result<(), Error> {
-    use arrayvec::ArrayVec;
-
-    if arena.is_on_disk_and_mmap() {
-      fn calculate_page_bounds(offset: u32, size: u32, page_size: u32) -> (u32, u32) {
-        let start_page = offset / page_size;
-        let end_page = (offset + size).saturating_sub(1) / page_size;
-        (start_page, end_page)
-      }
-
-      let page_size = arena.page_size() as u32;
-      let mut ranges = ArrayVec::<(u32, u32), 3>::new_const();
-      ranges.push(calculate_page_bounds(node_offset, node_size, page_size));
-
-      if let Some((offset, size)) = key {
-        ranges.push(calculate_page_bounds(offset, size, page_size));
-      }
-
-      if let Some((offset, size)) = value {
-        ranges.push(calculate_page_bounds(offset, size, page_size));
-      }
-
-      let len = ranges.len();
-
-      match len {
-        1 => {
-          return arena
-            .flush_range(node_offset as usize, node_size as usize)
-            .map_err(Into::into);
-        }
-        2..=3 => {
-          // Sort ranges by start page
-          ranges.sort_by_key(|&(start, _)| start);
-
-          let mut merged_ranges = ArrayVec::<(u32, u32), 3>::new_const();
-
-          for (start, end) in ranges {
-            match merged_ranges.last_mut() {
-              None => {
-                merged_ranges.push((start, end));
-              }
-              // no overlap
-              Some((_, last_end)) if *last_end < start => {
-                merged_ranges.push((start, end));
-              }
-              // overlap
-              Some((_, last)) => {
-                *last = (*last).max(end);
-              }
-            }
-          }
-
-          for (start, end) in merged_ranges {
-            let spo = (start * page_size) as usize;
-            let epo = (end * page_size) as usize;
-            arena.flush_range(spo, (epo - spo).max(1))?;
-          }
-
-          return Ok(());
-        }
-        _ => unreachable!(),
-      }
-    }
-
-    Ok(())
-  }
-
-  #[inline]
-  fn allocate_pure_node(arena: &Arena, height: u32) -> Result<BytesRefMut, ArenaError> {
-    arena.alloc_aligned_bytes::<Self>(height * Link::SIZE as u32)
-  }
-
-  /// Allocates a `Node`, key, trailer and value
-  fn allocate_entry_node<'a, 'b: 'a, E>(
-    arena: &'a Arena,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    opts: &Options,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    let (key_size, kf) = key_builder.into_components();
-    let (value_size, vf) = value_builder.into_components();
-
-    Self::check_node_size(
-      height,
-      opts.max_height().into(),
-      key_size.to_u32(),
-      opts.max_key_size().into(),
-      value_size,
-      opts.max_value_size(),
-    )
-    .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node =
-        Self::allocate_pure_node(arena, height).map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut key = arena
-        .alloc_bytes(key_size.to_u32())
-        .map_err(|e| Either::Right(e.into()))?;
-      let key_offset = key.offset();
-      let key_cap = key.capacity();
-      let mut trailer_and_value = arena
-        .alloc_aligned_bytes::<T>(value_size)
-        .map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_and_value.offset();
-      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
-      trailer_ptr.write(trailer);
-
-      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset as u32;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
-      node_ref.set_version(version);
-
-      key.detach();
-      let (_, key_deallocate_info) =
-        Self::fill_vacant_key(arena, key_cap as u32, key_offset as u32, kf)
-          .map_err(Either::Left)?;
-      trailer_and_value.detach();
-      let (_, value_deallocate_info) = Self::fill_vacant_value(
-        arena,
-        trailer_offset as u32,
-        trailer_and_value.capacity() as u32,
-        value_size,
-        value_offset,
-        vf,
-      )
-      .map_err(Either::Left)?;
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: Some(key_deallocate_info),
-        value: Some(value_deallocate_info),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = Self::msync_new_entry(
-        arena,
-        (node_offset as u32, node.capacity() as u32),
-        Some((key_offset as u32, key.capacity() as u32)),
-        Some((
-          trailer_and_value.memory_offset() as u32,
-          trailer_and_value.memory_capacity() as u32,
-        )),
-      ) {
-        deallocator.dealloc(arena);
-
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  /// Allocates a `Node` and trailer
-  fn allocate_node_in<'a, 'b: 'a, E>(
-    arena: &'a Arena,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_offset: u32,
-    key_size: u32,
-    value_size: u32,
-    opts: &Options,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    Self::check_node_size(
-      height,
-      opts.max_height().into(),
-      key_size,
-      opts.max_key_size().into(),
-      value_size,
-      opts.max_value_size().into(),
-    )
-    .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = arena
-        .alloc_aligned_bytes::<Self>(height * Link::SIZE as u32)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut trailer_ref = arena.alloc::<T>().map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_ref.offset();
-      trailer_ref.write(trailer);
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
-      node_ref.set_version(version);
-
-      trailer_ref.detach();
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: None,
-        value: Some(Pointer::new(
-          trailer_offset as u32,
-          mem::size_of::<T>() as u32,
-        )),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = Self::msync_new_entry(
-        arena,
-        (node_offset as u32, node.capacity() as u32),
-        None,
-        Some((
-          trailer_ref.memory_offset() as u32,
-          trailer_ref.memory_size() as u32,
-        )),
-      ) {
-        deallocator.dealloc(arena);
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  /// Allocates a `Node`, key and trailer
-  fn allocate_key_node<'a, 'b: 'a, E>(
-    arena: &'a Arena,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_size: u32,
-    kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-    value_size: u32,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    self
-      .check_node_size(height, key_size, value_size)
-      .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = arena
-        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut key = arena
-        .alloc_bytes(key_size)
-        .map_err(|e| Either::Right(e.into()))?;
-      let key_offset = key.offset();
-      let key_cap = key.capacity();
-
-      let mut trailer_ref = arena.alloc::<T>().map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_ref.offset();
-      trailer_ref.write(trailer);
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset as u32;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_cap as u32, height as u8);
-      node_ref.set_version(version);
-
-      key.detach();
-      let (_, key_deallocate_info) =
-        Self::fill_vacant_key(arena, key_cap as u32, key_offset as u32, kf)
-          .map_err(Either::Left)?;
-
-      trailer_ref.detach();
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: Some(key_deallocate_info),
-        value: Some(Pointer::new(
-          trailer_offset as u32,
-          mem::size_of::<T>() as u32,
-        )),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = Self::msync_new_entry(
-        arena,
-        (node_offset as u32, node.capacity() as u32),
-        Some((key_offset as u32, key.capacity() as u32)),
-        Some((
-          trailer_ref.memory_offset() as u32,
-          trailer_ref.memory_size() as u32,
-        )),
-      ) {
-        deallocator.dealloc(arena);
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  /// Allocates a `Node`, trailer and value
-  fn allocate_value_node<'a, 'b: 'a, E>(
-    arena: &'a Arena,
-    version: Version,
-    height: u32,
-    trailer: T,
-    key_size: u32,
-    key_offset: u32,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    opts: &Options,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
-    let (value_size, vf) = value_builder.into_components();
-    Self::check_node_size(
-      height,
-      opts.max_height().into(),
-      key_size,
-      opts.max_key_size().into(),
-      value_size,
-      opts.max_value_size(),
-    )
-    .map_err(Either::Right)?;
-
-    unsafe {
-      let mut node = arena
-        .alloc_aligned_bytes::<Node<T>>(height * Link::SIZE as u32)
-        .map_err(|e| Either::Right(e.into()))?;
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let mut trailer_and_value = arena
-        .alloc_aligned_bytes::<T>(value_size)
-        .map_err(|e| Either::Right(e.into()))?;
-      let trailer_offset = trailer_and_value.offset();
-      let trailer_ptr = trailer_and_value.as_mut_ptr().cast::<T>();
-      trailer_ptr.write(trailer);
-      let value_offset = (trailer_offset + mem::size_of::<T>()) as u32;
-
-      // Safety: the node is well aligned
-      let node_ref = &mut *node_ptr;
-      node_ref.value = AtomicValuePointer::new(trailer_offset as u32, value_size);
-      node_ref.key_offset = key_offset;
-      node_ref.key_size_and_height = encode_key_size_and_height(key_size, height as u8);
-      node_ref.set_version(version);
-
-      trailer_and_value.detach();
-      let (_, value_deallocate_info) = Self::fill_vacant_value(
-        arena,
-        trailer_offset as u32,
-        trailer_and_value.capacity() as u32,
-        value_size,
-        value_offset,
-        vf,
-      )
-      .map_err(Either::Left)?;
-
-      node.detach();
-
-      let deallocator = Deallocator {
-        node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
-        key: None,
-        value: Some(value_deallocate_info),
-      };
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      if let Err(e) = Self::msync_new_entry(
-        arena,
-        (node_offset as u32, node.capacity() as u32),
-        None,
-        Some((
-          trailer_and_value.memory_offset() as u32,
-          trailer_and_value.memory_capacity() as u32,
-        )),
-      ) {
-        deallocator.dealloc(arena);
-        return Err(Either::Right(e));
-      }
-
-      Ok((NodePtr::new(node_ptr as _, node_offset as u32), deallocator))
-    }
-  }
-
-  fn allocate_full_node(arena: &Arena, max_height: u8) -> Result<NodePtr<T>, ArenaError> {
-    // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
-    unsafe {
-      let mut node =
-        arena.alloc_aligned_bytes::<Node<T>>(((max_height as usize) * Link::SIZE) as u32)?;
-
-      // Safety: node and trailer do not need to be dropped.
-      node.detach();
-
-      let node_ptr = node.as_mut_ptr().cast::<Node<T>>();
-      let node_offset = node.offset();
-
-      let trailer_offset = if mem::size_of::<T>() != 0 {
-        let mut trailer = arena.alloc::<T>()?;
-        trailer.detach();
-        trailer.offset()
-      } else {
-        arena.allocated()
-      };
-
-      let node = &mut *node_ptr;
-      *node = Node::<T>::full(trailer_offset as u32, max_height);
-
-      Ok(NodePtr::new(node_ptr as _, node_offset as u32))
-    }
-  }
-
-  #[inline]
-  fn allocate_and_set_value<'a, E>(
-    &self,
-    arena: &'a Arena,
-    trailer: T,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<(), Either<E, Error>> {
-    let (value_size, f) = value_builder.into_components();
-    let mut bytes = arena
-      .alloc_aligned_bytes::<T>(value_size)
-      .map_err(|e| Either::Right(e.into()))?;
-    let trailer_ptr = bytes.as_mut_ptr().cast::<T>();
-    let trailer_offset = bytes.offset();
-    let value_offset = trailer_offset + mem::size_of::<T>();
-
-    let mut oval = VacantBuffer::new(value_size as usize, value_offset as u32, unsafe {
-      arena.get_bytes_mut(value_offset, value_size as usize)
-    });
-    f(&mut oval).map_err(Either::Left)?;
-
-    let remaining = oval.remaining();
-    let mut discard = 0;
-    if remaining != 0
-      && unsafe { !arena.dealloc((value_offset + oval.len()) as u32, remaining as u32) }
-    {
-      discard += remaining;
-    }
-
-    bytes.detach();
-    unsafe {
-      trailer_ptr.write(trailer);
-    }
-
-    if discard != 0 {
-      arena.increase_discarded(discard as u32);
-    }
-
-    let (_, old_len) = self.value.swap(trailer_offset as u32, value_size);
-    if old_len != REMOVE {
-      arena.increase_discarded(old_len);
-    }
-
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    {
-      if arena.is_on_disk_and_mmap() {
-        bytes.flush().map_err(|e| Either::Right(e.into()))?;
-      }
-    }
-
-    Ok(())
-  }
-
-  #[inline]
-  fn check_node_size(
-    height: u32,
-    max_height: u32,
-    key_size: u32,
-    max_key_size: u32,
-    mut value_size: u32,
-    max_value_size: u32,
-  ) -> Result<(), Error> {
-    if height < 1 || height > max_height {
-      panic!("height cannot be less than one or greater than the max height");
-    }
-
-    if key_size > max_key_size {
-      return Err(Error::KeyTooLarge(key_size as u64));
-    }
-
-    // if value_size is u32::MAX, it means that the value is removed.
-    value_size = if value_size == u32::MAX {
-      0
-    } else {
-      value_size
-    };
-
-    if value_size > max_value_size {
-      return Err(Error::ValueTooLarge(value_size as u64));
-    }
-
-    let entry_size = (value_size as u64 + key_size as u64) + Self::size(height as u8) as u64;
-    if entry_size > u32::MAX as u64 {
-      return Err(Error::EntryTooLarge(entry_size));
-    }
-
-    Ok(())
-  }
-
-  #[inline]
-  fn set_value(&self, arena: &Arena, offset: u32, value_size: u32) {
+  fn update_value(&self, arena: &Arena, offset: u32, value_size: u32) {
     let (_, old_len) = self.value.swap(offset, value_size);
     if old_len != REMOVE {
       arena.increase_discarded(old_len);
@@ -995,207 +466,91 @@ impl<T> Node<T> {
   }
 }
 
-impl<T> Node<T> {
-  #[inline]
-  const fn key_size(&self) -> u32 {
-    decode_key_size_and_height(self.key_size_and_height).0
-  }
+impl<T: core::fmt::Debug + Trailer> BaseNode for Node<T> {
+  type Link = Link;
 
-  #[inline]
-  const fn height(&self) -> u8 {
-    decode_key_size_and_height(self.key_size_and_height).1
-  }
+  type Trailer = T;
 
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  const unsafe fn get_key<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> &'b [u8] {
-    arena.get_bytes(self.key_offset as usize, self.key_size() as usize)
-  }
+  type ValuePointer = AtomicValuePointer;
 
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_value<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> Option<&'b [u8]> {
-    let (offset, len) = self.value.load(Ordering::Acquire);
+  type Pointer = NodePtr<Self::Trailer>;
 
-    if len == u32::MAX {
-      return None;
-    }
-    let align_offset = Self::align_offset(offset);
-    Some(arena.get_bytes(align_offset as usize + mem::size_of::<T>(), len as usize))
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_value_by_value_offset<'a, 'b: 'a>(
-    &'a self,
-    arena: &'b Arena,
-    offset: u32,
-    len: u32,
-  ) -> Option<&'b [u8]> {
-    if len == u32::MAX {
-      return None;
-    }
-
-    Some(arena.get_bytes(offset as usize, len as usize))
-  }
-
-  #[inline]
-  pub(super) fn trailer_offset_and_value_size(&self) -> ValuePartPointer<T> {
-    let (offset, len) = self.value.load(Ordering::Acquire);
-    let align_offset = Self::align_offset(offset);
-    ValuePartPointer::new(align_offset, align_offset + mem::size_of::<T>() as u32, len)
-  }
-
-  #[inline]
-  const fn align_offset(current_offset: u32) -> u32 {
-    let alignment = mem::align_of::<T>() as u32;
-    (current_offset + alignment - 1) & !(alignment - 1)
-  }
-}
-
-impl<T> Node<T> {
-  #[inline]
-  unsafe fn get_trailer<'a, 'b: 'a>(&'a self, arena: &'b Arena) -> &'b T {
-    let (offset, _) = self.value.load(Ordering::Acquire);
-    &*arena.get_aligned_pointer(offset as usize)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_trailer_by_offset<'a, 'b: 'a>(&'a self, arena: &'b Arena, offset: u32) -> &'b T {
-    &*arena.get_aligned_pointer::<T>(offset as usize)
-  }
-
-  /// ## Safety
-  ///
-  /// - The caller must ensure that the node is allocated by the arena.
-  #[inline]
-  unsafe fn get_value_and_trailer_with_pointer<'a, 'b: 'a>(
-    &'a self,
-    arena: &'b Arena,
-  ) -> (&'b T, Option<&'b [u8]>, ValuePartPointer<T>) {
-    let (offset, len) = self.value.load(Ordering::Acquire);
-    let ptr = arena.get_aligned_pointer(offset as usize);
-
-    let align_offset = Arena::align_offset::<T>(offset);
-    let trailer = &*ptr;
-
-    if len == u32::MAX {
-      return (
-        trailer,
-        None,
-        ValuePartPointer::new(offset, align_offset + mem::size_of::<T>() as u32, len),
-      );
-    }
-
-    let value_offset = align_offset + mem::size_of::<T>() as u32;
-    (
-      trailer,
-      Some(arena.get_bytes(value_offset as usize, len as usize)),
-      ValuePartPointer::new(offset, value_offset as u32, len),
-    )
-  }
-}
-
-/// A node allocated by the [`Arena`], but not be linked to the [`SkipList`].
-///
-/// It is used to help users implement atomic batch insertion or deletion logic.
-///
-/// **NOTE:** If this node is not linked to the [`SkipList`] through [`insert_node`](SkipList::insert_node), it is better to deallocate it to let the [`Arena`] reuse the memory.
-#[must_use = "UnlinkedNode should be either linked to the SkipList or deallocated."]
-pub struct UnlinkedNode<'a, T> {
-  arena: &'a Arena,
-  ptr: NodePtr<T>,
-  deallocator: Deallocator,
-  height: u32,
-  version: Version,
-}
-
-impl<'a, T> core::fmt::Debug for UnlinkedNode<'a, T> {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("UnlinkedNode")
-      .field("version", &self.version)
-      .field("key", &self.key())
-      .field("value", &self.value())
-      .finish()
-  }
-}
-
-impl<'a, T> UnlinkedNode<'a, T> {
-  #[inline]
-  const fn new(
-    arena: &'a Arena,
-    ptr: NodePtr<T>,
-    height: u32,
-    version: Version,
-    deallocator: Deallocator,
-  ) -> Self {
+  fn full(value_offset: u32, max_height: u8) -> Self {
     Self {
-      arena,
-      ptr,
-      deallocator,
-      height,
-      version,
+      value: AtomicValuePointer::new(value_offset, 0),
+      key_offset: 0,
+      key_size_and_height: encode_key_size_and_height(0, max_height),
+      version: MIN_VERSION,
+      trailer: PhantomData,
     }
   }
 
-  /// Deallocates the unlinked node, let the [`Arena`] reuse the memory.
   #[inline]
-  pub fn dealloc(self) {
-    self.deallocator.dealloc(self.arena)
+  fn value_pointer(&self) -> &Self::ValuePointer {
+    &self.value
   }
 
-  /// Returns the height of the node.
   #[inline]
-  pub const fn height(&self) -> u32 {
-    self.height
+  fn set_value_pointer(&mut self, offset: u32, size: u32) {
+    self.value = AtomicValuePointer::new(offset, size);
   }
 
-  /// Returns the version of the node.
   #[inline]
-  pub const fn version(&self) -> Version {
+  fn clear_value<A: BaseAllocator>(
+    &self,
+    arena: &A,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<(), (u32, u32)> {
+    self
+      .value
+      .compare_remove(success, failure)
+      .map(|(_, old_len)| {
+        if old_len != REMOVE {
+          arena.increase_discarded(old_len);
+        }
+      })
+  }
+
+  #[inline]
+  fn set_key_size_and_height(&mut self, key_size_and_height: u32) {
+    self.key_size_and_height = key_size_and_height;
+  }
+
+  #[inline]
+  fn set_key_offset(&mut self, key_offset: u32) {
+    self.key_offset = key_offset;
+  }
+
+  #[inline]
+  fn version(&self) -> Version {
     self.version
   }
 
-  /// Returns the key of the node.
   #[inline]
-  pub fn key(&self) -> &[u8] {
-    // Safety: the node is allocated by the arena.
-    unsafe { self.ptr.as_ref().get_key(self.arena) }
+  fn set_version(&mut self, version: Version) {
+    self.version = version;
   }
 
-  /// Returns the value of the node.
   #[inline]
-  pub fn value(&self) -> Option<&[u8]> {
-    // Safety: the node is allocated by the arena.
-    unsafe { self.ptr.as_ref().get_value(self.arena) }
+  fn key_size_and_height(&self) -> u32 {
+    self.key_size_and_height
   }
-}
 
-impl<'a, T: Trailer> UnlinkedNode<'a, T> {
-  /// Returns the trailer of the node.
   #[inline]
-  pub fn trailer(&self) -> &T {
-    // Safety: the node is allocated by the arena.
-    unsafe { self.ptr.as_ref().get_trailer(self.arena) }
+  fn key_offset(&self) -> u32 {
+    self.key_offset
   }
 }
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<C = Ascend, T = ()> {
-  arena: Arena,
-  meta: NonNull<Meta>,
-  head: NodePtr<T>,
-  tail: NodePtr<T>,
+pub struct SkipList<A: BaseAllocator, C = Ascend> {
+  arena: A,
+  meta: NonNull<A::Header>,
+  head: <A::Node as BaseNode>::Pointer,
+  tail: <A::Node as BaseNode>::Pointer,
   data_offset: u32,
   on_disk: bool,
   opts: Options,
@@ -1208,10 +563,24 @@ pub struct SkipList<C = Ascend, T = ()> {
 }
 
 // Safety: SkipList is Sync and Send
-unsafe impl<T: Send, C: Comparator + Send> Send for SkipList<C, T> {}
-unsafe impl<T: Sync, C: Comparator + Sync> Sync for SkipList<C, T> {}
+unsafe impl<A, C> Send for SkipList<A, C>
+where
+  A: BaseAllocator + Send,
+  C: Comparator + Send,
+{
+}
+unsafe impl<A, C> Sync for SkipList<A, C>
+where
+  A: BaseAllocator + Sync,
+  C: Comparator + Sync,
+{
+}
 
-impl<C: Clone, T> Clone for SkipList<C, T> {
+impl<A, C: Clone> Clone for SkipList<A, C>
+where
+  A: BaseAllocator,
+  C: Clone,
+{
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
@@ -1228,7 +597,10 @@ impl<C: Clone, T> Clone for SkipList<C, T> {
   }
 }
 
-impl<C, T> Drop for SkipList<C, T> {
+impl<A, C> Drop for SkipList<A, C>
+where
+  A: BaseAllocator,
+{
   fn drop(&mut self) {
     if self.arena.refs() == 1 {
       if !self.opts.unify() {
@@ -1245,8 +617,11 @@ impl<C, T> Drop for SkipList<C, T> {
   }
 }
 
-impl<C, T> SkipList<C, T> {
-  fn new_in(arena: Arena, cmp: C, opts: Options) -> Result<Self, Error> {
+impl<A, C> SkipList<A, C>
+where
+  A: BaseAllocator,
+{
+  fn new_in(arena: A, cmp: C, opts: Options) -> Result<Self, Error> {
     let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
     if arena.read_only() {
       let (meta, head, tail) = Self::get_pointers(&arena);
@@ -1263,33 +638,28 @@ impl<C, T> SkipList<C, T> {
     }
 
     let meta = if opts.unify() {
-      Self::allocate_meta(&arena, opts.magic_version())?
+      arena.allocate_header(opts.magic_version())?
     } else {
       unsafe {
-        NonNull::new_unchecked(Box::into_raw(Box::new(Meta {
-          max_version: AtomicU64::new(0),
-          min_version: AtomicU64::new(0),
-          height: AtomicU8::new(1),
-          len: AtomicU32::new(0),
-          magic_version: opts.magic_version(),
-          reserved_byte: 0,
-        })))
+        NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
+          opts.magic_version(),
+        ))))
       }
     };
 
     let max_height: u8 = opts.max_height().into();
-    let head = Node::<T>::allocate_full_node(&arena, max_height)?;
-    let tail = Node::<T>::allocate_full_node(&arena, max_height)?;
+    let head = arena.allocate_full_node(max_height)?;
+    let tail = arena.allocate_full_node(max_height)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
     unsafe {
       // Link all head/tail levels together.
       for i in 0..(max_height as usize) {
-        let head_link = head.tower(&arena, i);
-        let tail_link = tail.tower(&arena, i);
-        head_link.next_offset.store(tail.offset, Ordering::Relaxed);
-        tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
+        let head_link = head.tower::<A>(&arena, i);
+        let tail_link = tail.tower::<A>(&arena, i);
+        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
+        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
       }
     }
 
@@ -1307,20 +677,21 @@ impl<C, T> SkipList<C, T> {
   /// Checks if the arena has enough capacity to store the skiplist,
   /// and returns the data offset.
   #[inline]
-  const fn check_capacity(arena: &Arena, max_height: u8) -> Result<u32, Error> {
+  fn check_capacity(arena: &A, max_height: u8) -> Result<u32, Error> {
     let offset = arena.data_offset();
 
-    let alignment = mem::align_of::<Meta>();
+    let alignment = mem::align_of::<A::Header>();
     let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-    let meta_end = meta_offset + mem::size_of::<Meta>();
+    let meta_end = meta_offset + mem::size_of::<A::Header>();
 
-    let alignment = mem::align_of::<Node<T>>();
+    let alignment = mem::align_of::<A::Node>();
     let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-    let head_end =
-      head_offset + mem::size_of::<Node<T>>() + mem::size_of::<Link>() * max_height as usize;
+    let head_end = head_offset
+      + mem::size_of::<A::Node>()
+      + mem::size_of::<<A::Node as BaseNode>::Link>() * max_height as usize;
 
-    let trailer_alignment = mem::align_of::<T>();
-    let trailer_size = mem::size_of::<T>();
+    let trailer_alignment = mem::align_of::<A::Trailer>();
+    let trailer_size = mem::size_of::<A::Trailer>();
     let trailer_end = if trailer_size != 0 {
       let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
       trailer_offset + trailer_size
@@ -1329,8 +700,9 @@ impl<C, T> SkipList<C, T> {
     };
 
     let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
-    let tail_end =
-      tail_offset + mem::size_of::<Node<T>>() + mem::size_of::<Link>() * max_height as usize;
+    let tail_end = tail_offset
+      + mem::size_of::<A::Node>()
+      + mem::size_of::<<A::Node as BaseNode>::Link>() * max_height as usize;
     let trailer_end = if trailer_size != 0 {
       let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
       trailer_offset + trailer_size
@@ -1345,56 +717,46 @@ impl<C, T> SkipList<C, T> {
   }
 
   #[inline]
-  fn allocate_meta(arena: &Arena, magic_version: u16) -> Result<NonNull<Meta>, ArenaError> {
-    // Safety: meta does not need to be dropped, and it is recoverable.
-    unsafe {
-      let mut meta = arena.alloc::<Meta>()?;
-      meta.detach();
-
-      meta.write(Meta {
-        max_version: AtomicU64::new(0),
-        min_version: AtomicU64::new(0),
-        height: AtomicU8::new(1),
-        len: AtomicU32::new(0),
-        magic_version,
-        reserved_byte: 0,
-      });
-      Ok(meta.as_mut_ptr())
-    }
-  }
-
-  #[inline]
-  fn get_pointers(arena: &Arena) -> (NonNull<Meta>, NodePtr<T>, NodePtr<T>) {
+  fn get_pointers(
+    arena: &A,
+  ) -> (
+    NonNull<A::Header>,
+    <A::Node as BaseNode>::Pointer,
+    <A::Node as BaseNode>::Pointer,
+  ) {
     unsafe {
       let offset = arena.data_offset();
-      let meta = arena.get_aligned_pointer::<Meta>(offset);
+      let meta = arena.get_aligned_pointer::<A::Header>(offset);
 
-      let offset = arena.offset(meta as _) + mem::size_of::<Meta>();
-      let head_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
+      let offset = arena.offset(meta as _) + mem::size_of::<A::Header>();
+      let head_ptr = arena.get_aligned_pointer::<A::Node>(offset);
       let head_offset = arena.offset(head_ptr as _);
-      let head = NodePtr::new(head_ptr as _, head_offset as u32);
+      let head =
+        <<A::Node as BaseNode>::Pointer as BaseNodePointer>::new(head_ptr as _, head_offset as u32);
 
-      let (trailer_offset, _) = head.as_ref().value.load(Ordering::Relaxed);
-      let offset = trailer_offset as usize + mem::size_of::<T>();
-      let tail_ptr = arena.get_aligned_pointer::<Node<T>>(offset);
+      let (trailer_offset, _) = head.as_ref().value_pointer().load();
+      let offset = trailer_offset as usize + mem::size_of::<A::Trailer>();
+      let tail_ptr = arena.get_aligned_pointer::<A::Node>(offset);
       let tail_offset = arena.offset(tail_ptr as _);
-      let tail = NodePtr::new(tail_ptr as _, tail_offset as u32);
+      let tail =
+        <<A::Node as BaseNode>::Pointer as BaseNodePointer>::new(tail_ptr as _, tail_offset as u32);
       (NonNull::new_unchecked(meta as _), head, tail)
     }
   }
 
   #[inline]
   fn construct(
-    arena: Arena,
-    meta: NonNull<Meta>,
-    head: NodePtr<T>,
-    tail: NodePtr<T>,
+    arena: A,
+    meta: NonNull<A::Header>,
+    head: <A::Node as BaseNode>::Pointer,
+    tail: <A::Node as BaseNode>::Pointer,
     data_offset: u32,
     opts: Options,
     cmp: C,
   ) -> Self {
     Self {
-      on_disk: arena.is_on_disk(),
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      on_disk: arena.is_ondisk(),
       arena,
       meta,
       head,
@@ -1408,21 +770,24 @@ impl<C, T> SkipList<C, T> {
   }
 
   #[inline]
-  const fn meta(&self) -> &Meta {
+  const fn meta(&self) -> &A::Header {
     // Safety: the pointer is well aligned and initialized.
     unsafe { self.meta.as_ref() }
   }
 }
 
-impl<C, T: Trailer> SkipList<C, T> {
+impl<A, C> SkipList<A, C>
+where
+  A: BaseAllocator,
+{
   fn new_node<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
     height: u32,
-    key: &Key<'a, 'b>,
+    key: &Key<'a, 'b, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
-    trailer: T,
-  ) -> Result<(NodePtr<T>, Deallocator), Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<(<A::Node as BaseNode>::Pointer, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
       Key::Occupied(key) => {
         let kb = KeyBuilder::new(KeySize::from_u32_unchecked(key.len() as u32), |buf| {
@@ -1430,9 +795,11 @@ impl<C, T: Trailer> SkipList<C, T> {
           Ok(())
         });
         let vb = value_builder.unwrap();
-        self.allocate_entry_node(version, height, trailer, kb, vb)?
+        self
+          .arena
+          .allocate_entry_node::<E>(version, height, trailer, kb, vb)?
       }
-      Key::Vacant(key) => self.allocate_value_node(
+      Key::Vacant(key) => self.arena.allocate_value_node::<E>(
         version,
         height,
         trailer,
@@ -1440,7 +807,7 @@ impl<C, T: Trailer> SkipList<C, T> {
         key.offset,
         value_builder.unwrap(),
       )?,
-      Key::Pointer { offset, len, .. } => self.allocate_value_node(
+      Key::Pointer { offset, len, .. } => self.arena.allocate_value_node::<E>(
         version,
         height,
         trailer,
@@ -1448,7 +815,7 @@ impl<C, T: Trailer> SkipList<C, T> {
         *offset,
         value_builder.unwrap(),
       )?,
-      Key::Remove(key) => self.allocate_key_node(
+      Key::Remove(key) => self.arena.allocate_key_node::<E>(
         version,
         height,
         trailer,
@@ -1459,7 +826,7 @@ impl<C, T: Trailer> SkipList<C, T> {
         },
         REMOVE,
       )?,
-      Key::RemoveVacant(key) => self.allocate_node_in(
+      Key::RemoveVacant(key) => self.arena.allocate_node_in::<E>(
         version,
         height,
         trailer,
@@ -1467,15 +834,16 @@ impl<C, T: Trailer> SkipList<C, T> {
         key.len() as u32,
         REMOVE,
       )?,
-      Key::RemovePointer { offset, len, .. } => {
-        self.allocate_node_in(version, height, trailer, *offset, *len, REMOVE)?
-      }
+      Key::RemovePointer { offset, len, .. } => self
+        .arena
+        .allocate_node_in::<E>(version, height, trailer, *offset, *len, REMOVE)?,
     };
 
     // Try to increase self.height via CAS.
-    let mut list_height = self.height();
+    let meta = self.meta();
+    let mut list_height = meta.height();
     while height as u8 > list_height {
-      match self.meta().height.compare_exchange_weak(
+      match meta.compare_exchange_height_weak(
         list_height,
         height as u8,
         Ordering::SeqCst,
@@ -1490,29 +858,33 @@ impl<C, T: Trailer> SkipList<C, T> {
   }
 }
 
-impl<C: Comparator, T: Trailer> SkipList<C, T> {
+impl<A, C> SkipList<A, C>
+where
+  A: BaseAllocator,
+  C: Comparator,
+{
   /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
   unsafe fn get_prev(
     &self,
-    mut nd: NodePtr<T>,
+    mut nd: <A::Node as BaseNode>::Pointer,
     height: usize,
     ignore_invalid_trailer: bool,
-  ) -> NodePtr<T> {
+  ) -> <A::Node as BaseNode>::Pointer {
     loop {
       if nd.is_null() {
-        return NodePtr::NULL;
+        return <A::Node as BaseNode>::Pointer::NULL;
       }
 
-      if nd.ptr == self.head.ptr {
+      if nd.ptr() == self.head.ptr() {
         return self.head;
       }
 
       let offset = nd.prev_offset(&self.arena, height);
       let ptr = self.arena.get_pointer(offset as usize);
-      let prev = NodePtr::<T>::new(ptr as _, offset);
+      let prev = <A::Node as BaseNode>::Pointer::new(ptr as _, offset);
       let prev_node = prev.as_ref();
 
       if ignore_invalid_trailer && !prev_node.get_trailer(&self.arena).is_valid() {
@@ -1530,23 +902,23 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   #[inline]
   unsafe fn get_next(
     &self,
-    mut nptr: NodePtr<T>,
+    mut nptr: <A::Node as BaseNode>::Pointer,
     height: usize,
     ignore_invalid_trailer: bool,
-  ) -> NodePtr<T> {
+  ) -> <A::Node as BaseNode>::Pointer {
     loop {
       if nptr.is_null() {
-        return NodePtr::NULL;
+        return <A::Node as BaseNode>::Pointer::NULL;
       }
 
-      if nptr.ptr == self.tail.ptr {
+      if nptr.ptr() == self.tail.ptr() {
         return self.tail;
       }
 
       let offset = nptr.next_offset(&self.arena, height);
       let ptr = self.arena.get_pointer(offset as usize);
 
-      let next = NodePtr::<T>::new(ptr as _, offset);
+      let next = <A::Node as BaseNode>::Pointer::new(ptr as _, offset);
       let next_node = next.as_ref();
 
       if ignore_invalid_trailer && !next_node.get_trailer(&self.arena).is_valid() {
@@ -1562,23 +934,31 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_next_allow_uncommitted(&self, nptr: NodePtr<T>, height: usize) -> NodePtr<T> {
+  unsafe fn get_next_allow_uncommitted(
+    &self,
+    nptr: <A::Node as BaseNode>::Pointer,
+    height: usize,
+  ) -> <A::Node as BaseNode>::Pointer {
     if nptr.is_null() {
-      return NodePtr::NULL;
+      return <A::Node as BaseNode>::Pointer::NULL;
     }
 
     let offset = nptr.next_offset(&self.arena, height);
     let ptr = self.arena.get_pointer(offset as usize);
 
-    NodePtr::new(ptr as _, offset)
+    <A::Node as BaseNode>::Pointer::new(ptr as _, offset)
   }
 
   /// Returns the first entry in the map.
-  fn first_in(&self, version: Version, ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
+  fn first_in(
+    &self,
+    version: Version,
+    ignore_invalid_trailer: bool,
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     // Safety: head node was definitely allocated by self.arena
     let nd = unsafe { self.get_next(self.head, 0, ignore_invalid_trailer) };
 
-    if nd.is_null() || nd.ptr == self.tail.ptr {
+    if nd.is_null() || nd.ptr() == self.tail.ptr() {
       return None;
     }
 
@@ -1590,11 +970,15 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   }
 
   /// Returns the last entry in the map.
-  fn last_in(&self, version: Version, ignore_invalid_trailer: bool) -> Option<NodePtr<T>> {
+  fn last_in(
+    &self,
+    version: Version,
+    ignore_invalid_trailer: bool,
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     // Safety: tail node was definitely allocated by self.arena
     let nd = unsafe { self.get_prev(self.tail, 0, ignore_invalid_trailer) };
 
-    if nd.is_null() || nd.ptr == self.head.ptr {
+    if nd.is_null() || nd.ptr() == self.head.ptr() {
       return None;
     }
 
@@ -1616,13 +1000,13 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     ignore_invalid_trailer: bool,
-  ) -> Option<NodePtr<T>> {
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     unsafe {
       let (n, _) = self.find_near(Version::MIN, key, false, false, ignore_invalid_trailer); // find the key with the max version.
 
       let n = n?;
 
-      if n.is_null() || n.ptr == self.tail.ptr {
+      if n.is_null() || n.ptr() == self.tail.ptr() {
         return None;
       }
 
@@ -1641,12 +1025,12 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     ignore_invalid_trailer: bool,
-  ) -> Option<NodePtr<T>> {
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     unsafe {
       let (n, _) = self.find_near(Version::MAX, key, true, false, ignore_invalid_trailer); // find less or equal.
 
       let n = n?;
-      if n.is_null() || n.ptr == self.head.ptr {
+      if n.is_null() || n.ptr() == self.head.ptr() {
         return None;
       }
 
@@ -1665,13 +1049,13 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     ignore_invalid_trailer: bool,
-  ) -> Option<NodePtr<T>> {
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     unsafe {
       let (n, _) = self.find_near(Version::MAX, key, false, true, ignore_invalid_trailer); // find the key with the max version.
 
       let n = n?;
 
-      if n.is_null() || n.ptr == self.tail.ptr {
+      if n.is_null() || n.ptr() == self.tail.ptr() {
         return None;
       }
 
@@ -1690,12 +1074,12 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     ignore_invalid_trailer: bool,
-  ) -> Option<NodePtr<T>> {
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     unsafe {
       let (n, _) = self.find_near(Version::MIN, key, true, true, ignore_invalid_trailer); // find less or equal.
 
       let n = n?;
-      if n.is_null() || n.ptr == self.head.ptr {
+      if n.is_null() || n.ptr() == self.head.ptr() {
         return None;
       }
 
@@ -1705,10 +1089,10 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
 
   unsafe fn find_prev_max_version(
     &self,
-    mut curr: NodePtr<T>,
+    mut curr: <A::Node as BaseNode>::Pointer,
     version: Version,
     ignore_invalid_trailer: bool,
-  ) -> Option<NodePtr<T>> {
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     let mut prev = self.get_prev(curr, 0, ignore_invalid_trailer);
 
     loop {
@@ -1720,7 +1104,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         return None;
       }
 
-      if prev.is_null() || prev.ptr == self.head.ptr {
+      if prev.is_null() || prev.ptr() == self.head.ptr() {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
         }
@@ -1751,10 +1135,10 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
 
   unsafe fn find_next_max_version(
     &self,
-    mut curr: NodePtr<T>,
+    mut curr: <A::Node as BaseNode>::Pointer,
     version: Version,
     ignore_invalid_trailer: bool,
-  ) -> Option<NodePtr<T>> {
+  ) -> Option<<A::Node as BaseNode>::Pointer> {
     let mut next = self.get_next(curr, 0, ignore_invalid_trailer);
 
     loop {
@@ -1766,7 +1150,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         return Some(curr);
       }
 
-      if next.is_null() || next.ptr == self.head.ptr {
+      if next.is_null() || next.ptr() == self.head.ptr() {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
         }
@@ -1786,7 +1170,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       }
 
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        if next.ptr == self.tail.ptr {
+        if next.ptr() == self.tail.ptr() {
           return None;
         }
 
@@ -1811,16 +1195,16 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     less: bool,
     allow_equal: bool,
     ignore_invalid_trailer: bool,
-  ) -> (Option<NodePtr<T>>, bool) {
+  ) -> (Option<<A::Node as BaseNode>::Pointer>, bool) {
     let mut x = self.head;
-    let mut level = self.height() as usize - 1;
+    let mut level = self.meta().height() as usize - 1;
 
     loop {
       // Assume x.key < key.
       let next = self.get_next(x, level, ignore_invalid_trailer);
       let is_next_null = next.is_null();
 
-      if is_next_null || next.ptr == self.tail.ptr {
+      if is_next_null || next.ptr() == self.tail.ptr() {
         // x.key < key < END OF LIST
         if level > 0 {
           // Can descend further to iterate closer to the end.
@@ -1834,7 +1218,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         }
 
         // Try to return x. Make sure it is not a head node.
-        if x.ptr == self.head.ptr {
+        if x.ptr() == self.head.ptr() {
           return (None, false);
         }
 
@@ -1887,7 +1271,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
           }
 
           // Try to return x. Make sure it is not a head node.
-          if x.ptr == self.head.ptr {
+          if x.ptr() == self.head.ptr() {
             return (None, false);
           }
 
@@ -1905,10 +1289,14 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     &'a self,
     version: Version,
     key: &'b [u8],
-    ins: &mut Inserter<T>,
+    ins: &mut Inserter<<A::Node as BaseNode>::Pointer>,
     returned_when_found: bool,
-  ) -> (bool, Option<Pointer>, Option<NodePtr<T>>) {
-    let list_height = self.height() as u32;
+  ) -> (
+    bool,
+    Option<Pointer>,
+    Option<<A::Node as BaseNode>::Pointer>,
+  ) {
+    let list_height = self.meta().height() as u32;
     let mut level = 0;
 
     let mut prev = self.head;
@@ -1922,20 +1310,20 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       // Our cached height is equal to the list height.
       while level < list_height as usize {
         let spl = &ins.spl[level];
-        if self.get_next_allow_uncommitted(spl.prev, level).ptr != spl.next.ptr {
+        if self.get_next_allow_uncommitted(spl.prev, level).ptr() != spl.next.ptr() {
           level += 1;
           // One or more nodes have been inserted between the splice at this
           // level.
           continue;
         }
 
-        if spl.prev.ptr != self.head.ptr && !self.key_is_after_node(spl.prev, version, key) {
+        if spl.prev.ptr() != self.head.ptr() && !self.key_is_after_node(spl.prev, version, key) {
           // Key lies before splice.
           level = list_height as usize;
           break;
         }
 
-        if spl.next.ptr != self.tail.ptr && !self.key_is_after_node(spl.next, version, key) {
+        if spl.next.ptr() != self.tail.ptr() && !self.key_is_after_node(spl.next, version, key) {
           // Key lies after splice.
           level = list_height as usize;
           break;
@@ -1978,14 +1366,14 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     version: Version,
     key: &[u8],
     level: usize,
-    start: NodePtr<T>,
-  ) -> FindResult<T> {
+    start: <A::Node as BaseNode>::Pointer,
+  ) -> FindResult<<A::Node as BaseNode>::Pointer> {
     let mut prev = start;
 
     loop {
       // Assume prev.key < key.
       let next = self.get_next_allow_uncommitted(prev, level);
-      if next.ptr == self.tail.ptr {
+      if next.ptr() == self.tail.ptr() {
         // Tail node, so done.
         return FindResult {
           splice: Splice { prev, next },
@@ -2006,7 +1394,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       match cmp {
         cmp::Ordering::Equal => {
           found_key = Some(Pointer {
-            offset: next_node.key_offset,
+            offset: next_node.key_offset(),
             size: next_node.key_size(),
             height: Some(next_node.height()),
           });
@@ -2041,12 +1429,12 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     }
   }
 
-  fn try_get_pointer(&self, next_node: &Node<T>, next_key: &[u8], key: &[u8]) -> Option<Pointer> {
+  fn try_get_pointer(&self, next_node: &A::Node, next_key: &[u8], key: &[u8]) -> Option<Pointer> {
     match self.opts.compression_policy() {
       CompressionPolicy::Fast => {
         if next_key.starts_with(key) {
           return Some(Pointer {
-            offset: next_node.key_offset,
+            offset: next_node.key_offset(),
             size: key.len() as u32,
             height: Some(next_node.height()),
           });
@@ -2055,7 +1443,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       CompressionPolicy::High => {
         if let Some(idx) = memchr::memmem::find(next_key, key) {
           return Some(Pointer {
-            offset: next_node.key_offset + idx as u32,
+            offset: next_node.key_offset() + idx as u32,
             size: key.len() as u32,
             height: Some(next_node.height()),
           });
@@ -2068,11 +1456,16 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
-  unsafe fn key_is_after_node(&self, nd: NodePtr<T>, version: Version, key: &[u8]) -> bool {
-    let nd = &*nd.ptr;
+  unsafe fn key_is_after_node(
+    &self,
+    nd: <A::Node as BaseNode>::Pointer,
+    version: Version,
+    key: &[u8],
+  ) -> bool {
+    let nd = &*nd.ptr();
     let nd_key = self
       .arena
-      .get_bytes(nd.key_offset as usize, nd.key_size() as usize);
+      .get_bytes(nd.key_offset() as usize, nd.key_size() as usize);
 
     match self.cmp.compare(nd_key, key) {
       cmp::Ordering::Less => true,
@@ -2081,37 +1474,6 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         matches!(version.cmp(&nd.version()), cmp::Ordering::Less)
       }
     }
-  }
-
-  fn fetch_vacant_key<'a, 'b: 'a, E>(
-    &'a self,
-    key_size: u32,
-    key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-  ) -> Result<VacantBuffer<'a>, Either<E, Error>> {
-    let (key_offset, key_size) = self
-      .arena
-      .alloc_bytes(key_size)
-      .map(|mut b| {
-        b.detach();
-        (b.offset(), b.capacity())
-      })
-      .map_err(|e| Either::Right(e.into()))?;
-
-    let mut vk = unsafe {
-      VacantBuffer::new(
-        key_size,
-        key_offset as u32,
-        self.arena.get_bytes_mut(key_offset, key_size),
-      )
-    };
-    key(&mut vk)
-      .map_err(|e| {
-        unsafe {
-          self.arena.dealloc(key_offset as u32, key_size as u32);
-        }
-        Either::Left(e)
-      })
-      .map(|_| vk)
   }
 
   #[inline]
@@ -2128,186 +1490,19 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
     Ok(())
   }
 
-  fn get_or_allocate_unlinked_node_in<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    trailer: T,
-    height: u32,
-    key: Key<'a, 'b>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
-    mut ins: Inserter<'a, T>,
-  ) -> Result<Either<UnlinkedNode<'a, T>, VersionedEntryRef<'a, T>>, Either<E, Error>> {
-    let is_remove = key.is_remove();
-
-    // Safety: a fresh new Inserter, so safe here
-    let (found, found_key, ptr) =
-      unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
-
-    if found {
-      let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
-      let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
-      let is_old_removed = old.is_removed();
-
-      if !is_old_removed {
-        key.on_fail(&self.arena);
-        return Ok(Either::Right(old));
-      }
-
-      if is_old_removed && is_remove {
-        key.on_fail(&self.arena);
-        return Ok(Either::Right(old));
-      }
-    }
-
-    let k = match found_key {
-      None => key,
-      Some(k) => {
-        key.on_fail(&self.arena);
-
-        if is_remove {
-          Key::remove_pointer(&self.arena, k)
-        } else {
-          Key::pointer(&self.arena, k)
-        }
-      }
-    };
-
-    let (nd, deallocator) = self
-      .new_node(version, height, &k, value_builder, trailer)
-      .inspect_err(|_| {
-        k.on_fail(&self.arena);
-      })?;
-
-    Ok(Either::Left(UnlinkedNode::new(
-      &self.arena,
-      nd,
-      height,
-      version,
-      deallocator,
-    )))
-  }
-
-  fn allocate_unlinked_node_in<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    trailer: T,
-    height: u32,
-    key: Key<'a, 'b>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
-    mut ins: Inserter<'a, T>,
-  ) -> Result<UnlinkedNode<T>, Either<E, Error>> {
-    // Safety: a fresh new Inserter, so safe here
-    let (_, found_key, _) = unsafe { self.find_splice(version, key.as_ref(), &mut ins, true) };
-
-    let k = match found_key {
-      None => key,
-      Some(k) => {
-        let is_remove = key.is_remove();
-        key.on_fail(&self.arena);
-
-        if is_remove {
-          Key::remove_pointer(&self.arena, k)
-        } else {
-          Key::pointer(&self.arena, k)
-        }
-      }
-    };
-
-    let (nd, deallocator) = self
-      .new_node(version, height, &k, value_builder, trailer)
-      .inspect_err(|_| {
-        k.on_fail(&self.arena);
-      })?;
-
-    Ok(UnlinkedNode::new(
-      &self.arena,
-      nd,
-      height,
-      version,
-      deallocator,
-    ))
-  }
-
-  fn link_node_in<'a, 'b: 'a>(
-    &'a self,
-    node: UnlinkedNode<'a, T>,
-    success: Ordering,
-    failure: Ordering,
-    upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
-    assert!(
-      ptr::addr_eq(&self.arena, node.arena),
-      "unlinked node is not from the same arena as the skipmap"
-    );
-    let version = node.version();
-
-    // SAFETY: node is allocated by the arena, so safe here
-    let unlinked = unsafe { node.ptr.as_ref() };
-    let value = unsafe { unlinked.get_value(&self.arena) };
-    let mut ins = Inserter::default();
-
-    // Safety: a fresh new Inserter, so safe here
-    unsafe {
-      let (found, found_key, ptr) =
-        self.find_splice(version, unlinked.get_key(&self.arena), &mut ins, true);
-
-      if found {
-        let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
-        let k = found_key.expect("the key cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
-
-        if upsert {
-          let (value_offset, value_size) = unlinked.value.load(Ordering::Acquire);
-          match value {
-            Some(_) => {
-              return self.upsert_value(
-                old,
-                node_ptr,
-                &Key::pointer(&self.arena, k),
-                value_offset,
-                value_size,
-                success,
-                failure,
-              );
-            }
-            None => {
-              return self.upsert_value(
-                old,
-                node_ptr,
-                &Key::remove_pointer(&self.arena, k),
-                value_offset,
-                value_size,
-                success,
-                failure,
-              );
-            }
-          }
-        }
-
-        return Ok(Either::Left(if old.is_removed() {
-          None
-        } else {
-          Some(old)
-        }));
-      }
-    }
-
-    self.link_in(node, success, failure, upsert, ins)
-  }
-
   #[allow(clippy::too_many_arguments)]
   fn update<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    trailer: T,
+    trailer: A::Trailer,
     height: u32,
-    key: Key<'a, 'b>,
+    key: Key<'a, 'b, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
-    mut ins: Inserter<'a, T>,
+    mut ins: Inserter<'a, <A::Node as BaseNode>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, A>, Either<E, Error>> {
     let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
@@ -2367,39 +1562,23 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       }
     };
 
-    let (nd, deallocator) = self
+    let (nd, mut deallocator) = self
       .new_node(version, height, &k, value_builder, trailer)
       .inspect_err(|_| {
         k.on_fail(&self.arena);
       })?;
 
-    self
-      .link_in(
-        UnlinkedNode::new(&self.arena, nd, height, version, deallocator),
-        success,
-        failure,
-        upsert,
-        ins,
-      )
-      .map_err(Either::Right)
-  }
+    // self
+    //   .link_in(
+    //     UnlinkedNode::new(&self.arena, nd, height, version, deallocator),
+    //     success,
+    //     failure,
+    //     upsert,
+    //     ins,
+    //   )
+    //   .map_err(Either::Right)
 
-  fn link_in<'a, 'b: 'a>(
-    &'a self,
-    node: UnlinkedNode<'a, T>,
-    success: Ordering,
-    failure: Ordering,
-    upsert: bool,
-    mut ins: Inserter<'a, T>,
-  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
-    let is_removed = node.value().is_none();
-    let UnlinkedNode {
-      arena,
-      ptr: nd,
-      mut deallocator,
-      height,
-      version,
-    } = node;
+    let is_removed = unsafe { nd.as_ref().get_value(&self.arena).is_none() };
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -2434,8 +1613,8 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
       // 3. CAS nextPrevOffset to repoint from prev to nd.
       unsafe {
         loop {
-          let prev_offset = prev.offset;
-          let next_offset = next.offset;
+          let prev_offset = prev.offset();
+          let next_offset = next.offset();
           nd.write_tower(&self.arena, i, prev_offset, next_offset);
 
           // Check whether next has an updated link to prev. If it does not,
@@ -2471,8 +1650,8 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
           match prev.cas_next_offset(
             &self.arena,
             i,
-            next.offset,
-            nd.offset,
+            next.offset(),
+            nd.offset(),
             Ordering::SeqCst,
             Ordering::Acquire,
           ) {
@@ -2491,13 +1670,14 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                 &self.arena,
                 i,
                 prev_offset,
-                nd.offset,
+                nd.offset(),
                 Ordering::SeqCst,
                 Ordering::Acquire,
               );
 
               break;
             }
+
             Err(_) => {
               let unlinked_node = nd.as_ref();
 
@@ -2505,7 +1685,8 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
-              let fr = self.find_splice_for_level(version, unlinked_node.get_key(arena), i, prev);
+              let fr =
+                self.find_splice_for_level(version, unlinked_node.get_key(&self.arena), i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");
@@ -2518,22 +1699,24 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
 
                 if upsert {
                   let curr = nd.as_ref();
-                  let (new_value_offset, new_value_size) = curr.value.load(Ordering::Acquire);
+                  let (new_value_offset, new_value_size) = curr.value_pointer().load();
                   deallocator.dealloc_node_and_key(&self.arena);
 
-                  return self.upsert_value(
-                    old,
-                    node_ptr,
-                    &if is_removed {
-                      Key::remove_pointer(&self.arena, fr.found_key.unwrap())
-                    } else {
-                      Key::pointer(&self.arena, fr.found_key.unwrap())
-                    },
-                    new_value_offset,
-                    new_value_size,
-                    success,
-                    failure,
-                  );
+                  return self
+                    .upsert_value(
+                      old,
+                      node_ptr,
+                      &if is_removed {
+                        Key::remove_pointer(&self.arena, fr.found_key.unwrap())
+                      } else {
+                        Key::pointer(&self.arena, fr.found_key.unwrap())
+                      },
+                      new_value_offset,
+                      new_value_size,
+                      success,
+                      failure,
+                    )
+                    .map_err(Either::Right);
                 }
 
                 deallocator.dealloc(&self.arena);
@@ -2549,9 +1732,10 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
                 // in deallocator, and let the underlying allocator reclaim it, so that we do not store the same key twice.
                 if deallocator.key.is_some() {
                   let node = nd.as_mut();
-                  node.key_offset = p.offset;
-                  node.key_size_and_height = encode_key_size_and_height(p.size, p.height.unwrap());
-                  deallocator.dealloc_key_by_ref(arena)
+                  node.set_key_offset(p.offset);
+                  node
+                    .set_key_size_and_height(encode_key_size_and_height(p.size, p.height.unwrap()));
+                  deallocator.dealloc_key_by_ref(&self.arena)
                 }
               }
 
@@ -2576,9 +1760,10 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
         ins.spl[i].prev = nd;
       }
     }
-    self.meta().increase_len();
-    self.meta().update_max_version(version);
-    self.meta().update_min_version(version);
+    let meta = self.meta();
+    meta.increase_len();
+    meta.update_max_version(version);
+    meta.update_min_version(version);
 
     Ok(Either::Left(None))
   }
@@ -2586,18 +1771,18 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
-    old: VersionedEntryRef<'a, T>,
-    old_node_ptr: NodePtr<T>,
-    key: &Key<'a, 'b>,
+    old: VersionedEntryRef<'a, A>,
+    old_node_ptr: <A::Node as BaseNode>::Pointer,
+    key: &Key<'a, 'b, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, T>, Error> {
+  ) -> Result<UpdateOk<'a, 'b, A>, Error> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => {
         let old_node = old_node_ptr.as_ref();
-        old_node.set_value(&self.arena, value_offset, value_size);
+        old_node.update_value(&self.arena, value_offset, value_size);
 
         Ok(Either::Left(if old.is_removed() {
           None
@@ -2615,7 +1800,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
               &self.arena,
               ValuePartPointer::new(
                 offset,
-                Arena::align_offset::<T>(offset) + mem::size_of::<T>() as u32,
+                A::align_offset::<A::Trailer>(offset) + mem::size_of::<A::Trailer>() as u32,
                 len,
               ),
             ),
@@ -2628,18 +1813,18 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
-    old: VersionedEntryRef<'a, T>,
-    old_node_ptr: NodePtr<T>,
-    key: &Key<'a, 'b>,
-    trailer: T,
+    old: VersionedEntryRef<'a, A>,
+    old_node_ptr: <A::Node as BaseNode>::Pointer,
+    key: &Key<'a, 'b, A>,
+    trailer: A::Trailer,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, T>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, A>, Either<E, Error>> {
     match key {
-      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => old_node_ptr
-        .as_ref()
-        .allocate_and_set_value(&self.arena, trailer, value_builder.unwrap())
+      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => self
+        .arena
+        .allocate_and_update_value(old_node_ptr.as_ref(), trailer, value_builder.unwrap())
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref();
@@ -2651,7 +1836,7 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
               &self.arena,
               ValuePartPointer::new(
                 offset,
-                Arena::align_offset::<T>(offset) + mem::size_of::<T>() as u32,
+                A::align_offset::<A::Trailer>(offset) + mem::size_of::<A::Trailer>() as u32,
                 len,
               ),
             ),
@@ -2663,13 +1848,13 @@ impl<C: Comparator, T: Trailer> SkipList<C, T> {
 }
 
 /// A helper struct for caching splice information
-pub struct Inserter<'a, T> {
-  spl: [Splice<T>; super::MAX_HEIGHT],
+pub struct Inserter<'a, P> {
+  spl: [Splice<P>; super::MAX_HEIGHT],
   height: u32,
   _m: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, T> Default for Inserter<'a, T> {
+impl<'a, P: BaseNodePointer> Default for Inserter<'a, P> {
   #[inline]
   fn default() -> Self {
     Self {
@@ -2714,24 +1899,24 @@ impl<'a, T> Default for Inserter<'a, T> {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Splice<T> {
-  prev: NodePtr<T>,
-  next: NodePtr<T>,
+struct Splice<P> {
+  prev: P,
+  next: P,
 }
 
-impl<T> Default for Splice<T> {
+impl<P: BaseNodePointer> Default for Splice<P> {
   #[inline]
   fn default() -> Self {
     Self {
-      prev: NodePtr::NULL,
-      next: NodePtr::NULL,
+      prev: P::NULL,
+      next: P::NULL,
     }
   }
 }
 
-impl<'a, 'b: 'a> Key<'a, 'b> {
+impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
   #[inline]
-  const fn pointer(arena: &'a super::Arena, pointer: Pointer) -> Self {
+  const fn pointer(arena: &'a A, pointer: Pointer) -> Self {
     Self::Pointer {
       arena,
       offset: pointer.offset,
@@ -2740,7 +1925,7 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
   }
 
   #[inline]
-  const fn remove_pointer(arena: &'a super::Arena, pointer: Pointer) -> Self {
+  const fn remove_pointer(arena: &'a A, pointer: Pointer) -> Self {
     Self::RemovePointer {
       arena,
       offset: pointer.offset,
@@ -2749,11 +1934,230 @@ impl<'a, 'b: 'a> Key<'a, 'b> {
   }
 }
 
-struct FindResult<T> {
+struct FindResult<P> {
   // both key and version are equal.
   found: bool,
   // only key is equal.
   found_key: Option<Pointer>,
-  splice: Splice<T>,
-  curr: Option<NodePtr<T>>,
+  splice: Splice<P>,
+  curr: Option<P>,
+}
+
+impl<'a> crate::allocator::BytesRefMut for BytesRefMut<'a> {
+  fn offset(&self) -> u32 {
+    BytesRefMut::offset(self) as u32
+  }
+
+  fn capacity(&self) -> u32 {
+    BytesRefMut::capacity(self) as u32
+  }
+
+  fn memory_offset(&self) -> usize {
+    BytesRefMut::memory_offset(self)
+  }
+
+  fn memory_capacity(&self) -> usize {
+    BytesRefMut::memory_capacity(self)
+  }
+
+  fn detach(&mut self) {
+    BytesRefMut::detach(self)
+  }
+
+  fn as_mut_ptr(&self) -> *mut u8 {
+    BytesRefMut::as_mut_ptr(self)
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  fn flush(&self) -> std::io::Result<()> {
+    BytesRefMut::flush(self)
+  }
+}
+
+impl<'a, T> crate::allocator::RefMut<T> for RefMut<'a, T> {
+  #[inline]
+  fn offset(&self) -> u32 {
+    RefMut::offset(self) as u32
+  }
+
+  #[inline]
+  fn memory_offset(&self) -> usize {
+    RefMut::memory_offset(self)
+  }
+
+  #[inline]
+  fn memory_capacity(&self) -> usize {
+    RefMut::memory_capacity(self)
+  }
+
+  #[inline]
+  unsafe fn detach(&mut self) {
+    unsafe { RefMut::detach(self) }
+  }
+
+  #[inline]
+  unsafe fn write(&mut self, value: T) {
+    RefMut::write(self, value)
+  }
+
+  #[inline]
+  fn as_mut_ptr(&mut self) -> NonNull<T> {
+    RefMut::as_mut_ptr(self)
+  }
+}
+
+///. j
+#[derive(Debug)]
+pub struct Allocator<N> {
+  arena: Arena,
+  max_key_size: u32,
+  max_value_size: u32,
+  max_height: u32,
+  _m: PhantomData<N>,
+}
+
+impl<N> Allocator<N> {
+  #[inline]
+  fn refs(&self) -> usize {
+    self.arena.refs()
+  }
+}
+
+impl<N> Clone for Allocator<N> {
+  fn clone(&self) -> Self {
+    Self {
+      arena: self.arena.clone(),
+      max_key_size: self.max_key_size,
+      max_value_size: self.max_value_size,
+      max_height: self.max_height,
+      _m: PhantomData,
+    }
+  }
+}
+
+impl<N: BaseNode> crate::allocator::Allocator for Allocator<N> {
+  type BytesRefMut<'a> = BytesRefMut<'a> where Self: 'a;
+
+  type RefMut<'a, T> = RefMut<'a, T>
+  where
+    Self: 'a;
+
+  type Header = Meta;
+
+  type Node = N;
+
+  type Trailer = <N as BaseNode>::Trailer;
+
+  fn align_offset<T>(offset: u32) -> u32 {
+    Arena::align_offset::<T>(offset)
+  }
+
+  fn increase_discarded(&self, offset: u32) {
+    self.arena.increase_discarded(offset)
+  }
+
+  fn allocated(&self) -> u32 {
+    self.arena.allocated() as u32
+  }
+
+  fn capacity(&self) -> usize {
+    self.arena.capacity()
+  }
+
+  fn data_offset(&self) -> usize {
+    self.arena.data_offset()
+  }
+
+  fn read_only(&self) -> bool {
+    self.arena.read_only()
+  }
+
+  unsafe fn offset(&self, ptr: *const u8) -> usize {
+    self.arena.offset(ptr)
+  }
+
+  fn alloc_aligned_bytes<T>(
+    &self,
+    size: u32,
+  ) -> Result<Self::BytesRefMut<'_>, rarena_allocator::Error> {
+    self.arena.alloc_aligned_bytes::<T>(size)
+  }
+
+  fn alloc_bytes(&self, size: u32) -> Result<Self::BytesRefMut<'_>, rarena_allocator::Error> {
+    self.arena.alloc_bytes(size)
+  }
+
+  unsafe fn alloc<T>(&self) -> Result<Self::RefMut<'_, T>, rarena_allocator::Error> {
+    self.arena.alloc::<T>()
+  }
+
+  unsafe fn get_aligned_pointer<T>(&self, offset: usize) -> *const T {
+    self.arena.get_aligned_pointer(offset)
+  }
+
+  unsafe fn get_pointer(&self, offset: usize) -> *const u8 {
+    self.arena.get_pointer(offset)
+  }
+
+  unsafe fn get_pointer_mut(&self, offset: usize) -> *mut u8 {
+    self.arena.get_pointer_mut(offset)
+  }
+
+  unsafe fn get_bytes(&self, offset: usize, size: usize) -> &[u8] {
+    self.arena.get_bytes(offset, size)
+  }
+
+  unsafe fn get_bytes_mut(&self, offset: usize, size: usize) -> &mut [u8] {
+    self.arena.get_bytes_mut(offset, size)
+  }
+
+  unsafe fn dealloc(&self, offset: u32, size: u32) -> bool {
+    self.arena.dealloc(offset, size)
+  }
+
+  fn refs(&self) -> usize {
+    self.arena.refs()
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(windows)))]
+  unsafe fn munlock(&self, offset: usize, size: usize) -> std::io::Result<()> {
+    self.arena.munlock(offset, size)
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  fn is_on_disk_and_mmap(&self) -> bool {
+    self.arena.is_on_disk_and_mmap()
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  fn is_ondisk(&self) -> bool {
+    self.arena.is_on_disk()
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  fn is_mmap(&self) -> bool {
+    self.arena.is_mmap()
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  fn flush_range(&self, offset: usize, size: usize) -> std::io::Result<()> {
+    self.arena.flush_range(offset, size)
+  }
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  fn page_size(&self) -> usize {
+    self.arena.page_size()
+  }
+
+  fn max_key_size(&self) -> u32 {
+    self.max_key_size
+  }
+
+  fn max_value_size(&self) -> u32 {
+    self.max_value_size
+  }
+
+  fn max_height(&self) -> u32 {
+    self.max_height
+  }
 }

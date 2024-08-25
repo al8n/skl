@@ -21,17 +21,23 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-/// A versioned skipmap implementation.
-pub mod versioned;
+// /// A versioned skipmap implementation.
+// pub mod versioned;
 
-/// A versioned skipmap implementation with trailer support.
-pub mod trailed;
+// /// A versioned skipmap implementation with trailer support.
+// pub mod trailed;
 
-/// Skiplist implementation.
-pub mod base;
+// /// Skiplist implementation.
+// pub mod base;
 
-/// A skipmap based on the [`SkipList`](base::SkipList).
-pub mod map;
+// /// A skipmap based on the [`SkipList`](base::SkipList).
+// pub mod map;
+
+mod error;
+pub use error::Error;
+
+/// Implementations for concurrent environments.
+pub mod sync;
 
 /// Options for the [`SkipMap`](crate::SkipMap).
 pub mod options;
@@ -42,7 +48,7 @@ pub use options::{MmapOptions, OpenOptions};
 mod types;
 pub use types::*;
 
-pub use base::{AllVersionsIter, KeyBuilder, UnlinkedNode, ValueBuilder};
+// pub use base::{AllVersionsIter, KeyBuilder, UnlinkedNode, ValueBuilder};
 pub use either;
 pub use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 
@@ -214,6 +220,52 @@ const fn decode_key_size_and_height(size: u32) -> (u32, u8) {
   let height = (size & 0b11111) as u8;
   (key_size, height)
 }
+
+macro_rules! builder {
+  ($($name:ident($size:ident)),+ $(,)?) => {
+    $(
+      paste::paste! {
+        #[doc = "A " [< $name: snake>] " builder for the [`SkipList`], which requires the " [< $name: snake>] " size for accurate allocation and a closure to build the " [< $name: snake>]]
+        #[derive(Copy, Clone, Debug)]
+        pub struct [< $name Builder >] <F> {
+          size: $size,
+          f: F,
+        }
+
+        impl<F> [< $name Builder >]<F> {
+          #[doc = "Creates a new `" [<$name Builder>] "` with the given size and builder closure."]
+          #[inline]
+          pub const fn new<E>(size: $size, f: F) -> Self
+          where
+            F: for<'a> FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+          {
+            Self { size, f }
+          }
+
+          #[doc = "Returns the required" [< $name: snake>] "size."]
+          #[inline]
+          pub const fn size(&self) -> $size {
+            self.size
+          }
+
+          #[doc = "Returns the " [< $name: snake>] "builder closure."]
+          #[inline]
+          pub const fn builder(&self) -> &F {
+            &self.f
+          }
+
+          /// Deconstructs the value builder into the size and the builder closure.
+          #[inline]
+          pub fn into_components(self) -> ($size, F) {
+            (self.size, self.f)
+          }
+        }
+      }
+    )*
+  };
+}
+
+builder!(Value(u32), Key(KeySize));
 
 /// A trait for extra information that can be stored with entry in the skiplist.
 ///
@@ -399,7 +451,7 @@ pub mod time {
   );
 }
 
-mod sync {
+mod common {
   #[cfg(not(feature = "loom"))]
   pub(crate) use core::sync::atomic::*;
 

@@ -362,7 +362,7 @@ impl<C> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::versioned::SkipMap;
+  /// use skl::sync::map::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
@@ -606,10 +606,7 @@ impl<C> SkipMap<C> {
 }
 
 impl<C: Comparator> SkipMap<C> {
-  /// Returns `true` if the key exists in the map.
-  ///
-  /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](SkipMap::contains_key_versioned).
+  /// Returns `true` if the key exists in the map. 
   ///
   /// # Example
   ///
@@ -623,7 +620,6 @@ impl<C: Comparator> SkipMap<C> {
   /// map.get_or_remove(1u8, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
   /// ```
   #[inline]
   pub fn contains_key<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> bool {

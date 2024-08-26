@@ -2,14 +2,14 @@ use core::marker::PhantomData;
 
 use super::*;
 
-/// A lock-free skiplist based on an [`Arena`] allocator, which supports both multiple versions and trailer.
-pub type SkipList<T, C> = list::SkipList<ListAllocator<Meta, Node<T>, Arena>, C>;
+/// A lock-free skipmap based on an [`Arena`] allocator, which supports both multiple versions and trailer.
+pub type SkipMap<T, C> = base::SkipList<GenericAllocator<Meta, FullNode<T>, Arena>, C>;
 
-node_pointer!(Node<T>);
+node_pointer!(FullNode<T>);
 
-#[doc(hidden)]
+/// A node that supports both version and trailer.
 #[repr(C)]
-pub struct Node<T> {
+pub struct FullNode<T> {
   // A byte slice is 24 bytes. We are trying to save space here.
   /// Multiple parts of the value are encoded as a single u64 so that it
   /// can be atomically loaded and stored:
@@ -37,7 +37,7 @@ pub struct Node<T> {
   // pub(super) tower: [Link; self.opts.max_height],
 }
 
-impl<T> core::fmt::Debug for Node<T> {
+impl<T> core::fmt::Debug for FullNode<T> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let (key_size, height) = decode_key_size_and_height(self.key_size_and_height);
     let (value_offset, value_size) = decode_value_pointer(self.value.0.load(Ordering::Relaxed));
@@ -51,10 +51,10 @@ impl<T> core::fmt::Debug for Node<T> {
   }
 }
 
-impl<T: Trailer> WithTrailer for Node<T> {}
-impl<T: Trailer> WithVersion for Node<T> {}
+impl<T: Trailer> WithTrailer for FullNode<T> {}
+impl<T: Trailer> WithVersion for FullNode<T> {}
 
-impl<T: Trailer> BaseNode for Node<T> {
+impl<T: Trailer> Node for FullNode<T> {
   type Link = Link;
 
   type Trailer = T;
@@ -84,7 +84,7 @@ impl<T: Trailer> BaseNode for Node<T> {
   }
 
   #[inline]
-  fn clear_value<A: BaseAllocator>(
+  fn clear_value<A: Allocator>(
     &self,
     arena: &A,
     success: Ordering,

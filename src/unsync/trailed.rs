@@ -9,7 +9,7 @@ type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
 
 node_pointer!(TrailedNode<T>);
 
-/// A node that supports trailer.
+/// A node that supports both trailer.
 #[repr(C)]
 pub struct TrailedNode<T> {
   // A byte slice is 24 bytes. We are trying to save space here.
@@ -17,7 +17,7 @@ pub struct TrailedNode<T> {
   /// can be atomically loaded and stored:
   ///   value offset: u32 (bits 0-31)
   ///   value size  : u32 (bits 32-63)
-  value: AtomicValuePointer,
+  value: UnsyncValuePointer,
   // Immutable. No need to lock to access key.
   key_offset: u32,
   // Immutable. No need to lock to access key.
@@ -41,7 +41,7 @@ pub struct TrailedNode<T> {
 impl<T> core::fmt::Debug for TrailedNode<T> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let (key_size, height) = decode_key_size_and_height(self.key_size_and_height);
-    let (value_offset, value_size) = decode_value_pointer(self.value.0.load(Ordering::Relaxed));
+    let (value_offset, value_size) = self.value.load();
     f.debug_struct("Node")
       .field("value_offset", &value_offset)
       .field("value_size", &value_size)
@@ -59,13 +59,13 @@ impl<T: Trailer> Node for TrailedNode<T> {
 
   type Trailer = T;
 
-  type ValuePointer = AtomicValuePointer;
+  type ValuePointer = UnsyncValuePointer;
 
   type Pointer = NodePointer<Self::Trailer>;
 
   fn full(value_offset: u32, max_height: u8) -> Self {
     Self {
-      value: AtomicValuePointer::new(value_offset, 0),
+      value: UnsyncValuePointer::new(value_offset, 0),
       key_offset: 0,
       key_size_and_height: encode_key_size_and_height(0, max_height),
       trailer: PhantomData,
@@ -79,7 +79,7 @@ impl<T: Trailer> Node for TrailedNode<T> {
 
   #[inline]
   fn set_value_pointer(&mut self, offset: u32, size: u32) {
-    self.value = AtomicValuePointer::new(offset, size);
+    self.value = UnsyncValuePointer::new(offset, size);
   }
 
   #[inline]
@@ -262,7 +262,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```ignore
-  /// use skl::{sync::trailed::SkipMap, OpenOptions, MmapOptinos};
+  /// use skl::{unsync::trailed::SkipMap, OpenOptions, MmapOptinos};
   ///
   /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
   ///
@@ -565,7 +565,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ArenaPosition};
+  /// use skl::{unsync::trailed::SkipMap, ArenaPosition};
   ///
   /// let map = SkipMap::new().unwrap();
   ///
@@ -639,7 +639,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, Ascend, time::Ttl};
   ///
   /// let map = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
@@ -673,7 +673,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -736,7 +736,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -833,7 +833,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -896,7 +896,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -960,7 +960,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{unsync::trailed::SkipMap, u27, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1028,7 +1028,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1091,7 +1091,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1157,7 +1157,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1283,7 +1283,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, Ascend, time::Ttl};
   ///
   /// let map = SkipMap::<Ascend, Ttl>::new().unwrap();
   ///
@@ -1318,7 +1318,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1376,7 +1376,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1425,7 +1425,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::trailed::SkipMap;
+  /// use skl::unsync::trailed::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
@@ -1455,7 +1455,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::trailed::SkipMap;
+  /// use skl::unsync::trailed::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///

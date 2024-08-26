@@ -1,28 +1,28 @@
-use core::{borrow::Borrow, marker::PhantomData};
+use core::borrow::Borrow;
 
 use super::*;
 
-use base::{EntryRef, Iter};
+use base::{AllVersionsIter, EntryRef, Iter, VersionedEntryRef};
 
-type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;
-type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
+type Allocator = GenericAllocator<Meta, VersionedNode, Arena>;
+type SkipList<C> = base::SkipList<Allocator, C>;
 
-node_pointer!(TrailedNode<T>);
+node_pointer!(VersionedNode);
 
-/// A node that supports trailer.
+/// A node that supports version.
 #[repr(C)]
-pub struct TrailedNode<T> {
+pub struct VersionedNode {
   // A byte slice is 24 bytes. We are trying to save space here.
   /// Multiple parts of the value are encoded as a single u64 so that it
   /// can be atomically loaded and stored:
   ///   value offset: u32 (bits 0-31)
   ///   value size  : u32 (bits 32-63)
-  value: AtomicValuePointer,
+  value: UnsyncValuePointer,
   // Immutable. No need to lock to access key.
   key_offset: u32,
   // Immutable. No need to lock to access key.
   key_size_and_height: u32,
-  trailer: PhantomData<T>,
+  version: u64,
   // ** DO NOT REMOVE BELOW COMMENT**
   // The below field will be attached after the node, have to comment out
   // this field, because each node will not use the full height, the code will
@@ -38,10 +38,10 @@ pub struct TrailedNode<T> {
   // pub(super) tower: [Link; self.opts.max_height],
 }
 
-impl<T> core::fmt::Debug for TrailedNode<T> {
+impl core::fmt::Debug for VersionedNode {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let (key_size, height) = decode_key_size_and_height(self.key_size_and_height);
-    let (value_offset, value_size) = decode_value_pointer(self.value.0.load(Ordering::Relaxed));
+    let (value_offset, value_size) = self.value.load();
     f.debug_struct("Node")
       .field("value_offset", &value_offset)
       .field("value_size", &value_size)
@@ -52,23 +52,23 @@ impl<T> core::fmt::Debug for TrailedNode<T> {
   }
 }
 
-impl<T: Trailer> WithTrailer for TrailedNode<T> {}
+impl WithVersion for VersionedNode {}
 
-impl<T: Trailer> Node for TrailedNode<T> {
+impl Node for VersionedNode {
   type Link = Link;
 
-  type Trailer = T;
+  type Trailer = ();
 
-  type ValuePointer = AtomicValuePointer;
+  type ValuePointer = UnsyncValuePointer;
 
-  type Pointer = NodePointer<Self::Trailer>;
+  type Pointer = NodePointer;
 
   fn full(value_offset: u32, max_height: u8) -> Self {
     Self {
-      value: AtomicValuePointer::new(value_offset, 0),
+      value: UnsyncValuePointer::new(value_offset, 0),
       key_offset: 0,
       key_size_and_height: encode_key_size_and_height(0, max_height),
-      trailer: PhantomData,
+      version: MIN_VERSION,
     }
   }
 
@@ -79,7 +79,7 @@ impl<T: Trailer> Node for TrailedNode<T> {
 
   #[inline]
   fn set_value_pointer(&mut self, offset: u32, size: u32) {
-    self.value = AtomicValuePointer::new(offset, size);
+    self.value = UnsyncValuePointer::new(offset, size);
   }
 
   #[inline]
@@ -111,11 +111,13 @@ impl<T: Trailer> Node for TrailedNode<T> {
 
   #[inline]
   fn version(&self) -> Version {
-    0
+    self.version
   }
 
   #[inline]
-  fn set_version(&mut self, _: Version) {}
+  fn set_version(&mut self, version: Version) {
+    self.version = version;
+  }
 
   #[inline]
   fn key_size_and_height(&self) -> u32 {
@@ -131,16 +133,16 @@ impl<T: Trailer> Node for TrailedNode<T> {
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[repr(transparent)]
-pub struct SkipMap<T: Trailer = (), C = Ascend>(SkipList<T, C>);
+pub struct SkipMap<C = Ascend>(SkipList<C>);
 
-impl<T: Trailer, C: Clone> Clone for SkipMap<T, C> {
+impl<C: Clone> Clone for SkipMap<C> {
   #[inline]
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<T: Trailer> SkipMap<T> {
+impl SkipMap {
   /// Create a new skipmap with default options.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -232,13 +234,10 @@ impl<T: Trailer> SkipMap<T> {
   ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///    especially if you're frequently accessing or modifying it.
   ///
-  /// # Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  ///
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
+  pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
     Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
   }
 
@@ -250,7 +249,7 @@ impl<T: Trailer> SkipMap<T> {
   }
 }
 
-impl<T: Trailer, C> SkipMap<T, C> {
+impl<C> SkipMap<C> {
   /// Returns the underlying ARENA allocator used by the skipmap.
   ///
   /// This is a low level API, you should not use this method unless you know what you are doing.
@@ -262,7 +261,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```ignore
-  /// use skl::{sync::trailed::SkipMap, OpenOptions, MmapOptinos};
+  /// use skl::{unsync::versioned::SkipMap, OpenOptions, MmapOptinos};
   ///
   /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
   ///
@@ -295,8 +294,14 @@ impl<T: Trailer, C> SkipMap<T, C> {
   ///
   /// This method will return the offset of the data section in the ARENA.
   #[inline]
-  pub fn data_offset(&self) -> usize {
+  pub const fn data_offset(&self) -> usize {
     self.0.data_offset()
+  }
+
+  /// Returns the version number of the [`SkipMap`].
+  #[inline]
+  pub fn version(&self) -> u16 {
+    self.0.magic_version()
   }
 
   /// Returns the magic version number of the [`SkipMap`].
@@ -356,9 +361,21 @@ impl<T: Trailer, C> SkipMap<T, C> {
     self.0.discarded()
   }
 
+  /// Returns the maximum version of all entries in the map.
+  #[inline]
+  pub fn max_version(&self) -> u64 {
+    self.0.max_version()
+  }
+
+  /// Returns the minimum version of all entries in the map.
+  #[inline]
+  pub fn min_version(&self) -> u64 {
+    self.0.min_version()
+  }
+
   /// Returns the comparator used to compare keys.
   #[inline]
-  pub fn comparator(&self) -> &C {
+  pub const fn comparator(&self) -> &C {
     self.0.comparator()
   }
 
@@ -369,7 +386,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::trailed::SkipMap;
+  /// use skl::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
@@ -386,7 +403,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
   pub fn estimated_node_size(height: Height, key_size: impl Into<usize>, value_size: u32) -> usize {
-    SkipList::<T, C>::estimated_node_size(height, key_size, value_size)
+    SkipList::<C>::estimated_node_size(height, key_size, value_size)
   }
 
   /// Like [`SkipMap::new`], but with a custom [`Comparator`].
@@ -539,7 +556,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// ```ignore
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(b"hello", b"world").unwrap();
+  /// map.insert(1u8, b"hello", b"world").unwrap();
   ///
   /// let data = map.get(b"hello").unwrap();
   ///
@@ -565,7 +582,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ArenaPosition};
+  /// use skl::{unsync::versioned::SkipMap, ArenaPosition};
   ///
   /// let map = SkipMap::new().unwrap();
   ///
@@ -612,7 +629,178 @@ impl<T: Trailer, C> SkipMap<T, C> {
   }
 }
 
-impl<T: Trailer, C: Comparator> SkipMap<T, C> {
+impl<C: Comparator> SkipMap<C> {
+  /// Returns `true` if the key exists in the map.
+  ///
+  /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
+  /// you can use [`contains_key_versioned`](SkipMap::contains_key_versioned).
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::unsync::map::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0u8, b"hello", b"world").unwrap();
+  ///
+  /// map.get_or_remove(1u8, b"hello").unwrap();
+  ///
+  /// assert!(!map.contains_key(1u8, b"hello"));
+  /// assert!(map.contains_key_versioned(1u8, b"hello"));
+  /// ```
+  #[inline]
+  pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
+    self.0.contains_key(version, key)
+  }
+
+  /// Returns `true` if the key exists in the map, even if it is marked as removed.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::unsync::map::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0u8, b"hello", b"world").unwrap();
+  ///
+  /// map.get_or_remove(1u8, b"hello").unwrap();
+  ///
+  /// assert!(!map.contains_key(1u8, b"hello"));
+  /// assert!(map.contains_key_versioned(1u8, b"hello"));
+  /// ```
+  #[inline]
+  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
+    self.get_versioned(version, key).is_some()
+  }
+
+  /// Returns the first entry in the map.
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, Allocator>> {
+    self.0.first(version)
+  }
+
+  /// Returns the last entry in the map.
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, Allocator>> {
+    self.0.last(version)
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  ///
+  /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
+  /// you can use [`get_versioned`](SkipMap::get_versioned).
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::unsync::map::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0u8, b"hello", b"world").unwrap();
+  ///
+  /// let ent = map.get(0u8, b"hello").unwrap();
+  /// assert_eq!(ent.value(), b"world");
+  ///
+  /// map.get_or_remove(1u8, b"hello").unwrap();
+  ///
+  /// assert!(map.get(1u8, b"hello").is_none());
+  /// ```
+  pub fn get<'a, 'b: 'a>(
+    &'a self,
+    version: Version,
+    key: &'b [u8],
+  ) -> Option<EntryRef<'a, Allocator>> {
+    self.0.get(version, key)
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  ///
+  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::unsync::map::SkipMap;
+  ///
+  /// let map = SkipMap::new().unwrap();
+  ///
+  /// map.insert(0.into(), b"hello", b"world").unwrap();
+  ///
+  /// map.get_or_remove(1.into(), b"hello").unwrap();
+  ///
+  /// assert!(map.get(1.into(), b"hello").is_none());
+  ///
+  /// let ent = map.get_versioned(1.into(), b"hello").unwrap();
+  /// // value is None because the entry is marked as removed.
+  /// assert!(ent.value().is_none());
+  /// ```
+  pub fn get_versioned<'a, 'b: 'a>(
+    &'a self,
+    version: Version,
+    key: &'b [u8],
+  ) -> Option<VersionedEntryRef<'a, Allocator>> {
+    self.0.get_versioned(version, key)
+  }
+
+  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn upper_bound<'a, 'b: 'a>(
+    &'a self,
+    version: Version,
+    upper: Bound<&'b [u8]>,
+  ) -> Option<EntryRef<'a, Allocator>> {
+    self.0.upper_bound(version, upper)
+  }
+
+  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn lower_bound<'a, 'b: 'a>(
+    &'a self,
+    version: Version,
+    lower: Bound<&'b [u8]>,
+  ) -> Option<EntryRef<'a, Allocator>> {
+    self.0.lower_bound(version, lower)
+  }
+
+  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
+  #[inline]
+  pub fn iter(&self, version: Version) -> Iter<Allocator, C> {
+    self.0.iter(version)
+  }
+
+  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
+  #[inline]
+  pub fn iter_all_versions(&self, version: Version) -> AllVersionsIter<Allocator, C> {
+    self.0.iter_all_versions(version)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
+  #[inline]
+  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> Iter<'a, Allocator, C, Q, R>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    R: RangeBounds<Q> + 'a,
+  {
+    self.0.range(version, range)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
+  #[inline]
+  pub fn range_all_versions<'a, Q, R>(
+    &'a self,
+    version: Version,
+    range: R,
+  ) -> AllVersionsIter<'a, Allocator, C, Q, R>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    R: RangeBounds<Q> + 'a,
+  {
+    self.0.range_all_versions(version, range)
+  }
+}
+
+impl<C: Comparator> SkipMap<C> {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipMap::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
@@ -621,13 +809,11 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   #[inline]
   pub fn insert<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
-    self
-      .0
-      .insert_at_height(MIN_VERSION, self.random_height(), key, value, trailer)
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
+    self.0.insert(version, key, value, ())
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -639,23 +825,22 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, Ascend, time::Ttl};
+  /// use skl::unsync::map::SkipMap;
   ///
-  /// let map = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// map.insert_at_height(Version::new(), height, b"hello", b"world").unwrap();
   /// ```
+  #[inline]
   pub fn insert_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
-    self
-      .0
-      .insert_at_height(MIN_VERSION, height, key, value, trailer)
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
+    self.0.insert_at_height(version, height, key, value, ())
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -673,7 +858,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -694,7 +879,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -702,27 +887,27 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
   pub fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self.0.insert_at_height_with_value_builder(
-      MIN_VERSION,
+      version,
       self.random_height(),
       key,
       value_builder,
-      trailer,
+      (),
     )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height_with_value_builder`](SkipMap::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_value_builder`](SkipMap::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -736,7 +921,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -757,7 +942,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -766,19 +951,19 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb)
   /// .unwrap();
   /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self
       .0
-      .insert_at_height_with_value_builder(MIN_VERSION, height, key, value_builder, trailer)
+      .insert_at_height_with_value_builder(version, height, key, value_builder, ())
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
@@ -790,13 +975,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   #[inline]
   pub fn get_or_insert<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
     self
       .0
-      .get_or_insert_at_height(MIN_VERSION, self.random_height(), key, value, trailer)
+      .get_or_insert_at_height(version, self.random_height(), key, value, ())
   }
 
   /// Inserts a new key-value pair at height if it does not yet exist.
@@ -807,14 +992,14 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   pub fn get_or_insert_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
     self
       .0
-      .get_or_insert_at_height(MIN_VERSION, height, key, value, trailer)
+      .get_or_insert_at_height(version, height, key, value, ())
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -833,7 +1018,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -854,29 +1039,28 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
   pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
-    self.0.get_or_insert_at_height_with_value_builder(
-      MIN_VERSION,
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    self.get_or_insert_at_height_with_value_builder(
+      version,
       self.random_height(),
       key,
       value_builder,
-      trailer,
     )
   }
 
@@ -896,7 +1080,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -917,7 +1101,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -926,23 +1110,20 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb)
   /// .unwrap();
   /// ```
+  #[inline]
   pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
-    self.0.get_or_insert_at_height_with_value_builder(
-      MIN_VERSION,
-      height,
-      key,
-      value_builder,
-      trailer,
-    )
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    self
+      .0
+      .get_or_insert_at_height_with_value_builder(version, height, key, value_builder, ())
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -960,7 +1141,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, u27, KeyBuilder, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -994,27 +1175,27 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
   pub fn insert_with_builders<'a, E>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self.0.insert_at_height_with_builders(
-      MIN_VERSION,
+      version,
       self.random_height(),
       key_builder,
       value_builder,
-      trailer,
+      (),
     )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders_and_trailer`](SkipMap::get_or_insert_with_builders_and_trailer), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -1028,7 +1209,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1049,7 +1230,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1063,19 +1244,20 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb)
   /// .unwrap();
   /// ```
+  #[inline]
   pub fn insert_at_height_with_builders<'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self
       .0
-      .insert_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder, trailer)
+      .insert_at_height_with_builders(version, height, key_builder, value_builder, ())
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -1091,7 +1273,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1112,7 +1294,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1125,22 +1307,22 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
   pub fn get_or_insert_with_builders<'a, E>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self.0.get_or_insert_at_height_with_builders(
-      MIN_VERSION,
+      version,
       self.random_height(),
       key_builder,
       value_builder,
-      trailer,
+      (),
     )
   }
 
@@ -1157,7 +1339,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1178,7 +1360,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1192,23 +1374,19 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb)
   /// .unwrap();
   /// ```
   pub fn get_or_insert_at_height_with_builders<'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
-    self.0.get_or_insert_at_height_with_builders(
-      MIN_VERSION,
-      height,
-      key_builder,
-      value_builder,
-      trailer,
-    )
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    self
+      .0
+      .get_or_insert_at_height_with_builders(version, height, key_builder, value_builder, ())
   }
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
@@ -1222,19 +1400,12 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   #[inline]
   pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
-    trailer: T,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
-    self.0.compare_remove_at_height(
-      MIN_VERSION,
-      self.random_height(),
-      key,
-      trailer,
-      success,
-      failure,
-    )
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
+    self.compare_remove_at_height(version, self.random_height(), key, success, failure)
   }
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
@@ -1247,15 +1418,15 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   pub fn compare_remove_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
-    trailer: T,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
     self
       .0
-      .compare_remove_at_height(MIN_VERSION, height, key, trailer, success, failure)
+      .compare_remove_at_height(version, height, key, (), success, failure)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -1266,12 +1437,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   #[inline]
   pub fn get_or_remove<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
-    self
-      .0
-      .get_or_remove_at_height(MIN_VERSION, self.random_height(), key, trailer)
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
+    self.get_or_remove_at_height(version, self.random_height(), key)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -1283,28 +1452,27 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, Ascend, time::Ttl};
+  /// use skl::unsync::map::SkipMap;
   ///
-  /// let map = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(b"hello", b"world").unwrap();
+  /// map.insert(0u8, b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(height, b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
+  /// map.get_or_remove_at_height(0u8, height, b"hello").unwrap();
   /// ```
+  #[inline]
   pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
-    self
-      .0
-      .get_or_remove_at_height(MIN_VERSION, height, key, trailer)
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
+    self.0.get_or_remove_at_height(version, height, key, ())
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_with_builder_and_trailer`](SkipMap::compare_remove_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -1318,7 +1486,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1339,30 +1507,27 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(kb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, Ttl::new(std::time::Duration::from_seconds(60)))
   /// .unwrap();
   /// ```
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
-    self.0.get_or_remove_at_height_with_builder(
-      MIN_VERSION,
-      self.random_height(),
-      key_builder,
-      trailer,
-    )
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    self
+      .0
+      .get_or_remove_at_height_with_builder(version, self.random_height(), key_builder, ())
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height_with_builder_and_trailer`](SkipMap::compare_remove_at_height_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -1376,7 +1541,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, Ascend, time::Ttl};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1397,112 +1562,24 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<Ascend, Ttl>::new().unwrap();
+  /// let l = SkipMap::new().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(height, kb, Ttl::new(std::time::Duration::from_secs(60)))
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb)
   /// .unwrap();
   /// ```
   pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self
       .0
-      .get_or_remove_at_height_with_builder(MIN_VERSION, height, key_builder, trailer)
-  }
-}
-
-impl<T: Trailer, C: Comparator> SkipMap<T, C> {
-  /// Returns `true` if the key exists in the map.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::sync::trailed::SkipMap;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// map.get_or_remove(b"hello").unwrap();
-  ///
-  /// assert!(!map.contains_key(b"hello"));
-  /// ```
-  #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> bool {
-    self.0.contains_key(MIN_VERSION, key)
-  }
-
-  /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, Allocator<T>>> {
-    self.0.first(version)
-  }
-
-  /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, Allocator<T>>> {
-    self.0.last(version)
-  }
-
-  /// Returns the value associated with the given key, if it exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::sync::trailed::SkipMap;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// let ent = map.get(0u8, b"hello").unwrap();
-  /// assert_eq!(ent.value(), b"world");
-  ///
-  /// map.get_or_remove(b"hello").unwrap();
-  ///
-  /// assert!(map.get(b"hello").is_none());
-  /// ```
-  pub fn get<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> Option<EntryRef<'a, Allocator<T>>> {
-    self.0.get(MIN_VERSION, key)
-  }
-
-  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
-  /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, Allocator<T>>> {
-    self.0.upper_bound(MIN_VERSION, upper)
-  }
-
-  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
-  /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, Allocator<T>>> {
-    self.0.lower_bound(MIN_VERSION, lower)
-  }
-
-  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
-  #[inline]
-  pub fn iter(&self, version: Version) -> Iter<Allocator<T>, C> {
-    self.0.iter(version)
-  }
-
-  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
-  #[inline]
-  pub fn range<'a, Q, R>(&'a self, range: R) -> Iter<'a, Allocator<T>, C, Q, R>
-  where
-    Q: ?Sized + Borrow<[u8]>,
-    R: RangeBounds<Q> + 'a,
-  {
-    self.0.range(MIN_VERSION, range)
+      .get_or_remove_at_height_with_builder(version, height, key_builder, ())
   }
 }

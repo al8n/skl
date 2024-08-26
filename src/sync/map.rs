@@ -2,16 +2,16 @@ use core::borrow::Borrow;
 
 use super::*;
 
-use list::{AllVersionsIter, EntryRef, Iter};
+use base::{AllVersionsIter, EntryRef, Iter};
 
-type Allocator = ListAllocator<Meta, Node, Arena>;
-type SkipList<C> = list::SkipList<Allocator, C>;
+type Allocator = GenericAllocator<Meta, RawNode, Arena>;
+type SkipList<C> = base::SkipList<Allocator, C>;
 
-node_pointer!(Node);
+node_pointer!(RawNode);
 
-#[doc(hidden)]
+/// A node that does not support version and trailer.
 #[repr(C)]
-pub struct Node {
+pub struct RawNode {
   // A byte slice is 24 bytes. We are trying to save space here.
   /// Multiple parts of the value are encoded as a single u64 so that it
   /// can be atomically loaded and stored:
@@ -37,7 +37,7 @@ pub struct Node {
   // pub(super) tower: [Link; self.opts.max_height],
 }
 
-impl core::fmt::Debug for Node {
+impl core::fmt::Debug for RawNode {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let (key_size, height) = decode_key_size_and_height(self.key_size_and_height);
     let (value_offset, value_size) = decode_value_pointer(self.value.0.load(Ordering::Relaxed));
@@ -51,7 +51,7 @@ impl core::fmt::Debug for Node {
   }
 }
 
-impl BaseNode for Node {
+impl Node for RawNode {
   type Link = Link;
 
   type Trailer = ();
@@ -79,7 +79,7 @@ impl BaseNode for Node {
   }
 
   #[inline]
-  fn clear_value<A: BaseAllocator>(
+  fn clear_value<A: super::Allocator>(
     &self,
     arena: &A,
     success: Ordering,

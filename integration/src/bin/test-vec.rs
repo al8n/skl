@@ -1,5 +1,5 @@
 use integration::{big_value, key, new_value};
-use skl::{map::SkipMap, *};
+use skl::{sync::map::SkipMap, *};
 
 fn main() {
   {

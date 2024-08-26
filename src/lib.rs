@@ -21,23 +21,12 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-// /// A versioned skipmap implementation.
-// pub mod versioned;
+/// Skiplist implementation. See [`SkipList`](base::SkipList) for more information.
+pub mod base;
+pub use base::{AllVersionsIter, Entry, EntryRef, Iter, VersionedEntry, VersionedEntryRef};
 
-// /// A versioned skipmap implementation with trailer support.
-// pub mod trailed;
-
-// /// Skiplist implementation.
-// pub mod base;
-
-// /// A skipmap based on the [`SkipList`](base::SkipList).
-// pub mod map;
-
-mod base;
-pub use base::ListAllocator;
-
-mod list;
-pub use list::{AllVersionsIter, Entry, EntryRef, Iter, VersionedEntry, VersionedEntryRef};
+mod allocator;
+pub use allocator::GenericAllocator;
 
 mod error;
 pub use error::Error;
@@ -45,7 +34,10 @@ pub use error::Error;
 /// Implementations for concurrent environments.
 pub mod sync;
 
-/// Options for the [`SkipMap`](crate::SkipMap).
+/// Implementations for single-threaded environments.
+pub mod unsync;
+
+/// Options for configuration.
 pub mod options;
 pub use options::Options;
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -54,9 +46,8 @@ pub use options::{MmapOptions, OpenOptions};
 mod types;
 pub use types::*;
 
-// pub use base::{AllVersionsIter, KeyBuilder, UnlinkedNode, ValueBuilder};
 pub use either;
-pub use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
+pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;

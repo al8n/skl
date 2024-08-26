@@ -292,12 +292,6 @@ impl<C> SkipMap<C> {
     self.0.data_offset()
   }
 
-  /// Returns the version number of the [`SkipMap`].
-  #[inline]
-  pub fn version(&self) -> u16 {
-    self.0.magic_version()
-  }
-
   /// Returns the magic version number of the [`SkipMap`].
   ///
   /// This value can be used to check the compatibility for application using [`SkipMap`].
@@ -353,18 +347,6 @@ impl<C> SkipMap<C> {
   #[inline]
   pub fn discarded(&self) -> u32 {
     self.0.discarded()
-  }
-
-  /// Returns the maximum version of all entries in the map.
-  #[inline]
-  pub fn max_version(&self) -> u64 {
-    self.0.max_version()
-  }
-
-  /// Returns the minimum version of all entries in the map.
-  #[inline]
-  pub fn min_version(&self) -> u64 {
-    self.0.min_version()
   }
 
   /// Returns the comparator used to compare keys.

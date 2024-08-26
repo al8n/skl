@@ -1,6 +1,8 @@
+use core::convert::Infallible;
+
 use super::*;
 
-impl<T: Trailer, C: Comparator> SkipList<C, T> {
+impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipList::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
@@ -12,8 +14,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.insert_at_height(version, self.random_height(), key, value, trailer)
   }
 
@@ -39,8 +41,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;
 
     let copy = |buf: &mut VacantBuffer| {
@@ -126,8 +128,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.insert_at_height_with_value_builder(
       version,
       self.random_height(),
@@ -191,8 +193,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
 
     self
@@ -230,8 +232,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.get_or_insert_at_height(version, self.random_height(), key, value, trailer)
   }
 
@@ -247,8 +249,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;
 
     let copy = |buf: &mut VacantBuffer| {
@@ -334,8 +336,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.get_or_insert_at_height_with_value_builder(
       version,
       self.random_height(),
@@ -400,8 +402,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
 
     self
@@ -485,8 +487,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -555,12 +557,12 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
+    let vk = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
       .update(
@@ -641,8 +643,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.get_or_insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -709,14 +711,14 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     if self.arena.read_only() {
       return Err(Either::Right(Error::read_only()));
     }
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
+    let vk = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
 
     self
       .update(
@@ -754,10 +756,10 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     key: &'b [u8],
-    trailer: T,
+    trailer: A::Trailer,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.compare_remove_at_height(
       version,
       self.random_height(),
@@ -781,10 +783,10 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     height: Height,
     key: &'b [u8],
-    trailer: T,
+    trailer: A::Trailer,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;
 
     self
@@ -831,8 +833,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     key: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.get_or_remove_at_height(version, self.random_height(), key, trailer)
   }
 
@@ -859,8 +861,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     height: Height,
     key: &'b [u8],
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Error> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;
 
     self
@@ -940,8 +942,8 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.get_or_remove_at_height_with_builder(version, self.random_height(), key_builder, trailer)
   }
 
@@ -996,12 +998,12 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: T,
-  ) -> Result<Option<EntryRef<'a, T>>, Either<E, Error>> {
+    trailer: A::Trailer,
+  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self.fetch_vacant_key(u32::from(key_size), key)?;
+    let vk = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
     let key = Key::RemoveVacant(vk);
     self
       .update(

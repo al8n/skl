@@ -192,60 +192,6 @@ impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantBuffer<'a> {
   }
 }
 
-pub(crate) enum Key<'a, 'b: 'a, A> {
-  Occupied(&'b [u8]),
-  Vacant(VacantBuffer<'a>),
-  Pointer {
-    arena: &'a A,
-    offset: u32,
-    len: u32,
-  },
-  Remove(&'b [u8]),
-  #[allow(dead_code)]
-  RemoveVacant(VacantBuffer<'a>),
-  RemovePointer {
-    arena: &'a A,
-    offset: u32,
-    len: u32,
-  },
-}
-
-impl<'a, 'b: 'a, A: crate::allocator::Allocator> Key<'a, 'b, A> {
-  #[inline]
-  pub(crate) fn on_fail(&self, arena: &A) {
-    match self {
-      Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } | Self::RemovePointer { .. } => {}
-      Self::Vacant(key) | Self::RemoveVacant(key) => unsafe {
-        arena.dealloc(key.offset, key.cap as u32);
-      },
-    }
-  }
-}
-
-impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
-  /// Returns `true` if the key is a remove operation.
-  #[inline]
-  pub(crate) fn is_remove(&self) -> bool {
-    matches!(
-      self,
-      Self::Remove(_) | Self::RemoveVacant(_) | Self::RemovePointer { .. }
-    )
-  }
-}
-
-impl<'a, 'b: 'a, A: crate::allocator::Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
-  #[inline]
-  fn as_ref(&self) -> &[u8] {
-    match self {
-      Self::Occupied(key) | Self::Remove(key) => key,
-      Self::Vacant(key) | Self::RemoveVacant(key) => key.as_ref(),
-      Self::Pointer { arena, offset, len } | Self::RemovePointer { arena, offset, len } => unsafe {
-        arena.get_bytes(*offset as usize, *len as usize)
-      },
-    }
-  }
-}
-
 macro_rules! impl_eq_and_ord {
   ($name:ident($inner:ident < $upper:ident) -> [$($target:ident),+ $(,)?]) => {
     $(

@@ -2,9 +2,10 @@ use super::*;
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct AllVersionsIter<'a, A: BaseAllocator, C, Q: ?Sized = &'static [u8], R = core::ops::RangeFull> {
+pub struct AllVersionsIter<'a, A: Allocator, C, Q: ?Sized = &'static [u8], R = core::ops::RangeFull>
+{
   pub(super) map: &'a SkipList<A, C>,
-  pub(super) nd: <A::Node as BaseNode>::Pointer,
+  pub(super) nd: <A::Node as Node>::Pointer,
   pub(super) version: Version,
   pub(super) range: R,
   pub(super) all_versions: bool,
@@ -12,7 +13,7 @@ pub struct AllVersionsIter<'a, A: BaseAllocator, C, Q: ?Sized = &'static [u8], R
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for AllVersionsIter<'a, C, T, Q, R> {
+impl<'a, A: Allocator, C, Q: Clone, R: Clone> Clone for AllVersionsIter<'a, A, C, Q, R> {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
@@ -26,14 +27,15 @@ impl<'a, R: Clone, Q: Clone, T: Clone, C> Clone for AllVersionsIter<'a, C, T, Q,
   }
 }
 
-impl<'a, R: Copy, Q: Copy, T: Copy, C> Copy for AllVersionsIter<'a, C, T, Q, R> {}
+impl<'a, A: Allocator, C, Q: Copy, R: Copy> Copy for AllVersionsIter<'a, A, C, Q, R> {}
 
-impl<'a, C, T> AllVersionsIter<'a, C, T>
+impl<'a, A, C> AllVersionsIter<'a, A, C>
 where
+  A: Allocator,
   C: Comparator,
 {
   #[inline]
-  pub(crate) const fn new(version: Version, map: &'a SkipList<C, T>, all_versions: bool) -> Self {
+  pub(crate) const fn new(version: Version, map: &'a SkipList<A, C>, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -46,12 +48,13 @@ where
   }
 }
 
-impl<'a, Q, R, C, T> AllVersionsIter<'a, C, T, Q, R>
+impl<'a, A, C, Q, R> AllVersionsIter<'a, A, C, Q, R>
 where
+  A: Allocator,
   Q: ?Sized + Borrow<[u8]>,
 {
   #[inline]
-  pub(crate) fn range(version: Version, map: &'a SkipList<C, T>, r: R, all_versions: bool) -> Self {
+  pub(crate) fn range(version: Version, map: &'a SkipList<A, C>, r: R, all_versions: bool) -> Self {
     Self {
       map,
       nd: map.head,
@@ -64,7 +67,7 @@ where
   }
 }
 
-impl<'a, Q: ?Sized, R, C, T> AllVersionsIter<'a, C, T, Q, R> {
+impl<'a, A: Allocator, C, Q: ?Sized, R> AllVersionsIter<'a, A, C, Q, R> {
   /// Returns the bounds of the iterator.
   #[inline]
   pub const fn bounds(&self) -> &R {
@@ -73,21 +76,21 @@ impl<'a, Q: ?Sized, R, C, T> AllVersionsIter<'a, C, T, Q, R> {
 
   /// Returns the entry at the current position of the iterator.
   #[inline]
-  pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, T>> {
+  pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, A>> {
     self.last.as_ref()
   }
 }
 
-impl<'a, Q, R, C, T> AllVersionsIter<'a, C, T, Q, R>
+impl<'a, A, C, Q, R> AllVersionsIter<'a, A, C, Q, R>
 where
+  A: Allocator,
   C: Comparator,
-  T: Trailer,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, T>> {
+  pub fn seek_upper_bound(&mut self, upper: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, A>> {
     match upper {
       Bound::Included(key) => self.seek_le(key).map(|n| {
         let ent = VersionedEntryRef::from_node(n, &self.map.arena);
@@ -105,7 +108,7 @@ where
 
   /// Moves the iterator to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, T>> {
+  pub fn seek_lower_bound(&mut self, lower: Bound<&[u8]>) -> Option<VersionedEntryRef<'a, A>> {
     match lower {
       Bound::Included(key) => self.seek_ge(key).map(|n| {
         let ent = VersionedEntryRef::from_node(n, &self.map.arena);
@@ -123,12 +126,12 @@ where
 
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn next_in(&mut self) -> Option<VersionedEntryRef<T>> {
+  fn next_in(&mut self) -> Option<VersionedEntryRef<A>> {
     loop {
       unsafe {
         self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
 
-        if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+        if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
           return None;
         }
 
@@ -167,12 +170,12 @@ where
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn prev(&mut self) -> Option<VersionedEntryRef<T>> {
+  fn prev(&mut self) -> Option<VersionedEntryRef<A>> {
     loop {
       unsafe {
         self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
 
-        if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
+        if self.nd.is_null() || self.nd.ptr() == self.map.head.ptr() {
           return None;
         }
 
@@ -212,9 +215,9 @@ where
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_ge(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
+  fn seek_ge(&mut self, key: &[u8]) -> Option<<A::Node as Node>::Pointer> {
     self.nd = self.map.ge(self.version, key, !self.all_versions)?;
-    if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+    if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
       return None;
     }
 
@@ -256,10 +259,10 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_gt(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
+  fn seek_gt(&mut self, key: &[u8]) -> Option<<A::Node as Node>::Pointer> {
     self.nd = self.map.gt(self.version, key, self.all_versions)?;
 
-    if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+    if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
       return None;
     }
 
@@ -301,7 +304,7 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_le(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
+  fn seek_le(&mut self, key: &[u8]) -> Option<<A::Node as Node>::Pointer> {
     self.nd = self.map.le(self.version, key, self.all_versions)?;
 
     loop {
@@ -343,7 +346,7 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  fn seek_lt(&mut self, key: &[u8]) -> Option<NodePtr<T>> {
+  fn seek_lt(&mut self, key: &[u8]) -> Option<<A::Node as Node>::Pointer> {
     // NB: the top-level AllVersionsIter has already adjusted key based on
     // the upper-bound.
     self.nd = self.map.lt(self.version, key, self.all_versions)?;
@@ -385,11 +388,11 @@ where
 
   /// Seeks position at the first entry in map. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
-  fn first(&mut self) -> Option<VersionedEntryRef<'a, T>> {
+  fn first(&mut self) -> Option<VersionedEntryRef<'a, A>> {
     self.nd = self.map.first_in(self.version, self.all_versions)?;
 
     loop {
-      if self.nd.is_null() || self.nd.ptr == self.map.tail.ptr {
+      if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
         return None;
       }
 
@@ -425,12 +428,12 @@ where
 
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
-  fn last(&mut self) -> Option<VersionedEntryRef<'a, T>> {
+  fn last(&mut self) -> Option<VersionedEntryRef<'a, A>> {
     self.nd = self.map.last_in(self.version, self.all_versions)?;
 
     loop {
       unsafe {
-        if self.nd.is_null() || self.nd.ptr == self.map.head.ptr {
+        if self.nd.is_null() || self.nd.ptr() == self.map.head.ptr() {
           return None;
         }
 
@@ -463,14 +466,14 @@ where
   }
 }
 
-impl<'a, Q, R, C, T> Iterator for AllVersionsIter<'a, C, T, Q, R>
+impl<'a, A, C, Q, R> Iterator for AllVersionsIter<'a, A, C, Q, R>
 where
+  A: Allocator,
   C: Comparator,
-  T: Trailer,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
-  type Item = VersionedEntryRef<'a, T>;
+  type Item = VersionedEntryRef<'a, A>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -513,10 +516,10 @@ where
   }
 }
 
-impl<'a, Q, R, C, T> DoubleEndedIterator for AllVersionsIter<'a, C, T, Q, R>
+impl<'a, A, C, Q, R> DoubleEndedIterator for AllVersionsIter<'a, A, C, Q, R>
 where
+  A: Allocator,
   C: Comparator,
-  T: Trailer,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {

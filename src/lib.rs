@@ -33,6 +33,10 @@ use core::{
 // /// A skipmap based on the [`SkipList`](base::SkipList).
 // pub mod map;
 
+mod base;
+
+mod list;
+
 mod error;
 pub use error::Error;
 
@@ -52,10 +56,12 @@ pub use types::*;
 pub use either;
 pub use rarena_allocator::{sync::Arena, ArenaPosition, Error as ArenaError};
 
-mod allocator;
-
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
+/// The memory format version.
+const CURRENT_VERSION: u16 = 0;
+/// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
+const REMOVE: u32 = u32::MAX;
 
 #[cfg(feature = "std")]
 fn random_height(max_height: Height) -> Height {

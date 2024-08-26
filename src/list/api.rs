@@ -1,16 +1,15 @@
 use core::borrow::Borrow;
 
-use rarena_allocator::{ArenaOptions, ArenaPosition};
+use rarena_allocator::ArenaOptions;
 
 use super::*;
 
-mod allocate;
 mod update;
 
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer) -> Result<(), E>>>;
 
-impl<T> SkipList<Ascend, T> {
+impl<A: Allocator> SkipList<A, Ascend> {
   /// Create a new skipmap with default options.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -117,7 +116,7 @@ impl<T> SkipList<Ascend, T> {
   }
 }
 
-impl<C, T> SkipList<C, T> {
+impl<A: Allocator, C> SkipList<A, C> {
   /// Returns the underlying ARENA allocator used by the skipmap.
   ///
   /// This is a low level API, you should not use this method unless you know what you are doing.
@@ -151,7 +150,7 @@ impl<C, T> SkipList<C, T> {
   /// meta.write(Meta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
   /// ```
   #[inline]
-  pub const fn allocator(&self) -> &Arena {
+  pub const fn allocator(&self) -> &A {
     &self.arena
   }
 
@@ -168,7 +167,7 @@ impl<C, T> SkipList<C, T> {
 
   /// Returns the version number of the [`SkipList`].
   #[inline]
-  pub const fn version(&self) -> u16 {
+  pub fn version(&self) -> u16 {
     self.arena.magic_version()
   }
 
@@ -176,7 +175,7 @@ impl<C, T> SkipList<C, T> {
   ///
   /// This value can be used to check the compatibility for application using [`SkipList`].
   #[inline]
-  pub const fn magic_version(&self) -> u16 {
+  pub fn magic_version(&self) -> u16 {
     self.meta().magic_version()
   }
 
@@ -193,15 +192,21 @@ impl<C, T> SkipList<C, T> {
     self.arena.remaining()
   }
 
+  /// Returns how many bytes are discarded by the ARENA.
+  #[inline]
+  pub fn discarded(&self) -> u32 {
+    self.arena.discarded()
+  }
+
   /// Returns the number of bytes that have allocated from the arena.
   #[inline]
   pub fn allocated(&self) -> usize {
-    self.arena.allocated()
+    self.arena.allocated() as usize
   }
 
   /// Returns the capacity of the arena.
   #[inline]
-  pub const fn capacity(&self) -> usize {
+  pub fn capacity(&self) -> usize {
     self.arena.capacity()
   }
 
@@ -221,12 +226,6 @@ impl<C, T> SkipList<C, T> {
   #[inline]
   pub fn refs(&self) -> usize {
     self.arena.refs()
-  }
-
-  /// Returns how many bytes are discarded by the ARENA.
-  #[inline]
-  pub fn discarded(&self) -> u32 {
-    self.arena.discarded()
   }
 
   /// Returns the maximum version of all entries in the map.
@@ -273,11 +272,11 @@ impl<C, T> SkipList<C, T> {
   pub fn estimated_node_size(height: Height, key_size: impl Into<usize>, value_size: u32) -> usize {
     let height: usize = height.into();
     7 // max padding
-      + mem::size_of::<Node<T>>()
-      + mem::size_of::<Link>() * height
+      + mem::size_of::<A::Node>()
+      + mem::size_of::<<A::Node as Node>::Link>() * height
       + key_size.into()
-      + mem::align_of::<T>() - 1 // max trailer padding
-      + mem::size_of::<T>()
+      + mem::align_of::<A::Trailer>() - 1 // max trailer padding
+      + mem::size_of::<A::Trailer>()
       + value_size as usize
   }
 
@@ -292,11 +291,11 @@ impl<C, T> SkipList<C, T> {
   pub fn with_options_and_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
     let arena_opts = ArenaOptions::new()
       .with_capacity(opts.capacity())
-      .with_maximum_alignment(Node::<T>::ALIGN as usize)
+      .with_maximum_alignment(mem::align_of::<A::Node>())
       .with_unify(opts.unify())
       .with_magic_version(CURRENT_VERSION)
       .with_freelist(opts.freelist());
-    let arena = Arena::new(arena_opts);
+    let arena = A::new(arena_opts, opts);
     Self::new_in(arena, cmp, opts)
   }
 
@@ -330,12 +329,12 @@ impl<C, T> SkipList<C, T> {
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::ALIGN as usize;
+    let alignment = mem::align_of::<A::Node>();
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
       .with_magic_version(CURRENT_VERSION)
       .with_freelist(opts.freelist());
-    let arena = Arena::map_mut(path, arena_opts, open_options, mmap_options)?;
+    let arena = A::map_mut(path, arena_opts, open_options, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts.with_unify(true))
       .map_err(invalid_data)
       .and_then(|map| {
@@ -373,13 +372,13 @@ impl<C, T> SkipList<C, T> {
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    let alignment = Node::<T>::ALIGN as usize;
+    let alignment = mem::align_of::<A::Node>();
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
       .with_magic_version(CURRENT_VERSION)
       .with_freelist(opts.freelist());
     let arena =
-      Arena::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options)?;
+      A::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts.with_unify(true))
       .map_err(invalid_data)
       .and_then(|map| {
@@ -415,31 +414,28 @@ impl<C, T> SkipList<C, T> {
     cmp: C,
     magic_version: u16,
   ) -> std::io::Result<Self> {
-    let arena = Arena::map(path, open_options, mmap_options, CURRENT_VERSION)?;
-    Self::new_in(
-      arena,
-      cmp,
-      Options::new()
-        .with_unify(true)
-        .with_magic_version(magic_version),
-    )
-    .map_err(invalid_data)
-    .and_then(|map| {
-      if map.magic_version() != magic_version {
-        Err(bad_magic_version())
-      } else if map.version() != CURRENT_VERSION {
-        Err(bad_version())
-      } else {
-        // Lock the memory of first page to prevent it from being swapped out.
-        unsafe {
-          map
-            .arena
-            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-        }
+    let opts = Options::new()
+      .with_unify(true)
+      .with_magic_version(magic_version);
+    let arena = A::map(path, open_options, mmap_options, opts, CURRENT_VERSION)?;
+    Self::new_in(arena, cmp, opts)
+      .map_err(invalid_data)
+      .and_then(|map| {
+        if map.magic_version() != magic_version {
+          Err(bad_magic_version())
+        } else if map.version() != CURRENT_VERSION {
+          Err(bad_version())
+        } else {
+          // Lock the memory of first page to prevent it from being swapped out.
+          unsafe {
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          }
 
-        Ok(map)
-      }
-    })
+          Ok(map)
+        }
+      })
   }
 
   /// Like [`SkipList::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
@@ -459,32 +455,34 @@ impl<C, T> SkipList<C, T> {
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    let arena =
-      Arena::map_with_path_builder(path_builder, open_options, mmap_options, CURRENT_VERSION)?;
-    Self::new_in(
-      arena,
-      cmp,
-      Options::new()
-        .with_unify(true)
-        .with_magic_version(magic_version),
-    )
-    .map_err(invalid_data)
-    .and_then(|map| {
-      if map.magic_version() != magic_version {
-        Err(bad_magic_version())
-      } else if map.version() != CURRENT_VERSION {
-        Err(bad_version())
-      } else {
-        // Lock the memory of first page to prevent it from being swapped out.
-        unsafe {
-          map
-            .arena
-            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+    let opts = Options::new()
+      .with_unify(true)
+      .with_magic_version(magic_version);
+    let arena = A::map_with_path_builder(
+      path_builder,
+      open_options,
+      mmap_options,
+      opts,
+      CURRENT_VERSION,
+    )?;
+    Self::new_in(arena, cmp, opts)
+      .map_err(invalid_data)
+      .and_then(|map| {
+        if map.magic_version() != magic_version {
+          Err(bad_magic_version())
+        } else if map.version() != CURRENT_VERSION {
+          Err(bad_version())
+        } else {
+          // Lock the memory of first page to prevent it from being swapped out.
+          unsafe {
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          }
+          Ok(map)
         }
-        Ok(map)
-      }
-    })
-    .map_err(Either::Right)
+      })
+      .map_err(Either::Right)
   }
 
   /// Like [`SkipList::map_anon`], but with a custom [`Comparator`].
@@ -504,12 +502,12 @@ impl<C, T> SkipList<C, T> {
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    let alignment = Node::<T>::ALIGN as usize;
+    let alignment = mem::align_of::<A::Node>();
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
       .with_unify(opts.unify())
       .with_magic_version(CURRENT_VERSION);
-    let arena = Arena::map_anon(arena_opts, mmap_options)?;
+    let arena = A::map_anon(arena_opts, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts)
       .map_err(invalid_data)
       .and_then(|map| {
@@ -548,20 +546,22 @@ impl<C, T> SkipList<C, T> {
     self.arena.clear()?;
 
     let meta = if self.opts.unify() {
-      Self::allocate_meta(&self.arena, self.meta().magic_version())?
+      self.arena.allocate_header(self.meta().magic_version())?
     } else {
       unsafe {
         let magic_version = self.meta().magic_version();
         let _ = Box::from_raw(self.meta.as_ptr());
-        NonNull::new_unchecked(Box::into_raw(Box::new(Meta::new(magic_version))))
+        NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
+          magic_version,
+        ))))
       }
     };
 
     self.meta = meta;
 
     let max_height: u8 = self.opts.max_height().into();
-    let head = Self::allocate_full_node(&self.arena, max_height)?;
-    let tail = Self::allocate_full_node(&self.arena, max_height)?;
+    let head = self.arena.allocate_full_node(max_height)?;
+    let tail = self.arena.allocate_full_node(max_height)?;
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -570,8 +570,8 @@ impl<C, T> SkipList<C, T> {
       for i in 0..(max_height as usize) {
         let head_link = head.tower(&self.arena, i);
         let tail_link = tail.tower(&self.arena, i);
-        head_link.next_offset.store(tail.offset, Ordering::Relaxed);
-        tail_link.prev_offset.store(head.offset, Ordering::Relaxed);
+        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
+        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
       }
     }
 
@@ -648,7 +648,7 @@ impl<C, T> SkipList<C, T> {
   }
 }
 
-impl<T: Trailer, C: Comparator> SkipList<C, T> {
+impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
@@ -695,12 +695,12 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, T>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A>> {
     self.iter(version).seek_lower_bound(Bound::Unbounded)
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, T>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A>> {
     self.iter(version).seek_upper_bound(Bound::Unbounded)
   }
 
@@ -725,7 +725,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
   ///
   /// assert!(map.get(1u8, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<EntryRef<'a, T>> {
+  pub fn get<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<EntryRef<'a, A>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
 
@@ -786,7 +786,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     key: &'b [u8],
-  ) -> Option<VersionedEntryRef<'a, T>> {
+  ) -> Option<VersionedEntryRef<'a, A>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
 
@@ -824,7 +824,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
+  ) -> Option<EntryRef<'a, A>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
@@ -834,25 +834,25 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, T>> {
+  ) -> Option<EntryRef<'a, A>> {
     self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<C, T> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<A, C> {
     iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> iterator::AllVersionsIter<C, T> {
+  pub fn iter_all_versions(&self, version: Version) -> iterator::AllVersionsIter<A, C> {
     iterator::AllVersionsIter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> iterator::Iter<'a, C, T, Q, R>
+  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> iterator::Iter<'a, A, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,
@@ -866,7 +866,7 @@ impl<T: Trailer, C: Comparator> SkipList<C, T> {
     &'a self,
     version: Version,
     range: R,
-  ) -> iterator::AllVersionsIter<'a, C, T, Q, R>
+  ) -> iterator::AllVersionsIter<'a, A, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q> + 'a,

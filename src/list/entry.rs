@@ -1,56 +1,26 @@
-use allocator::ValuePartPointer;
-
 use super::*;
-
-// #[derive(Debug)]
-// pub(super) struct ValuePartPointer<T> {
-//   trailer_offset: u32,
-//   value_offset: u32,
-//   value_len: u32,
-//   _m: core::marker::PhantomData<T>,
-// }
-
-// impl<T> Clone for ValuePartPointer<T> {
-//   fn clone(&self) -> Self {
-//     *self
-//   }
-// }
-
-// impl<T> Copy for ValuePartPointer<T> {}
-
-// impl<T> ValuePartPointer<T> {
-//   #[inline]
-//   pub(super) const fn new(trailer_offset: u32, value_offset: u32, value_len: u32) -> Self {
-//     Self {
-//       trailer_offset,
-//       value_offset,
-//       value_len,
-//       _m: core::marker::PhantomData,
-//     }
-//   }
-// }
 
 /// A versioned entry reference of the skipmap.
 ///
 /// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
 #[derive(Debug)]
-pub struct VersionedEntryRef<'a, A: BaseAllocator> {
+pub struct VersionedEntryRef<'a, A: Allocator> {
   pub(super) arena: &'a A,
   pub(super) key: &'a [u8],
   pub(super) value_part_pointer: ValuePartPointer<A::Trailer>,
   pub(super) version: Version,
-  pub(super) ptr: <A::Node as BaseNode>::Pointer,
+  pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<'a, A: BaseAllocator> Clone for VersionedEntryRef<'a, A> {
+impl<'a, A: Allocator> Clone for VersionedEntryRef<'a, A> {
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl<'a, A: BaseAllocator> Copy for VersionedEntryRef<'a, A> {}
+impl<'a, A: Allocator> Copy for VersionedEntryRef<'a, A> {}
 
-impl<'a, A: BaseAllocator> VersionedEntryRef<'a, A> {
+impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &[u8] {
@@ -90,7 +60,7 @@ impl<'a, A: BaseAllocator> VersionedEntryRef<'a, A> {
   /// Returns the owned versioned entry,
   /// feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
-  pub fn to_owned(&self) -> VersionedEntry<A> {
+  pub fn to_owned(self) -> VersionedEntry<A> {
     VersionedEntry {
       arena: self.arena.clone(),
       ptr: self.ptr,
@@ -105,16 +75,16 @@ impl<'a, A: BaseAllocator> VersionedEntryRef<'a, A> {
   }
 }
 
-impl<'a, A: BaseAllocator> From<VersionedEntryRef<'a, A>> for VersionedEntry<A> {
+impl<'a, A: Allocator> From<VersionedEntryRef<'a, A>> for VersionedEntry<A> {
   fn from(entry: VersionedEntryRef<'a, A>) -> Self {
     entry.to_owned()
   }
 }
 
-impl<'a, A: BaseAllocator> VersionedEntryRef<'a, A> {
+impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   #[inline]
   pub(super) fn from_node(
-    node_ptr: <A::Node as BaseNode>::Pointer,
+    node_ptr: <A::Node as Node>::Pointer,
     arena: &'a A,
   ) -> VersionedEntryRef<'a, A> {
     unsafe {
@@ -132,7 +102,7 @@ impl<'a, A: BaseAllocator> VersionedEntryRef<'a, A> {
 
   #[inline]
   pub(super) fn from_node_with_pointer(
-    node_ptr: <A::Node as BaseNode>::Pointer,
+    node_ptr: <A::Node as Node>::Pointer,
     arena: &'a A,
     pointer: ValuePartPointer<A::Trailer>,
   ) -> VersionedEntryRef<'a, A> {
@@ -153,13 +123,13 @@ impl<'a, A: BaseAllocator> VersionedEntryRef<'a, A> {
 ///
 /// Compared to the [`Entry`], this one's value can be `None` which means the entry is removed.
 #[derive(Debug)]
-pub struct VersionedEntry<A: BaseAllocator> {
+pub struct VersionedEntry<A: Allocator> {
   pub(super) arena: A,
-  pub(super) ptr: <A::Node as BaseNode>::Pointer,
+  pub(super) ptr: <A::Node as Node>::Pointer,
   pub(super) value_part_pointer: ValuePartPointer<A::Trailer>,
 }
 
-impl<A: BaseAllocator> Clone for VersionedEntry<A> {
+impl<A: Allocator> Clone for VersionedEntry<A> {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
@@ -169,13 +139,13 @@ impl<A: BaseAllocator> Clone for VersionedEntry<A> {
   }
 }
 
-impl<'a, A: BaseAllocator> From<&'a VersionedEntry<A>> for VersionedEntryRef<'a, A> {
+impl<'a, A: Allocator> From<&'a VersionedEntry<A>> for VersionedEntryRef<'a, A> {
   fn from(entry: &'a VersionedEntry<A>) -> VersionedEntryRef<'a, A> {
     entry.borrow()
   }
 }
 
-impl<A: BaseAllocator> VersionedEntry<A> {
+impl<A: Allocator> VersionedEntry<A> {
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &[u8] {
@@ -235,21 +205,21 @@ impl<A: BaseAllocator> VersionedEntry<A> {
 ///
 /// Compared to the [`VersionedEntry`], this one's value cannot be `None`.
 #[derive(Debug)]
-pub struct Entry<A: BaseAllocator>(VersionedEntry<A>);
+pub struct Entry<A: Allocator>(VersionedEntry<A>);
 
-impl<A: BaseAllocator> Clone for Entry<A> {
+impl<A: Allocator> Clone for Entry<A> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, A: BaseAllocator> From<&'a Entry<A>> for EntryRef<'a, A> {
+impl<'a, A: Allocator> From<&'a Entry<A>> for EntryRef<'a, A> {
   fn from(entry: &'a Entry<A>) -> Self {
     entry.borrow()
   }
 }
 
-impl<A: BaseAllocator> Entry<A> {
+impl<A: Allocator> Entry<A> {
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &[u8] {
@@ -288,23 +258,23 @@ impl<A: BaseAllocator> Entry<A> {
 ///
 /// Compared to the [`VersionedEntryRef`], this one's value cannot be `None`.
 #[derive(Debug)]
-pub struct EntryRef<'a, A: BaseAllocator>(pub(crate) VersionedEntryRef<'a, A>);
+pub struct EntryRef<'a, A: Allocator>(pub(crate) VersionedEntryRef<'a, A>);
 
-impl<'a, A: BaseAllocator> Clone for EntryRef<'a, A> {
+impl<'a, A: Allocator> Clone for EntryRef<'a, A> {
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl<'a, A: BaseAllocator> Copy for EntryRef<'a, A> {}
+impl<'a, A: Allocator> Copy for EntryRef<'a, A> {}
 
-impl<'a, A: BaseAllocator> From<EntryRef<'a, A>> for Entry<A> {
+impl<'a, A: Allocator> From<EntryRef<'a, A>> for Entry<A> {
   fn from(entry: EntryRef<'a, A>) -> Self {
     entry.to_owned()
   }
 }
 
-impl<'a, A: BaseAllocator> EntryRef<'a, A> {
+impl<'a, A: Allocator> EntryRef<'a, A> {
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &[u8] {
@@ -328,7 +298,7 @@ impl<'a, A: BaseAllocator> EntryRef<'a, A> {
 
   /// Returns the owned entry, feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
-  pub fn to_owned(&self) -> Entry<A> {
+  pub fn to_owned(self) -> Entry<A> {
     Entry(self.0.to_owned())
   }
 

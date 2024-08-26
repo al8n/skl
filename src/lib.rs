@@ -34,8 +34,10 @@ use core::{
 // pub mod map;
 
 mod base;
+pub use base::ListAllocator;
 
 mod list;
+pub use list::{AllVersionsIter, Entry, EntryRef, Iter, VersionedEntry, VersionedEntryRef};
 
 mod error;
 pub use error::Error;
@@ -182,23 +184,6 @@ impl Comparator for Descend {
   #[inline]
   fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
     (start_bound, end_bound).contains(&key)
-  }
-}
-
-struct Pointer {
-  offset: u32,
-  size: u32,
-  height: Option<u8>,
-}
-
-impl Pointer {
-  #[inline]
-  const fn new(offset: u32, size: u32) -> Self {
-    Self {
-      offset,
-      size,
-      height: None,
-    }
   }
 }
 

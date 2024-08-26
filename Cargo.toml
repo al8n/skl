@@ -48,7 +48,7 @@ derive_more = "0.99"
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-rarena-allocator = { version = "0.1", default-features = false, path = "../arena/rarena-allocator" }
+rarena-allocator = { version = "0.2", default-features = false, path = "../arena/rarena-allocator" }
 arbitrary-int = { version = "1.2", default-features = false }
 paste = "1"
 

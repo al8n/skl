@@ -20,6 +20,22 @@ impl<'a, A: Allocator> Clone for VersionedEntryRef<'a, A> {
 
 impl<'a, A: Allocator> Copy for VersionedEntryRef<'a, A> {}
 
+impl<'a, A> VersionedEntryRef<'a, A>
+where
+  A: Allocator,
+  A::Node: WithTrailer,
+{
+  /// Returns the trailer of the entry
+  #[inline]
+  pub fn trailer(&self) -> &A::Trailer {
+    unsafe {
+      let node = self.ptr.as_ref();
+      let trailer = node.get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset);
+      trailer
+    }
+  }
+}
+
 impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   /// Returns the reference to the key
   #[inline]
@@ -38,16 +54,6 @@ impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
         self.value_part_pointer.value_len,
       );
       value
-    }
-  }
-
-  /// Returns the trailer of the entry
-  #[inline]
-  pub fn trailer(&self) -> &A::Trailer {
-    unsafe {
-      let node = self.ptr.as_ref();
-      let trailer = node.get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset);
-      trailer
     }
   }
 
@@ -145,6 +151,22 @@ impl<'a, A: Allocator> From<&'a VersionedEntry<A>> for VersionedEntryRef<'a, A> 
   }
 }
 
+impl<A> VersionedEntry<A>
+where
+  A: Allocator,
+  A::Node: WithTrailer,
+{
+  /// Returns the trailer of the entry
+  #[inline]
+  pub fn trailer(&self) -> &A::Trailer {
+    unsafe {
+      let node = self.ptr.as_ref();
+      let trailer = node.get_trailer_by_offset(&self.arena, self.value_part_pointer.trailer_offset);
+      trailer
+    }
+  }
+}
+
 impl<A: Allocator> VersionedEntry<A> {
   /// Returns the reference to the key
   #[inline]
@@ -166,16 +188,6 @@ impl<A: Allocator> VersionedEntry<A> {
         self.value_part_pointer.value_len,
       );
       value
-    }
-  }
-
-  /// Returns the trailer of the entry
-  #[inline]
-  pub fn trailer(&self) -> &A::Trailer {
-    unsafe {
-      let node = self.ptr.as_ref();
-      let trailer = node.get_trailer_by_offset(&self.arena, self.value_part_pointer.trailer_offset);
-      trailer
     }
   }
 
@@ -219,6 +231,30 @@ impl<'a, A: Allocator> From<&'a Entry<A>> for EntryRef<'a, A> {
   }
 }
 
+impl<A> Entry<A>
+where
+  A: Allocator,
+  A::Node: WithTrailer,
+{
+  /// Returns the trailer of the entry
+  #[inline]
+  pub fn trailer(&self) -> &A::Trailer {
+    self.0.trailer()
+  }
+}
+
+impl<A> Entry<A>
+where
+  A: Allocator,
+  A::Node: WithVersion,
+{
+  /// Returns the version of the entry
+  #[inline]
+  pub fn version(&self) -> Version {
+    self.0.version()
+  }
+}
+
 impl<A: Allocator> Entry<A> {
   /// Returns the reference to the key
   #[inline]
@@ -235,22 +271,10 @@ impl<A: Allocator> Entry<A> {
     }
   }
 
-  /// Returns the trailer of the entry
-  #[inline]
-  pub fn trailer(&self) -> &A::Trailer {
-    self.0.trailer()
-  }
-
   /// Returns the borrowed entry reference
   #[inline]
   pub fn borrow(&self) -> EntryRef<'_, A> {
     EntryRef(self.0.borrow())
-  }
-
-  /// Returns the version of the entry
-  #[inline]
-  pub fn version(&self) -> Version {
-    self.0.version()
   }
 }
 
@@ -274,6 +298,30 @@ impl<'a, A: Allocator> From<EntryRef<'a, A>> for Entry<A> {
   }
 }
 
+impl<'a, A> EntryRef<'a, A>
+where
+  A: Allocator,
+  A::Node: WithTrailer,
+{
+  /// Returns the trailer of the entry
+  #[inline]
+  pub fn trailer(&self) -> &A::Trailer {
+    self.0.trailer()
+  }
+}
+
+impl<'a, A> EntryRef<'a, A>
+where
+  A: Allocator,
+  A::Node: WithVersion,
+{
+  /// Returns the version of the entry
+  #[inline]
+  pub fn version(&self) -> Version {
+    self.0.version()
+  }
+}
+
 impl<'a, A: Allocator> EntryRef<'a, A> {
   /// Returns the reference to the key
   #[inline]
@@ -290,21 +338,9 @@ impl<'a, A: Allocator> EntryRef<'a, A> {
     }
   }
 
-  /// Returns the trailer of the entry
-  #[inline]
-  pub fn trailer(&self) -> &A::Trailer {
-    self.0.trailer()
-  }
-
   /// Returns the owned entry, feel free to clone the entry if needed, no allocation and no deep clone will be made.
   #[inline]
   pub fn to_owned(self) -> Entry<A> {
     Entry(self.0.to_owned())
-  }
-
-  /// Returns the version of the entry
-  #[inline]
-  pub fn version(&self) -> Version {
-    self.0.version()
   }
 }

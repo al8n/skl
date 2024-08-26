@@ -3,6 +3,7 @@ use std::boxed::Box;
 
 use either::Either;
 use options::CompressionPolicy;
+use rarena_allocator::Allocator as _;
 
 use super::{base::*, common::*, *};
 
@@ -10,15 +11,12 @@ use super::{base::*, common::*, *};
 use error::{bad_magic_version, bad_version, invalid_data};
 
 mod api;
-pub use api::*;
 
 mod entry;
 pub use entry::*;
 
 mod iterator;
 pub use iterator::*;
-
-const CURRENT_VERSION: u16 = 0;
 
 type UpdateOk<'a, 'b, A> = Either<
   Option<VersionedEntryRef<'a, A>>,

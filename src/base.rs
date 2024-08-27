@@ -42,7 +42,6 @@ pub struct SkipList<A: Allocator, C = Ascend> {
   cmp: C,
 }
 
-
 unsafe impl<A, C> Send for SkipList<A, C>
 where
   A: Allocator + Send,
@@ -480,7 +479,7 @@ where
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn gt<'a, 'b: 'a>(
+  pub(crate) fn gt<'a, 'b: 'a>(
     &'a self,
     version: Version,
     key: &'b [u8],
@@ -505,7 +504,7 @@ where
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn lt<'a, 'b: 'a>(
+  pub(crate) fn lt<'a, 'b: 'a>(
     &'a self,
     version: Version,
     key: &'b [u8],
@@ -529,7 +528,7 @@ where
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  fn ge<'a, 'b: 'a>(
+  pub(crate) fn ge<'a, 'b: 'a>(
     &'a self,
     version: Version,
     key: &'b [u8],
@@ -554,7 +553,7 @@ where
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  fn le<'a, 'b: 'a>(
+  pub(crate) fn le<'a, 'b: 'a>(
     &'a self,
     version: Version,
     key: &'b [u8],

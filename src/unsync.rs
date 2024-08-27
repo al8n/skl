@@ -1,12 +1,18 @@
-use rarena_allocator::Allocator as _;
 pub use rarena_allocator::unsync::Arena;
+use rarena_allocator::Allocator as _;
 
 use core::{
-  cell::UnsafeCell, ops::{Bound, RangeBounds}, ptr
+  cell::UnsafeCell,
+  ops::{Bound, RangeBounds},
+  ptr,
 };
 
+use super::{
+  allocator::{Link as BaseLink, *},
+  common::*,
+  *,
+};
 use crate::VacantBuffer;
-use super::{allocator::{Link as BaseLink, *}, common::*, *};
 
 use either::Either;
 
@@ -98,7 +104,10 @@ impl Header for Meta {
   ) -> Result<u8, u8> {
     unsafe {
       let height = self.height.get();
-      assert_eq!(current, *height, "current height is not equal to the actual height in unsync version Meta");
+      assert_eq!(
+        current, *height,
+        "current height is not equal to the actual height in unsync version Meta"
+      );
       *height = new;
       Ok(current)
     }
@@ -177,12 +186,16 @@ impl BaseLink for Link {
 
   #[inline]
   fn store_next_offset(&self, offset: u32, _: Ordering) {
-    unsafe { *self.next_offset.get() = offset; }
+    unsafe {
+      *self.next_offset.get() = offset;
+    }
   }
 
   #[inline]
   fn store_prev_offset(&self, offset: u32, _: Ordering) {
-    unsafe { *self.prev_offset.get() = offset; }
+    unsafe {
+      *self.prev_offset.get() = offset;
+    }
   }
 }
 
@@ -260,7 +273,7 @@ macro_rules! node_pointer {
           let old = *ptr;
 
           assert_eq!(old, current, "current prev_offset is not equal to the actual prev_offset in unsync version `NodePointer`, it seems that you are using unsync version in concurrent environment");
-          
+
           *ptr = new;
           Ok(old)
         }
@@ -286,7 +299,7 @@ macro_rules! node_pointer {
           let old = *ptr;
 
           assert_eq!(old, current, "current next_offset is not equal to the actual next_offset in unsync version `NodePointer`, it seems that you are using unsync version in concurrent environment");
-          
+
           *ptr = new;
           Ok(old)
         }

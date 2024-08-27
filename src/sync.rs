@@ -1,13 +1,17 @@
-use rarena_allocator::Allocator as _;
 pub use rarena_allocator::sync::Arena;
+use rarena_allocator::Allocator as _;
 
 use core::{
   ops::{Bound, RangeBounds},
   ptr,
 };
 
+use super::{
+  allocator::{Link as BaseLink, *},
+  common::*,
+  *,
+};
 use crate::VacantBuffer;
-use super::{allocator::{Link as BaseLink, *}, common::*, *};
 
 use either::Either;
 
@@ -328,3 +332,6 @@ pub mod trailed;
 
 /// A skipmap implementation without trailer and version support. See [`SkipMap`](map::SkipMap) for more information.
 pub mod map;
+
+#[cfg(test)]
+mod tests;

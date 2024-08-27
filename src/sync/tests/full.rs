@@ -1,91 +1,10 @@
-#![allow(warnings)]
-
 use super::*;
-use crate::Descend;
 
-use std::format;
+type SkipList<T, C> = crate::sync::full::SkipMap<T, C>;
 
-use std::sync::Arc;
+type SkipMap = crate::sync::full::SkipMap<(), Ascend>;
 
-use rarena_allocator::Freelist;
-#[cfg(feature = "std")]
-use wg::WaitGroup;
-
-const ARENA_SIZE: usize = 1 << 20;
-#[cfg(feature = "std")]
-const BIG_ARENA_SIZE: usize = 120 << 20;
-const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
-const UNIFY_TEST_OPTIONS: Options = Options::new()
-  .with_capacity(ARENA_SIZE as u32)
-  .with_unify(true);
-#[cfg(feature = "std")]
-const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
-#[cfg(feature = "std")]
-const UNIFY_BIG_TEST_OPTIONS: Options = Options::new()
-  .with_capacity(BIG_ARENA_SIZE as u32)
-  .with_unify(true);
-
-fn run(f: impl Fn() + Send + Sync + 'static) {
-  f();
-}
-
-/// Only used for testing
-
-pub fn key(i: usize) -> std::vec::Vec<u8> {
-  format!("{:05}", i).into_bytes()
-}
-
-/// Only used for testing
-#[cfg(feature = "std")]
-pub fn big_value(i: usize) -> std::vec::Vec<u8> {
-  format!("{:01048576}", i).into_bytes()
-}
-
-/// Only used for testing
-pub fn new_value(i: usize) -> std::vec::Vec<u8> {
-  format!("{:05}", i).into_bytes()
-}
-
-fn make_int_key(i: usize) -> std::vec::Vec<u8> {
-  format!("{:05}", i).into_bytes()
-}
-
-fn make_value(i: usize) -> std::vec::Vec<u8> {
-  format!("v{:05}", i).into_bytes()
-}
-
-#[test]
-fn test_node_ptr_clone() {
-  let node_ptr = NodePtr::<u8>::NULL;
-  #[allow(clippy::clone_on_copy)]
-  let _ = node_ptr.clone();
-}
-
-#[test]
-fn test_encode_decode_key_size() {
-  // Test cases
-  let test_cases = [
-    (0, 0),                       // Minimum values
-    (1, 1),                       // Small values
-    (0x1FFFFFF, 0),               // Maximum key_size, minimum height
-    (0, 0b11111),                 // Minimum key_size, maximum height
-    (0x1FFFFFF, 0b11111),         // Maximum values
-    (0x1FFFFFF - 1, 0b11111 - 1), // One less than maximum values
-    (12345678, 31),               // Random values
-    (0, 1),                       // Edge case: Minimum key_size, small height
-    (1, 0),                       // Edge case: Small key_size, minimum height
-  ];
-
-  for &(key_size, height) in &test_cases {
-    let encoded = encode_key_size_and_height(key_size, height);
-    let (decoded_key_size, decoded_height) = decode_key_size_and_height(encoded);
-
-    assert_eq!(key_size, decoded_key_size);
-    assert_eq!(height, decoded_height);
-  }
-}
-
-fn empty_in(l: SkipList) {
+fn empty_in(l: SkipMap) {
   let mut it = l.iter_all_versions(MIN_VERSION);
 
   assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
@@ -119,7 +38,7 @@ fn test_empty_unify() {
 
 #[test]
 #[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
+#[cfg_attr(miri, ignore)]
 fn test_empty_map_mut() {
   run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();
@@ -153,7 +72,7 @@ fn test_empty_map_anon_unify() {
   })
 }
 
-fn full_in(l: impl FnOnce(usize) -> SkipList) {
+fn full_in(l: impl FnOnce(usize) -> SkipMap) {
   let l = l(1000);
   let mut found_arena_full = false;
 
@@ -248,7 +167,7 @@ fn test_full_map_anon_unify() {
   })
 }
 
-fn basic_in(mut l: SkipList) {
+fn basic_in(mut l: SkipMap) {
   // Try adding values.
   l.get_or_insert(0, b"key1", &make_value(1), ()).unwrap();
   l.get_or_insert(0, b"key3", &make_value(3), ()).unwrap();
@@ -377,7 +296,7 @@ fn test_basic_map_anon_unify() {
   })
 }
 
-fn iter_all_versions_mvcc(l: SkipList) {
+fn iter_all_versions_mvcc(l: SkipMap) {
   l.get_or_insert(1, b"a", b"a1", ()).unwrap();
   l.get_or_insert(3, b"a", b"a2", ()).unwrap();
   l.get_or_insert(1, b"c", b"c1", ()).unwrap();
@@ -528,7 +447,7 @@ fn test_ordering() {
   run(ordering);
 }
 
-fn get_mvcc(l: SkipList) {
+fn get_mvcc(l: SkipMap) {
   l.get_or_insert(1, b"a", b"a1", ()).unwrap();
   l.get_or_insert(3, b"a", b"a2", ()).unwrap();
   l.get_or_insert(1, b"c", b"c1", ()).unwrap();
@@ -627,7 +546,7 @@ fn test_get_mvcc_map_anon_unify() {
   })
 }
 
-fn gt_in(l: SkipList) {
+fn gt_in(l: SkipMap) {
   l.get_or_insert(1, b"a", b"a1", ()).unwrap();
   l.get_or_insert(3, b"a", b"a2", ()).unwrap();
   l.get_or_insert(1, b"c", b"c1", ()).unwrap();
@@ -750,7 +669,7 @@ fn test_gt_map_anon_unify() {
   })
 }
 
-fn ge_in(l: SkipList) {
+fn ge_in(l: SkipMap) {
   l.get_or_insert(1, b"a", b"a1", ()).unwrap();
   l.get_or_insert(3, b"a", b"a2", ()).unwrap();
   l.get_or_insert(1, b"c", b"c1", ()).unwrap();
@@ -871,7 +790,7 @@ fn test_ge_map_anon_unify() {
   })
 }
 
-fn le_in(l: SkipList) {
+fn le_in(l: SkipMap) {
   l.get_or_insert(1, b"a", b"a1", ()).unwrap();
   l.get_or_insert(3, b"a", b"a2", ()).unwrap();
   l.get_or_insert(1, b"c", b"c1", ()).unwrap();
@@ -1006,7 +925,7 @@ fn test_le_map_anon_unify() {
   })
 }
 
-fn lt_in(l: SkipList) {
+fn lt_in(l: SkipMap) {
   l.get_or_insert(1, b"a", b"a1", ()).unwrap();
   l.get_or_insert(3, b"a", b"a2", ()).unwrap();
   l.get_or_insert(1, b"c", b"c1", ()).unwrap();
@@ -1122,7 +1041,7 @@ fn test_lt_map_anon_unify() {
   })
 }
 
-fn test_basic_large_testcases_in(l: Arc<SkipList>) {
+fn test_basic_large_testcases_in(l: SkipMap) {
   let n = 1000;
 
   for i in 0..n {
@@ -1144,7 +1063,7 @@ fn test_basic_large_testcases_in(l: Arc<SkipList>) {
 #[test]
 fn test_basic_large_testcases() {
   run(|| {
-    let l = Arc::new(SkipList::with_options(TEST_OPTIONS).unwrap());
+    let l = SkipList::with_options(TEST_OPTIONS).unwrap();
     test_basic_large_testcases_in(l);
   })
 }
@@ -1152,7 +1071,7 @@ fn test_basic_large_testcases() {
 #[test]
 fn test_basic_large_testcases_unify() {
   run(|| {
-    let l = Arc::new(SkipList::with_options(UNIFY_TEST_OPTIONS).unwrap());
+    let l = SkipList::with_options(UNIFY_TEST_OPTIONS).unwrap();
     test_basic_large_testcases_in(l);
   })
 }
@@ -1171,7 +1090,7 @@ fn test_basic_large_testcases_map_mut() {
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    let l = Arc::new(SkipList::map_mut(p, open_options, map_options).unwrap());
+    let l = SkipList::map_mut(p, open_options, map_options).unwrap();
     test_basic_large_testcases_in(l);
   })
 }
@@ -1181,7 +1100,7 @@ fn test_basic_large_testcases_map_mut() {
 fn test_basic_large_testcases_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    let l = Arc::new(SkipList::map_anon(map_options).unwrap());
+    let l = SkipList::map_anon(map_options).unwrap();
     test_basic_large_testcases_in(l);
   })
 }
@@ -1191,13 +1110,13 @@ fn test_basic_large_testcases_map_anon() {
 fn test_basic_large_testcases_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    let l = Arc::new(SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
+    let l = SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap();
     test_basic_large_testcases_in(l);
   })
 }
 
 #[cfg(feature = "std")]
-fn test_concurrent_basic_runner(l: Arc<SkipList>) {
+fn test_concurrent_basic_runner(l: SkipMap) {
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 1000;
   #[cfg(any(miri, feature = "loom"))]
@@ -1233,11 +1152,9 @@ fn test_concurrent_basic_runner(l: Arc<SkipList>) {
 #[cfg(feature = "std")]
 fn test_concurrent_basic() {
   run(|| {
-    let l = Arc::new(
-      SkipList::with_options(TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
+    let l = SkipList::with_options(TEST_OPTIONS)
+      .unwrap()
+      .with_yield_now();
     test_concurrent_basic_runner(l);
   })
 }
@@ -1246,11 +1163,9 @@ fn test_concurrent_basic() {
 #[cfg(feature = "std")]
 fn test_concurrent_basic_unify() {
   run(|| {
-    let l = Arc::new(
-      SkipList::with_options(UNIFY_TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
+    let l = SkipList::with_options(UNIFY_TEST_OPTIONS)
+      .unwrap()
+      .with_yield_now();
     test_concurrent_basic_runner(l);
   })
 }
@@ -1267,11 +1182,9 @@ fn test_concurrent_basic_map_mut() {
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    let l = Arc::new(
-      SkipList::map_mut(p, open_options, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
+    let l = SkipList::map_mut(p, open_options, map_options)
+      .unwrap()
+      .with_yield_now();
     test_concurrent_basic_runner(l);
   })
 }
@@ -1281,9 +1194,7 @@ fn test_concurrent_basic_map_mut() {
 fn test_concurrent_basic_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    test_concurrent_basic_runner(Arc::new(
-      SkipList::map_anon(map_options).unwrap().with_yield_now(),
-    ));
+    test_concurrent_basic_runner(SkipList::map_anon(map_options).unwrap().with_yield_now());
   })
 }
 
@@ -1292,123 +1203,16 @@ fn test_concurrent_basic_map_anon() {
 fn test_concurrent_basic_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    test_concurrent_basic_runner(Arc::new(
+    test_concurrent_basic_runner(
       SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options)
         .unwrap()
         .with_yield_now(),
-    ));
-  })
-}
-
-#[cfg(feature = "std")]
-fn test_concurrent_basic_2pc_runner(l: Arc<SkipList>) {
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 100;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
-
-  let wg = Arc::new(());
-  for i in 0..N {
-    let w = wg.clone();
-    let l = l.clone();
-    std::thread::spawn(move || {
-      let k = key(i);
-      let v = new_value(i);
-      let node = l.allocate(MIN_VERSION, &k, &v, ()).unwrap();
-      std::thread::sleep(std::time::Duration::from_millis(rand::random::<u8>() as u64));
-      l.link(node).unwrap();
-      drop(w);
-    });
-  }
-  while Arc::strong_count(&wg) > 1 {}
-  for i in 0..N {
-    let w = wg.clone();
-    let l = l.clone();
-    std::thread::spawn(move || {
-      let k = key(i);
-      assert_eq!(
-        l.get(MIN_VERSION, &k).unwrap().value(),
-        new_value(i),
-        "broken: {i}"
-      );
-      drop(w);
-    });
-  }
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn test_concurrent_basic_2pc() {
-  run(|| {
-    let l = Arc::new(
-      SkipList::with_options(TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
     );
-    test_concurrent_basic_2pc_runner(l);
-  })
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn test_concurrent_basic_2pc_unify() {
-  run(|| {
-    let l = Arc::new(
-      SkipList::with_options(UNIFY_TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
-    test_concurrent_basic_2pc_runner(l);
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-fn test_concurrent_basic_2pc_map_mut() {
-  run(|| unsafe {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("test_skipmap_concurrent_basic_2pc_map_mut");
-    let open_options = OpenOptions::default()
-      .create_new(Some(ARENA_SIZE as u32))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    let l = Arc::new(
-      SkipList::map_mut(p, open_options, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
-    test_concurrent_basic_2pc_runner(l);
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_concurrent_basic_2pc_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    test_concurrent_basic_2pc_runner(Arc::new(
-      SkipList::map_anon(map_options).unwrap().with_yield_now(),
-    ));
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_concurrent_basic_2pc_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    test_concurrent_basic_2pc_runner(Arc::new(
-      SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options)
-        .unwrap()
-        .with_yield_now(),
-    ));
   })
 }
 
 #[cfg(all(feature = "std", not(miri)))]
-fn test_concurrent_basic_big_values_runner(l: Arc<SkipList>) {
+fn test_concurrent_basic_big_values_runner(l: SkipMap) {
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 100;
   #[cfg(any(miri, feature = "loom"))]
@@ -1421,7 +1225,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipList>) {
         .unwrap();
     });
   }
-  while Arc::strong_count(&l) > 1 {}
+  while l.refs() > 1 {}
   // assert_eq!(N, l.len());
   for i in 0..N {
     let l = l.clone();
@@ -1434,18 +1238,18 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipList>) {
       );
     });
   }
-  while Arc::strong_count(&l) > 1 {}
+  while l.refs() > 1 {}
 }
 
 #[test]
 #[cfg(all(feature = "std", not(miri)))]
 fn test_concurrent_basic_big_values() {
   run(|| {
-    test_concurrent_basic_big_values_runner(Arc::new(
+    test_concurrent_basic_big_values_runner(
       SkipList::with_options(BIG_TEST_OPTIONS)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1453,11 +1257,11 @@ fn test_concurrent_basic_big_values() {
 #[cfg(all(feature = "std", not(miri)))]
 fn test_concurrent_basic_big_values_unify() {
   run(|| {
-    test_concurrent_basic_big_values_runner(Arc::new(
+    test_concurrent_basic_big_values_runner(
       SkipList::with_options(UNIFY_BIG_TEST_OPTIONS)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1474,11 +1278,11 @@ fn test_concurrent_basic_big_values_map_mut() {
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    test_concurrent_basic_big_values_runner(Arc::new(
+    test_concurrent_basic_big_values_runner(
       SkipList::map_mut(p, open_options, map_options)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1487,9 +1291,9 @@ fn test_concurrent_basic_big_values_map_mut() {
 fn test_concurrent_basic_big_values_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(120 << 20);
-    test_concurrent_basic_big_values_runner(Arc::new(
+    test_concurrent_basic_big_values_runner(
       SkipList::map_anon(map_options).unwrap().with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1498,16 +1302,16 @@ fn test_concurrent_basic_big_values_map_anon() {
 fn test_concurrent_basic_big_values_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(120 << 20);
-    test_concurrent_basic_big_values_runner(Arc::new(
+    test_concurrent_basic_big_values_runner(
       SkipList::map_anon_with_options(UNIFY_BIG_TEST_OPTIONS, map_options)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
 #[cfg(feature = "std")]
-fn concurrent_one_key(l: Arc<SkipList>) {
+fn concurrent_one_key(l: SkipMap) {
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 5;
   #[cfg(any(miri, feature = "loom"))]
@@ -1559,11 +1363,11 @@ fn concurrent_one_key(l: Arc<SkipList>) {
 #[cfg(feature = "std")]
 fn test_concurrent_one_key() {
   run(|| {
-    concurrent_one_key(Arc::new(
+    concurrent_one_key(
       SkipList::with_options(TEST_OPTIONS)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1571,11 +1375,11 @@ fn test_concurrent_one_key() {
 #[cfg(feature = "std")]
 fn test_concurrent_one_key_unify() {
   run(|| {
-    concurrent_one_key(Arc::new(
+    concurrent_one_key(
       SkipList::with_options(UNIFY_TEST_OPTIONS)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1591,11 +1395,11 @@ fn test_concurrent_one_key_map_mut() {
       .read(true)
       .write(true);
     let map_options = MmapOptions::default();
-    concurrent_one_key(Arc::new(
+    concurrent_one_key(
       SkipList::map_mut(p, open_options, map_options)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
@@ -1604,9 +1408,7 @@ fn test_concurrent_one_key_map_mut() {
 fn test_concurrent_one_key_map_anon() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    concurrent_one_key(Arc::new(
-      SkipList::map_anon(map_options).unwrap().with_yield_now(),
-    ));
+    concurrent_one_key(SkipList::map_anon(map_options).unwrap().with_yield_now());
   })
 }
 
@@ -1615,15 +1417,15 @@ fn test_concurrent_one_key_map_anon() {
 fn test_concurrent_one_key_map_anon_unify() {
   run(|| {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    concurrent_one_key(Arc::new(
+    concurrent_one_key(
       SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options)
         .unwrap()
         .with_yield_now(),
-    ));
+    );
   })
 }
 
-fn iter_all_versions_next(l: SkipList) {
+fn iter_all_versions_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -1692,7 +1494,7 @@ fn test_iter_all_versions_next_map_anon_unify() {
   })
 }
 
-fn range_next(l: SkipList) {
+fn range_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -1766,7 +1568,7 @@ fn test_range_next_map_anon_unify() {
   })
 }
 
-fn iter_all_versions_prev(l: SkipList) {
+fn iter_all_versions_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
@@ -1830,7 +1632,7 @@ fn test_iter_all_versions_prev_map_anon_unify() {
   })
 }
 
-fn range_prev(l: SkipList) {
+fn range_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
@@ -1902,7 +1704,7 @@ fn test_range_prev_map_anon_unify() {
   })
 }
 
-fn iter_all_versions_seek_ge(l: SkipList) {
+fn iter_all_versions_seek_ge(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -2001,7 +1803,7 @@ fn test_iter_all_versions_seek_ge_map_anon_unify() {
   })
 }
 
-fn iter_all_versions_seek_lt(l: SkipList) {
+fn iter_all_versions_seek_lt(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
@@ -2087,7 +1889,7 @@ fn test_iter_all_versions_seek_lt_map_anon_unify() {
   })
 }
 
-fn range(l: SkipList) {
+fn range(l: SkipMap) {
   for i in 1..10 {
     l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
       .unwrap();
@@ -2219,7 +2021,7 @@ fn test_range_map_anon_unify() {
   })
 }
 
-fn iter_latest(l: SkipList) {
+fn iter_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
@@ -2293,7 +2095,7 @@ fn test_iter_latest_map_anon_unify() {
   })
 }
 
-fn range_latest(l: SkipList) {
+fn range_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
@@ -2380,7 +2182,7 @@ fn test_reopen_mmap() {
         .read(true)
         .write(true);
       let map_options = MmapOptions::default();
-      let l = SkipList::map_mut(&p, open_options, map_options).unwrap();
+      let l = SkipMap::map_mut(&p, open_options, map_options).unwrap();
       for i in 0..1000 {
         l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
           .unwrap();
@@ -2390,7 +2192,7 @@ fn test_reopen_mmap() {
 
     let open_options = OpenOptions::default().read(true);
     let map_options = MmapOptions::default();
-    let l = SkipList::<Ascend, ()>::map(&p, open_options, map_options, 0).unwrap();
+    let l = SkipMap::map(&p, open_options, map_options, 0).unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
       let k = key(i);
@@ -2417,7 +2219,7 @@ fn test_reopen_mmap2() {
         .read(true)
         .write(true);
       let map_options = MmapOptions::default();
-      let l = SkipList::map_mut_with_comparator(&p, open_options, map_options, Ascend).unwrap();
+      let l = SkipMap::map_mut_with_comparator(&p, open_options, map_options, Ascend).unwrap();
       let mut data = (0..1000).collect::<Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
       for i in &data {
@@ -2440,8 +2242,7 @@ fn test_reopen_mmap2() {
 
     let open_options = OpenOptions::default().read(true);
     let map_options = MmapOptions::default();
-    let l =
-      SkipList::<_, ()>::map_with_comparator(&p, open_options, map_options, Ascend, 0).unwrap();
+    let l = SkipMap::map_with_comparator(&p, open_options, map_options, Ascend, 0).unwrap();
     assert_eq!(1000, l.len());
     let mut data = (0..1000).collect::<Vec<usize>>();
     data.shuffle(&mut rand::thread_rng());
@@ -2468,7 +2269,7 @@ impl Person {
   }
 }
 
-fn get_or_insert_with_value(l: SkipList) {
+fn get_or_insert_with_value(l: SkipMap) {
   let alice = Person {
     id: 1,
     name: std::string::String::from("Alice"),
@@ -2551,7 +2352,7 @@ fn test_get_or_insert_with_value_map_anon_unify() {
   })
 }
 
-fn get_or_insert_with(l: SkipList) {
+fn get_or_insert_with(l: SkipMap) {
   let alice = Person {
     id: 1,
     name: std::string::String::from("Alice"),
@@ -2630,7 +2431,7 @@ fn test_get_or_insert_with_map_anon_unify() {
   })
 }
 
-fn insert_in(l: SkipList) {
+fn insert_in(l: SkipMap) {
   let k = 0u64.to_le_bytes();
   for i in 0..100 {
     let v = new_value(i);
@@ -2694,7 +2495,7 @@ fn test_insert_in_map_anon_unify() {
   })
 }
 
-fn insert_with_value(l: SkipList) {
+fn insert_with_value(l: SkipMap) {
   let alice = Person {
     id: 1,
     name: std::string::String::from("Alice"),
@@ -2807,7 +2608,7 @@ fn test_insert_with_value_map_anon_unify() {
   })
 }
 
-fn insert_with(l: SkipList) {
+fn insert_with(l: SkipMap) {
   let alice = Person {
     id: 1,
     name: std::string::String::from("Alice"),
@@ -2921,7 +2722,7 @@ fn test_insert_with_map_anon_unify() {
   })
 }
 
-fn get_or_remove(l: SkipList) {
+fn get_or_remove(l: SkipMap) {
   for i in 0..100 {
     let v = new_value(i);
     l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
@@ -2990,7 +2791,7 @@ fn test_get_or_remove_map_anon_unify() {
   })
 }
 
-fn remove(l: SkipList) {
+fn remove(l: SkipMap) {
   for i in 0..100 {
     let v = new_value(i);
     l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
@@ -3062,7 +2863,7 @@ fn test_remove_map_anon_unify() {
   })
 }
 
-fn remove2(l: SkipList) {
+fn remove2(l: SkipMap) {
   for i in 0..100 {
     let v = new_value(i);
     l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
@@ -3132,75 +2933,4 @@ fn test_remove2_map_anon_unify() {
     let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
     remove2(SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
   })
-}
-
-fn allocate_in(map: SkipList) {
-  let unlinked_node = map.allocate(MIN_VERSION, b"hello", b"world", ()).unwrap();
-  map.link(unlinked_node).unwrap();
-
-  let entry = map.get(MIN_VERSION, b"hello").unwrap();
-  assert_eq!(entry.value(), b"world");
-
-  let unlinked_node2 = map.allocate(MIN_VERSION, b"hello", b"rust", ()).unwrap();
-  map.link(unlinked_node2).unwrap();
-
-  let entry = map.get(MIN_VERSION, b"hello").unwrap();
-  assert_eq!(entry.value(), b"rust");
-}
-
-#[test]
-fn test_allocate_in() {
-  run(|| allocate_in(SkipList::with_options(TEST_OPTIONS).unwrap()))
-}
-
-#[test]
-fn test_allocate_in_unify() {
-  run(|| allocate_in(SkipList::with_options(UNIFY_TEST_OPTIONS).unwrap()))
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-fn test_allocate_in_map_mut() {
-  run(|| unsafe {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("test_skipmap_allocate_in_map_mut");
-    let open_options = OpenOptions::default()
-      .create_new(Some(ARENA_SIZE as u32))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    allocate_in(SkipList::map_mut(p, open_options, map_options).unwrap());
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_allocate_in_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    allocate_in(SkipList::map_anon(map_options).unwrap());
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_allocate_in_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    allocate_in(SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
-  })
-}
-
-#[test]
-fn test_estimited_size() {
-  let l = SkipList::new().unwrap();
-
-  let h = l.random_height();
-  let size = SkipList::<u64>::estimated_node_size(h, 3usize, 3);
-  let allocated = l.allocated();
-  l.allocate_at_height(1, h, b"key", b"val", ());
-  let allocated2 = l.allocated();
-  let actual = allocated2 - allocated;
-  assert!(size - 7 - (mem::align_of::<u64>() - 1) < actual && actual < size);
 }

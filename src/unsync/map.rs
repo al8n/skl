@@ -606,7 +606,7 @@ impl<C> SkipMap<C> {
 }
 
 impl<C: Comparator> SkipMap<C> {
-  /// Returns `true` if the key exists in the map. 
+  /// Returns `true` if the key exists in the map.
   ///
   /// # Example
   ///

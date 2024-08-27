@@ -1,7 +1,7 @@
 use criterion::*;
 use parking_lot::Mutex;
 use rand::prelude::*;
-use skl::{map::SkipMap, *};
+use skl::{sync::map::SkipMap, *};
 use std::{
   collections::*,
   sync::{atomic::*, *},

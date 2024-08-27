@@ -4,7 +4,7 @@ use super::*;
 
 use base::{AllVersionsIter, EntryRef, Iter, VersionedEntryRef};
 
-type Allocator = GenericAllocator<Meta, VersionedNode, Arena>;
+type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
 type SkipList<C> = base::SkipList<Allocator, C>;
 
 node_pointer!(VersionedNode);
@@ -265,7 +265,7 @@ impl<C> SkipMap<C> {
   ///
   /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
   ///
-  /// struct Meta {
+  /// struct VersionedMeta {
   ///   magic: u32,
   ///   version: u32,
   /// }
@@ -276,11 +276,11 @@ impl<C> SkipMap<C> {
   ///   MmapOptions::default(),
   /// ).unwrap();
   /// let arena = map.allocater();
-  /// let mut meta = arena.alloc::<Meta>();
+  /// let mut meta = arena.alloc::<VersionedMeta>();
   ///
-  /// // Safety: Meta does not require any drop, so it is safe to detach it from the ARENA.
+  /// // Safety: VersionedMeta does not require any drop, so it is safe to detach it from the ARENA.
   /// unsafe { meta.detach(); }
-  /// meta.write(Meta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
+  /// meta.write(VersionedMeta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
   /// ```
   #[inline]
   pub fn allocator(&self) -> &Arena {

@@ -16,10 +16,10 @@ use crate::VacantBuffer;
 
 use either::Either;
 
-/// Header of the skiplist.
+/// Versioned header of the skipmap.
 #[derive(Debug)]
 #[repr(C)]
-pub struct Meta {
+pub struct VersionedMeta {
   /// The maximum MVCC version of the skiplist.
   max_version: UnsafeCell<u64>,
   /// The minimum MVCC version of the skiplist.
@@ -31,7 +31,7 @@ pub struct Meta {
   reserved_byte: u8,
 }
 
-impl Header for Meta {
+impl Header for VersionedMeta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
@@ -106,7 +106,85 @@ impl Header for Meta {
       let height = self.height.get();
       assert_eq!(
         current, *height,
-        "current height is not equal to the actual height in unsync version Meta"
+        "current height is not equal to the actual height in unsync version `VersionedMeta`"
+      );
+      *height = new;
+      Ok(current)
+    }
+  }
+}
+
+/// Header of the skipmap.
+#[derive(Debug)]
+#[repr(C)]
+pub struct Meta {
+  len: UnsafeCell<u32>,
+  magic_version: u16,
+  /// Current height. 1 <= height <= 31.
+  height: UnsafeCell<u8>,
+  reserved_byte: u8,
+}
+
+impl Header for Meta {
+  #[inline]
+  fn new(version: u16) -> Self {
+    Self {
+      magic_version: version,
+      height: UnsafeCell::new(1),
+      len: UnsafeCell::new(0),
+      reserved_byte: 0,
+    }
+  }
+
+  #[inline]
+  fn magic_version(&self) -> u16 {
+    self.magic_version
+  }
+
+  #[inline]
+  fn max_version(&self) -> u64 {
+    MIN_VERSION
+  }
+
+  #[inline]
+  fn min_version(&self) -> u64 {
+    MIN_VERSION
+  }
+
+  #[inline]
+  fn height(&self) -> u8 {
+    unsafe { *self.height.get() }
+  }
+
+  #[inline]
+  fn len(&self) -> u32 {
+    unsafe { *self.len.get() }
+  }
+
+  #[inline]
+  fn increase_len(&self) {
+    unsafe {
+      *self.len.get() += 1;
+    }
+  }
+
+  fn update_max_version(&self, _: Version) {}
+
+  fn update_min_version(&self, _: Version) {}
+
+  #[inline]
+  fn compare_exchange_height_weak(
+    &self,
+    current: u8,
+    new: u8,
+    _: Ordering,
+    _: Ordering,
+  ) -> Result<u8, u8> {
+    unsafe {
+      let height = self.height.get();
+      assert_eq!(
+        current, *height,
+        "current height is not equal to the actual height in unsync version `Meta`"
       );
       *height = new;
       Ok(current)

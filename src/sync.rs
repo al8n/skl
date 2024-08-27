@@ -15,10 +15,10 @@ use crate::VacantBuffer;
 
 use either::Either;
 
-/// Header of the skiplist.
+/// Versioned header of the skiplist.
 #[derive(Debug)]
 #[repr(C)]
-pub struct Meta {
+pub struct VersionedMeta {
   /// The maximum MVCC version of the skiplist. CAS.
   max_version: AtomicU64,
   /// The minimum MVCC version of the skiplist. CAS.
@@ -30,7 +30,7 @@ pub struct Meta {
   reserved_byte: u8,
 }
 
-impl Header for Meta {
+impl Header for VersionedMeta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
@@ -110,6 +110,76 @@ impl Header for Meta {
       }
     }
   }
+
+  #[inline]
+  fn compare_exchange_height_weak(
+    &self,
+    current: u8,
+    new: u8,
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<u8, u8> {
+    self
+      .height
+      .compare_exchange_weak(current, new, success, failure)
+  }
+}
+
+/// Header of the skipmap.
+#[derive(Debug)]
+#[repr(C)]
+pub struct Meta {
+  len: AtomicU32,
+  magic_version: u16,
+  /// Current height. 1 <= height <= 31. CAS.
+  height: AtomicU8,
+  reserved_byte: u8,
+}
+
+impl Header for Meta {
+  #[inline]
+  fn new(version: u16) -> Self {
+    Self {
+      magic_version: version,
+      height: AtomicU8::new(1),
+      len: AtomicU32::new(0),
+      reserved_byte: 0,
+    }
+  }
+
+  #[inline]
+  fn magic_version(&self) -> u16 {
+    self.magic_version
+  }
+
+  #[inline]
+  fn max_version(&self) -> u64 {
+    MIN_VERSION
+  }
+
+  #[inline]
+  fn min_version(&self) -> u64 {
+    MIN_VERSION
+  }
+
+  #[inline]
+  fn height(&self) -> u8 {
+    self.height.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn len(&self) -> u32 {
+    self.len.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn increase_len(&self) {
+    self.len.fetch_add(1, Ordering::Release);
+  }
+
+  fn update_max_version(&self, _: Version) {}
+
+  fn update_min_version(&self, _: Version) {}
 
   #[inline]
   fn compare_exchange_height_weak(

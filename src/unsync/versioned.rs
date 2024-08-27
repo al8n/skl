@@ -4,7 +4,7 @@ use super::*;
 
 use base::{AllVersionsIter, EntryRef, Iter, VersionedEntryRef};
 
-type Allocator = GenericAllocator<Meta, VersionedNode, Arena>;
+type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
 type SkipList<C> = base::SkipList<Allocator, C>;
 
 node_pointer!(VersionedNode);

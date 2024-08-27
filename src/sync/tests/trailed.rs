@@ -1070,7 +1070,8 @@ fn iter_all_versions_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   let mut it = l.iter();
@@ -1138,7 +1139,8 @@ fn range_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   let upper = make_int_key(50);
@@ -1211,7 +1213,8 @@ fn iter_all_versions_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   let mut it = l.iter();
@@ -1274,7 +1277,8 @@ fn range_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   let lower = make_int_key(50);
@@ -1346,7 +1350,8 @@ fn iter_all_versions_seek_ge(l: SkipMap) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(&make_int_key(v), &make_value(v), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(v), &make_value(v), trailer())
+      .unwrap();
   }
 
   let mut it = l.iter();
@@ -1444,7 +1449,8 @@ fn iter_all_versions_seek_lt(l: SkipMap) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(&make_int_key(v), &make_value(v), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(v), &make_value(v), trailer())
+      .unwrap();
   }
 
   let mut it = l.iter();
@@ -1525,7 +1531,8 @@ fn test_iter_all_versions_seek_lt_map_anon_unify() {
 
 fn range(l: SkipMap) {
   for i in 1..10 {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   let k3 = make_int_key(3);
@@ -1658,15 +1665,18 @@ fn iter_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   for i in 50..N {
-    l.insert(&make_int_key(i), &make_value(i + 1000), trailer()).unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), trailer())
+      .unwrap();
   }
 
   for i in 0..50 {
-    l.insert(&make_int_key(i), &make_value(i + 1000), trailer()).unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), trailer())
+      .unwrap();
   }
 
   let mut it = l.iter();
@@ -1729,15 +1739,18 @@ fn range_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(&make_int_key(i), &make_value(i), trailer()).unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), trailer())
+      .unwrap();
   }
 
   for i in 50..N {
-    l.insert(&make_int_key(i), &make_value(i + 1000), trailer()).unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), trailer())
+      .unwrap();
   }
 
   for i in 0..50 {
-    l.insert(&make_int_key(i), &make_value(i + 1000), trailer()).unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), trailer())
+      .unwrap();
   }
 
   let mut it = l.range::<[u8], _>(..);
@@ -2003,7 +2016,8 @@ fn get_or_insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<()>(kb, vb, trailer()).unwrap();
+  l.get_or_insert_with_builders::<()>(kb, vb, trailer())
+    .unwrap();
 }
 
 #[test]
@@ -2141,7 +2155,8 @@ fn insert_with_value(l: SkipMap) {
     Ok(())
   });
 
-  l.insert_with_value_builder::<()>(b"alice", vb, trailer()).unwrap();
+  l.insert_with_value_builder::<()>(b"alice", vb, trailer())
+    .unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -2283,7 +2298,10 @@ fn insert_with(l: SkipMap) {
     );
     Ok(())
   });
-  let old = l.insert_with_builders::<()>(kb, vb, trailer()).unwrap().unwrap();
+  let old = l
+    .insert_with_builders::<()>(kb, vb, trailer())
+    .unwrap()
+    .unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
@@ -2549,4 +2567,3 @@ fn test_remove2_map_anon_unify() {
     remove2(SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
   })
 }
-

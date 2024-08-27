@@ -1909,8 +1909,7 @@ fn test_reopen_mmap2() {
       data.shuffle(&mut rand::thread_rng());
       for i in &data {
         let i = *i;
-        l.get_or_insert(i as u64, &key(i), &new_value(i))
-          .unwrap();
+        l.get_or_insert(i as u64, &key(i), &new_value(i)).unwrap();
       }
       l.flush_async().unwrap();
       assert_eq!(l.max_version(), 999);
@@ -2207,8 +2206,7 @@ fn insert_with_value(l: SkipMap) {
     Ok(())
   });
 
-  l.insert_with_value_builder::<()>(1, b"alice", vb)
-    .unwrap();
+  l.insert_with_value_builder::<()>(1, b"alice", vb).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -2350,10 +2348,7 @@ fn insert_with(l: SkipMap) {
     );
     Ok(())
   });
-  let old = l
-    .insert_with_builders::<()>(1, kb, vb)
-    .unwrap()
-    .unwrap();
+  let old = l.insert_with_builders::<()>(1, kb, vb).unwrap().unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
@@ -2619,4 +2614,3 @@ fn test_remove2_map_anon_unify() {
     remove2(SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
   })
 }
-

@@ -385,7 +385,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   ///
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
-  pub fn estimated_node_size(height: Height, key_size: impl Into<usize>, value_size: u32) -> usize {
+  pub fn estimated_node_size(height: Height, key_size: usize, value_size: usize) -> usize {
     SkipList::<T, C>::estimated_node_size(height, key_size, value_size)
   }
 

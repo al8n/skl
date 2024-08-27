@@ -269,15 +269,15 @@ impl<A: Allocator, C> SkipList<A, C> {
   ///
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
-  pub fn estimated_node_size(height: Height, key_size: impl Into<usize>, value_size: u32) -> usize {
+  pub fn estimated_node_size(height: Height, key_size: usize, value_size: usize) -> usize {
     let height: usize = height.into();
     7 // max padding
       + mem::size_of::<A::Node>()
       + mem::size_of::<<A::Node as Node>::Link>() * height
-      + key_size.into()
+      + key_size
       + mem::align_of::<A::Trailer>() - 1 // max trailer padding
       + mem::size_of::<A::Trailer>()
-      + value_size as usize
+      + value_size
   }
 
   /// Like [`SkipList::new`], but with a custom [`Comparator`].

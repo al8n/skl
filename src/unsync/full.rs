@@ -3,7 +3,8 @@ use core::marker::PhantomData;
 use super::*;
 
 /// A lock-free skipmap based on an [`Arena`] allocator, which supports both multiple versions and trailer.
-pub type SkipMap<T, C> = crate::base::SkipList<GenericAllocator<VersionedMeta, FullNode<T>, Arena>, C>;
+pub type SkipMap<T, C> =
+  crate::base::SkipList<GenericAllocator<VersionedMeta, FullNode<T>, Arena>, C>;
 
 node_pointer!(FullNode<T>);
 

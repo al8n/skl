@@ -238,7 +238,7 @@ impl<T: Trailer> SkipMap<T> {
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
+  pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
     Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
   }
 
@@ -1441,13 +1441,13 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, Allocator<T>>> {
-    self.0.first(version)
+  pub fn first(&self) -> Option<EntryRef<'_, Allocator<T>>> {
+    self.0.first(MIN_VERSION)
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, Allocator<T>>> {
-    self.0.last(version)
+  pub fn last(&self) -> Option<EntryRef<'_, Allocator<T>>> {
+    self.0.last(MIN_VERSION)
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -1492,8 +1492,8 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> Iter<Allocator<T>, C> {
-    self.0.iter(version)
+  pub fn iter(&self) -> Iter<Allocator<T>, C> {
+    self.0.iter(MIN_VERSION)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.

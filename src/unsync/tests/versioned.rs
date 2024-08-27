@@ -1,8 +1,8 @@
 use super::*;
 
-type SkipList<T, C> = crate::sync::full::SkipMap<T, C>;
+type SkipList<C> = crate::unsync::versioned::SkipMap<C>;
 
-type SkipMap = crate::sync::full::SkipMap<(), Ascend>;
+type SkipMap = crate::unsync::versioned::SkipMap<Ascend>;
 
 fn empty_in(l: SkipMap) {
   let mut it = l.iter_all_versions(MIN_VERSION);
@@ -15,10 +15,6 @@ fn empty_in(l: SkipMap) {
   assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
   assert!(l.first(MIN_VERSION).is_none());
   assert!(l.last(MIN_VERSION).is_none());
-  assert!(l.ge(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.lt(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.gt(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.le(MIN_VERSION, b"aaa", false).is_none());
   assert!(l.get(MIN_VERSION, b"aaa").is_none());
   assert!(!l.contains_key(MIN_VERSION, b"aaa"));
   assert!(l.allocated() > 0);
@@ -77,7 +73,7 @@ fn full_in(l: impl FnOnce(usize) -> SkipMap) {
   let mut found_arena_full = false;
 
   for i in 0..100 {
-    if let Err(e) = l.get_or_insert(0, &make_int_key(i), &make_value(i), ()) {
+    if let Err(e) = l.get_or_insert(0, &make_int_key(i), &make_value(i)) {
       assert!(matches!(
         e,
         Error::Arena(ArenaError::InsufficientSpace { .. })
@@ -169,9 +165,9 @@ fn test_full_map_anon_unify() {
 
 fn basic_in(mut l: SkipMap) {
   // Try adding values.
-  l.get_or_insert(0, b"key1", &make_value(1), ()).unwrap();
-  l.get_or_insert(0, b"key3", &make_value(3), ()).unwrap();
-  l.get_or_insert(0, b"key2", &make_value(2), ()).unwrap();
+  l.get_or_insert(0, b"key1", &make_value(1)).unwrap();
+  l.get_or_insert(0, b"key3", &make_value(3)).unwrap();
+  l.get_or_insert(0, b"key2", &make_value(2)).unwrap();
   assert_eq!(l.comparator(), &Ascend);
 
   {
@@ -192,8 +188,8 @@ fn basic_in(mut l: SkipMap) {
     assert_eq!(ent.version(), 0);
   }
 
-  l.get_or_insert(1, "a".as_bytes(), &[], ()).unwrap();
-  l.get_or_insert(2, "a".as_bytes(), &[], ()).unwrap();
+  l.get_or_insert(1, "a".as_bytes(), &[]).unwrap();
+  l.get_or_insert(2, "a".as_bytes(), &[]).unwrap();
 
   {
     let mut it = l.iter_all_versions(2);
@@ -208,8 +204,8 @@ fn basic_in(mut l: SkipMap) {
     assert_eq!(ent.version(), 1);
   }
 
-  l.get_or_insert(2, "b".as_bytes(), &[], ()).unwrap();
-  l.get_or_insert(1, "b".as_bytes(), &[], ()).unwrap();
+  l.get_or_insert(2, "b".as_bytes(), &[]).unwrap();
+  l.get_or_insert(1, "b".as_bytes(), &[]).unwrap();
 
   {
     let mut it = l.iter_all_versions(2);
@@ -229,9 +225,9 @@ fn basic_in(mut l: SkipMap) {
     assert_eq!(ent.version(), 1);
   }
 
-  l.get_or_insert(2, b"b", &[], ()).unwrap().unwrap();
+  l.get_or_insert(2, b"b", &[]).unwrap().unwrap();
 
-  assert!(l.get_or_insert(2, b"c", &[], ()).unwrap().is_none());
+  assert!(l.get_or_insert(2, b"c", &[]).unwrap().is_none());
 
   unsafe {
     l.clear().unwrap();
@@ -297,10 +293,10 @@ fn test_basic_map_anon_unify() {
 }
 
 fn iter_all_versions_mvcc(l: SkipMap) {
-  l.get_or_insert(1, b"a", b"a1", ()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", ()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", ()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", ()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   let mut it = l.iter_all_versions(0);
   let mut num = 0;
@@ -430,9 +426,9 @@ fn test_iter_all_versions_mvcc_map_anon_unify() {
 fn ordering() {
   let l = SkipList::with_options_and_comparator(TEST_OPTIONS, Descend).unwrap();
 
-  l.get_or_insert(1, b"a1", b"a1", ()).unwrap();
-  l.get_or_insert(2, b"a2", b"a2", ()).unwrap();
-  l.get_or_insert(3, b"a3", b"a3", ()).unwrap();
+  l.get_or_insert(1, b"a1", b"a1").unwrap();
+  l.get_or_insert(2, b"a2", b"a2").unwrap();
+  l.get_or_insert(3, b"a3", b"a3").unwrap();
 
   let mut it = l.iter_all_versions(3);
   for i in (1..=3).rev() {
@@ -448,10 +444,10 @@ fn test_ordering() {
 }
 
 fn get_mvcc(l: SkipMap) {
-  l.get_or_insert(1, b"a", b"a1", ()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", ()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", ()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", ()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   let ent = l.get(1, b"a").unwrap();
   assert_eq!(ent.key(), b"a");
@@ -547,11 +543,11 @@ fn test_get_mvcc_map_anon_unify() {
 }
 
 fn gt_in(l: SkipMap) {
-  l.get_or_insert(1, b"a", b"a1", ()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", ()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", ()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", ()).unwrap();
-  l.get_or_insert(5, b"c", b"c3", ()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
+  l.get_or_insert(5, b"c", b"c3").unwrap();
 
   assert!(l.lower_bound(0, Bound::Excluded(b"a")).is_none());
   assert!(l.lower_bound(0, Bound::Excluded(b"b")).is_none());
@@ -670,10 +666,10 @@ fn test_gt_map_anon_unify() {
 }
 
 fn ge_in(l: SkipMap) {
-  l.get_or_insert(1, b"a", b"a1", ()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", ()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", ()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", ()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
   assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
@@ -791,10 +787,10 @@ fn test_ge_map_anon_unify() {
 }
 
 fn le_in(l: SkipMap) {
-  l.get_or_insert(1, b"a", b"a1", ()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", ()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", ()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", ()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
   assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
@@ -926,10 +922,10 @@ fn test_le_map_anon_unify() {
 }
 
 fn lt_in(l: SkipMap) {
-  l.get_or_insert(1, b"a", b"a1", ()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", ()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", ()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", ()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"a")).is_none());
   assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"b")).is_none());
@@ -1045,7 +1041,7 @@ fn test_basic_large_testcases_in(l: SkipMap) {
   let n = 1000;
 
   for i in 0..n {
-    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
+    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
       .unwrap();
   }
 
@@ -1115,319 +1111,11 @@ fn test_basic_large_testcases_map_anon_unify() {
   })
 }
 
-#[cfg(feature = "std")]
-fn test_concurrent_basic_runner(l: SkipMap) {
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 1000;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
-
-  let wg = Arc::new(());
-  for i in 0..N {
-    let w = wg.clone();
-    let l = l.clone();
-    std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
-        .unwrap();
-      drop(w);
-    });
-  }
-  while Arc::strong_count(&wg) > 1 {}
-  for i in 0..N {
-    let w = wg.clone();
-    let l = l.clone();
-    std::thread::spawn(move || {
-      let k = key(i);
-      assert_eq!(
-        l.get(MIN_VERSION, &k).unwrap().value(),
-        new_value(i),
-        "broken: {i}"
-      );
-      drop(w);
-    });
-  }
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn test_concurrent_basic() {
-  run(|| {
-    let l = SkipList::with_options(TEST_OPTIONS)
-      .unwrap()
-      .with_yield_now();
-    test_concurrent_basic_runner(l);
-  })
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn test_concurrent_basic_unify() {
-  run(|| {
-    let l = SkipList::with_options(UNIFY_TEST_OPTIONS)
-      .unwrap()
-      .with_yield_now();
-    test_concurrent_basic_runner(l);
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-#[cfg_attr(miri, ignore)]
-fn test_concurrent_basic_map_mut() {
-  run(|| unsafe {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("test_skipmap_concurrent_basic_map_mut");
-    let open_options = OpenOptions::default()
-      .create_new(Some(ARENA_SIZE as u32))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    let l = SkipList::map_mut(p, open_options, map_options)
-      .unwrap()
-      .with_yield_now();
-    test_concurrent_basic_runner(l);
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_concurrent_basic_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    test_concurrent_basic_runner(SkipList::map_anon(map_options).unwrap().with_yield_now());
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_concurrent_basic_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    test_concurrent_basic_runner(
-      SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[cfg(all(feature = "std", not(miri)))]
-fn test_concurrent_basic_big_values_runner(l: SkipMap) {
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 100;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
-
-  for i in 0..N {
-    let l = l.clone();
-    std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &big_value(i), ())
-        .unwrap();
-    });
-  }
-  while l.refs() > 1 {}
-  // assert_eq!(N, l.len());
-  for i in 0..N {
-    let l = l.clone();
-    std::thread::spawn(move || {
-      let k = key(i);
-      assert_eq!(
-        l.get(MIN_VERSION, &k).unwrap().value(),
-        big_value(i),
-        "broken: {i}"
-      );
-    });
-  }
-  while l.refs() > 1 {}
-}
-
-#[test]
-#[cfg(all(feature = "std", not(miri)))]
-fn test_concurrent_basic_big_values() {
-  run(|| {
-    test_concurrent_basic_big_values_runner(
-      SkipList::with_options(BIG_TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(all(feature = "std", not(miri)))]
-fn test_concurrent_basic_big_values_unify() {
-  run(|| {
-    test_concurrent_basic_big_values_runner(
-      SkipList::with_options(UNIFY_BIG_TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(all(feature = "memmap", not(miri)))]
-fn test_concurrent_basic_big_values_map_mut() {
-  run(|| unsafe {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir
-      .path()
-      .join("test_skipmap_concurrent_basic_big_values_map_mut");
-    let open_options = OpenOptions::default()
-      .create_new(Some(120 << 20))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    test_concurrent_basic_big_values_runner(
-      SkipList::map_mut(p, open_options, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(all(feature = "memmap", not(miri)))]
-fn test_concurrent_basic_big_values_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(120 << 20);
-    test_concurrent_basic_big_values_runner(
-      SkipList::map_anon(map_options).unwrap().with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(all(feature = "memmap", not(miri)))]
-fn test_concurrent_basic_big_values_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(120 << 20);
-    test_concurrent_basic_big_values_runner(
-      SkipList::map_anon_with_options(UNIFY_BIG_TEST_OPTIONS, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[cfg(feature = "std")]
-fn concurrent_one_key(l: SkipMap) {
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 5;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
-
-  let wg = WaitGroup::new();
-  for i in 0..N {
-    let wg = wg.add(1);
-    let l = l.clone();
-    std::thread::spawn(move || {
-      let _ = l.get_or_insert(MIN_VERSION, b"thekey", &make_value(i), ());
-      wg.done();
-    });
-  }
-
-  wg.wait();
-
-  let saw_value = Arc::new(crate::sync::AtomicU32::new(0));
-  for _ in 0..N {
-    let wg = wg.add(1);
-    let l = l.clone();
-    let saw_value = saw_value.clone();
-    std::thread::spawn(move || {
-      let ent = l.get(MIN_VERSION, b"thekey").unwrap();
-      let val = ent.value();
-      let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
-      assert!((0..N).contains(&num));
-
-      let mut it = l.iter_all_versions(MIN_VERSION);
-      let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
-      let val = ent.value().unwrap();
-      let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
-      assert!((0..N).contains(&num));
-      assert_eq!(ent.key(), b"thekey");
-      saw_value.fetch_add(1, Ordering::SeqCst);
-      wg.done();
-    });
-  }
-
-  wg.wait();
-
-  assert_eq!(N, saw_value.load(Ordering::SeqCst) as usize);
-  assert_eq!(l.len(), 1);
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn test_concurrent_one_key() {
-  run(|| {
-    concurrent_one_key(
-      SkipList::with_options(TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(feature = "std")]
-fn test_concurrent_one_key_unify() {
-  run(|| {
-    concurrent_one_key(
-      SkipList::with_options(UNIFY_TEST_OPTIONS)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
-fn test_concurrent_one_key_map_mut() {
-  run(|| unsafe {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("test_skipmap_concurrent_one_key_map_mut");
-    let open_options = OpenOptions::default()
-      .create(Some(ARENA_SIZE as u32))
-      .read(true)
-      .write(true);
-    let map_options = MmapOptions::default();
-    concurrent_one_key(
-      SkipList::map_mut(p, open_options, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_concurrent_one_key_map_anon() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    concurrent_one_key(SkipList::map_anon(map_options).unwrap().with_yield_now());
-  })
-}
-
-#[test]
-#[cfg(feature = "memmap")]
-fn test_concurrent_one_key_map_anon_unify() {
-  run(|| {
-    let map_options = MmapOptions::default().len(ARENA_SIZE as u32);
-    concurrent_one_key(
-      SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options)
-        .unwrap()
-        .with_yield_now(),
-    );
-  })
-}
-
 fn iter_all_versions_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
@@ -1496,7 +1184,7 @@ fn range_next(l: SkipMap) {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
@@ -1570,7 +1258,7 @@ fn iter_all_versions_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
@@ -1634,7 +1322,7 @@ fn range_prev(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
@@ -1707,7 +1395,7 @@ fn iter_all_versions_seek_ge(l: SkipMap) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v))
       .unwrap();
   }
 
@@ -1743,7 +1431,7 @@ fn iter_all_versions_seek_ge(l: SkipMap) {
   let ent = it.seek_lower_bound(Bound::Included(b"99999"));
   assert!(ent.is_none());
 
-  l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
+  l.get_or_insert(MIN_VERSION, &[], &[]).unwrap();
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
@@ -1806,7 +1494,7 @@ fn iter_all_versions_seek_lt(l: SkipMap) {
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v))
       .unwrap();
   }
 
@@ -1828,8 +1516,7 @@ fn iter_all_versions_seek_lt(l: SkipMap) {
   assert_eq!(ent.key(), make_int_key(1990));
   assert_eq!(ent.value().unwrap(), make_value(1990));
 
-  l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
-  assert!(l.lt(MIN_VERSION, &[], false).is_none());
+  l.get_or_insert(MIN_VERSION, &[], &[]).unwrap();
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());
@@ -1889,7 +1576,7 @@ fn test_iter_all_versions_seek_lt_map_anon_unify() {
 
 fn range(l: SkipMap) {
   for i in 1..10 {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
@@ -2023,17 +1710,17 @@ fn iter_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(1, &make_int_key(i), &make_value(i + 1000), ())
+    l.get_or_insert(1, &make_int_key(i), &make_value(i + 1000))
       .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(2, &make_int_key(i), &make_value(i + 1000), ())
+    l.get_or_insert(2, &make_int_key(i), &make_value(i + 1000))
       .unwrap();
   }
 
@@ -2097,17 +1784,17 @@ fn range_latest(l: SkipMap) {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i), ())
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
       .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(1, &make_int_key(i), &make_value(i + 1000), ())
+    l.get_or_insert(1, &make_int_key(i), &make_value(i + 1000))
       .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(2, &make_int_key(i), &make_value(i + 1000), ())
+    l.get_or_insert(2, &make_int_key(i), &make_value(i + 1000))
       .unwrap();
   }
 
@@ -2182,7 +1869,7 @@ fn test_reopen_mmap() {
       let map_options = MmapOptions::default();
       let l = SkipMap::map_mut(&p, open_options, map_options).unwrap();
       for i in 0..1000 {
-        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), ())
+        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
           .unwrap();
       }
       l.flush().unwrap();
@@ -2222,7 +1909,7 @@ fn test_reopen_mmap2() {
       data.shuffle(&mut rand::thread_rng());
       for i in &data {
         let i = *i;
-        l.get_or_insert(i as u64, &key(i), &new_value(i), ())
+        l.get_or_insert(i as u64, &key(i), &new_value(i))
           .unwrap();
       }
       l.flush_async().unwrap();
@@ -2294,7 +1981,7 @@ fn get_or_insert_with_value(l: SkipMap) {
     Ok(())
   });
 
-  l.get_or_insert_with_value_builder::<()>(1, b"alice", vb, ())
+  l.get_or_insert_with_value_builder::<()>(1, b"alice", vb)
     .unwrap();
 }
 
@@ -2382,7 +2069,7 @@ fn get_or_insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<()>(1, kb, vb, ()).unwrap();
+  l.get_or_insert_with_builders::<()>(1, kb, vb).unwrap();
 }
 
 #[test]
@@ -2433,7 +2120,7 @@ fn insert_in(l: SkipMap) {
   let k = 0u64.to_le_bytes();
   for i in 0..100 {
     let v = new_value(i);
-    let old = l.insert(MIN_VERSION, &k, &v, ()).unwrap();
+    let old = l.insert(MIN_VERSION, &k, &v).unwrap();
     if let Some(old) = old {
       assert_eq!(old.key(), k);
       assert_eq!(old.value(), new_value(i - 1));
@@ -2520,7 +2207,7 @@ fn insert_with_value(l: SkipMap) {
     Ok(())
   });
 
-  l.insert_with_value_builder::<()>(1, b"alice", vb, ())
+  l.insert_with_value_builder::<()>(1, b"alice", vb)
     .unwrap();
 
   let alice2 = Person {
@@ -2548,7 +2235,7 @@ fn insert_with_value(l: SkipMap) {
   });
 
   let old = l
-    .insert_with_value_builder::<()>(1, b"alice", vb, ())
+    .insert_with_value_builder::<()>(1, b"alice", vb)
     .unwrap()
     .unwrap();
 
@@ -2638,7 +2325,7 @@ fn insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.insert_with_builders::<()>(1, kb, vb, ()).unwrap();
+  l.insert_with_builders::<()>(1, kb, vb).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -2664,7 +2351,7 @@ fn insert_with(l: SkipMap) {
     Ok(())
   });
   let old = l
-    .insert_with_builders::<()>(1, kb, vb, ())
+    .insert_with_builders::<()>(1, kb, vb)
     .unwrap()
     .unwrap();
 
@@ -2723,16 +2410,16 @@ fn test_insert_with_map_anon_unify() {
 fn get_or_remove(l: SkipMap) {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
+    l.insert(MIN_VERSION, &key(i), &v).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
-    let old = l.get_or_remove(MIN_VERSION, &k, ()).unwrap().unwrap();
+    let old = l.get_or_remove(MIN_VERSION, &k).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
 
-    let old = l.get_or_remove(MIN_VERSION, &k, ()).unwrap().unwrap();
+    let old = l.get_or_remove(MIN_VERSION, &k).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
   }
@@ -2792,20 +2479,20 @@ fn test_get_or_remove_map_anon_unify() {
 fn remove(l: SkipMap) {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
+    l.insert(MIN_VERSION, &key(i), &v).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // no race, remove should succeed
     let old = l
-      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
 
     // key already removed
     let old = l
-      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
   }
@@ -2864,20 +2551,20 @@ fn test_remove_map_anon_unify() {
 fn remove2(l: SkipMap) {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, ()).unwrap();
+    l.insert(MIN_VERSION, &key(i), &v).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // not found, remove should succeed
     let old = l
-      .compare_remove(1, &k, (), Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(1, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
 
     // no-race, remove should succeed
     let old = l
-      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
   }
@@ -2932,3 +2619,4 @@ fn test_remove2_map_anon_unify() {
     remove2(SkipList::map_anon_with_options(UNIFY_TEST_OPTIONS, map_options).unwrap());
   })
 }
+

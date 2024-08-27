@@ -627,6 +627,12 @@ impl<C> SkipMap<C> {
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.0.flush_async()
   }
+
+  #[cfg(all(test, feature = "std"))]
+  #[inline]
+  pub(crate) fn with_yield_now(self) -> Self {
+    Self(self.0.with_yield_now())
+  }
 }
 
 impl<C: Comparator> SkipMap<C> {

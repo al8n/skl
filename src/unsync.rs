@@ -341,3 +341,6 @@ pub mod trailed;
 
 /// A skipmap implementation without trailer and version support. See [`SkipMap`](map::SkipMap) for more information.
 pub mod map;
+
+#[cfg(test)]
+mod tests;

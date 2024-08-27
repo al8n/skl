@@ -966,9 +966,7 @@ fn concurrent_one_key(l: SkipMap) {
     });
   }
 
-  std::println!("waiting for inserts");
   wg.wait();
-  std::println!("finish inserts");
 
   let saw_value = Arc::new(crate::sync::AtomicU32::new(0));
   for _ in 0..N {

@@ -250,43 +250,6 @@ impl SkipMap {
 }
 
 impl<C> SkipMap<C> {
-  /// Returns the underlying ARENA allocator used by the skipmap.
-  ///
-  /// This is a low level API, you should not use this method unless you know what you are doing.
-  ///
-  /// By default, `skl` does not do any forward and backward compatibility checks when using file backed memory map,
-  /// so this will allow the users to access the ARENA allocator directly, and allocate some bytes or structures
-  /// to help them implement forward and backward compatibility checks.
-  ///
-  /// # Example
-  ///
-  /// ```ignore
-  /// use skl::{sync::versioned::SkipMap, OpenOptions, MmapOptinos};
-  ///
-  /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
-  ///
-  /// struct VersionedMeta {
-  ///   magic: u32,
-  ///   version: u32,
-  /// }
-  ///
-  /// let map = SkipMap::map_mut(
-  ///   "/path/to/file",
-  ///   OpenOptions::create_new(Some(1000)).read(true).write(true),
-  ///   MmapOptions::default(),
-  /// ).unwrap();
-  /// let arena = map.allocater();
-  /// let mut meta = arena.alloc::<VersionedMeta>();
-  ///
-  /// // Safety: VersionedMeta does not require any drop, so it is safe to detach it from the ARENA.
-  /// unsafe { meta.detach(); }
-  /// meta.write(VersionedMeta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
-  /// ```
-  #[inline]
-  pub fn allocator(&self) -> &Arena {
-    self.0.allocator()
-  }
-
   /// Returns the offset of the data section in the `SkipMap`.
   ///
   /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,
@@ -386,12 +349,12 @@ impl<C> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::versioned::SkipMap;
+  /// use skl::{sync::versioned::SkipMap, Ascend};
   ///
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
+  /// let needed = SkipMap::<Ascend>::estimated_node_size(height, b"k1".len(), b"k2".len());
   /// ```
   #[inline]
   pub fn random_height(&self) -> Height {
@@ -568,44 +531,6 @@ impl<C> SkipMap<C> {
     self.0.clear()
   }
 
-  /// Rewind the underlying [`Arena`] to the given position.
-  ///
-  /// It is common to use this method to rewind the ARENA to a previous state after a failed operation.
-  ///
-  /// # Safety
-  /// - If the current position is larger than the given position,
-  ///   then the memory between the current position and the given position will be reclaimed,
-  ///   so must ensure the memory chunk between the current position and the given position will not
-  ///   be accessed anymore.
-  /// - This method is not thread safe.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{sync::versioned::SkipMap, ArenaPosition};
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// let allocated = map.allocated();
-  ///
-  /// {
-  ///   let n1 = map.allocate(0u8, b"hello", b"world").unwrap();
-  ///   let n2 = map.allocate(0u8, b"foo", b"bar").unwrap();
-  /// }
-  ///
-  /// let intermediate = map.allocated();
-  /// assert!(intermediate > allocated);
-  ///
-  /// // some conditions are failed
-  /// // rewind the ARENA to the position before the failed operation
-  /// unsafe { map.rewind(ArenaPosition::Start(allocated as u32)); }
-  ///
-  /// assert_eq!(map.allocated(), allocated);
-  /// ```
-  pub unsafe fn rewind(&self, pos: ArenaPosition) {
-    self.0.rewind(pos)
-  }
-
   /// Flushes outstanding memory map modifications to disk.
   ///
   /// When this method returns with a non-error result,
@@ -644,16 +569,16 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::map::SkipMap;
+  /// use skl::sync::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
+  /// assert!(!map.contains_key(1, b"hello"));
+  /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
   pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
@@ -665,16 +590,16 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::map::SkipMap;
+  /// use skl::sync::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
+  /// assert!(!map.contains_key(1, b"hello"));
+  /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
   pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
@@ -699,18 +624,18 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::map::SkipMap;
+  /// use skl::sync::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// let ent = map.get(0u8, b"hello").unwrap();
+  /// let ent = map.get(0, b"hello").unwrap();
   /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(map.get(1u8, b"hello").is_none());
+  /// assert!(map.get(1, b"hello").is_none());
   /// ```
   pub fn get<'a, 'b: 'a>(
     &'a self,
@@ -727,17 +652,17 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::map::SkipMap;
+  /// use skl::sync::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(0.into(), b"hello", b"world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1.into(), b"hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(map.get(1.into(), b"hello").is_none());
+  /// assert!(map.get(1, b"hello").is_none());
   ///
-  /// let ent = map.get_versioned(1.into(), b"hello").unwrap();
+  /// let ent = map.get_versioned(1, b"hello").unwrap();
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```
@@ -831,12 +756,12 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::map::SkipMap;
+  /// use skl::sync::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(Version::new(), height, b"hello", b"world").unwrap();
+  /// map.insert_at_height(0, height, b"hello", b"world").unwrap();
   /// ```
   #[inline]
   pub fn insert_at_height<'a, 'b: 'a>(
@@ -893,7 +818,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -957,7 +882,7 @@ impl<C: Comparator> SkipMap<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb)
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb)
   /// .unwrap();
   /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
@@ -1052,7 +977,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   val.write(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb)
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -1116,7 +1041,7 @@ impl<C: Comparator> SkipMap<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb)
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -1181,7 +1106,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb)
+  /// l.insert_with_builders::<core::convert::Infallible>(1, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -1250,7 +1175,7 @@ impl<C: Comparator> SkipMap<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb)
+  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1, height, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -1313,7 +1238,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb)
+  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -1380,7 +1305,7 @@ impl<C: Comparator> SkipMap<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb)
+  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1, height, kb, vb)
   /// .unwrap();
   /// ```
   pub fn get_or_insert_at_height_with_builders<'a, E>(
@@ -1458,14 +1383,14 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::map::SkipMap;
+  /// use skl::sync::versioned::SkipMap;
   ///
   /// let map = SkipMap::new().unwrap();
   ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(0u8, height, b"hello").unwrap();
+  /// map.get_or_remove_at_height(0, height, b"hello").unwrap();
   /// ```
   #[inline]
   pub fn get_or_remove_at_height<'a, 'b: 'a>(
@@ -1519,7 +1444,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   key.write(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, Ttl::new(std::time::Duration::from_seconds(60)))
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb)
   /// .unwrap();
   /// ```
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
@@ -1575,7 +1500,7 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb)
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1, height, kb)
   /// .unwrap();
   /// ```
   pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(

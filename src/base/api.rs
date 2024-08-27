@@ -117,43 +117,6 @@ impl<A: Allocator> SkipList<A, Ascend> {
 }
 
 impl<A: Allocator, C> SkipList<A, C> {
-  /// Returns the underlying ARENA allocator used by the skipmap.
-  ///
-  /// This is a low level API, you should not use this method unless you know what you are doing.
-  ///
-  /// By default, `skl` does not do any forward and backward compatibility checks when using file backed memory map,
-  /// so this will allow the users to access the ARENA allocator directly, and allocate some bytes or structures
-  /// to help them implement forward and backward compatibility checks.
-  ///
-  /// # Example
-  ///
-  /// ```ignore
-  /// use skl::{SkipList, OpenOptions, MmapOptinos};
-  ///
-  /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
-  ///
-  /// struct Meta {
-  ///   magic: u32,
-  ///   version: u32,
-  /// }
-  ///
-  /// let map = SkipList::map_mut(
-  ///   "/path/to/file",
-  ///   OpenOptions::create_new(Some(1000)).read(true).write(true),
-  ///   MmapOptions::default(),
-  /// ).unwrap();
-  /// let arena = map.allocater();
-  /// let mut meta = arena.alloc::<Meta>();
-  ///
-  /// // Safety: Meta does not require any drop, so it is safe to detach it from the ARENA.
-  /// unsafe { meta.detach(); }
-  /// meta.write(Meta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
-  /// ```
-  #[inline]
-  pub const fn allocator(&self) -> &A {
-    &self.arena
-  }
-
   /// Returns the offset of the data section in the `SkipList`.
   ///
   /// By default, `SkipList` will allocate meta, head node, and tail node in the ARENA,
@@ -201,7 +164,7 @@ impl<A: Allocator, C> SkipList<A, C> {
   /// Returns the number of bytes that have allocated from the arena.
   #[inline]
   pub fn allocated(&self) -> usize {
-    self.arena.allocated() as usize
+    self.arena.allocated()
   }
 
   /// Returns the capacity of the arena.
@@ -249,17 +212,6 @@ impl<A: Allocator, C> SkipList<A, C> {
   /// Returns a random generated height.
   ///
   /// This method is useful when you want to check if the underlying allocator can allocate a node.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::<u64>::new().unwrap();
-  /// let height = map.random_height();
-  ///
-  /// let needed = SkipList::<u64>::estimated_node_size(height, b"k1".len() as u32, b"k2".len() as u32);
-  /// ```
   #[inline]
   pub fn random_height(&self) -> Height {
     random_height(self.opts.max_height())
@@ -526,22 +478,6 @@ impl<A: Allocator, C> SkipList<A, C> {
   /// # Safety
   /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
   /// - This method is not thread-safe.
-  ///
-  /// # Example
-  ///
-  /// Undefine behavior:
-  ///
-  /// ```ignore
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// map.insert(1u8, b"hello", b"world").unwrap();
-  ///
-  /// let data = map.get(b"hello").unwrap();
-  ///
-  /// map.clear().unwrap();
-  ///
-  /// let w = data[0]; // undefined behavior
-  /// ```
   pub unsafe fn clear(&mut self) -> Result<(), Error> {
     self.arena.clear()?;
 
@@ -580,44 +516,6 @@ impl<A: Allocator, C> SkipList<A, C> {
     Ok(())
   }
 
-  /// Rewind the underlying [`Arena`] to the given position.
-  ///
-  /// It is common to use this method to rewind the ARENA to a previous state after a failed operation.
-  ///
-  /// # Safety
-  /// - If the current position is larger than the given position,
-  ///   then the memory between the current position and the given position will be reclaimed,
-  ///   so must ensure the memory chunk between the current position and the given position will not
-  ///   be accessed anymore.
-  /// - This method is not thread safe.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ArenaPosition};
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// let allocated = map.allocated();
-  ///
-  /// {
-  ///   let n1 = map.allocate(0u8, b"hello", b"world").unwrap();
-  ///   let n2 = map.allocate(0u8, b"foo", b"bar").unwrap();
-  /// }
-  ///
-  /// let intermediate = map.allocated();
-  /// assert!(intermediate > allocated);
-  ///
-  /// // some conditions are failed
-  /// // rewind the ARENA to the position before the failed operation
-  /// unsafe { map.rewind(ArenaPosition::Start(allocated as u32)); }
-  ///
-  /// assert_eq!(map.allocated(), allocated);
-  /// ```
-  pub unsafe fn rewind(&self, pos: ArenaPosition) {
-    self.arena.rewind(pos);
-  }
-
   /// Flushes outstanding memory map modifications to disk.
   ///
   /// When this method returns with a non-error result,
@@ -653,42 +551,12 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
   /// you can use [`contains_key_versioned`](SkipList::contains_key_versioned).
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
-  ///
-  /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
-  /// ```
   #[inline]
   pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
     self.get(version, key).is_some()
   }
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
-  ///
-  /// assert!(!map.contains_key(1u8, b"hello"));
-  /// assert!(map.contains_key_versioned(1u8, b"hello"));
-  /// ```
   #[inline]
   pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
     self.get_versioned(version, key).is_some()
@@ -708,23 +576,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// let ent = map.get(0u8, b"hello").unwrap();
-  /// assert_eq!(ent.value(), b"world");
-  ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
-  ///
-  /// assert!(map.get(1u8, b"hello").is_none());
-  /// ```
   pub fn get<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<EntryRef<'a, A>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
@@ -764,24 +615,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// Returns the value associated with the given key, if it exists.
   ///
   /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::SkipList;
-  ///
-  /// let map = SkipList::new().unwrap();
-  ///
-  /// map.insert(0u8, b"hello", b"world").unwrap();
-  ///
-  /// map.get_or_remove(1u8, b"hello").unwrap();
-  ///
-  /// assert!(map.get(1u8, b"hello").is_none());
-  ///
-  /// let ent = map.get_versioned(1u8, b"hello").unwrap();
-  /// // value is None because the entry is marked as removed.
-  /// assert!(ent.value().is_none());
-  /// ```
   pub fn get_versioned<'a, 'b: 'a>(
     &'a self,
     version: Version,

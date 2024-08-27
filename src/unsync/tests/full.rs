@@ -15,10 +15,10 @@ fn empty_in(l: SkipMap) {
   assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
   assert!(l.first(MIN_VERSION).is_none());
   assert!(l.last(MIN_VERSION).is_none());
-  assert!(l.ge(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.lt(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.gt(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.le(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.ge(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.lt(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.gt(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.le(MIN_VERSION, b"aaa", false).is_none());
   assert!(l.get(MIN_VERSION, b"aaa").is_none());
   assert!(!l.contains_key(MIN_VERSION, b"aaa"));
   assert!(l.allocated() > 0);
@@ -1521,7 +1521,7 @@ fn iter_all_versions_seek_lt(l: SkipMap) {
   assert_eq!(ent.value().unwrap(), make_value(1990));
 
   l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
-  assert!(l.lt(MIN_VERSION, &[], false).is_none());
+  assert!(l.0.lt(MIN_VERSION, &[], false).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());
@@ -2490,15 +2490,11 @@ fn remove(l: SkipMap) {
   for i in 0..100 {
     let k = key(i);
     // no race, remove should succeed
-    let old = l
-      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(MIN_VERSION, &k, ()).unwrap();
     assert!(old.is_none());
 
     // key already removed
-    let old = l
-      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(MIN_VERSION, &k, ()).unwrap();
     assert!(old.is_none());
   }
 
@@ -2562,15 +2558,11 @@ fn remove2(l: SkipMap) {
   for i in 0..100 {
     let k = key(i);
     // not found, remove should succeed
-    let old = l
-      .compare_remove(1, &k, (), Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(1, &k, ()).unwrap();
     assert!(old.is_none());
 
     // no-race, remove should succeed
-    let old = l
-      .compare_remove(MIN_VERSION, &k, (), Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(MIN_VERSION, &k, ()).unwrap();
     assert!(old.is_none());
   }
 

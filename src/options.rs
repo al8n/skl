@@ -244,11 +244,11 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u5};
+  /// use skl::{Options, Height};
   ///
-  /// let options = Options::new().with_max_height(5);
+  /// let options = Options::new().with_max_height(Height::from_u8_unchecked(5));
   ///
-  /// assert_eq!(options.max_height(), Height::from(5));
+  /// assert_eq!(options.max_height(), 5);
   /// ```
   #[inline]
   pub const fn max_height(&self) -> Height {

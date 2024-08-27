@@ -2043,11 +2043,11 @@ fn get_or_remove(l: SkipMap) {
 
   for i in 0..100 {
     let k = key(i);
-    let old = l.get_or_remove(&k).unwrap().unwrap();
+    let old = l.remove(&k).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
 
-    let old = l.get_or_remove(&k).unwrap().unwrap();
+    let old = l.remove(&k).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
   }
@@ -2113,15 +2113,11 @@ fn remove(l: SkipMap) {
   for i in 0..100 {
     let k = key(i);
     // no race, remove should succeed
-    let old = l
-      .compare_remove(&k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(&k).unwrap();
     assert!(old.is_none());
 
     // key already removed
-    let old = l
-      .compare_remove(&k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(&k).unwrap();
     assert!(old.is_none());
   }
 
@@ -2185,15 +2181,11 @@ fn remove2(l: SkipMap) {
   for i in 0..100 {
     let k = key(i);
     // not found, remove should succeed
-    let old = l
-      .compare_remove(&k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(&k).unwrap();
     assert!(old.is_none());
 
     // no-race, remove should succeed
-    let old = l
-      .compare_remove(&k, Ordering::SeqCst, Ordering::Acquire)
-      .unwrap();
+    let old = l.remove(&k).unwrap();
     assert!(old.is_none());
   }
 

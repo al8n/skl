@@ -15,10 +15,10 @@ fn empty_in(l: SkipMap) {
   assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
   assert!(l.first(MIN_VERSION).is_none());
   assert!(l.last(MIN_VERSION).is_none());
-  assert!(l.ge(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.lt(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.gt(MIN_VERSION, b"aaa", false).is_none());
-  assert!(l.le(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.ge(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.lt(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.gt(MIN_VERSION, b"aaa", false).is_none());
+  assert!(l.0.le(MIN_VERSION, b"aaa", false).is_none());
   assert!(l.get(MIN_VERSION, b"aaa").is_none());
   assert!(!l.contains_key(MIN_VERSION, b"aaa"));
   assert!(l.allocated() > 0);
@@ -1829,7 +1829,7 @@ fn iter_all_versions_seek_lt(l: SkipMap) {
   assert_eq!(ent.value().unwrap(), make_value(1990));
 
   l.get_or_insert(MIN_VERSION, &[], &[], ()).unwrap();
-  assert!(l.lt(MIN_VERSION, &[], false).is_none());
+  assert!(l.0.lt(MIN_VERSION, &[], false).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());

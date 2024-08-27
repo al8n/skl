@@ -24,17 +24,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, Ascend, time::Ttl};
-  ///
-  /// let map = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let height = map.random_height();
-  /// map.insert_at_height(Version::new(), height, b"hello", b"world", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
-  /// ```
   pub fn insert_at_height<'a, 'b: 'a>(
     &'a self,
     version: Version,
@@ -86,42 +75,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   #[inline]
   pub fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
@@ -150,43 +103,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
@@ -295,41 +211,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1.into(), b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   #[inline]
   pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
@@ -359,43 +240,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, ValueBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1.into(), height, b"alice", vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
@@ -440,47 +284,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, u27, KeyBuilder, ValueBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// l.insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   #[inline]
   pub fn insert_with_builders<'a, E>(
     &'a self,
@@ -509,48 +312,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   pub fn insert_at_height_with_builders<'a, E>(
     &'a self,
     version: Version,
@@ -596,47 +357,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1.into(), kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   #[inline]
   pub fn get_or_insert_with_builders<'a, E>(
     &'a self,
@@ -663,48 +383,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, KeyBuilder, ValueBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
-  /// });
-  ///
-  /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1.into(), height, kb, vb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   pub fn get_or_insert_at_height_with_builders<'a, E>(
     &'a self,
     version: Version,
@@ -843,19 +521,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, Ascend, time::Ttl};
-  ///
-  /// let map = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// map.insert(Version::new(), b"hello", b"world").unwrap();
-  ///
-  /// let height = map.random_height();
-  /// map.get_or_remove_at_height(Version::new(), height, b"hello", Ttl::new(std::time::Duration::from_secs(60))).unwrap();
-  /// ```
   pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
     version: Version,
@@ -904,40 +569,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, KeyBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1.into(), kb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
@@ -958,41 +589,6 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{SkipList, KeyBuilder, Ascend, time::Ttl};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipList::<Ascend, Ttl>::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1.into(), height, kb, Ttl::new(std::time::Duration::from_secs(60)))
-  /// .unwrap();
-  /// ```
   pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,

@@ -22,7 +22,7 @@ use core::{
 };
 
 /// Skiplist implementation. See [`SkipList`](base::SkipList) for more information.
-pub mod base;
+mod base;
 pub use base::{AllVersionsIter, Entry, EntryRef, Iter, VersionedEntry, VersionedEntryRef};
 
 mod allocator;

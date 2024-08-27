@@ -250,43 +250,6 @@ impl SkipMap {
 }
 
 impl<C> SkipMap<C> {
-  /// Returns the underlying ARENA allocator used by the skipmap.
-  ///
-  /// This is a low level API, you should not use this method unless you know what you are doing.
-  ///
-  /// By default, `skl` does not do any forward and backward compatibility checks when using file backed memory map,
-  /// so this will allow the users to access the ARENA allocator directly, and allocate some bytes or structures
-  /// to help them implement forward and backward compatibility checks.
-  ///
-  /// # Example
-  ///
-  /// ```ignore
-  /// use skl::{unsync::versioned::SkipMap, OpenOptions, MmapOptinos};
-  ///
-  /// const MAGIC_TEXT: u32 = u32::from_le_bytes(*b"al8n");
-  ///
-  /// struct Meta {
-  ///   magic: u32,
-  ///   version: u32,
-  /// }
-  ///
-  /// let map = SkipMap::map_mut(
-  ///   "/path/to/file",
-  ///   OpenOptions::create_new(Some(1000)).read(true).write(true),
-  ///   MmapOptions::default(),
-  /// ).unwrap();
-  /// let arena = map.allocater();
-  /// let mut meta = arena.alloc::<Meta>();
-  ///
-  /// // Safety: Meta does not require any drop, so it is safe to detach it from the ARENA.
-  /// unsafe { meta.detach(); }
-  /// meta.write(Meta { magic: MAGIC_TEXT, version: 1 }); // now the meta info is persisted to the file.
-  /// ```
-  #[inline]
-  pub fn allocator(&self) -> &Arena {
-    self.0.allocator()
-  }
-
   /// Returns the offset of the data section in the `SkipMap`.
   ///
   /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,
@@ -386,12 +349,12 @@ impl<C> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
+  /// use skl::{unsync::versioned::SkipMap, Ascend};
   ///
   /// let map = SkipMap::new().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::estimated_node_size(height, b"k1".len(), b"k2".len());
+  /// let needed = SkipMap::<Ascend>::estimated_node_size(height, b"k1".len(), b"k2".len());
   /// ```
   #[inline]
   pub fn random_height(&self) -> Height {
@@ -606,7 +569,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.remove(1, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, b"hello"));
   /// assert!(map.contains_key_versioned(1, b"hello"));
@@ -627,7 +590,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.remove(1, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, b"hello"));
   /// assert!(map.contains_key_versioned(1, b"hello"));
@@ -664,7 +627,7 @@ impl<C: Comparator> SkipMap<C> {
   /// let ent = map.get(0, b"hello").unwrap();
   /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.remove(1, b"hello").unwrap();
   ///
   /// assert!(map.get(1, b"hello").is_none());
   /// ```
@@ -689,7 +652,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.remove(1, b"hello").unwrap();
   ///
   /// assert!(map.get(1, b"hello").is_none());
   ///
@@ -1351,197 +1314,30 @@ impl<C: Comparator> SkipMap<C> {
       .get_or_insert_at_height_with_builders(version, height, key_builder, value_builder, ())
   }
 
-  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
-  ///
-  /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)`:
-  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
-  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
+  /// Removes the key-value pair if it exists.
   #[inline]
-  pub fn compare_remove<'a, 'b: 'a>(
-    &'a self,
-    version: Version,
-    key: &'b [u8],
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
-    self.compare_remove_at_height(version, self.random_height(), key, success, failure)
-  }
-
-  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
-  ///
-  /// Unlike [`get_or_remove_at_height`](SkipMap::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)`:
-  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
-  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
-  pub fn compare_remove_at_height<'a, 'b: 'a>(
-    &'a self,
-    version: Version,
-    height: Height,
-    key: &'b [u8],
-    success: Ordering,
-    failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
-    self
-      .0
-      .compare_remove_at_height(version, height, key, (), success, failure)
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  #[inline]
-  pub fn get_or_remove<'a, 'b: 'a>(
+  pub fn remove<'a, 'b: 'a>(
     &'a self,
     version: Version,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
-    self.get_or_remove_at_height(version, self.random_height(), key)
+    self.remove_at_height(version, self.random_height(), key)
   }
 
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
-  ///
-  /// let map = SkipMap::new().unwrap();
-  ///
-  /// map.insert(0, b"hello", b"world").unwrap();
-  ///
-  /// let height = map.random_height();
-  /// map.get_or_remove_at_height(0, height, b"hello").unwrap();
-  /// ```
-  #[inline]
-  pub fn get_or_remove_at_height<'a, 'b: 'a>(
+  /// Removes the key-value pair if it exists.
+  pub fn remove_at_height<'a, 'b: 'a>(
     &'a self,
     version: Version,
     height: Height,
     key: &'b [u8],
   ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
-    self.0.get_or_remove_at_height(version, height, key, ())
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_with_builder_and_trailer`](SkipMap::compare_remove_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, KeyBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipMap::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb)
-  /// .unwrap();
-  /// ```
-  pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
-    self
-      .0
-      .get_or_remove_at_height_with_builder(version, self.random_height(), key_builder, ())
-  }
-
-  /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height_with_builder_and_trailer`](SkipMap::compare_remove_at_height_with_builder_and_trailer), this method will not remove the value if the key with the given version already exists.
-  ///
-  /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  ///
-  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
-  /// at this moment.
-  ///
-  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
-  /// and you must fill the buffer with bytes later in the closure.
-  ///
-  /// # Example
-  ///
-  /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, KeyBuilder};
-  ///
-  /// struct Person {
-  ///   id: u32,
-  ///   name: String,
-  /// }
-  ///
-  /// impl Person {
-  ///   fn encoded_size(&self) -> usize {
-  ///     4 + self.name.len()
-  ///   }
-  /// }
-  ///
-  ///
-  /// let alice = Person {
-  ///   id: 1,
-  ///   name: "Alice".to_string(),
-  /// };
-  ///
-  /// let encoded_size = alice.encoded_size();
-  ///
-  /// let l = SkipMap::new().unwrap();
-  ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
-  ///   Ok(())
-  /// });
-  /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1, height, kb)
-  /// .unwrap();
-  /// ```
-  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
-    &'a self,
-    version: Version,
-    height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
-    self
-      .0
-      .get_or_remove_at_height_with_builder(version, height, key_builder, ())
+    self.0.compare_remove_at_height(
+      version,
+      height,
+      key,
+      (),
+      Ordering::Relaxed,
+      Ordering::Relaxed,
+    )
   }
 }

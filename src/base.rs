@@ -27,7 +27,7 @@ type UpdateOk<'a, 'b, A> = Either<
 /// and backward iteration.
 #[derive(Debug)]
 pub struct SkipList<A: Allocator, C = Ascend> {
-  arena: A,
+  pub(crate) arena: A,
   meta: NonNull<A::Header>,
   head: <A::Node as Node>::Pointer,
   tail: <A::Node as Node>::Pointer,

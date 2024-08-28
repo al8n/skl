@@ -117,6 +117,19 @@ impl<A: Allocator> SkipList<A, Ascend> {
 }
 
 impl<A: Allocator, C> SkipList<A, C> {
+  /// Sets remove on drop, only works on mmap with a file backend.
+  ///
+  /// Default is `false`.
+  ///
+  /// > **WARNING:** Once set to `true`, the backed file will be removed when the allocator is dropped, even though the file is opened in
+  /// > read-only mode.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn remove_on_drop(&self, val: bool) {
+    self.arena.remove_on_drop(val);
+  }
+
   /// Returns the offset of the data section in the `SkipList`.
   ///
   /// By default, `SkipList` will allocate meta, head node, and tail node in the ARENA,

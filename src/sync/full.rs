@@ -249,6 +249,27 @@ impl<T: Trailer> SkipMap<T> {
 }
 
 impl<T: Trailer, C> SkipMap<T, C> {
+  /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+    self.0.arena.path()
+  }
+
+  /// Sets remove on drop, only works on mmap with a file backend.
+  ///
+  /// Default is `false`.
+  ///
+  /// > **WARNING:** Once set to `true`, the backed file will be removed when the allocator is dropped, even though the file is opened in
+  /// > read-only mode.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn remove_on_drop(&self, val: bool) {
+    self.0.remove_on_drop(val);
+  }
+
   /// Returns the offset of the data section in the `SkipMap`.
   ///
   /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,

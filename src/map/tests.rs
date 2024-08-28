@@ -1199,7 +1199,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipMap>) {
   #[cfg(any(miri, feature = "loom"))]
   const N: usize = 5;
 
-  let wg = Arc::new(());
+  let mut wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();
@@ -1208,7 +1208,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipMap>) {
       drop(w);
     });
   }
-  while Arc::strong_count(&wg) > 1 {}
+  while Arc::get_mut(&mut wg).is_none() {}
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();
@@ -1292,7 +1292,7 @@ fn test_concurrent_basic_map_anon_unify() {
 }
 
 #[cfg(feature = "std")]
-fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
+fn test_concurrent_basic_big_values_runner(mut l: Arc<SkipMap>) {
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 100;
   #[cfg(any(miri, feature = "loom"))]
@@ -1304,7 +1304,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
       l.get_or_insert(0, &key(i), &big_value(i)).unwrap();
     });
   }
-  while Arc::strong_count(&l) > 1 {}
+  while Arc::get_mut(&mut l).is_none() {}
   // assert_eq!(N, l.len());
   for i in 0..N {
     let l = l.clone();
@@ -1313,7 +1313,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
       assert_eq!(l.get(0, &k).unwrap().value(), big_value(i), "broken: {i}");
     });
   }
-  while Arc::strong_count(&l) > 1 {}
+  while Arc::get_mut(&mut l).is_none() {}
 }
 
 #[test]

@@ -426,9 +426,13 @@ mod sealed {
 
     type Allocator: ArenaAllocator;
 
-    fn reserved_slice(&self) -> &[u8];
+    fn reserved_slice(&self) -> &[u8] {
+      ArenaAllocator::reserved_slice(core::ops::Deref::deref(self))
+    }
 
-    unsafe fn reserved_slice_mut(&self) -> &mut [u8];
+    unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
+      ArenaAllocator::reserved_slice_mut(core::ops::Deref::deref(self))
+    }
 
     fn new(arena_opts: ArenaOptions, opts: Options) -> Self;
 
@@ -680,20 +684,6 @@ mod sealed {
           value: Some(value_deallocate_info),
         };
 
-        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-        if let Err(e) = self.flush_node(
-          (node_offset as u32, node.capacity() as u32),
-          Some((key_offset as u32, key.capacity() as u32)),
-          Some((
-            trailer_and_value.memory_offset() as u32,
-            trailer_and_value.memory_capacity() as u32,
-          )),
-        ) {
-          deallocator.dealloc(self);
-
-          return Err(Either::Right(e));
-        }
-
         Ok((
           NodePointer::new(node_ptr as _, node_offset as u32),
           deallocator,
@@ -748,19 +738,6 @@ mod sealed {
             mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
           )),
         };
-
-        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-        if let Err(e) = self.flush_node(
-          (node_offset as u32, node.capacity() as u32),
-          None,
-          Some((
-            trailer_ref.memory_offset() as u32,
-            trailer_ref.memory_capacity() as u32,
-          )),
-        ) {
-          deallocator.dealloc(self);
-          return Err(Either::Right(e));
-        }
 
         Ok((
           NodePointer::new(node_ptr as _, node_offset as u32),
@@ -827,19 +804,6 @@ mod sealed {
             mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
           )),
         };
-
-        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-        if let Err(e) = self.flush_node(
-          (node_offset as u32, node.capacity() as u32),
-          Some((key_offset as u32, key.capacity() as u32)),
-          Some((
-            trailer_ref.memory_offset() as u32,
-            trailer_ref.memory_capacity() as u32,
-          )),
-        ) {
-          deallocator.dealloc(self);
-          return Err(Either::Right(e));
-        }
 
         Ok((
           NodePointer::new(node_ptr as _, node_offset as u32),
@@ -908,19 +872,6 @@ mod sealed {
           key: None,
           value: Some(value_deallocate_info),
         };
-
-        #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-        if let Err(e) = self.flush_node(
-          (node_offset as u32, node.capacity() as u32),
-          None,
-          Some((
-            trailer_and_value.memory_offset() as u32,
-            trailer_and_value.memory_capacity() as u32,
-          )),
-        ) {
-          deallocator.dealloc(self);
-          return Err(Either::Right(e));
-        }
 
         Ok((
           NodePointer::new(node_ptr as _, node_offset as u32),
@@ -1000,90 +951,6 @@ mod sealed {
       let (_, old_len) = node.value_pointer().swap(trailer_offset as u32, value_size);
       if old_len != <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
         self.increase_discarded(old_len);
-      }
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-      {
-        if self.is_ondisk_and_mmap() {
-          bytes.flush().map_err(|e| Either::Right(e.into()))?;
-        }
-      }
-
-      Ok(())
-    }
-
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    #[inline]
-    fn flush_node(
-      &self,
-      // (offset, size)
-      (node_offset, node_size): (u32, u32),
-      // (offset, size)
-      key: Option<(u32, u32)>,
-      // (offset, size)
-      value: Option<(u32, u32)>,
-    ) -> Result<(), Error> {
-      use arrayvec::ArrayVec;
-
-      if self.is_ondisk_and_mmap() {
-        fn calculate_page_bounds(offset: u32, size: u32, page_size: u32) -> (u32, u32) {
-          let start_page = offset / page_size;
-          let end_page = (offset + size).saturating_sub(1) / page_size;
-          (start_page, end_page)
-        }
-
-        let page_size = self.page_size() as u32;
-        let mut ranges = ArrayVec::<(u32, u32), 3>::new_const();
-        ranges.push(calculate_page_bounds(node_offset, node_size, page_size));
-
-        if let Some((offset, size)) = key {
-          ranges.push(calculate_page_bounds(offset, size, page_size));
-        }
-
-        if let Some((offset, size)) = value {
-          ranges.push(calculate_page_bounds(offset, size, page_size));
-        }
-
-        let len = ranges.len();
-
-        match len {
-          1 => {
-            return self
-              .flush_range(node_offset as usize, node_size as usize)
-              .map_err(Into::into);
-          }
-          2..=3 => {
-            // Sort ranges by start page
-            ranges.sort_by_key(|&(start, _)| start);
-
-            let mut merged_ranges = ArrayVec::<(u32, u32), 3>::new_const();
-
-            for (start, end) in ranges {
-              match merged_ranges.last_mut() {
-                None => {
-                  merged_ranges.push((start, end));
-                }
-                // no overlap
-                Some((_, last_end)) if *last_end < start => {
-                  merged_ranges.push((start, end));
-                }
-                // overlap
-                Some((_, last)) => {
-                  *last = (*last).max(end);
-                }
-              }
-            }
-
-            for (start, end) in merged_ranges {
-              let spo = (start * page_size) as usize;
-              let epo = (end * page_size) as usize;
-              self.flush_range(spo, (epo - spo).max(1))?;
-            }
-
-            return Ok(());
-          }
-          _ => unreachable!(),
-        }
       }
 
       Ok(())
@@ -1171,14 +1038,6 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   type Trailer = <N as Node>::Trailer;
 
   type Allocator = A;
-
-  fn reserved_slice(&self) -> &[u8] {
-    self.arena.reserved_slice()
-  }
-
-  unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
-    self.arena.reserved_slice_mut()
-  }
 
   fn new(arena_opts: ArenaOptions, opts: Options) -> Self {
     Self {

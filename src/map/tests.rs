@@ -34,9 +34,13 @@ pub fn key(i: usize) -> std::vec::Vec<u8> {
 }
 
 /// Only used for testing
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(miri)))]
 pub fn big_value(i: usize) -> std::vec::Vec<u8> {
   format!("{:01048576}", i).into_bytes()
+}
+#[cfg(all(feature = "std", miri))]
+pub fn big_value(i: usize) -> std::vec::Vec<u8> {
+  format!("{:01024}", i).into_bytes()
 }
 
 /// Only used for testing
@@ -1120,7 +1124,10 @@ fn test_lt_map_anon_unify() {
 }
 
 fn test_basic_large_testcases_in(l: Arc<SkipMap>) {
+  #[cfg(not(miri))]
   let n = 1000;
+  #[cfg(miri)]
+  let n = 200; //takes about 30s on miri, that's large enough
 
   for i in 0..n {
     l.get_or_insert(0, &key(i), &new_value(i)).unwrap();

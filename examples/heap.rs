@@ -12,7 +12,7 @@ pub fn new_value(i: usize) -> Vec<u8> {
 fn main() {
   const N: usize = 1000;
   let l = SkipMap::with_options(Options::new().with_capacity(1 << 20)).unwrap();
-  let wg = Arc::new(());
+  let mut wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();
@@ -21,7 +21,7 @@ fn main() {
       drop(w);
     });
   }
-  while Arc::strong_count(&wg) > 1 {}
+  while Arc::get_mut(&mut wg).is_none() {}
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();

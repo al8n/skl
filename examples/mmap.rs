@@ -18,7 +18,7 @@ fn main() {
     .write(true);
 
   let l = SkipMap::map_mut("test.wal", open_options, mmap_options).unwrap();
-  let wg = Arc::new(());
+  let mut wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();
@@ -27,7 +27,7 @@ fn main() {
       drop(w);
     });
   }
-  while Arc::strong_count(&wg) > 1 {}
+  while Arc::get_mut(&mut wg).is_none() {}
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();

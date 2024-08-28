@@ -426,6 +426,10 @@ mod sealed {
 
     type Allocator: ArenaAllocator;
 
+    fn reserved_slice(&self) -> &[u8];
+
+    unsafe fn reserved_slice_mut(&self) -> &mut [u8];
+
     fn new(arena_opts: ArenaOptions, opts: Options) -> Self;
 
     /// Creates a new ARENA backed by an anonymous mmap with the given capacity.
@@ -453,10 +457,10 @@ mod sealed {
     #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
     fn map<P: AsRef<std::path::Path>>(
       path: P,
+      arena_opts: ArenaOptions,
       open_options: OpenOptions,
       mmap_options: MmapOptions,
       opts: Options,
-      magic_version: u16,
     ) -> std::io::Result<Self>;
 
     /// Creates a new ARENA backed by a mmap with the given options.
@@ -477,10 +481,10 @@ mod sealed {
     #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
     fn map_with_path_builder<PB, E>(
       path_builder: PB,
+      arena_opts: ArenaOptions,
       open_options: OpenOptions,
       mmap_options: MmapOptions,
       opts: Options,
-      magic_version: u16,
     ) -> Result<Self, Either<E, std::io::Error>>
     where
       PB: FnOnce() -> Result<std::path::PathBuf, E>;
@@ -1168,6 +1172,14 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   type Allocator = A;
 
+  fn reserved_slice(&self) -> &[u8] {
+    self.arena.reserved_slice()
+  }
+
+  unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
+    self.arena.reserved_slice_mut()
+  }
+
   fn new(arena_opts: ArenaOptions, opts: Options) -> Self {
     Self {
       arena: A::new(arena_opts),
@@ -1216,12 +1228,12 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   fn map<P: AsRef<std::path::Path>>(
     path: P,
+    arena_options: rarena_allocator::ArenaOptions,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     opts: Options,
-    magic_version: u16,
   ) -> std::io::Result<Self> {
-    A::map(path, open_options, mmap_options, magic_version).map(|arena| Self {
+    A::map(path, arena_options, open_options, mmap_options).map(|arena| Self {
       arena,
       max_key_size: opts.max_key_size().into(),
       max_value_size: opts.max_value_size(),
@@ -1257,15 +1269,15 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   fn map_with_path_builder<PB, E>(
     path_builder: PB,
+    arena_options: rarena_allocator::ArenaOptions,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     opts: Options,
-    magic_version: u16,
   ) -> Result<Self, Either<E, std::io::Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    A::map_with_path_builder(path_builder, open_options, mmap_options, magic_version).map(|arena| {
+    A::map_with_path_builder(path_builder, arena_options, open_options, mmap_options).map(|arena| {
       Self {
         arena,
         max_key_size: opts.max_key_size().into(),

@@ -28,6 +28,7 @@ pub struct Options {
   unify: bool,
   freelist: Freelist,
   policy: CompressionPolicy,
+  reserved: u32,
 }
 
 impl Default for Options {
@@ -50,7 +51,33 @@ impl Options {
       magic_version: 0,
       freelist: Freelist::Optimistic,
       policy: CompressionPolicy::Fast,
+      reserved: 0,
     }
+  }
+
+  /// Set the reserved bytes of the ARENA.
+  ///
+  /// The reserved is used to configure the start position of the ARENA. This is useful
+  /// when you want to add some bytes before the ARENA, e.g. when using the memory map file backed ARENA,
+  /// you can set the reserved to the size to `8` to store a 8 bytes checksum.
+  ///
+  /// The default reserved is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_reserved(8);
+  /// ```
+  #[inline]
+  pub const fn with_reserved(mut self, reserved: u32) -> Self {
+    self.reserved = if self.capacity <= reserved {
+      self.capacity
+    } else {
+      reserved
+    };
+    self
   }
 
   /// Set the magic version of the [`SkipMap`](super::SkipMap).
@@ -199,6 +226,28 @@ impl Options {
   pub const fn with_capacity(mut self, capacity: u32) -> Self {
     self.capacity = capacity;
     self
+  }
+
+  /// Get the reserved of the ARENA.
+  ///
+  /// The reserved is used to configure the start position of the ARENA. This is useful
+  /// when you want to add some bytes before the ARENA, e.g. when using the memory map file backed ARENA,
+  /// you can set the reserved to the size to `8` to store a 8 bytes checksum.
+  ///
+  /// The default reserved is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_reserved(8);
+  ///
+  /// assert_eq!(opts.reserved(), 8);
+  /// ```
+  #[inline]
+  pub const fn reserved(&self) -> u32 {
+    self.reserved
   }
 
   /// Returns the maximum size of the value.

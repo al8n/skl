@@ -30,14 +30,8 @@ impl<A: Allocator> SkipList<A, Ascend> {
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// [`SkipList::mmap_anon`]: #method.mmap_anon
-  pub fn new() -> Result<Self, Error> {
-    Self::with_options(Options::new())
-  }
-
-  /// Like [`SkipList::new`], but with [`Options`].
-  #[inline]
-  pub fn with_options(opts: Options) -> Result<Self, Error> {
-    Self::with_options_and_comparator(opts, Ascend)
+  pub fn new(opts: Options) -> Result<Self, Error> {
+    Self::with_comparator(opts, Ascend)
   }
 
   /// Create a new memory map file backed with default options.
@@ -51,25 +45,11 @@ impl<A: Allocator> SkipList<A, Ascend> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_mut<P: AsRef<std::path::Path>>(
     path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_options(path, Options::new(), open_options, mmap_options)
-  }
-
-  /// Like [`SkipList::map_mut`], but with [`Options`].
-  ///
-  /// # Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_mut_with_options<P: AsRef<std::path::Path>>(
-    path: P,
     opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
   ) -> std::io::Result<Self> {
-    Self::map_mut_with_options_and_comparator(path, opts, open_options, mmap_options, Ascend)
+    Self::map_mut_with_comparator(path, opts, open_options, mmap_options, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
@@ -80,11 +60,11 @@ impl<A: Allocator> SkipList<A, Ascend> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map<P: AsRef<std::path::Path>>(
     path: P,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
-    magic_version: u16,
   ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, open_options, mmap_options, Ascend, magic_version)
+    Self::map_with_comparator(path, opts, open_options, mmap_options, Ascend)
   }
 
   /// Create a new memory map backed skipmap with default options.
@@ -104,15 +84,8 @@ impl<A: Allocator> SkipList<A, Ascend> {
   /// [`SkipList::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
-  }
-
-  /// Like [`SkipList::map_anon`], but with [`Options`].
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon_with_options(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::map_anon_with_options_and_comparator(opts, mmap_options, Ascend)
+  pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::map_anon_with_comparator(opts, mmap_options, Ascend)
   }
 }
 
@@ -247,13 +220,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
   /// Like [`SkipList::new`], but with a custom [`Comparator`].
   #[inline]
-  pub fn with_comparator(cmp: C) -> Result<Self, Error> {
-    Self::with_options_and_comparator(Options::new(), cmp)
-  }
-
-  /// Like [`SkipList::new`], but with [`Options`] and a custom [`Comparator`].
-  #[inline]
-  pub fn with_options_and_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
+  pub fn with_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
     let arena_opts = ArenaOptions::new()
       .with_capacity(opts.capacity())
       .with_maximum_alignment(mem::align_of::<A::Node>())
@@ -264,22 +231,6 @@ impl<A: Allocator, C> SkipList<A, C> {
     Self::new_in(arena, cmp, opts)
   }
 
-  /// Like [`SkipList::map_mut`], but with a custom [`Comparator`].
-  ///
-  /// # Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_options_and_comparator(path, Options::new(), open_options, mmap_options, cmp)
-  }
-
   /// Like [`SkipList::map_mut`], but with [`Options`] and a custom [`Comparator`].
   ///
   /// # Safety
@@ -287,7 +238,7 @@ impl<A: Allocator, C> SkipList<A, C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map_mut_with_options_and_comparator<P: AsRef<std::path::Path>>(
+  pub unsafe fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
     opts: Options,
     open_options: OpenOptions,
@@ -327,7 +278,7 @@ impl<A: Allocator, C> SkipList<A, C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map_mut_with_options_and_comparator_and_path_builder<PB, E>(
+  pub unsafe fn map_mut_with_comparator_and_path_builder<PB, E>(
     path_builder: PB,
     opts: Options,
     open_options: OpenOptions,
@@ -374,15 +325,17 @@ impl<A: Allocator, C> SkipList<A, C> {
   #[inline]
   pub unsafe fn map_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
-    magic_version: u16,
   ) -> std::io::Result<Self> {
-    let opts = Options::new()
-      .with_unify(true)
-      .with_magic_version(magic_version);
-    let arena = A::map(path, open_options, mmap_options, opts, CURRENT_VERSION)?;
+    let opts = opts.with_unify(true);
+    let magic_version = opts.magic_version();
+    let arena_opts = ArenaOptions::new()
+      .with_magic_version(CURRENT_VERSION)
+      .with_reserved(opts.reserved());
+    let arena = A::map(path, arena_opts, open_options, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts)
       .map_err(invalid_data)
       .and_then(|map| {
@@ -412,24 +365,22 @@ impl<A: Allocator, C> SkipList<A, C> {
   #[inline]
   pub unsafe fn map_with_comparator_and_path_builder<PB, E>(
     path_builder: PB,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
-    magic_version: u16,
   ) -> Result<Self, Either<E, std::io::Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    let opts = Options::new()
-      .with_unify(true)
-      .with_magic_version(magic_version);
-    let arena = A::map_with_path_builder(
-      path_builder,
-      open_options,
-      mmap_options,
-      opts,
-      CURRENT_VERSION,
-    )?;
+    let opts = opts.with_unify(true);
+
+    let magic_version = opts.magic_version();
+    let arena_opts = ArenaOptions::new()
+      .with_magic_version(CURRENT_VERSION)
+      .with_reserved(opts.reserved());
+    let arena =
+      A::map_with_path_builder(path_builder, arena_opts, open_options, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts)
       .map_err(invalid_data)
       .and_then(|map| {
@@ -454,15 +405,7 @@ impl<A: Allocator, C> SkipList<A, C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
-    Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, cmp)
-  }
-
-  /// Like [`SkipList::map_anon`], but with [`Options`] and a custom [`Comparator`].
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub fn map_anon_with_options_and_comparator(
+  pub fn map_anon_with_comparator(
     opts: Options,
     mmap_options: MmapOptions,
     cmp: C,

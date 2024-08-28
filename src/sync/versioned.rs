@@ -163,14 +163,8 @@ impl SkipMap {
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// [`SkipMap::mmap_anon`]: #method.mmap_anon
-  pub fn new() -> Result<Self, Error> {
-    Self::with_options(Options::new())
-  }
-
-  /// Like [`SkipMap::new`], but with [`Options`].
-  #[inline]
-  pub fn with_options(opts: Options) -> Result<Self, Error> {
-    Self::with_options_and_comparator(opts, Ascend)
+  pub fn new(opts: Options) -> Result<Self, Error> {
+    Self::with_comparator(opts, Ascend)
   }
 
   /// Create a new memory map file backed with default options.
@@ -184,25 +178,11 @@ impl SkipMap {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_mut<P: AsRef<std::path::Path>>(
     path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_options(path, Options::new(), open_options, mmap_options)
-  }
-
-  /// Like [`SkipMap::map_mut`], but with [`Options`].
-  ///
-  /// # Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_mut_with_options<P: AsRef<std::path::Path>>(
-    path: P,
     opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
   ) -> std::io::Result<Self> {
-    Self::map_mut_with_options_and_comparator(path, opts, open_options, mmap_options, Ascend)
+    Self::map_mut_with_comparator(path, opts, open_options, mmap_options, Ascend)
   }
 
   /// Open an exist file and mmap it to create skipmap.
@@ -213,11 +193,11 @@ impl SkipMap {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map<P: AsRef<std::path::Path>>(
     path: P,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
-    magic_version: u16,
   ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, open_options, mmap_options, Ascend, magic_version)
+    Self::map_with_comparator(path, opts, open_options, mmap_options, Ascend)
   }
 
   /// Create a new memory map backed skipmap with default options.
@@ -237,19 +217,30 @@ impl SkipMap {
   /// [`SkipMap::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon(mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, Ascend)
-  }
-
-  /// Like [`SkipMap::map_anon`], but with [`Options`].
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon_with_options(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::map_anon_with_options_and_comparator(opts, mmap_options, Ascend)
+  pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
+    Self::map_anon_with_comparator(opts, mmap_options, Ascend)
   }
 }
 
 impl<C> SkipMap<C> {
+  /// Returns the reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
+  #[inline]
+  pub fn reserved_slice(&self) -> &[u8] {
+    self.0.arena.reserved_slice()
+  }
+
+  /// Returns the mutable reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
+  ///
+  /// # Safety
+  /// - The caller need to make sure there is no data-race
+  ///
+  /// # Panics
+  /// - If in read-only mode, it will panic.
+  #[inline]
+  #[allow(clippy::mut_from_ref)]
+  pub unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
+    self.0.arena.reserved_slice_mut()
+  }
   /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -372,7 +363,7 @@ impl<C> SkipMap<C> {
   /// ```rust
   /// use skl::{sync::versioned::SkipMap, Ascend};
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<Ascend>::estimated_node_size(height, b"k1".len(), b"k2".len());
@@ -392,14 +383,8 @@ impl<C> SkipMap<C> {
 
   /// Like [`SkipMap::new`], but with a custom [`Comparator`].
   #[inline]
-  pub fn with_comparator(cmp: C) -> Result<Self, Error> {
-    Self::with_options_and_comparator(Options::new(), cmp)
-  }
-
-  /// Like [`SkipMap::new`], but with [`Options`] and a custom [`Comparator`].
-  #[inline]
-  pub fn with_options_and_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
-    SkipList::with_options_and_comparator(opts, cmp).map(Self)
+  pub fn with_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
+    SkipList::with_comparator(opts, cmp).map(Self)
   }
 
   /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
@@ -411,29 +396,12 @@ impl<C> SkipMap<C> {
   #[inline]
   pub unsafe fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_options_and_comparator(path, Options::new(), open_options, mmap_options, cmp)
-  }
-
-  /// Like [`SkipMap::map_mut`], but with [`Options`] and a custom [`Comparator`].
-  ///
-  /// # Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_mut_with_options_and_comparator<P: AsRef<std::path::Path>>(
-    path: P,
     opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    SkipList::map_mut_with_options_and_comparator(path, opts, open_options, mmap_options, cmp)
-      .map(Self)
+    SkipList::map_mut_with_comparator(path, opts, open_options, mmap_options, cmp).map(Self)
   }
 
   /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
@@ -443,7 +411,7 @@ impl<C> SkipMap<C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map_mut_with_options_and_comparator_and_path_builder<PB, E>(
+  pub unsafe fn map_mut_with_comparator_and_path_builder<PB, E>(
     path_builder: PB,
     opts: Options,
     open_options: OpenOptions,
@@ -453,7 +421,7 @@ impl<C> SkipMap<C> {
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    SkipList::map_mut_with_options_and_comparator_and_path_builder(
+    SkipList::map_mut_with_comparator_and_path_builder(
       path_builder,
       opts,
       open_options,
@@ -472,12 +440,12 @@ impl<C> SkipMap<C> {
   #[inline]
   pub unsafe fn map_with_comparator<P: AsRef<std::path::Path>>(
     path: P,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
-    magic_version: u16,
   ) -> std::io::Result<Self> {
-    SkipList::map_with_comparator(path, open_options, mmap_options, cmp, magic_version).map(Self)
+    SkipList::map_with_comparator(path, opts, open_options, mmap_options, cmp).map(Self)
   }
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
@@ -489,20 +457,20 @@ impl<C> SkipMap<C> {
   #[inline]
   pub unsafe fn map_with_comparator_and_path_builder<PB, E>(
     path_builder: PB,
+    opts: Options,
     open_options: OpenOptions,
     mmap_options: MmapOptions,
     cmp: C,
-    magic_version: u16,
   ) -> Result<Self, either::Either<E, std::io::Error>>
   where
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     SkipList::map_with_comparator_and_path_builder(
       path_builder,
+      opts,
       open_options,
       mmap_options,
       cmp,
-      magic_version,
     )
     .map(Self)
   }
@@ -511,20 +479,12 @@ impl<C> SkipMap<C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_anon_with_comparator(mmap_options: MmapOptions, cmp: C) -> std::io::Result<Self> {
-    Self::map_anon_with_options_and_comparator(Options::new(), mmap_options, cmp)
-  }
-
-  /// Like [`SkipMap::map_anon`], but with [`Options`] and a custom [`Comparator`].
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub fn map_anon_with_options_and_comparator(
+  pub fn map_anon_with_comparator(
     opts: Options,
     mmap_options: MmapOptions,
     cmp: C,
   ) -> std::io::Result<Self> {
-    SkipList::map_anon_with_options_and_comparator(opts, mmap_options, cmp).map(Self)
+    SkipList::map_anon_with_comparator(opts, mmap_options, cmp).map(Self)
   }
 
   /// Clear the skiplist to empty and re-initialize.
@@ -538,7 +498,7 @@ impl<C> SkipMap<C> {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// map.insert(1u8, b"hello", b"world").unwrap();
   ///
@@ -592,7 +552,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```rust
   /// use skl::sync::versioned::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -613,7 +573,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```rust
   /// use skl::sync::versioned::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -647,7 +607,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```rust
   /// use skl::sync::versioned::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -675,7 +635,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```rust
   /// use skl::sync::versioned::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -779,7 +739,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```rust
   /// use skl::sync::versioned::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(0, height, b"hello", b"world").unwrap();
@@ -831,7 +791,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -894,7 +854,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -991,7 +951,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1053,7 +1013,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -1114,7 +1074,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1182,7 +1142,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1246,7 +1206,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1312,7 +1272,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1406,7 +1366,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```rust
   /// use skl::sync::versioned::SkipMap;
   ///
-  /// let map = SkipMap::new().unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -1459,7 +1419,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1514,7 +1474,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::new().unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();

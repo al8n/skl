@@ -241,8 +241,8 @@ jobs:
         working-directory: integration
       
  
-  miri:
-    name: miri
+  miri-tb:
+    name: miri-tb
     strategy:
       matrix:
         os:
@@ -265,10 +265,40 @@ jobs:
       - name: Install cargo-hack
         run: cargo install cargo-hack
       - name: Miri (Linux)
-        run: ci/miri.sh
+        run: ci/miri_tb.sh
         if: matrix.os == 'ubuntu-latest'
       - name: Miri
-        run: ci/miri_generic.sh
+        run: ci/miri_tb_generic.sh
+        if: matrix.os != 'ubuntu-latest'
+
+  miri-sb:
+    name: miri-sb
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          # - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cache cargo build and registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-miri-
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+      - name: Miri (Linux)
+        run: ci/miri_sb.sh
+        if: matrix.os == 'ubuntu-latest'
+      - name: Miri
+        run: ci/miri_sb_generic.sh
         if: matrix.os != 'ubuntu-latest'
 
   # loom:

@@ -226,7 +226,8 @@ impl<A: Allocator, C> SkipList<A, C> {
       .with_maximum_alignment(mem::align_of::<A::Node>())
       .with_unify(opts.unify())
       .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist());
+      .with_freelist(opts.freelist())
+      .with_reserved(opts.reserved());
     let arena = A::new(arena_opts, opts);
     Self::new_in(arena, cmp, opts)
   }
@@ -249,7 +250,8 @@ impl<A: Allocator, C> SkipList<A, C> {
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
       .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist());
+      .with_freelist(opts.freelist())
+      .with_reserved(opts.reserved());
     let arena = A::map_mut(path, arena_opts, open_options, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts.with_unify(true))
       .map_err(invalid_data)
@@ -292,7 +294,8 @@ impl<A: Allocator, C> SkipList<A, C> {
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
       .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist());
+      .with_freelist(opts.freelist())
+      .with_reserved(opts.reserved());
     let arena =
       A::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts.with_unify(true))
@@ -414,7 +417,8 @@ impl<A: Allocator, C> SkipList<A, C> {
     let arena_opts = ArenaOptions::new()
       .with_maximum_alignment(alignment)
       .with_unify(opts.unify())
-      .with_magic_version(CURRENT_VERSION);
+      .with_magic_version(CURRENT_VERSION)
+      .with_reserved(opts.reserved());
     let arena = A::map_anon(arena_opts, mmap_options, opts)?;
     Self::new_in(arena, cmp, opts)
       .map_err(invalid_data)

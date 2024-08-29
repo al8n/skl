@@ -1890,6 +1890,64 @@ fn test_reopen_mmap() {
 #[test]
 #[cfg(feature = "memmap")]
 #[cfg_attr(miri, ignore)]
+fn test_reopen_mmap_with_reserved() {
+  run(|| unsafe {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("reopen_skipmap_with_reserved");
+    {
+      let open_options = OpenOptions::default()
+        .create(Some(ARENA_SIZE as u32))
+        .read(true)
+        .write(true);
+      let map_options = MmapOptions::default();
+      let l = SkipMap::map_mut(
+        &p,
+        Options::new().with_reserved(5),
+        open_options,
+        map_options,
+      )
+      .unwrap();
+      for i in 0..1000 {
+        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
+          .unwrap();
+      }
+      l.flush().unwrap();
+      let slice = l.reserved_slice_mut();
+      assert_eq!(slice.len(), 5);
+      for i in 0..5 {
+        slice[i] = i as u8;
+      }
+    }
+
+    let open_options = OpenOptions::default().read(true);
+    let map_options = MmapOptions::default();
+    let l = SkipMap::map(
+      &p,
+      Options::new().with_reserved(5),
+      open_options,
+      map_options,
+    )
+    .unwrap();
+    assert_eq!(1000, l.len());
+    for i in 0..1000 {
+      let k = key(i);
+      let ent = l.get(MIN_VERSION, &k).unwrap();
+      assert_eq!(new_value(i), ent.value());
+      assert_eq!(ent.version(), 0);
+      assert_eq!(ent.key(), k);
+    }
+
+    let slice = l.reserved_slice();
+    assert_eq!(slice.len(), 5);
+    for i in 0..5 {
+      assert_eq!(slice[i], i as u8);
+    }
+  })
+}
+
+#[test]
+#[cfg(feature = "memmap")]
+#[cfg_attr(miri, ignore)]
 fn test_reopen_mmap2() {
   run(|| unsafe {
     use rand::seq::SliceRandom;

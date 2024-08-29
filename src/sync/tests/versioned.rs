@@ -1116,19 +1116,15 @@ fn test_concurrent_basic_runner(l: SkipMap) {
   #[cfg(any(miri, feature = "loom"))]
   const N: usize = 5;
 
-  let wg = Arc::new(());
   for i in 0..N {
-    let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
       l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
         .unwrap();
-      drop(w);
     });
   }
-  while Arc::strong_count(&wg) > 1 {}
+  while l.refs() > 1 {}
   for i in 0..N {
-    let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
@@ -1137,7 +1133,6 @@ fn test_concurrent_basic_runner(l: SkipMap) {
         new_value(i),
         "broken: {i}"
       );
-      drop(w);
     });
   }
 }

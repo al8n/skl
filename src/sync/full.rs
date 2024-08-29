@@ -360,9 +360,9 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Ascend};
+  /// use skl::{sync::full::SkipMap, Options, Ascend};
   ///
-  /// let map = SkipMap::<u64, Ascend>::new().unwrap();
+  /// let map = SkipMap::<u64, Ascend>::new(Options::new()).unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<u64, Ascend>::estimated_node_size(height, b"k1".len(), b"k2".len());
@@ -550,7 +550,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::full::SkipMap;
+  /// use skl::{sync::full::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -571,7 +571,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::full::SkipMap;
+  /// use skl::{sync::full::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -605,7 +605,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::full::SkipMap;
+  /// use skl::{sync::full::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -633,7 +633,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::full::SkipMap;
+  /// use skl::{sync::full::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -738,7 +738,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::full::SkipMap;
+  /// use skl::{sync::full::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -773,7 +773,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -837,7 +837,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -935,7 +935,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -999,7 +999,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1060,7 +1060,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1129,7 +1129,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1193,7 +1193,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1260,7 +1260,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1388,9 +1388,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::full::SkipMap;
+  /// use skl::{sync::full::SkipMap, Options};
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// map.insert(0, b"hello", b"world", 10).unwrap();
   ///
@@ -1424,7 +1424,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, KeyBuilder};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1478,7 +1478,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, KeyBuilder};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,

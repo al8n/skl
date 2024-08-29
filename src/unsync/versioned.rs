@@ -362,7 +362,7 @@ impl<C> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, Ascend};
+  /// use skl::{unsync::versioned::SkipMap, Ascend, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   /// let height = map.random_height();
@@ -542,7 +542,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
+  /// use skl::{unsync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -563,7 +563,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
+  /// use skl::{unsync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -597,7 +597,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
+  /// use skl::{unsync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -625,7 +625,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
+  /// use skl::{unsync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -729,7 +729,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::unsync::versioned::SkipMap;
+  /// use skl::{unsync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
@@ -762,7 +762,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -825,7 +825,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -922,7 +922,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -984,7 +984,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1045,7 +1045,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1113,7 +1113,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1177,7 +1177,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1243,7 +1243,7 @@ impl<C: Comparator> SkipMap<C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,

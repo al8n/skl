@@ -350,9 +350,9 @@ impl<T: Trailer, C> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::trailed::SkipMap;
+  /// use skl::{sync::trailed::SkipMap, Options};
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
@@ -551,9 +551,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, Ascend};
+  /// use skl::{sync::trailed::SkipMap, Options};
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(height, b"hello", b"world", 10).unwrap();
@@ -585,7 +585,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -606,7 +606,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -648,7 +648,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -669,7 +669,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -745,7 +745,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -766,7 +766,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -808,7 +808,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -829,7 +829,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.write(&alice.id.to_le_bytes()).unwrap();
@@ -872,7 +872,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -893,7 +893,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -940,7 +940,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -961,7 +961,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1003,7 +1003,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1024,7 +1024,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1069,7 +1069,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder};
+  /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1090,7 +1090,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1195,9 +1195,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::trailed::SkipMap;
+  /// use skl::{sync::trailed::SkipMap, Options};
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// map.insert(b"hello", b"world", 10).unwrap();
   ///
@@ -1230,7 +1230,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder};
+  /// use skl::{sync::trailed::SkipMap, KeyBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1251,7 +1251,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1288,7 +1288,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, KeyBuilder};
+  /// use skl::{sync::trailed::SkipMap, KeyBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1309,7 +1309,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new().unwrap();
+  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.write(b"alice").unwrap();
@@ -1337,10 +1337,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::trailed::SkipMap;
+  /// use skl::{sync::trailed::SkipMap, Options};
   /// use core::sync::atomic::Ordering;
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// map.insert(b"hello", b"world", 10).unwrap();
   ///
@@ -1368,10 +1368,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// # Example
   ///
   /// ```rust
-  /// use skl::sync::trailed::SkipMap;
+  /// use skl::{sync::trailed::SkipMap, Options};
   /// use core::sync::atomic::Ordering;
   ///
-  /// let map = SkipMap::<u64>::new().unwrap();
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   ///
   /// map.insert(b"hello", b"world", 10).unwrap();
   ///

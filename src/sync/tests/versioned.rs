@@ -1364,7 +1364,7 @@ fn test_concurrent_one_key_unify() {
 
 #[test]
 #[cfg(feature = "memmap")]
-// #[cfg_attr(miri, ignore)]
+#[cfg_attr(miri, ignore)]
 fn test_concurrent_one_key_map_mut() {
   run(|| unsafe {
     let dir = tempfile::tempdir().unwrap();

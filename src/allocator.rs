@@ -286,7 +286,7 @@ mod sealed {
       (
         trailer,
         Some(arena.get_bytes(value_offset as usize, len as usize)),
-        ValuePartPointer::new(offset, value_offset as u32, len),
+        ValuePartPointer::new(offset, value_offset, len),
       )
     }
 

@@ -438,6 +438,7 @@ impl<A: Allocator, C> SkipList<A, C> {
         .map_err(invalid_data)
         .and_then(|map| {
           // Lock the memory of first page to prevent it from being swapped out.
+          #[cfg(not(windows))]
           unsafe {
             map
               .arena

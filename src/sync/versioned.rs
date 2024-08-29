@@ -584,7 +584,7 @@ impl<C: Comparator> SkipMap<C> {
   /// ```
   #[inline]
   pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
-    self.get_versioned(version, key).is_some()
+    self.0.contains_key_versioned(version, key)
   }
 
   /// Returns the first entry in the map.

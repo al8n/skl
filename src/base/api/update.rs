@@ -75,6 +75,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
+  #[allow(dead_code)]
   #[inline]
   pub fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
@@ -142,6 +143,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
+  #[allow(dead_code)]
   #[inline]
   pub fn get_or_insert<'a, 'b: 'a>(
     &'a self,
@@ -211,6 +213,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
+  #[allow(dead_code)]
   #[inline]
   pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
@@ -284,6 +287,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
+  #[allow(dead_code)]
   #[inline]
   pub fn insert_with_builders<'a, E>(
     &'a self,
@@ -357,6 +361,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
+  #[allow(dead_code)]
   #[inline]
   pub fn get_or_insert_with_builders<'a, E>(
     &'a self,
@@ -429,6 +434,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
+  #[allow(dead_code)]
   #[inline]
   pub fn compare_remove<'a, 'b: 'a>(
     &'a self,
@@ -506,6 +512,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  #[allow(dead_code)]
   #[inline]
   pub fn get_or_remove<'a, 'b: 'a>(
     &'a self,
@@ -569,6 +576,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
+  #[allow(dead_code)]
   pub fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,

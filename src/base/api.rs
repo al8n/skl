@@ -30,6 +30,7 @@ impl<A: Allocator> SkipList<A, Ascend> {
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// [`SkipList::mmap_anon`]: #method.mmap_anon
+  #[allow(dead_code)]
   pub fn new(opts: Options) -> Result<Self, Error> {
     Self::with_comparator(opts, Ascend)
   }
@@ -43,6 +44,8 @@ impl<A: Allocator> SkipList<A, Ascend> {
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[allow(dead_code)]
+  #[inline]
   pub unsafe fn map_mut<P: AsRef<std::path::Path>>(
     path: P,
     opts: Options,
@@ -58,6 +61,7 @@ impl<A: Allocator> SkipList<A, Ascend> {
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[allow(dead_code)]
   pub unsafe fn map<P: AsRef<std::path::Path>>(
     path: P,
     opts: Options,
@@ -84,6 +88,8 @@ impl<A: Allocator> SkipList<A, Ascend> {
   /// [`SkipList::new`]: #method.new
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[allow(dead_code)]
+  #[inline]
   pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
     Self::map_anon_with_comparator(opts, mmap_options, Ascend)
   }

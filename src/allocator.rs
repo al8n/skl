@@ -259,20 +259,13 @@ mod sealed {
     unsafe fn get_value_and_trailer_with_pointer<'a, 'b: 'a, A: Allocator>(
       &'a self,
       arena: &'b A,
-    ) -> (
-      &'b Self::Trailer,
-      Option<&'b [u8]>,
-      ValuePartPointer<Self::Trailer>,
-    ) {
+    ) -> (Option<&'b [u8]>, ValuePartPointer<Self::Trailer>) {
       let (offset, len) = self.value_pointer().load();
-      let ptr = arena.get_aligned_pointer(offset as usize);
 
       let align_offset = A::align_offset::<Self::Trailer>(offset);
-      let trailer = &*ptr;
 
       if len == <Self::ValuePointer as ValuePointer>::REMOVE {
         return (
-          trailer,
           None,
           ValuePartPointer::new(
             offset,
@@ -284,7 +277,6 @@ mod sealed {
 
       let value_offset = align_offset + mem::size_of::<Self::Trailer>() as u32;
       (
-        trailer,
         Some(arena.get_bytes(value_offset as usize, len as usize)),
         ValuePartPointer::new(offset, value_offset, len),
       )

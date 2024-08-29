@@ -136,7 +136,7 @@ where
         }
 
         let node = self.nd.as_ref();
-        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
+        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
         if node.version() > self.version {
           continue;
         }
@@ -180,7 +180,7 @@ where
         }
 
         let node = self.nd.as_ref();
-        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
+        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
         if node.version() > self.version {
           continue;
         }
@@ -399,7 +399,7 @@ where
       unsafe {
         let node = self.nd.as_ref();
         let nk = node.get_key(&self.map.arena);
-        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
+        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {
           self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
@@ -438,7 +438,7 @@ where
         }
 
         let node = self.nd.as_ref();
-        let (_, value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
+        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {
           self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);

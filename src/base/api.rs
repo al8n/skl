@@ -430,18 +430,22 @@ impl<A: Allocator, C> SkipList<A, C> {
       .with_magic_version(CURRENT_VERSION)
       .with_reserved(opts.reserved());
     let arena = A::map_anon(arena_opts, mmap_options, opts)?;
-    Self::new_in(arena, cmp, opts)
-      .map_err(invalid_data)
-      .and_then(|map| {
-        // Lock the memory of first page to prevent it from being swapped out.
-        #[cfg(not(windows))]
-        unsafe {
-          map
-            .arena
-            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-        }
-        Ok(map)
-      })
+
+    if cfg!(windows) {
+      Self::new_in(arena, cmp, opts).map_err(invalid_data)
+    } else {
+      Self::new_in(arena, cmp, opts)
+        .map_err(invalid_data)
+        .and_then(|map| {
+          // Lock the memory of first page to prevent it from being swapped out.
+          unsafe {
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          }
+          Ok(map)
+        })
+    }
   }
 
   /// Clear the skiplist to empty and re-initialize.

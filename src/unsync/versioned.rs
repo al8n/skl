@@ -477,6 +477,9 @@ impl<C> SkipMap<C> {
   }
 
   /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
   pub fn map_anon_with_comparator(
     opts: Options,
     mmap_options: MmapOptions,

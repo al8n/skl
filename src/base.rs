@@ -32,6 +32,7 @@ pub struct SkipList<A: Allocator, C = Ascend> {
   head: <A::Node as Node>::Pointer,
   tail: <A::Node as Node>::Pointer,
   data_offset: u32,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   on_disk: bool,
   opts: Options,
   /// If set to true by tests, then extra delays are added to make it easier to
@@ -64,6 +65,7 @@ where
     Self {
       arena: self.arena.clone(),
       meta: self.meta,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       on_disk: self.on_disk,
       head: self.head,
       tail: self.tail,
@@ -80,6 +82,7 @@ impl<A, C> Drop for SkipList<A, C>
 where
   A: Allocator,
 {
+  #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
     if self.arena.refs() == 1 {
       if !self.opts.unify() {

@@ -1,4 +1,9 @@
-use core::ops::{Add, AddAssign, Sub, SubAssign};
+use core::{
+  marker::PhantomData,
+  ops::{Add, AddAssign, Sub, SubAssign},
+  ptr::{self, NonNull},
+  slice,
+};
 
 use arbitrary_int::{u27, u5, Number, TryNewError};
 
@@ -32,17 +37,25 @@ impl std::error::Error for TooLarge {}
 #[must_use = "vacant buffer must be filled with bytes."]
 #[derive(Debug)]
 pub struct VacantBuffer<'a> {
-  value: &'a mut [u8],
+  value: NonNull<u8>,
   len: usize,
   cap: usize,
   pub(crate) offset: u32,
+  _m: PhantomData<&'a ()>,
 }
 
 impl<'a> VacantBuffer<'a> {
   /// Fill the remaining space with the given byte.
   pub fn fill(&mut self, byte: u8) {
+    if self.cap == 0 {
+      return;
+    }
+
+    // SAFETY: the value's ptr is aligned and the cap is the correct.
+    unsafe {
+      ptr::write_bytes(self.value.as_ptr(), byte, self.cap);
+    }
     self.len = self.cap;
-    self.value[self.len..].fill(byte);
   }
 
   /// Write bytes to the vacant value.
@@ -56,7 +69,15 @@ impl<'a> VacantBuffer<'a> {
       });
     }
 
-    self.value[self.len..self.len + len].copy_from_slice(bytes);
+    // SAFETY: the value's ptr is aligned and the cap is the correct.
+    unsafe {
+      self
+        .value
+        .as_ptr()
+        .add(self.len)
+        .copy_from(bytes.as_ptr(), len);
+    }
+
     self.len += len;
     Ok(())
   }
@@ -67,7 +88,22 @@ impl<'a> VacantBuffer<'a> {
   /// - If a slice is larger than the remaining space.
   pub fn write_unchecked(&mut self, bytes: &[u8]) {
     let len = bytes.len();
-    self.value[self.len..self.len + len].copy_from_slice(bytes);
+    let remaining = self.cap - self.len;
+    if len > remaining {
+      panic!(
+        "buffer does not have enough space (remaining {}, want {})",
+        remaining, len
+      );
+    }
+
+    // SAFETY: the value's ptr is aligned and the cap is the correct.
+    unsafe {
+      self
+        .value
+        .as_ptr()
+        .add(self.len)
+        .copy_from(bytes.as_ptr(), len);
+    }
     self.len += len;
   }
 
@@ -96,12 +132,13 @@ impl<'a> VacantBuffer<'a> {
   }
 
   #[inline]
-  pub(crate) fn new(cap: usize, offset: u32, value: &'a mut [u8]) -> Self {
+  pub(crate) fn new(cap: usize, offset: u32, value: NonNull<u8>) -> Self {
     Self {
       value,
       len: 0,
       cap,
       offset,
+      _m: PhantomData,
     }
   }
 }
@@ -110,85 +147,93 @@ impl<'a> core::ops::Deref for VacantBuffer<'a> {
   type Target = [u8];
 
   fn deref(&self) -> &Self::Target {
-    &self.value[..self.len]
+    if self.cap == 0 {
+      return &[];
+    }
+
+    unsafe { slice::from_raw_parts(self.value.as_ptr(), self.len) }
   }
 }
 
 impl<'a> core::ops::DerefMut for VacantBuffer<'a> {
   fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.value[..self.len]
+    if self.cap == 0 {
+      return &mut [];
+    }
+
+    unsafe { slice::from_raw_parts_mut(self.value.as_ptr(), self.len) }
   }
 }
 
 impl<'a> AsRef<[u8]> for VacantBuffer<'a> {
   fn as_ref(&self) -> &[u8] {
-    &self.value[..self.len]
+    self
   }
 }
 
 impl<'a> AsMut<[u8]> for VacantBuffer<'a> {
   fn as_mut(&mut self) -> &mut [u8] {
-    &mut self.value[..self.len]
+    self
   }
 }
 
 impl<'a> PartialEq<[u8]> for VacantBuffer<'a> {
   fn eq(&self, other: &[u8]) -> bool {
-    self.value[..self.len].eq(other)
+    self.as_ref().eq(other)
   }
 }
 
 impl<'a> PartialEq<VacantBuffer<'a>> for [u8] {
   fn eq(&self, other: &VacantBuffer<'a>) -> bool {
-    self.eq(&other.value[..other.len])
+    self.as_ref().eq(other.as_ref())
   }
 }
 
 impl<'a> PartialEq<[u8]> for &VacantBuffer<'a> {
   fn eq(&self, other: &[u8]) -> bool {
-    self.value[..self.len].eq(other)
+    self.as_ref().eq(other)
   }
 }
 
 impl<'a> PartialEq<&VacantBuffer<'a>> for [u8] {
   fn eq(&self, other: &&VacantBuffer<'a>) -> bool {
-    self.eq(&other.value[..other.len])
+    self.eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<[u8; N]> for VacantBuffer<'a> {
   fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_ref())
+    self.as_ref().eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &VacantBuffer<'a>) -> bool {
-    self.as_ref().eq(&other.value[..other.len])
+    self.as_ref().eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<&VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &&VacantBuffer<'a>) -> bool {
-    self.as_ref().eq(&other.value[..other.len])
+    self.as_ref().eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<[u8; N]> for &VacantBuffer<'a> {
   fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_ref())
+    self.as_ref().eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<&mut VacantBuffer<'a>> for [u8; N] {
   fn eq(&self, other: &&mut VacantBuffer<'a>) -> bool {
-    self.as_ref().eq(&other.value[..other.len])
+    self.as_ref().eq(other.as_ref())
   }
 }
 
 impl<'a, const N: usize> PartialEq<[u8; N]> for &mut VacantBuffer<'a> {
   fn eq(&self, other: &[u8; N]) -> bool {
-    self.value[..self.len].eq(other.as_ref())
+    self.as_ref().eq(other.as_ref())
   }
 }
 

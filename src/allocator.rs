@@ -12,6 +12,8 @@ impl<T> Allocator for T where T: Sealed {}
 pub(crate) use sealed::*;
 
 mod sealed {
+  use core::ptr;
+
   use super::*;
 
   pub struct Pointer {
@@ -508,7 +510,7 @@ mod sealed {
         VacantBuffer::new(
           key_size,
           key_offset as u32,
-          self.get_bytes_mut(key_offset, key_size),
+          NonNull::new_unchecked(self.get_pointer_mut(key_offset)),
         )
       };
       key(&mut vk)
@@ -528,8 +530,8 @@ mod sealed {
       offset: u32,
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     ) -> Result<(u32, Pointer), E> {
-      let buf = self.get_bytes_mut(offset as usize, size as usize);
-      let mut oval = VacantBuffer::new(size as usize, offset, buf);
+      let buf = self.get_pointer_mut(offset as usize);
+      let mut oval = VacantBuffer::new(size as usize, offset, NonNull::new_unchecked(buf));
       if let Err(e) = f(&mut oval) {
         self.dealloc(offset, size);
         return Err(e);
@@ -560,8 +562,12 @@ mod sealed {
       value_offset: u32,
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     ) -> Result<(u32, Pointer), E> {
-      let buf = self.get_bytes_mut(value_offset as usize, value_size as usize);
-      let mut oval = VacantBuffer::new(value_size as usize, value_offset, buf);
+      let buf = self.get_pointer_mut(value_offset as usize);
+      let mut oval = VacantBuffer::new(
+        value_size as usize,
+        value_offset,
+        NonNull::new_unchecked(buf),
+      );
       if let Err(e) = f(&mut oval) {
         self.dealloc(offset, size);
         return Err(e);
@@ -884,8 +890,6 @@ mod sealed {
 
         // Safety: node and trailer do not need to be dropped.
         node.detach();
-
-        let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
 
         let trailer_offset = if mem::size_of::<<Self::Node as Node>::Trailer>() != 0 {
@@ -896,8 +900,9 @@ mod sealed {
           self.allocated()
         };
 
-        let node = &mut *node_ptr;
-        *node = <Self::Node as Node>::full(trailer_offset as u32, max_height);
+        let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
+        let full_node = <Self::Node as Node>::full(trailer_offset as u32, max_height);
+        ptr::write(node_ptr, full_node);
 
         Ok(NodePointer::new(node_ptr as _, node_offset as u32))
       }
@@ -919,7 +924,7 @@ mod sealed {
       let value_offset = trailer_offset + mem::size_of::<<Self::Node as Node>::Trailer>();
 
       let mut oval = VacantBuffer::new(value_size as usize, value_offset as u32, unsafe {
-        self.get_bytes_mut(value_offset, value_size as usize)
+        NonNull::new_unchecked(self.get_pointer_mut(value_offset))
       });
       f(&mut oval).map_err(Either::Left)?;
 

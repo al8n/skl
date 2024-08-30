@@ -19,6 +19,7 @@ extern crate std;
 use core::{
   cmp,
   ops::{Bound, RangeBounds},
+  ptr::NonNull,
 };
 
 /// Skiplist implementation. See [`SkipList`](base::SkipList) for more information.
@@ -55,6 +56,20 @@ const MIN_VERSION: Version = Version::MIN;
 const CURRENT_VERSION: u16 = 0;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
+const DANGLING_ZST: NonNull<()> = NonNull::dangling();
+
+/// # Safety
+/// - `T` must be a ZST.
+#[inline]
+const unsafe fn dangling_zst_ref<'a, T>() -> &'a T {
+  #[cfg(debug_assertions)]
+  if core::mem::size_of::<T>() != 0 {
+    panic!("`T` must be a ZST");
+  }
+
+  // Safety: T is ZST, so it's safe to cast and deref.
+  unsafe { &*(DANGLING_ZST.as_ptr() as *const T) }
+}
 
 #[cfg(feature = "std")]
 fn random_height(max_height: Height) -> Height {

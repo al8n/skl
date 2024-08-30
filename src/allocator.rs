@@ -238,6 +238,10 @@ mod sealed {
 
     #[inline]
     unsafe fn get_trailer<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b Self::Trailer {
+      if mem::size_of::<Self::Trailer>() == 0 {
+        return dangling_zst_ref();
+      }
+
       let (offset, _) = self.value_pointer().load();
       &*arena.get_aligned_pointer(offset as usize)
     }
@@ -251,6 +255,10 @@ mod sealed {
       arena: &'b A,
       offset: u32,
     ) -> &'b Self::Trailer {
+      if mem::size_of::<Self::Trailer>() == 0 {
+        return dangling_zst_ref();
+      }
+
       &*arena.get_aligned_pointer::<Self::Trailer>(offset as usize)
     }
 

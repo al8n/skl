@@ -4,7 +4,6 @@ use rarena_allocator::Allocator as _;
 use core::{
   cell::UnsafeCell,
   ops::{Bound, RangeBounds},
-  ptr,
 };
 
 use super::{
@@ -282,8 +281,8 @@ macro_rules! node_pointer {
     #[doc(hidden)]
     #[derive(Debug)]
     pub struct NodePointer $(<$t>)? {
-      ptr: *mut $node $(<$t>)?,
       offset: u32,
+      _m: core::marker::PhantomData<$node $(<$t>)?>,
     }
 
     impl $(<$t>)?  Clone for NodePointer $(<$t>)? {
@@ -296,8 +295,8 @@ macro_rules! node_pointer {
 
     impl $(<$t: $crate::Trailer>)? $crate::allocator::NodePointer for NodePointer $(<$t>)? {
       const NULL: Self = Self {
-        ptr: ptr::null_mut(),
         offset: 0,
+        _m: core::marker::PhantomData,
       };
 
       type Node = $node $(<$t>)?;
@@ -309,10 +308,6 @@ macro_rules! node_pointer {
 
       fn offset(&self) -> u32 {
         self.offset
-      }
-
-      fn ptr(&self) -> *mut Self::Node {
-        self.ptr
       }
 
       /// ## Safety
@@ -384,25 +379,25 @@ macro_rules! node_pointer {
       }
 
       #[inline]
-      fn new(ptr: *mut u8, offset: u32) -> Self {
+      fn new(offset: u32) -> Self {
         Self {
-          ptr: ptr.cast(),
           offset,
+          _m: core::marker::PhantomData,
         }
       }
 
       /// ## Safety
       /// - the pointer must be valid
       #[inline]
-      unsafe fn as_ref(&self) -> &Self::Node {
-        &*self.ptr.cast()
+      unsafe fn as_ref<A: $crate::allocator::Sealed>(&self, arena: &A) -> &Self::Node {
+        &*(arena.get_pointer(self.offset as usize) as *const Self::Node)
       }
 
       /// ## Safety
       /// - the pointer must be valid
       #[inline]
-      unsafe fn as_mut(&self) -> &mut Self::Node {
-        &mut *self.ptr.cast()
+      unsafe fn as_mut<A: $crate::allocator::Sealed>(&self, arena: &A) -> &mut Self::Node {
+        &mut *(arena.get_pointer_mut(self.offset as usize) as *mut Self::Node)
       }
     }
   };

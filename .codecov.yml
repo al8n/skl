@@ -4,6 +4,11 @@ codecov:
 ignore:
   - integration/
   - src/map/error.rs
+  - src/unsync/tests.rs
+  - src/unsync/tests/
+  - src/sync/tests.rs
+  - src/sync/tests/
+
 
 coverage:
   status:

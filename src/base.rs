@@ -213,15 +213,13 @@ where
       let offset = arena.offset(meta as _) + mem::size_of::<A::Header>();
       let head_ptr = arena.get_aligned_pointer::<A::Node>(offset);
       let head_offset = arena.offset(head_ptr as _);
-      let head =
-        <<A::Node as Node>::Pointer as NodePointer>::new(head_ptr as _, head_offset as u32);
+      let head = <<A::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
 
-      let (trailer_offset, _) = head.as_ref().value_pointer().load();
+      let (trailer_offset, _) = head.as_ref(arena).value_pointer().load();
       let offset = trailer_offset as usize + mem::size_of::<A::Trailer>();
       let tail_ptr = arena.get_aligned_pointer::<A::Node>(offset);
       let tail_offset = arena.offset(tail_ptr as _);
-      let tail =
-        <<A::Node as Node>::Pointer as NodePointer>::new(tail_ptr as _, tail_offset as u32);
+      let tail = <<A::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
       (NonNull::new_unchecked(meta as _), head, tail)
     }
   }
@@ -365,14 +363,13 @@ where
         return <A::Node as Node>::Pointer::NULL;
       }
 
-      if nd.ptr() == self.head.ptr() {
+      if nd.offset() == self.head.offset() {
         return self.head;
       }
 
       let offset = nd.prev_offset(&self.arena, height);
-      let ptr = self.arena.get_pointer(offset as usize);
-      let prev = <A::Node as Node>::Pointer::new(ptr as _, offset);
-      let prev_node = prev.as_ref();
+      let prev = <A::Node as Node>::Pointer::new(offset);
+      let prev_node = prev.as_ref(&self.arena);
 
       if ignore_invalid_trailer && !prev_node.get_trailer(&self.arena).is_valid() {
         nd = prev;
@@ -398,15 +395,13 @@ where
         return <A::Node as Node>::Pointer::NULL;
       }
 
-      if nptr.ptr() == self.tail.ptr() {
+      if nptr.offset() == self.tail.offset() {
         return self.tail;
       }
 
       let offset = nptr.next_offset(&self.arena, height);
-      let ptr = self.arena.get_pointer(offset as usize);
-
-      let next = <A::Node as Node>::Pointer::new(ptr as _, offset);
-      let next_node = next.as_ref();
+      let next = <A::Node as Node>::Pointer::new(offset);
+      let next_node = next.as_ref(&self.arena);
 
       if ignore_invalid_trailer && !next_node.get_trailer(&self.arena).is_valid() {
         nptr = next;
@@ -421,7 +416,7 @@ where
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
-  unsafe fn get_next_allow_uncommitted(
+  unsafe fn get_next_allow_invalid(
     &self,
     nptr: <A::Node as Node>::Pointer,
     height: usize,
@@ -431,9 +426,7 @@ where
     }
 
     let offset = nptr.next_offset(&self.arena, height);
-    let ptr = self.arena.get_pointer(offset as usize);
-
-    <A::Node as Node>::Pointer::new(ptr as _, offset)
+    <A::Node as Node>::Pointer::new(offset)
   }
 
   /// Returns the first entry in the map.
@@ -445,12 +438,12 @@ where
     // Safety: head node was definitely allocated by self.arena
     let nd = unsafe { self.get_next(self.head, 0, ignore_invalid_trailer) };
 
-    if nd.is_null() || nd.ptr() == self.tail.ptr() {
+    if nd.is_null() || nd.offset() == self.tail.offset() {
       return None;
     }
 
     unsafe {
-      let node = nd.as_ref();
+      let node = nd.as_ref(&self.arena);
       let curr_key = node.get_key(&self.arena);
       self.ge(version, curr_key, ignore_invalid_trailer)
     }
@@ -465,12 +458,12 @@ where
     // Safety: tail node was definitely allocated by self.arena
     let nd = unsafe { self.get_prev(self.tail, 0, ignore_invalid_trailer) };
 
-    if nd.is_null() || nd.ptr() == self.head.ptr() {
+    if nd.is_null() || nd.offset() == self.head.offset() {
       return None;
     }
 
     unsafe {
-      let node = nd.as_ref();
+      let node = nd.as_ref(&self.arena);
       let curr_key = node.get_key(&self.arena);
       self.le(version, curr_key, ignore_invalid_trailer)
     }
@@ -493,7 +486,7 @@ where
 
       let n = n?;
 
-      if n.is_null() || n.ptr() == self.tail.ptr() {
+      if n.is_null() || n.offset() == self.tail.offset() {
         return None;
       }
 
@@ -517,7 +510,7 @@ where
       let (n, _) = self.find_near(Version::MAX, key, true, false, ignore_invalid_trailer); // find less or equal.
 
       let n = n?;
-      if n.is_null() || n.ptr() == self.head.ptr() {
+      if n.is_null() || n.offset() == self.head.offset() {
         return None;
       }
 
@@ -542,7 +535,7 @@ where
 
       let n = n?;
 
-      if n.is_null() || n.ptr() == self.tail.ptr() {
+      if n.is_null() || n.offset() == self.tail.offset() {
         return None;
       }
 
@@ -566,7 +559,7 @@ where
       let (n, _) = self.find_near(Version::MIN, key, true, true, ignore_invalid_trailer); // find less or equal.
 
       let n = n?;
-      if n.is_null() || n.ptr() == self.head.ptr() {
+      if n.is_null() || n.offset() == self.head.offset() {
         return None;
       }
 
@@ -583,7 +576,7 @@ where
     let mut prev = self.get_prev(curr, 0, ignore_invalid_trailer);
 
     loop {
-      let curr_node = curr.as_ref();
+      let curr_node = curr.as_ref(&self.arena);
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is greater than the given version, we should return.
       let version_cmp = curr_node.version().cmp(&version);
@@ -591,7 +584,7 @@ where
         return None;
       }
 
-      if prev.is_null() || prev.ptr() == self.head.ptr() {
+      if prev.is_null() || prev.offset() == self.head.offset() {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
         }
@@ -599,7 +592,7 @@ where
         return None;
       }
 
-      let prev_node = prev.as_ref();
+      let prev_node = prev.as_ref(&self.arena);
       let prev_key = prev_node.get_key(&self.arena);
       if self.cmp.compare(prev_key, curr_key) == cmp::Ordering::Less {
         return Some(curr);
@@ -629,7 +622,7 @@ where
     let mut next = self.get_next(curr, 0, ignore_invalid_trailer);
 
     loop {
-      let curr_node = curr.as_ref();
+      let curr_node = curr.as_ref(&self.arena);
       let curr_key = curr_node.get_key(&self.arena);
       // if the current version is less or equal to the given version, we should return.
       let version_cmp = curr_node.version().cmp(&version);
@@ -637,7 +630,7 @@ where
         return Some(curr);
       }
 
-      if next.is_null() || next.ptr() == self.head.ptr() {
+      if next.is_null() || next.offset() == self.head.offset() {
         if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
           return Some(curr);
         }
@@ -645,7 +638,7 @@ where
         return None;
       }
 
-      let next_node = next.as_ref();
+      let next_node = next.as_ref(&self.arena);
       let next_key = next_node.get_key(&self.arena);
       let version_cmp = next_node.version().cmp(&version);
       if self.cmp.compare(next_key, curr_key) == cmp::Ordering::Greater {
@@ -657,7 +650,7 @@ where
       }
 
       if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        if next.ptr() == self.tail.ptr() {
+        if next.offset() == self.tail.offset() {
           return None;
         }
 
@@ -691,7 +684,7 @@ where
       let next = self.get_next(x, level, ignore_invalid_trailer);
       let is_next_null = next.is_null();
 
-      if is_next_null || next.ptr() == self.tail.ptr() {
+      if is_next_null || next.offset() == self.tail.offset() {
         // x.key < key < END OF LIST
         if level > 0 {
           // Can descend further to iterate closer to the end.
@@ -705,14 +698,14 @@ where
         }
 
         // Try to return x. Make sure it is not a head node.
-        if x.ptr() == self.head.ptr() {
+        if x.offset() == self.head.offset() {
           return (None, false);
         }
 
         return (Some(x), false);
       }
 
-      let next_node = next.as_ref();
+      let next_node = next.as_ref(&self.arena);
       let next_key = next_node.get_key(&self.arena);
       let cmp = self
         .cmp
@@ -758,7 +751,7 @@ where
           }
 
           // Try to return x. Make sure it is not a head node.
-          if x.ptr() == self.head.ptr() {
+          if x.offset() == self.head.offset() {
             return (None, false);
           }
 
@@ -793,20 +786,24 @@ where
       // Our cached height is equal to the list height.
       while level < list_height as usize {
         let spl = &ins.spl[level];
-        if self.get_next_allow_uncommitted(spl.prev, level).ptr() != spl.next.ptr() {
+        if self.get_next_allow_invalid(spl.prev, level).offset() != spl.next.offset() {
           level += 1;
           // One or more nodes have been inserted between the splice at this
           // level.
           continue;
         }
 
-        if spl.prev.ptr() != self.head.ptr() && !self.key_is_after_node(spl.prev, version, key) {
+        if spl.prev.offset() != self.head.offset()
+          && !self.key_is_after_node(spl.prev, version, key)
+        {
           // Key lies before splice.
           level = list_height as usize;
           break;
         }
 
-        if spl.next.ptr() != self.tail.ptr() && !self.key_is_after_node(spl.next, version, key) {
+        if spl.next.offset() != self.tail.offset()
+          && !self.key_is_after_node(spl.next, version, key)
+        {
           // Key lies after splice.
           level = list_height as usize;
           break;
@@ -855,8 +852,8 @@ where
 
     loop {
       // Assume prev.key < key.
-      let next = self.get_next_allow_uncommitted(prev, level);
-      if next.ptr() == self.tail.ptr() {
+      let next = self.get_next_allow_invalid(prev, level);
+      if next.offset() == self.tail.offset() {
         // Tail node, so done.
         return FindResult {
           splice: Splice { prev, next },
@@ -867,7 +864,7 @@ where
       }
 
       // offset is not zero, so we can safely dereference the next node ptr.
-      let next_node = next.as_ref();
+      let next_node = next.as_ref(&self.arena);
       let next_key = next_node.get_key(&self.arena);
 
       let cmp = self.cmp.compare(key, next_key);
@@ -945,7 +942,7 @@ where
     version: Version,
     key: &[u8],
   ) -> bool {
-    let nd = &*nd.ptr();
+    let nd = nd.as_ref(&self.arena);
     let nd_key = self
       .arena
       .get_bytes(nd.key_offset() as usize, nd.key_size() as usize);
@@ -1051,17 +1048,7 @@ where
         k.on_fail(&self.arena);
       })?;
 
-    // self
-    //   .link_in(
-    //     UnlinkedNode::new(&self.arena, nd, height, version, deallocator),
-    //     success,
-    //     failure,
-    //     upsert,
-    //     ins,
-    //   )
-    //   .map_err(Either::Right)
-
-    let is_removed = unsafe { nd.as_ref().get_value(&self.arena).is_none() };
+    let is_removed = unsafe { nd.as_ref(&self.arena).get_value(&self.arena).is_none() };
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -1162,7 +1149,7 @@ where
             }
 
             Err(_) => {
-              let unlinked_node = nd.as_ref();
+              let unlinked_node = nd.as_ref(&self.arena);
 
               // CAS failed. We need to recompute prev and next. It is unlikely to
               // be helpful to try to use a different level as we redo the search,
@@ -1181,7 +1168,7 @@ where
                 let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
 
                 if upsert {
-                  let curr = nd.as_ref();
+                  let curr = nd.as_ref(&self.arena);
                   let (new_value_offset, new_value_size) = curr.value_pointer().load();
                   deallocator.dealloc_node_and_key(&self.arena);
 
@@ -1214,7 +1201,7 @@ where
                 // if key is already in the underlying allocator, we should deallocate the key
                 // in deallocator, and let the underlying allocator reclaim it, so that we do not store the same key twice.
                 if deallocator.key.is_some() {
-                  let node = nd.as_mut();
+                  let node = nd.as_mut(&self.arena);
                   node.set_key_offset(p.offset);
                   node
                     .set_key_size_and_height(encode_key_size_and_height(p.size, p.height.unwrap()));
@@ -1264,7 +1251,7 @@ where
   ) -> Result<UpdateOk<'a, 'b, A>, Error> {
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => {
-        let old_node = old_node_ptr.as_ref();
+        let old_node = old_node_ptr.as_ref(&self.arena);
         old_node.update_value(&self.arena, value_offset, value_size);
 
         Ok(Either::Left(if old.is_removed() {
@@ -1274,7 +1261,7 @@ where
         }))
       }
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
-        let node = old_node_ptr.as_ref();
+        let node = old_node_ptr.as_ref(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => Ok(Either::Right(Err(
@@ -1307,10 +1294,14 @@ where
     match key {
       Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => self
         .arena
-        .allocate_and_update_value(old_node_ptr.as_ref(), trailer, value_builder.unwrap())
+        .allocate_and_update_value(
+          old_node_ptr.as_ref(&self.arena),
+          trailer,
+          value_builder.unwrap(),
+        )
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
-        let node = old_node_ptr.as_ref();
+        let node = old_node_ptr.as_ref(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => Ok(Either::Right(Err(

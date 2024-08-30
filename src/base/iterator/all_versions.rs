@@ -131,11 +131,11 @@ where
       unsafe {
         self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
 
-        if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
+        if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
           return None;
         }
 
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
         if node.version() > self.version {
           continue;
@@ -175,11 +175,11 @@ where
       unsafe {
         self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
 
-        if self.nd.is_null() || self.nd.ptr() == self.map.head.ptr() {
+        if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
           return None;
         }
 
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
         if node.version() > self.version {
           continue;
@@ -217,14 +217,14 @@ where
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_ge(&mut self, key: &[u8]) -> Option<<A::Node as Node>::Pointer> {
     self.nd = self.map.ge(self.version, key, !self.all_versions)?;
-    if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
+    if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
       return None;
     }
 
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
@@ -262,14 +262,14 @@ where
   fn seek_gt(&mut self, key: &[u8]) -> Option<<A::Node as Node>::Pointer> {
     self.nd = self.map.gt(self.version, key, self.all_versions)?;
 
-    if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
+    if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
       return None;
     }
 
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
@@ -310,7 +310,7 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this on line 75
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
 
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
@@ -354,7 +354,7 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this on line 75
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = node.get_key(&self.map.arena);
 
@@ -392,12 +392,12 @@ where
     self.nd = self.map.first_in(self.version, self.all_versions)?;
 
     loop {
-      if self.nd.is_null() || self.nd.ptr() == self.map.tail.ptr() {
+      if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
         return None;
       }
 
       unsafe {
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         let nk = node.get_key(&self.map.arena);
         let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
@@ -433,11 +433,11 @@ where
 
     loop {
       unsafe {
-        if self.nd.is_null() || self.nd.ptr() == self.map.head.ptr() {
+        if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
           return None;
         }
 
-        let node = self.nd.as_ref();
+        let node = self.nd.as_ref(&self.map.arena);
         let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
 
         if node.version() > self.version {

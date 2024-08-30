@@ -304,7 +304,8 @@ mod sealed {
 
     const NULL: Self;
 
-    fn new(ptr: *mut u8, offset: u32) -> Self;
+    // fn new(ptr: *mut u8, offset: u32) -> Self;
+    fn new(offset: u32) -> Self;
 
     #[inline]
     fn is_null(&self) -> bool {
@@ -313,7 +314,7 @@ mod sealed {
 
     fn offset(&self) -> u32;
 
-    fn ptr(&self) -> *mut Self::Node;
+    // fn ptr(&self) -> *mut Self::Node;
 
     #[inline]
     unsafe fn tower<A: Sealed>(&self, arena: &A, idx: usize) -> &<Self::Node as Node>::Link {
@@ -382,11 +383,11 @@ mod sealed {
 
     /// ## Safety
     /// - the pointer must be valid
-    unsafe fn as_ref(&self) -> &Self::Node;
+    unsafe fn as_ref<A: Sealed>(&self, arena: &A) -> &Self::Node;
 
     /// ## Safety
     /// - the pointer must be valid
-    unsafe fn as_mut(&self) -> &mut Self::Node;
+    unsafe fn as_mut<A: Sealed>(&self, arena: &A) -> &mut Self::Node;
   }
 
   pub trait Header: core::fmt::Debug {
@@ -690,10 +691,7 @@ mod sealed {
           value: Some(value_deallocate_info),
         };
 
-        Ok((
-          NodePointer::new(node_ptr as _, node_offset as u32),
-          deallocator,
-        ))
+        Ok((NodePointer::new(node_offset as u32), deallocator))
       }
     }
 
@@ -745,10 +743,7 @@ mod sealed {
           )),
         };
 
-        Ok((
-          NodePointer::new(node_ptr as _, node_offset as u32),
-          deallocator,
-        ))
+        Ok((NodePointer::new(node_offset as u32), deallocator))
       }
     }
 
@@ -811,10 +806,7 @@ mod sealed {
           )),
         };
 
-        Ok((
-          NodePointer::new(node_ptr as _, node_offset as u32),
-          deallocator,
-        ))
+        Ok((NodePointer::new(node_offset as u32), deallocator))
       }
     }
 
@@ -879,10 +871,7 @@ mod sealed {
           value: Some(value_deallocate_info),
         };
 
-        Ok((
-          NodePointer::new(node_ptr as _, node_offset as u32),
-          deallocator,
-        ))
+        Ok((NodePointer::new(node_offset as u32), deallocator))
       }
     }
 
@@ -912,7 +901,7 @@ mod sealed {
         let full_node = <Self::Node as Node>::full(trailer_offset as u32, max_height);
         ptr::write(node_ptr, full_node);
 
-        Ok(NodePointer::new(node_ptr as _, node_offset as u32))
+        Ok(NodePointer::new(node_offset as u32))
       }
     }
 

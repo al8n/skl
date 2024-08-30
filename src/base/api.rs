@@ -555,7 +555,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
 
       let n = n?;
-      let node = n.as_ref();
+      let node = n.as_ref(&self.arena);
       let node_key = node.get_key(&self.arena);
       let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
@@ -598,7 +598,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
       let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
 
       let n = n?;
-      let node = n.as_ref();
+      let node = n.as_ref(&self.arena);
       let node_key = node.get_key(&self.arena);
       let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {

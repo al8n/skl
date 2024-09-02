@@ -1,5 +1,7 @@
 use core::convert::Infallible;
 
+use among::Among;
+
 use super::*;
 
 impl<A: Allocator, C: Comparator> SkipList<A, C> {
@@ -289,13 +291,13 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   #[allow(dead_code)]
   #[inline]
-  pub fn insert_with_builders<'a, E>(
+  pub fn insert_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, A>>, Among<KE, VE, Error>> {
     self.insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -316,18 +318,24 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  pub fn insert_at_height_with_builders<'a, E>(
+  pub fn insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
+  ) -> Result<Option<EntryRef<'a, A>>, Among<KE, VE, Error>> {
+    self.check_height_and_ro(height).map_err(Among::Right)?;
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
+    let vk = self
+      .arena
+      .fetch_vacant_key(u32::from(key_size), key)
+      .map_err(|e| match e {
+        Either::Left(e) => Among::Left(e),
+        Either::Right(e) => Among::Right(e),
+      })?;
 
     self
       .update(
@@ -350,6 +358,10 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
           }
         })
       })
+      .map_err(|e| match e {
+        Either::Left(e) => Among::Middle(e),
+        Either::Right(e) => Among::Right(e),
+      })
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -363,13 +375,13 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// and you must fill the buffer with bytes later in the closure.
   #[allow(dead_code)]
   #[inline]
-  pub fn get_or_insert_with_builders<'a, E>(
+  pub fn get_or_insert_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, A>>, Among<KE, VE, Error>> {
     self.get_or_insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -388,20 +400,26 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  pub fn get_or_insert_at_height_with_builders<'a, E>(
+  pub fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, A>>, Among<KE, VE, Error>> {
     if self.arena.read_only() {
-      return Err(Either::Right(Error::read_only()));
+      return Err(Among::Right(Error::read_only()));
     }
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
+    let vk = self
+      .arena
+      .fetch_vacant_key(u32::from(key_size), key)
+      .map_err(|e| match e {
+        Either::Left(e) => Among::Left(e),
+        Either::Right(e) => Among::Right(e),
+      })?;
 
     self
       .update(
@@ -423,6 +441,10 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
             Some(EntryRef(old))
           }
         })
+      })
+      .map_err(|e| match e {
+        Either::Left(e) => Among::Middle(e),
+        Either::Right(e) => Among::Right(e),
       })
   }
 

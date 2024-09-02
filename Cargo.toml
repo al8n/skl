@@ -33,8 +33,8 @@ required-features = ["memmap"]
 [features]
 default = ["std"]
 alloc = ["rarena-allocator/alloc"]
-memmap = ["rarena-allocator/memmap", "std", "arrayvec/default"]
-std = ["rand/default", "either/default", "rarena-allocator/std", "memchr/default"]
+memmap = ["rarena-allocator/memmap", "std"]
+std = ["rand/default", "either/default", "rarena-allocator/std", "memchr/default", "among/default"]
 tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
 # loom = ["dep:loom", "rarena-allocator/loom"]
@@ -43,7 +43,7 @@ tracing = ["dep:tracing", "rarena-allocator/tracing"]
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
-arrayvec = { version = "0.7", default-features = false, optional = true }
+among = { version = "0.1", default-features = false }
 derive_more = "0.99"
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false }

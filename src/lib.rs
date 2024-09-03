@@ -48,6 +48,7 @@ mod types;
 pub use types::*;
 
 pub use among;
+pub use dbutils::{Ascend, Comparator, Descend};
 pub use either;
 pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
 
@@ -118,81 +119,6 @@ const PROBABILITIES: [u32; MAX_HEIGHT] = {
 
   probabilities
 };
-
-/// Comparator is used for key-value database developers to define their own key comparison logic.
-/// e.g. some key-value database developers may want to alpabetically comparation
-pub trait Comparator: core::fmt::Debug {
-  /// Compares two byte slices.
-  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering;
-
-  /// Returns if a is contained in range.
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool;
-}
-
-impl<C: Comparator> Comparator for std::sync::Arc<C> {
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
-    (**self).compare(a, b)
-  }
-
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    (**self).contains(start_bound, end_bound, key)
-  }
-}
-
-impl<C: Comparator> Comparator for std::rc::Rc<C> {
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
-    (**self).compare(a, b)
-  }
-
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    (**self).contains(start_bound, end_bound, key)
-  }
-}
-
-impl<C: Comparator> Comparator for std::boxed::Box<C> {
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
-    (**self).compare(a, b)
-  }
-
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    (**self).contains(start_bound, end_bound, key)
-  }
-}
-
-/// Ascend is a comparator that compares byte slices in ascending order.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Ascend;
-
-impl Comparator for Ascend {
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
-    a.cmp(b)
-  }
-
-  #[inline]
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    (start_bound, end_bound).contains(&key)
-  }
-}
-
-/// Descend is a comparator that compares byte slices in descending order.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Descend;
-
-impl Comparator for Descend {
-  #[inline]
-  fn compare(&self, a: &[u8], b: &[u8]) -> cmp::Ordering {
-    b.cmp(a)
-  }
-
-  #[inline]
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    (start_bound, end_bound).contains(&key)
-  }
-}
 
 #[inline]
 const fn encode_value_pointer(offset: u32, val_size: u32) -> u64 {

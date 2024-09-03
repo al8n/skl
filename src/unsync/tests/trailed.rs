@@ -1719,7 +1719,7 @@ fn get_or_insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<()>(kb, vb, trailer())
+  l.get_or_insert_with_builders::<(), ()>(kb, vb, trailer())
     .unwrap();
 }
 
@@ -1976,7 +1976,7 @@ fn insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.insert_with_builders::<()>(kb, vb, trailer()).unwrap();
+  l.insert_with_builders::<(), ()>(kb, vb, trailer()).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -2002,7 +2002,7 @@ fn insert_with(l: SkipMap) {
     Ok(())
   });
   let old = l
-    .insert_with_builders::<()>(kb, vb, trailer())
+    .insert_with_builders::<(), ()>(kb, vb, trailer())
     .unwrap()
     .unwrap();
 

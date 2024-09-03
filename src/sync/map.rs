@@ -2,6 +2,7 @@ use core::borrow::Borrow;
 
 use super::*;
 
+use among::Among;
 use base::{EntryRef, Iter};
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
@@ -969,15 +970,15 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<core::convert::Infallible>(kb, vb)
+  /// l.insert_with_builders::<(), ()>(kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn insert_with_builders<'a, E>(
+  pub fn insert_with_builders<'a, KE, VE>(
     &'a self,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Among<KE, VE, Error>> {
     self.0.insert_at_height_with_builders(
       MIN_VERSION,
       self.random_height(),
@@ -1037,16 +1038,16 @@ impl<C: Comparator> SkipMap<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(height, kb, vb)
+  /// l.insert_at_height_with_builders::<(), ()>(height, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn insert_at_height_with_builders<'a, E>(
+  pub fn insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Among<KE, VE, Error>> {
     self
       .0
       .insert_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder, ())
@@ -1099,15 +1100,15 @@ impl<C: Comparator> SkipMap<C> {
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(kb, vb)
+  /// l.get_or_insert_with_builders::<(), ()>(kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn get_or_insert_with_builders<'a, E>(
+  pub fn get_or_insert_with_builders<'a, KE, VE>(
     &'a self,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Among<KE, VE, Error>> {
     self.0.get_or_insert_at_height_with_builders(
       MIN_VERSION,
       self.random_height(),
@@ -1165,15 +1166,15 @@ impl<C: Comparator> SkipMap<C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(height, kb, vb)
+  /// l.get_or_insert_at_height_with_builders::<(), ()>(height, kb, vb)
   /// .unwrap();
   /// ```
-  pub fn get_or_insert_at_height_with_builders<'a, E>(
+  pub fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+  ) -> Result<Option<EntryRef<'a, Allocator>>, Among<KE, VE, Error>> {
     self.0.get_or_insert_at_height_with_builders(
       MIN_VERSION,
       height,

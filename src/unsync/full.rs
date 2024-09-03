@@ -1,5 +1,6 @@
 use core::{borrow::Borrow, marker::PhantomData};
 
+use among::Among;
 use base::{AllVersionsIter, EntryRef, Iter, VersionedEntryRef};
 
 use super::*;
@@ -1090,17 +1091,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<core::convert::Infallible>(1, kb, vb, 10)
+  /// l.insert_with_builders::<(), ()>(1, kb, vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn insert_with_builders<'a, E>(
+  pub fn insert_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Among<KE, VE, Error>> {
     self.insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -1160,17 +1161,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<core::convert::Infallible>(1, height, kb, vb, 10)
+  /// l.insert_at_height_with_builders::<(), ()>(1, height, kb, vb, 10)
   /// .unwrap();
   /// ```
-  pub fn insert_at_height_with_builders<'a, E>(
+  pub fn insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Among<KE, VE, Error>> {
     self
       .0
       .insert_at_height_with_builders(version, height, key_builder, value_builder, trailer)
@@ -1223,17 +1224,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<core::convert::Infallible>(1, kb, vb, 10)
+  /// l.get_or_insert_with_builders::<(), ()>(1, kb, vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn get_or_insert_with_builders<'a, E>(
+  pub fn get_or_insert_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Among<KE, VE, Error>> {
     self.get_or_insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -1291,17 +1292,17 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<core::convert::Infallible>(1, height, kb, vb, 10)
+  /// l.get_or_insert_at_height_with_builders::<(), ()>(1, height, kb, vb, 10)
   /// .unwrap();
   /// ```
-  pub fn get_or_insert_at_height_with_builders<'a, E>(
+  pub fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: T,
-  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Among<KE, VE, Error>> {
     self.0.get_or_insert_at_height_with_builders(
       version,
       height,

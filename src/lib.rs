@@ -47,6 +47,7 @@ pub use options::{MmapOptions, OpenOptions};
 mod types;
 pub use types::*;
 
+pub use among;
 pub use either;
 pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
 

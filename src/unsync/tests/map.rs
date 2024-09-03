@@ -1702,7 +1702,7 @@ fn get_or_insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<()>(kb, vb).unwrap();
+  l.get_or_insert_with_builders::<(), ()>(kb, vb).unwrap();
 }
 
 #[test]
@@ -1957,7 +1957,7 @@ fn insert_with(l: SkipMap) {
     Ok(())
   });
 
-  l.insert_with_builders::<()>(kb, vb).unwrap();
+  l.insert_with_builders::<(), ()>(kb, vb).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -1982,7 +1982,7 @@ fn insert_with(l: SkipMap) {
     );
     Ok(())
   });
-  let old = l.insert_with_builders::<()>(kb, vb).unwrap().unwrap();
+  let old = l.insert_with_builders::<(), ()>(kb, vb).unwrap().unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));

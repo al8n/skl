@@ -34,9 +34,13 @@ pub fn key(i: usize) -> std::vec::Vec<u8> {
 }
 
 /// Only used for testing
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(miri)))]
 pub fn big_value(i: usize) -> std::vec::Vec<u8> {
   format!("{:01048576}", i).into_bytes()
+}
+#[cfg(all(feature = "std", miri))]
+pub fn big_value(i: usize) -> std::vec::Vec<u8> {
+  format!("{:01024}", i).into_bytes()
 }
 
 /// Only used for testing
@@ -1120,7 +1124,10 @@ fn test_lt_map_anon_unify() {
 }
 
 fn test_basic_large_testcases_in(l: Arc<SkipMap>) {
+  #[cfg(not(miri))]
   let n = 1000;
+  #[cfg(miri)]
+  let n = 200; //takes about 30s on miri, that's large enough
 
   for i in 0..n {
     l.get_or_insert(0, &key(i), &new_value(i)).unwrap();
@@ -1199,7 +1206,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipMap>) {
   #[cfg(any(miri, feature = "loom"))]
   const N: usize = 5;
 
-  let wg = Arc::new(());
+  let mut wg = Arc::new(());
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();
@@ -1208,7 +1215,7 @@ fn test_concurrent_basic_runner(l: Arc<SkipMap>) {
       drop(w);
     });
   }
-  while Arc::strong_count(&wg) > 1 {}
+  while Arc::get_mut(&mut wg).is_none() {}
   for i in 0..N {
     let w = wg.clone();
     let l = l.clone();
@@ -1292,7 +1299,7 @@ fn test_concurrent_basic_map_anon_unify() {
 }
 
 #[cfg(feature = "std")]
-fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
+fn test_concurrent_basic_big_values_runner(mut l: Arc<SkipMap>) {
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 100;
   #[cfg(any(miri, feature = "loom"))]
@@ -1304,7 +1311,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
       l.get_or_insert(0, &key(i), &big_value(i)).unwrap();
     });
   }
-  while Arc::strong_count(&l) > 1 {}
+  while Arc::get_mut(&mut l).is_none() {}
   // assert_eq!(N, l.len());
   for i in 0..N {
     let l = l.clone();
@@ -1313,7 +1320,7 @@ fn test_concurrent_basic_big_values_runner(l: Arc<SkipMap>) {
       assert_eq!(l.get(0, &k).unwrap().value(), big_value(i), "broken: {i}");
     });
   }
-  while Arc::strong_count(&l) > 1 {}
+  while Arc::get_mut(&mut l).is_none() {}
 }
 
 #[test]

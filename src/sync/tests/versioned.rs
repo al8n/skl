@@ -1037,6 +1037,8 @@ fn test_lt_map_anon_unify() {
 
 fn test_basic_large_testcases_in(l: SkipMap) {
   let n = 1000;
+  #[cfg(miri)]
+  let n = 200; //takes about 30s on miri, that's large enough
 
   for i in 0..n {
     l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))

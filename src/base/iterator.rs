@@ -1,4 +1,4 @@
-use core::ops::RangeFull;
+use core::{borrow::Borrow, ops::RangeFull};
 
 use super::*;
 

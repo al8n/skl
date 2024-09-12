@@ -1,5 +1,4 @@
-use skl::SkipMap;
-use std::sync::Arc;
+use skl::{sync::map::SkipMap, Options};
 
 pub fn key(i: usize) -> Vec<u8> {
   format!("{:05}", i).into_bytes()
@@ -17,24 +16,23 @@ fn main() {
     .read(true)
     .write(true);
 
-  let l = SkipMap::map_mut("test.wal", open_options, mmap_options).unwrap();
-  let mut wg = Arc::new(());
+  let l =
+    unsafe { SkipMap::map_mut("test.wal", Options::new(), open_options, mmap_options).unwrap() };
+
   for i in 0..N {
-    let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
-      l.insert(0, &key(i), &new_value(i)).unwrap();
-      drop(w);
+      l.insert(&key(i), &new_value(i)).unwrap();
     });
   }
-  while Arc::get_mut(&mut wg).is_none() {}
+
+  while l.refs() > 1 {}
+
   for i in 0..N {
-    let w = wg.clone();
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
-      drop(w);
+      assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
     });
   }
 }

@@ -1,5 +1,5 @@
 use integration::{key, new_value};
-use skl::*;
+use skl::{sync::map::SkipMap, *};
 
 fn main() {
   let dir = tempfile::tempdir().unwrap();
@@ -12,11 +12,11 @@ fn main() {
       .read(true)
       .write(true);
     let mmap_options = MmapOptions::default();
-    let l = SkipMap::map_mut(&p, open_options, mmap_options).unwrap();
+    let l = unsafe { SkipMap::map_mut(&p, Options::new(), open_options, mmap_options).unwrap() };
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(0, &key(i), &new_value(i)).unwrap();
+        l.insert(&key(i), &new_value(i)).unwrap();
         drop(l);
       });
     }
@@ -27,7 +27,7 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
+        assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
         drop(l);
       });
     }
@@ -41,13 +41,13 @@ fn main() {
 
     let open_options = OpenOptions::default().read(true);
     let mmap_options = MmapOptions::default();
-    let l = SkipMap::<u64>::map(&p, open_options, mmap_options, 0).unwrap();
+    let l = unsafe { SkipMap::map(&p, Options::new(), open_options, mmap_options).unwrap() };
     assert_eq!(N2, l.len());
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(0, &k).unwrap().value(), new_value(i), "broken: {i}");
+        assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
       });
     }
     while l.refs() > 1 {

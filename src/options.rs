@@ -4,18 +4,31 @@ pub use rarena_allocator::{MmapOptions, OpenOptions};
 
 pub use rarena_allocator::Freelist;
 
-use ux2::{u27, u5};
+use crate::{Height, KeySize};
 
-/// Options for `SkipMap`.
+/// Configuration for the compression policy of the key in [`SkipMap`](super::SkipMap).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum CompressionPolicy {
+  /// Fast compression policy, which only checks if the key is a prefix of the next key.
+  #[default]
+  Fast,
+  /// High compression policy, which checks if the key is a substring of the next key.
+  High,
+}
+
+/// Options for [`SkipMap`](super::SkipMap).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Options {
   max_value_size: u32,
-  max_key_size: u27,
-  max_height: u5,
+  max_key_size: KeySize,
+  max_height: Height,
   magic_version: u16,
   capacity: u32,
   unify: bool,
   freelist: Freelist,
+  policy: CompressionPolicy,
+  reserved: u32,
 }
 
 impl Default for Options {
@@ -31,13 +44,40 @@ impl Options {
   pub const fn new() -> Self {
     Self {
       max_value_size: u32::MAX,
-      max_key_size: u27::MAX,
-      max_height: u5::new(20),
+      max_key_size: KeySize::MAX,
+      max_height: Height::new(),
       capacity: 1024,
       unify: false,
       magic_version: 0,
       freelist: Freelist::Optimistic,
+      policy: CompressionPolicy::Fast,
+      reserved: 0,
     }
+  }
+
+  /// Set the reserved bytes of the ARENA.
+  ///
+  /// The reserved is used to configure the start position of the ARENA. This is useful
+  /// when you want to add some bytes before the ARENA, e.g. when using the memory map file backed ARENA,
+  /// you can set the reserved to the size to `8` to store a 8 bytes checksum.
+  ///
+  /// The default reserved is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_reserved(8);
+  /// ```
+  #[inline]
+  pub const fn with_reserved(mut self, reserved: u32) -> Self {
+    self.reserved = if self.capacity <= reserved {
+      self.capacity
+    } else {
+      reserved
+    };
+    self
   }
 
   /// Set the magic version of the [`SkipMap`](super::SkipMap).
@@ -75,6 +115,23 @@ impl Options {
   #[inline]
   pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
     self.freelist = freelist;
+    self
+  }
+
+  /// Set the compression policy of the key in [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`CompressionPolicy::Fast`].
+  ///
+  /// # Example
+  ///
+  /// ```
+  /// use skl::{Options, options::CompressionPolicy};
+  ///
+  /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
+  /// ```
+  #[inline]
+  pub const fn with_compression_policy(mut self, policy: CompressionPolicy) -> Self {
+    self.policy = policy;
     self
   }
 
@@ -122,17 +179,17 @@ impl Options {
   ///
   /// The maximum size of the key is `u27::MAX`.
   ///
-  /// Default is `u27::MAX`.
+  /// Default is `65535`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u27};
+  /// use skl::{Options, KeySize};
   ///
-  /// let options = Options::new().with_max_key_size(u27::new(1024));
+  /// let options = Options::new().with_max_key_size(KeySize::new());
   /// ```
   #[inline]
-  pub const fn with_max_key_size(mut self, size: u27) -> Self {
+  pub const fn with_max_key_size(mut self, size: KeySize) -> Self {
     self.max_key_size = size;
     self
   }
@@ -144,12 +201,12 @@ impl Options {
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u5};
+  /// use skl::{Options, Height};
   ///
-  /// let options = Options::new().with_max_height(u5::new(20));
+  /// let options = Options::new().with_max_height(Height::new());
   /// ```
   #[inline]
-  pub const fn with_max_height(mut self, height: u5) -> Self {
+  pub const fn with_max_height(mut self, height: Height) -> Self {
     self.max_height = height;
     self
   }
@@ -171,9 +228,31 @@ impl Options {
     self
   }
 
+  /// Get the reserved of the ARENA.
+  ///
+  /// The reserved is used to configure the start position of the ARENA. This is useful
+  /// when you want to add some bytes before the ARENA, e.g. when using the memory map file backed ARENA,
+  /// you can set the reserved to the size to `8` to store a 8 bytes checksum.
+  ///
+  /// The default reserved is `0`.
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_reserved(8);
+  ///
+  /// assert_eq!(opts.reserved(), 8);
+  /// ```
+  #[inline]
+  pub const fn reserved(&self) -> u32 {
+    self.reserved
+  }
+
   /// Returns the maximum size of the value.
   ///
-  /// Default is `u32::MAX`.
+  /// Default is `u32::MAX`. The maximum size of the value is `u32::MAX - header`.
   ///
   /// # Example
   ///
@@ -191,37 +270,37 @@ impl Options {
   ///
   /// The maximum size of the key is `u27::MAX`.
   ///
-  /// Default is `u27::MAX`.
+  /// Default is `65535`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u27};
+  /// use skl::{Options, KeySize};
   ///
-  /// let options = Options::new().with_max_key_size(u27::new(1024));
+  /// let options = Options::new().with_max_key_size(KeySize::new());
   ///
-  /// assert_eq!(options.max_key_size(), u27::new(1024));
+  /// assert_eq!(options.max_key_size(), u16::MAX);
   /// ```
   #[inline]
-  pub const fn max_key_size(&self) -> u27 {
+  pub const fn max_key_size(&self) -> KeySize {
     self.max_key_size
   }
 
   /// Returns the maximum height.
   ///
-  /// Default is `20`. The maximum height is `u5::MAX`. The minimum height is `1`.
+  /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
   ///
   /// # Example
   ///
   /// ```
-  /// use skl::{Options, u5};
+  /// use skl::{Options, Height};
   ///
-  /// let options = Options::new().with_max_height(u5::new(5));
+  /// let options = Options::new().with_max_height(Height::from_u8_unchecked(5));
   ///
-  /// assert_eq!(options.max_height(), u5::new(5));
+  /// assert_eq!(options.max_height(), 5);
   /// ```
   #[inline]
-  pub const fn max_height(&self) -> u5 {
+  pub const fn max_height(&self) -> Height {
     self.max_height
   }
 
@@ -303,5 +382,23 @@ impl Options {
   #[inline]
   pub const fn freelist(&self) -> Freelist {
     self.freelist
+  }
+
+  /// Get the compression policy of the key in [`SkipMap`](super::SkipMap).
+  ///
+  /// The default value is [`CompressionPolicy::Fast`].
+  ///
+  /// # Example
+  ///
+  /// ```rust
+  /// use skl::{Options, options::CompressionPolicy};
+  ///
+  /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
+  ///
+  /// assert_eq!(opts.compression_policy(), CompressionPolicy::High);
+  /// ```
+  #[inline]
+  pub const fn compression_policy(&self) -> CompressionPolicy {
+    self.policy
   }
 }

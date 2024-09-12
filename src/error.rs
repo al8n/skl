@@ -1,7 +1,9 @@
+use super::Height;
+
 /// Error type for the [`SkipMap`](crate::SkipMap).
 ///
 /// [`SkipMap`]: crate::SkipMap
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Error {
   /// Indicates that the arena is full
   Arena(rarena_allocator::Error),
@@ -15,8 +17,22 @@ pub enum Error {
   /// Indicates that the entry is too large to be stored in the [`SkipMap`](super::SkipMap).
   EntryTooLarge(u64),
 
+  /// Indicates that the height of the [`SkipMap`](super::SkipMap) is too large.
+  InvalidHeight {
+    /// The height of the [`SkipMap`](super::SkipMap).
+    height: Height,
+
+    /// The max height of the [`SkipMap`](super::SkipMap).
+    max_height: Height,
+  },
+
   /// Arena too small
   ArenaTooSmall,
+
+  /// I/O error
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  IO(std::io::Error),
 }
 
 impl core::fmt::Display for Error {
@@ -27,6 +43,12 @@ impl core::fmt::Display for Error {
       Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
       Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
       Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
+      Self::InvalidHeight { height, max_height } => write!(
+        f,
+        "given height {height} is larger than the max height {max_height} or less than 1"
+      ),
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      Self::IO(e) => write!(f, "{e}"),
     }
   }
 }
@@ -45,6 +67,18 @@ impl Error {
   #[inline]
   pub const fn read_only() -> Self {
     Self::Arena(rarena_allocator::Error::ReadOnly)
+  }
+
+  #[inline]
+  pub(crate) const fn invalid_height(height: Height, max_height: Height) -> Self {
+    Self::InvalidHeight { height, max_height }
+  }
+}
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+impl From<std::io::Error> for Error {
+  fn from(e: std::io::Error) -> Self {
+    Self::IO(e)
   }
 }
 

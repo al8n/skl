@@ -131,8 +131,9 @@ impl Node for VersionedNode {
   }
 }
 
-/// A fast, cocnurrent map implementation based on skiplist that supports forward
-/// and backward iteration.
+/// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
+///
+/// If you want to use in non-concurrent environment, you can use [`unsync::versioned::SkipMap`].
 #[repr(transparent)]
 pub struct SkipMap<C = Ascend>(SkipList<C>);
 

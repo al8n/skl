@@ -129,8 +129,9 @@ impl<T: Trailer> Node for TrailedNode<T> {
   }
 }
 
-/// A fast, cocnurrent map implementation based on skiplist that supports forward
-/// and backward iteration.
+/// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports trailed structure, forward and backward iteration.
+///
+/// If you want to use in non-concurrent environment, you can use [`unsync::trailed::SkipMap`].
 #[repr(transparent)]
 pub struct SkipMap<T: Trailer = (), C = Ascend>(SkipList<T, C>);
 

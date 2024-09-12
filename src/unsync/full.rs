@@ -134,7 +134,9 @@ impl<T: Trailer> Node for FullNode<T> {
   }
 }
 
-/// A skipmap based on an [`Arena`] allocator, which supports both multiple versions and trailer.
+/// A fast, ARENA based `SkipMap` that supports trailed structure, multiple versions, forward and backward iteration.
+///
+/// If you want to use in concurrent environment, you can use [`sync::full::SkipMap`].
 #[repr(transparent)]
 pub struct SkipMap<T: Trailer = (), C = Ascend>(pub(super) SkipList<T, C>);
 

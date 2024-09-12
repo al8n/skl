@@ -451,7 +451,7 @@ mod sealed {
     /// Creates a new ARENA backed by a mmap with the given options.
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    fn map_mut<P: AsRef<std::path::Path>>(
+    unsafe fn map_mut<P: AsRef<std::path::Path>>(
       path: P,
       arena_opts: ArenaOptions,
       open_options: OpenOptions,
@@ -462,7 +462,7 @@ mod sealed {
     /// Opens a read only ARENA backed by a mmap with the given capacity.
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    fn map<P: AsRef<std::path::Path>>(
+    unsafe fn map<P: AsRef<std::path::Path>>(
       path: P,
       arena_opts: ArenaOptions,
       open_options: OpenOptions,
@@ -473,7 +473,7 @@ mod sealed {
     /// Creates a new ARENA backed by a mmap with the given options.
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    fn map_mut_with_path_builder<PB, E>(
+    unsafe fn map_mut_with_path_builder<PB, E>(
       path_builder: PB,
       arena_opts: ArenaOptions,
       open_options: OpenOptions,
@@ -486,7 +486,7 @@ mod sealed {
     /// Opens a read only ARENA backed by a mmap with the given capacity.
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    fn map_with_path_builder<PB, E>(
+    unsafe fn map_with_path_builder<PB, E>(
       path_builder: PB,
       arena_opts: ArenaOptions,
       open_options: OpenOptions,
@@ -1061,7 +1061,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  fn map_mut<P: AsRef<std::path::Path>>(
+  unsafe fn map_mut<P: AsRef<std::path::Path>>(
     path: P,
     arena_opts: rarena_allocator::ArenaOptions,
     open_options: OpenOptions,
@@ -1079,7 +1079,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  fn map<P: AsRef<std::path::Path>>(
+  unsafe fn map<P: AsRef<std::path::Path>>(
     path: P,
     arena_options: rarena_allocator::ArenaOptions,
     open_options: OpenOptions,
@@ -1097,7 +1097,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  fn map_mut_with_path_builder<PB, E>(
+  unsafe fn map_mut_with_path_builder<PB, E>(
     path_builder: PB,
     arena_opts: rarena_allocator::ArenaOptions,
     open_options: OpenOptions,
@@ -1120,7 +1120,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  fn map_with_path_builder<PB, E>(
+  unsafe fn map_with_path_builder<PB, E>(
     path_builder: PB,
     arena_options: rarena_allocator::ArenaOptions,
     open_options: OpenOptions,

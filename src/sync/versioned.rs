@@ -795,8 +795,8 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -858,8 +858,8 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -955,8 +955,8 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb)
@@ -1017,8 +1017,8 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -1078,13 +1078,13 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
+  ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -1146,13 +1146,13 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
+  ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -1210,13 +1210,13 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
+  ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -1276,13 +1276,13 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
+  ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
-  ///   val.write(&alice.id.to_le_bytes()).unwrap();
-  ///   val.write(alice.name.as_bytes()).unwrap();
+  ///   val.put_u32_le(alice.id).unwrap();
+  ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
   ///
@@ -1423,7 +1423,7 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
+  ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb)
@@ -1478,7 +1478,7 @@ impl<C: Comparator> SkipMap<C> {
   /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
-  ///   key.write(b"alice").unwrap();
+  ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   /// let height = l.random_height();

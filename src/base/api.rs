@@ -234,7 +234,7 @@ impl<A: Allocator, C> SkipList<A, C> {
       .with_magic_version(CURRENT_VERSION)
       .with_freelist(opts.freelist())
       .with_reserved(opts.reserved());
-    let arena = A::new(arena_opts, opts);
+    let arena = A::new(arena_opts, opts)?;
     Self::new_in(arena, cmp, opts)
   }
 

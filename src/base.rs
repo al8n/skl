@@ -271,7 +271,9 @@ where
     let (nd, deallocator) = match key {
       Key::Occupied(key) => {
         let kb = KeyBuilder::new(KeySize::from_u32_unchecked(key.len() as u32), |buf| {
-          buf.write(key).expect("buffer must be large enough for key");
+          buf
+            .put_slice(key)
+            .expect("buffer must be large enough for key");
           Ok(())
         });
         let vb = value_builder.unwrap();
@@ -279,12 +281,12 @@ where
           .arena
           .allocate_entry_node::<E>(version, height, trailer, kb, vb)?
       }
-      Key::Vacant(key) => self.arena.allocate_value_node::<E>(
+      Key::Vacant { buf: key, offset } => self.arena.allocate_value_node::<E>(
         version,
         height,
         trailer,
         key.len() as u32,
-        key.offset,
+        *offset,
         value_builder.unwrap(),
       )?,
       Key::Pointer { offset, len, .. } => self.arena.allocate_value_node::<E>(
@@ -301,16 +303,18 @@ where
         trailer,
         key.len() as u32,
         |buf| {
-          buf.write(key).expect("buffer must be large enough for key");
+          buf
+            .put_slice(key)
+            .expect("buffer must be large enough for key");
           Ok(())
         },
         <A::Node as Node>::ValuePointer::REMOVE,
       )?,
-      Key::RemoveVacant(key) => self.arena.allocate_node_in::<E>(
+      Key::RemoveVacant { buf: key, offset } => self.arena.allocate_node_in::<E>(
         version,
         height,
         trailer,
-        key.offset,
+        *offset,
         key.len() as u32,
         <A::Node as Node>::ValuePointer::REMOVE,
       )?,
@@ -1250,7 +1254,7 @@ where
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, A>, Error> {
     match key {
-      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => {
+      Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         let old_node = old_node_ptr.as_ref(&self.arena);
         old_node.update_value(&self.arena, value_offset, value_size);
 
@@ -1260,7 +1264,7 @@ where
           Some(old)
         }))
       }
-      Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
+      Key::Remove(_) | Key::RemoveVacant { .. } | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
@@ -1292,7 +1296,7 @@ where
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, A>, Either<E, Error>> {
     match key {
-      Key::Occupied(_) | Key::Vacant(_) | Key::Pointer { .. } => self
+      Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena
         .allocate_and_update_value(
           old_node_ptr.as_ref(&self.arena),
@@ -1300,7 +1304,7 @@ where
           value_builder.unwrap(),
         )
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
-      Key::Remove(_) | Key::RemoveVacant(_) | Key::RemovePointer { .. } => {
+      Key::Remove(_) | Key::RemoveVacant { .. } | Key::RemovePointer { .. } => {
         let node = old_node_ptr.as_ref(&self.arena);
         match node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
@@ -1390,7 +1394,10 @@ impl<P: NodePointer> Default for Splice<P> {
 
 pub(crate) enum Key<'a, 'b: 'a, A> {
   Occupied(&'b [u8]),
-  Vacant(VacantBuffer<'a>),
+  Vacant {
+    buf: VacantBuffer<'a>,
+    offset: u32,
+  },
   Pointer {
     arena: &'a A,
     offset: u32,
@@ -1398,7 +1405,10 @@ pub(crate) enum Key<'a, 'b: 'a, A> {
   },
   Remove(&'b [u8]),
   #[allow(dead_code)]
-  RemoveVacant(VacantBuffer<'a>),
+  RemoveVacant {
+    buf: VacantBuffer<'a>,
+    offset: u32,
+  },
   RemovePointer {
     arena: &'a A,
     offset: u32,
@@ -1411,8 +1421,8 @@ impl<'a, 'b: 'a, A: Allocator> Key<'a, 'b, A> {
   pub(crate) fn on_fail(&self, arena: &A) {
     match self {
       Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } | Self::RemovePointer { .. } => {}
-      Self::Vacant(key) | Self::RemoveVacant(key) => unsafe {
-        arena.dealloc(key.offset, key.capacity() as u32);
+      Self::Vacant { buf, offset } | Self::RemoveVacant { buf, offset } => unsafe {
+        arena.dealloc(*offset, buf.capacity() as u32);
       },
     }
   }
@@ -1424,7 +1434,7 @@ impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
   pub(crate) fn is_remove(&self) -> bool {
     matches!(
       self,
-      Self::Remove(_) | Self::RemoveVacant(_) | Self::RemovePointer { .. }
+      Self::Remove(_) | Self::RemoveVacant { .. } | Self::RemovePointer { .. }
     )
   }
 }
@@ -1434,7 +1444,7 @@ impl<'a, 'b: 'a, A: Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
   fn as_ref(&self) -> &[u8] {
     match self {
       Self::Occupied(key) | Self::Remove(key) => key,
-      Self::Vacant(key) | Self::RemoveVacant(key) => key.as_ref(),
+      Self::Vacant { buf, .. } | Self::RemoveVacant { buf, .. } => buf.as_ref(),
       Self::Pointer { arena, offset, len } | Self::RemovePointer { arena, offset, len } => unsafe {
         arena.get_bytes(*offset as usize, *len as usize)
       },

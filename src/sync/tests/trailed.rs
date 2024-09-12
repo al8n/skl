@@ -1904,15 +1904,15 @@ fn get_or_insert_with_value(l: SkipMap) {
   let vb = ValueBuilder::new(encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
-    val.write(&alice.id.to_le_bytes()).unwrap();
+    val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
     assert_eq!(&*val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(&*val, alice.id.to_be_bytes());
-    val.write(alice.name.as_bytes()).unwrap();
+    val.put_slice(alice.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
-    let err = val.write(&[1]).unwrap_err();
+    let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
       "buffer does not have enough space (remaining 0, want 1)"
@@ -1985,22 +1985,22 @@ fn get_or_insert_with(l: SkipMap) {
   let encoded_size = alice.encoded_size() as u32;
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer| {
-    key.write(b"alice").unwrap();
+    key.put_slice(b"alice").unwrap();
     Ok(())
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
-    val.write(&alice.id.to_le_bytes()).unwrap();
+    val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
     assert_eq!(&*val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(&*val, alice.id.to_be_bytes());
-    val.write(alice.name.as_bytes()).unwrap();
+    val.put_slice(alice.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
-    let err = val.write(&[1]).unwrap_err();
+    let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
       "buffer does not have enough space (remaining 0, want 1)"
@@ -2131,15 +2131,15 @@ fn insert_with_value(l: SkipMap) {
   let vb = ValueBuilder::new(encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
-    val.write(&alice.id.to_le_bytes()).unwrap();
+    val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
     assert_eq!(val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(val, alice.id.to_be_bytes());
-    val.write(alice.name.as_bytes()).unwrap();
+    val.put_slice(alice.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
-    let err = val.write(&[1]).unwrap_err();
+    let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
       "buffer does not have enough space (remaining 0, want 1)"
@@ -2158,15 +2158,15 @@ fn insert_with_value(l: SkipMap) {
   let vb = ValueBuilder::new(encoded_size, |val| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
-    val.write(&alice2.id.to_le_bytes()).unwrap();
+    val.put_u32_le(alice2.id).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
     assert_eq!(&*val, alice2.id.to_le_bytes());
     val[..4].copy_from_slice(&alice2.id.to_be_bytes());
     assert_eq!(&*val, alice2.id.to_be_bytes());
-    val.write(alice2.name.as_bytes()).unwrap();
+    val.put_slice(alice2.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
-    let err = val.write(&[1]).unwrap_err();
+    let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
       "buffer does not have enough space (remaining 0, want 1)"
@@ -2242,22 +2242,22 @@ fn insert_with(l: SkipMap) {
   let encoded_size = alice.encoded_size() as u32;
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer| {
-    key.write(b"alice").unwrap();
+    key.put_slice(b"alice").unwrap();
     Ok(())
   });
 
   let vb = ValueBuilder::new(encoded_size as u32, |val: &mut VacantBuffer| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
-    val.write(&alice.id.to_le_bytes()).unwrap();
+    val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
     assert_eq!(val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(val, alice.id.to_be_bytes());
-    val.write(alice.name.as_bytes()).unwrap();
+    val.put_slice(alice.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
-    let err = val.write(&[1]).unwrap_err();
+    let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
       "buffer does not have enough space (remaining 0, want 1)"
@@ -2275,15 +2275,15 @@ fn insert_with(l: SkipMap) {
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
-    val.write(&alice2.id.to_le_bytes()).unwrap();
+    val.put_u32_le(alice2.id).unwrap();
     assert_eq!(val.len(), 4);
     assert_eq!(val.remaining(), encoded_size as usize - 4);
     assert_eq!(&*val, alice2.id.to_le_bytes());
     val[..4].copy_from_slice(&alice2.id.to_be_bytes());
     assert_eq!(&*val, alice2.id.to_be_bytes());
-    val.write(alice2.name.as_bytes()).unwrap();
+    val.put_slice(alice2.name.as_bytes()).unwrap();
     assert_eq!(val.len(), encoded_size as usize);
-    let err = val.write(&[1]).unwrap_err();
+    let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
       "buffer does not have enough space (remaining 0, want 1)"

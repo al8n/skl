@@ -37,7 +37,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     self.check_height_and_ro(height)?;
 
     let copy = |buf: &mut VacantBuffer| {
-      let _ = buf.write(value);
+      buf.put_slice_unchecked(value);
       Ok(())
     };
     let val_len = value.len() as u32;
@@ -174,7 +174,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     self.check_height_and_ro(height)?;
 
     let copy = |buf: &mut VacantBuffer| {
-      let _ = buf.write(value);
+      buf.put_slice_unchecked(value);
       Ok(())
     };
     let val_len = value.len() as u32;
@@ -329,7 +329,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     self.check_height_and_ro(height).map_err(Among::Right)?;
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self
+    let (offset, vk) = self
       .arena
       .fetch_vacant_key(u32::from(key_size), key)
       .map_err(|e| match e {
@@ -342,7 +342,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         version,
         trailer,
         height.into(),
-        Key::Vacant(vk),
+        Key::Vacant { offset, buf: vk },
         Some(value_builder),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -413,7 +413,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     }
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self
+    let (offset, vk) = self
       .arena
       .fetch_vacant_key(u32::from(key_size), key)
       .map_err(|e| match e {
@@ -426,7 +426,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         version,
         trailer,
         height.into(),
-        Key::Vacant(vk),
+        Key::Vacant { offset, buf: vk },
         Some(value_builder),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -629,8 +629,8 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
 
     let (key_size, key) = key_builder.into_components();
-    let vk = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
-    let key = Key::RemoveVacant(vk);
+    let (offset, vk) = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
+    let key = Key::RemoveVacant { offset, buf: vk };
     self
       .update(
         version,

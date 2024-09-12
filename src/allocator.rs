@@ -437,7 +437,7 @@ mod sealed {
       ArenaAllocator::reserved_slice_mut(core::ops::Deref::deref(self))
     }
 
-    fn new(arena_opts: ArenaOptions, opts: Options) -> Self;
+    fn new(arena_opts: ArenaOptions, opts: Options) -> Result<Self, Error>;
 
     /// Creates a new ARENA backed by an anonymous mmap with the given capacity.
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -504,7 +504,7 @@ mod sealed {
       &'a self,
       key_size: u32,
       key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-    ) -> Result<VacantBuffer<'a>, Either<E, Error>> {
+    ) -> Result<(u32, VacantBuffer<'a>), Either<E, Error>> {
       let (key_offset, key_size) = self
         .alloc_bytes(key_size)
         .map(|mut b| {
@@ -518,7 +518,6 @@ mod sealed {
       let mut vk = unsafe {
         VacantBuffer::new(
           key_size,
-          key_offset as u32,
           NonNull::new_unchecked(self.get_pointer_mut(key_offset)),
         )
       };
@@ -529,7 +528,7 @@ mod sealed {
           }
           Either::Left(e)
         })
-        .map(|_| vk)
+        .map(|_| (key_offset as u32, vk))
     }
 
     #[inline]
@@ -540,7 +539,7 @@ mod sealed {
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     ) -> Result<(u32, Pointer), E> {
       let buf = self.get_pointer_mut(offset as usize);
-      let mut oval = VacantBuffer::new(size as usize, offset, NonNull::new_unchecked(buf));
+      let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
       if let Err(e) = f(&mut oval) {
         self.dealloc(offset, size);
         return Err(e);
@@ -572,11 +571,7 @@ mod sealed {
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     ) -> Result<(u32, Pointer), E> {
       let buf = self.get_pointer_mut(value_offset as usize);
-      let mut oval = VacantBuffer::new(
-        value_size as usize,
-        value_offset,
-        NonNull::new_unchecked(buf),
-      );
+      let mut oval = VacantBuffer::new(value_size as usize, NonNull::new_unchecked(buf));
       if let Err(e) = f(&mut oval) {
         self.dealloc(offset, size);
         return Err(e);
@@ -920,9 +915,12 @@ mod sealed {
       let trailer_offset = bytes.offset();
       let value_offset = trailer_offset + mem::size_of::<<Self::Node as Node>::Trailer>();
 
-      let mut oval = VacantBuffer::new(value_size as usize, value_offset as u32, unsafe {
-        NonNull::new_unchecked(self.get_pointer_mut(value_offset))
-      });
+      let mut oval = unsafe {
+        VacantBuffer::new(
+          value_size as usize,
+          NonNull::new_unchecked(self.get_pointer_mut(value_offset)),
+        )
+      };
       f(&mut oval).map_err(Either::Left)?;
 
       let remaining = oval.remaining();
@@ -1033,14 +1031,16 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   type Allocator = A;
 
-  fn new(arena_opts: ArenaOptions, opts: Options) -> Self {
-    Self {
-      arena: A::new(arena_opts),
-      max_key_size: opts.max_key_size().into(),
-      max_value_size: opts.max_value_size(),
-      max_height: opts.max_height().into(),
-      _m: PhantomData,
-    }
+  fn new(arena_opts: ArenaOptions, opts: Options) -> Result<Self, Error> {
+    A::new(arena_opts)
+      .map(|arena| Self {
+        arena,
+        max_key_size: opts.max_key_size().into(),
+        max_value_size: opts.max_value_size(),
+        max_height: opts.max_height().into(),
+        _m: PhantomData,
+      })
+      .map_err(Into::into)
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]

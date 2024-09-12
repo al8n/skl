@@ -41,19 +41,20 @@
 ## Features
 
 - **MVCC and 3D access**: Builtin MVCC (multiple versioning concurrency control) and key-value-version access support.
-- **Lock-free and Concurrent-Safe:** SkipMap provide lock-free operations, ensuring efficient concurrent access without the need for explicit locking mechanisms.
-- **Extensible for Key-Value Database Developers:** Designed as a low-level crate, SkipMap offer a flexible foundation for key-value database developers. You can easily build your own memtable or write-ahead-log (WAL) using these structures.
+- **Lock-free and Concurrent-Safe:** `SkipMap` provide lock-free operations, ensuring efficient concurrent access without the need for explicit locking mechanisms.
+- **Extensible for Key-Value Database Developers:** Designed as a low-level crate, `SkipMap` offer a flexible foundation for key-value database developers. You can easily build your own memtable or durable storage using these structures.
 - **Memory Efficiency:** These data structures are optimized for minimal memory overhead. They operate around references, avoiding unnecessary allocations and deep copies, which can be crucial for efficient memory usage.
   - **Segment tracker:** Builtin segment recollection support, a lock-free freelist helps reuse free segments.
   - **Prefix compression:**
     - Same key will only be stored once.
     - Keys with common prefix will be stored once (longest one must be inserted first).
+    - Keys are sub-slice of negeibours will be stored once (require `CompressionPolicy::High`).
   - **Discard tracker:** Builtin discard tracker, which will track discarded bytes to help end-users decide when to compact or rewrite.
-- **Efficient Iteration:** Enjoy fast forward and backward iteration through the elements in your SkipMap. Additionally, bounded iterators are supported, allowing you to traverse only a specified range of elements efficiently.
-- **Snapshot Support:** Create snapshots of your SkipMap, offering a read-only view of the contents at a specific moment in time. Snapshots provide a consistent view of the data, enabling implementations of transactional semantics and other use cases where data consistency is crucial.
+- **Efficient Iteration:** Enjoy fast forward and backward iteration through the elements in your `SkipMap`. Additionally, bounded iterators are supported, allowing you to traverse only a specified range of elements efficiently.
+- **Snapshot Support:** Create snapshots of your `SkipMap`, offering a read-only view of the contents at a specific moment in time. Snapshots provide a consistent view of the data, enabling implementations of transactional semantics and other use cases where data consistency is crucial.
 - **Memory Management Options:**
   - **Heap Allocation:** Memory allocation is handled by Rust's allocator, ensuring all data resides in RAM.
-  - **Mmap:** Data can be mapped to a disk file by the operating system, making it suitable for write-ahead-logs (WAL) and durable storage.
+  - **Mmap:** Data can be mapped to a disk file by the operating system, making it suitable for durable storage.
   - **Mmap Anonymous:** Mapped to anonymous memory (virtual memory) by the OS, ideal for large in-memory memtables, optimizing memory utilization.
 
 ## Examples

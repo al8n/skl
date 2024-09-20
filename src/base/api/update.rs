@@ -36,7 +36,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;
 
-    let copy = |buf: &mut VacantBuffer| {
+    let copy = |buf: &mut VacantBuffer<'_>| {
       buf.put_slice_unchecked(value);
       Ok(())
     };
@@ -79,10 +79,10 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   #[allow(dead_code)]
   #[inline]
-  pub fn insert_with_value_builder<'a, 'b: 'a, E>(
+  pub fn insert_with_value_builder<'a, E>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
@@ -106,11 +106,11 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
+  pub fn insert_at_height_with_value_builder<'a, E>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
@@ -173,7 +173,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;
 
-    let copy = |buf: &mut VacantBuffer| {
+    let copy = |buf: &mut VacantBuffer<'_>| {
       buf.put_slice_unchecked(value);
       Ok(())
     };
@@ -217,10 +217,10 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   #[allow(dead_code)]
   #[inline]
-  pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
+  pub fn get_or_insert_with_value_builder<'a, E>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
@@ -245,11 +245,11 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
-  pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
+  pub fn get_or_insert_at_height_with_value_builder<'a, E>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
@@ -458,10 +458,10 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[allow(dead_code)]
   #[inline]
-  pub fn compare_remove<'a, 'b: 'a>(
+  pub fn compare_remove<'a>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: A::Trailer,
     success: Ordering,
     failure: Ordering,
@@ -484,11 +484,11 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
-  pub fn compare_remove_at_height<'a, 'b: 'a>(
+  pub fn compare_remove_at_height<'a>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: A::Trailer,
     success: Ordering,
     failure: Ordering,
@@ -536,10 +536,10 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
   #[allow(dead_code)]
   #[inline]
-  pub fn get_or_remove<'a, 'b: 'a>(
+  pub fn get_or_remove<'a>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.get_or_remove_at_height(version, self.random_height(), key, trailer)
@@ -550,11 +550,11 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  pub fn get_or_remove_at_height<'a, 'b: 'a>(
+  pub fn get_or_remove_at_height<'a>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Error> {
     self.check_height_and_ro(height)?;

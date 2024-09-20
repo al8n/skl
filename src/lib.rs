@@ -38,11 +38,12 @@ pub mod sync;
 /// Implementations for single-threaded environments.
 pub mod unsync;
 
-/// Options for configuration.
-pub mod options;
-pub use options::Options;
+mod builder;
+pub use builder::*;
+
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-pub use options::{MmapOptions, OpenOptions};
+#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+pub use builder::{MmapOptions, OpenOptions};
 
 mod types;
 pub use types::*;
@@ -60,7 +61,7 @@ const CURRENT_VERSION: u16 = 0;
 const REMOVE: u32 = u32::MAX;
 const DANGLING_ZST: NonNull<()> = NonNull::dangling();
 
-/// # Safety
+/// ## Safety
 /// - `T` must be a ZST.
 #[inline]
 const unsafe fn dangling_zst_ref<'a, T>() -> &'a T {
@@ -193,7 +194,7 @@ builder!(Value(u32), Key(KeySize));
 
 /// A trait for extra information that can be stored with entry in the skiplist.
 ///
-/// # Safety
+/// ## Safety
 /// - The implementors must ensure that they can be reconstructed from a byte slice directly.
 ///   e.g. struct includes `*const T` cannot be used as the trailer, because the pointer is invalid
 ///   after restart the program.

@@ -37,8 +37,6 @@ memmap = ["rarena-allocator/memmap", "std"]
 std = ["rand/default", "either/default", "rarena-allocator/std", "memchr/default", "among/default"]
 tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
-# loom = ["dep:loom", "rarena-allocator/loom"]
-
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 
@@ -81,3 +79,18 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
 members = ["integration"]
+
+[lints.rust]
+rust_2018_idioms = "warn"
+single_use_lifetimes = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(all_tests)',
+  'cfg(test_unsync_full)',
+  'cfg(test_unsync_versioned)',
+  'cfg(test_unsync_trailed)',
+  'cfg(test_unsync_map)',
+  'cfg(test_sync_full)',
+  'cfg(test_sync_versioned)',
+  'cfg(test_sync_trailed)',
+  'cfg(test_sync_map)',
+] }

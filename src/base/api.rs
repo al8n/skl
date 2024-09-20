@@ -7,7 +7,7 @@ use super::*;
 mod update;
 
 type RemoveValueBuilder<E> =
-  ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer) -> Result<(), E>>>;
+  ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<(), E>>>;
 
 impl<A: Allocator> SkipList<A, Ascend> {
   /// Create a new skipmap with default options.
@@ -40,7 +40,7 @@ impl<A: Allocator> SkipList<A, Ascend> {
   /// **Note:** The capacity stands for how many memory mmaped,
   /// it does not mean the skipmap can store `cap` entries.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -57,7 +57,7 @@ impl<A: Allocator> SkipList<A, Ascend> {
 
   /// Open an exist file and mmap it to create skipmap.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -240,7 +240,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
   /// Like [`SkipList::map_mut`], but with [`Options`] and a custom [`Comparator`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -282,7 +282,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
   /// Like [`SkipList::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -329,7 +329,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
   /// Like [`SkipList::map`], but with a custom [`Comparator`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -370,7 +370,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
   /// Like [`SkipList::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -449,7 +449,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
   /// Clear the skiplist to empty and re-initialize.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
   /// - This method is not thread-safe.
   pub unsafe fn clear(&mut self) -> Result<(), Error> {
@@ -526,13 +526,13 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
   /// you can use [`contains_key_versioned`](SkipList::contains_key_versioned).
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
+  pub fn contains_key(&self, version: Version, key: &[u8]) -> bool {
     self.get(version, key).is_some()
   }
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
+  pub fn contains_key_versioned(&self, version: Version, key: &[u8]) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
@@ -550,7 +550,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> Option<EntryRef<'a, A>> {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
 
@@ -589,11 +589,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
   /// Returns the value associated with the given key, if it exists.
   ///
   /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  pub fn get_versioned<'a, 'b: 'a>(
-    &'a self,
-    version: Version,
-    key: &'b [u8],
-  ) -> Option<VersionedEntryRef<'a, A>> {
+  pub fn get_versioned(&self, version: Version, key: &[u8]) -> Option<VersionedEntryRef<'_, A>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
 
@@ -627,33 +623,25 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
-    version: Version,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, A>> {
+  pub fn upper_bound(&self, version: Version, upper: Bound<&[u8]>) -> Option<EntryRef<'_, A>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
-    version: Version,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, A>> {
+  pub fn lower_bound(&self, version: Version, lower: Bound<&[u8]>) -> Option<EntryRef<'_, A>> {
     self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<A, C> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, A, C> {
     iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> iterator::AllVersionsIter<A, C> {
+  pub fn iter_all_versions(&self, version: Version) -> iterator::AllVersionsIter<'_, A, C> {
     iterator::AllVersionsIter::new(version, self, true)
   }
 

@@ -78,10 +78,14 @@ fn test_encode_decode_key_size() {
   }
 }
 
+#[cfg(any(all(test, not(miri)), test_sync_full,))]
 mod full;
 
+#[cfg(any(all(test, not(miri)), test_sync_map,))]
 mod map;
 
+#[cfg(any(all(test, not(miri)), test_sync_trailed,))]
 mod trailed;
 
+#[cfg(any(all(test, not(miri)), test_sync_versioned,))]
 mod versioned;

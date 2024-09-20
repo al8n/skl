@@ -12,15 +12,15 @@ pub struct VersionedEntryRef<'a, A: Allocator> {
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<'a, A: Allocator> Clone for VersionedEntryRef<'a, A> {
+impl<A: Allocator> Clone for VersionedEntryRef<'_, A> {
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl<'a, A: Allocator> Copy for VersionedEntryRef<'a, A> {}
+impl<A: Allocator> Copy for VersionedEntryRef<'_, A> {}
 
-impl<'a, A> VersionedEntryRef<'a, A>
+impl<A> VersionedEntryRef<'_, A>
 where
   A: Allocator,
   A::Node: WithTrailer,
@@ -36,7 +36,7 @@ where
   }
 }
 
-impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
+impl<A: Allocator> VersionedEntryRef<'_, A> {
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &[u8] {
@@ -284,13 +284,13 @@ impl<A: Allocator> Entry<A> {
 #[derive(Debug)]
 pub struct EntryRef<'a, A: Allocator>(pub(crate) VersionedEntryRef<'a, A>);
 
-impl<'a, A: Allocator> Clone for EntryRef<'a, A> {
+impl<A: Allocator> Clone for EntryRef<'_, A> {
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl<'a, A: Allocator> Copy for EntryRef<'a, A> {}
+impl<A: Allocator> Copy for EntryRef<'_, A> {}
 
 impl<'a, A: Allocator> From<EntryRef<'a, A>> for Entry<A> {
   fn from(entry: EntryRef<'a, A>) -> Self {
@@ -298,7 +298,7 @@ impl<'a, A: Allocator> From<EntryRef<'a, A>> for Entry<A> {
   }
 }
 
-impl<'a, A> EntryRef<'a, A>
+impl<A> EntryRef<'_, A>
 where
   A: Allocator,
   A::Node: WithTrailer,
@@ -310,7 +310,7 @@ where
   }
 }
 
-impl<'a, A> EntryRef<'a, A>
+impl<A> EntryRef<'_, A>
 where
   A: Allocator,
   A::Node: WithVersion,
@@ -322,7 +322,7 @@ where
   }
 }
 
-impl<'a, A: Allocator> EntryRef<'a, A> {
+impl<A: Allocator> EntryRef<'_, A> {
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &[u8] {

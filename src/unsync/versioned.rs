@@ -174,7 +174,7 @@ impl SkipMap {
   /// **Note:** The capacity stands for how many memory mmaped,
   /// it does not mean the skipmap can store `cap` entries.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -189,7 +189,7 @@ impl SkipMap {
 
   /// Open an exist file and mmap it to create skipmap.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -233,7 +233,7 @@ impl<C> SkipMap<C> {
 
   /// Returns the mutable reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - The caller need to make sure there is no data-race
   ///
   /// # Panics
@@ -361,7 +361,7 @@ impl<C> SkipMap<C> {
   ///
   /// This method is useful when you want to check if the underlying allocator can allocate a node.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, Ascend, Options};
@@ -392,7 +392,7 @@ impl<C> SkipMap<C> {
 
   /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -409,7 +409,7 @@ impl<C> SkipMap<C> {
 
   /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -436,7 +436,7 @@ impl<C> SkipMap<C> {
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -453,7 +453,7 @@ impl<C> SkipMap<C> {
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -492,11 +492,11 @@ impl<C> SkipMap<C> {
 
   /// Clear the skiplist to empty and re-initialize.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
   /// - This method is not thread-safe.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// Undefine behavior:
   ///
@@ -544,7 +544,7 @@ impl<C: Comparator> SkipMap<C> {
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
   /// you can use [`contains_key_versioned`](SkipMap::contains_key_versioned).
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, Options};
@@ -559,13 +559,13 @@ impl<C: Comparator> SkipMap<C> {
   /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
+  pub fn contains_key(&self, version: Version, key: &[u8]) -> bool {
     self.0.contains_key(version, key)
   }
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, Options};
@@ -580,7 +580,7 @@ impl<C: Comparator> SkipMap<C> {
   /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key_versioned<'a, 'b: 'a>(&'a self, version: Version, key: &'b [u8]) -> bool {
+  pub fn contains_key_versioned(&self, version: Version, key: &[u8]) -> bool {
     self.0.contains_key_versioned(version, key)
   }
 
@@ -599,7 +599,7 @@ impl<C: Comparator> SkipMap<C> {
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipMap::get_versioned).
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, Options};
@@ -615,11 +615,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// assert!(map.get(1, b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(
-    &'a self,
-    version: Version,
-    key: &'b [u8],
-  ) -> Option<EntryRef<'a, Allocator>> {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, Allocator>> {
     self.0.get(version, key)
   }
 
@@ -627,7 +623,7 @@ impl<C: Comparator> SkipMap<C> {
   ///
   /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, Options};
@@ -644,43 +640,43 @@ impl<C: Comparator> SkipMap<C> {
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```
-  pub fn get_versioned<'a, 'b: 'a>(
-    &'a self,
+  pub fn get_versioned(
+    &self,
     version: Version,
-    key: &'b [u8],
-  ) -> Option<VersionedEntryRef<'a, Allocator>> {
+    key: &[u8],
+  ) -> Option<VersionedEntryRef<'_, Allocator>> {
     self.0.get_versioned(version, key)
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
+  pub fn upper_bound(
+    &self,
     version: Version,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, Allocator>> {
+    upper: Bound<&[u8]>,
+  ) -> Option<EntryRef<'_, Allocator>> {
     self.0.upper_bound(version, upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
+  pub fn lower_bound(
+    &self,
     version: Version,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, Allocator>> {
+    lower: Bound<&[u8]>,
+  ) -> Option<EntryRef<'_, Allocator>> {
     self.0.lower_bound(version, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> Iter<Allocator, C> {
+  pub fn iter(&self, version: Version) -> Iter<'_, Allocator, C> {
     self.0.iter(version)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> AllVersionsIter<Allocator, C> {
+  pub fn iter_all_versions(&self, version: Version) -> AllVersionsIter<'_, Allocator, C> {
     self.0.iter_all_versions(version)
   }
 
@@ -731,7 +727,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, Options};
@@ -764,7 +760,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
@@ -800,10 +796,10 @@ impl<C: Comparator> SkipMap<C> {
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn insert_with_value_builder<'a, 'b: 'a, E>(
+  pub fn insert_with_value_builder<'a, E>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self.0.insert_at_height_with_value_builder(
@@ -827,7 +823,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
@@ -863,11 +859,11 @@ impl<C: Comparator> SkipMap<C> {
   /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb)
   /// .unwrap();
   /// ```
-  pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
+  pub fn insert_at_height_with_value_builder<'a, E>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self
@@ -924,7 +920,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
@@ -959,10 +955,10 @@ impl<C: Comparator> SkipMap<C> {
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
+  pub fn get_or_insert_with_value_builder<'a, E>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self.get_or_insert_at_height_with_value_builder(
@@ -986,7 +982,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, ValueBuilder, Options};
@@ -1023,11 +1019,11 @@ impl<C: Comparator> SkipMap<C> {
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
+  pub fn get_or_insert_at_height_with_value_builder<'a, E>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, Allocator>>, Either<E, Error>> {
     self
@@ -1047,7 +1043,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1115,7 +1111,7 @@ impl<C: Comparator> SkipMap<C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1179,7 +1175,7 @@ impl<C: Comparator> SkipMap<C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1245,7 +1241,7 @@ impl<C: Comparator> SkipMap<C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{unsync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1300,20 +1296,20 @@ impl<C: Comparator> SkipMap<C> {
 
   /// Removes the key-value pair if it exists.
   #[inline]
-  pub fn remove<'a, 'b: 'a>(
+  pub fn remove<'a>(
     &'a self,
     version: Version,
-    key: &'b [u8],
+    key: &'a [u8],
   ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
     self.remove_at_height(version, self.random_height(), key)
   }
 
   /// Removes the key-value pair if it exists.
-  pub fn remove_at_height<'a, 'b: 'a>(
+  pub fn remove_at_height<'a>(
     &'a self,
     version: Version,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
   ) -> Result<Option<EntryRef<'a, Allocator>>, Error> {
     self.0.compare_remove_at_height(
       version,

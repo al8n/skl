@@ -1,8 +1,8 @@
 use core::{mem, ptr::NonNull};
 use std::boxed::Box;
 
+use builder::CompressionPolicy;
 use either::Either;
-use options::CompressionPolicy;
 use rarena_allocator::Allocator as _;
 
 use super::{allocator::*, common::*, *};
@@ -260,11 +260,11 @@ impl<A, C> SkipList<A, C>
 where
   A: Allocator,
 {
-  fn new_node<'a, 'b: 'a, E>(
+  fn new_node<'a, E>(
     &'a self,
     version: Version,
     height: u32,
-    key: &Key<'a, 'b, A>,
+    key: &Key<'a, '_, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     trailer: A::Trailer,
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
@@ -479,10 +479,10 @@ where
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub(crate) fn gt<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn gt(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -504,10 +504,10 @@ where
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub(crate) fn lt<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn lt(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -528,10 +528,10 @@ where
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub(crate) fn ge<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn ge(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -553,10 +553,10 @@ where
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub(crate) fn le<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn le(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -769,11 +769,11 @@ where
   ///
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
-  unsafe fn find_splice<'a, 'b: 'a>(
+  unsafe fn find_splice<'a>(
     &'a self,
     version: Version,
-    key: &'b [u8],
-    ins: &mut Inserter<<A::Node as Node>::Pointer>,
+    key: &[u8],
+    ins: &mut Inserter<'a, <A::Node as Node>::Pointer>,
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>) {
     let list_height = self.meta().height() as u32;
@@ -842,7 +842,7 @@ where
 
   /// Find the splice for the given level.
   ///
-  /// # Safety
+  /// ## Safety
   /// - `level` is less than `MAX_HEIGHT`.
   /// - `start` must be allocated by self's arena.
   unsafe fn find_splice_for_level(
@@ -1332,7 +1332,7 @@ pub struct Inserter<'a, P> {
   _m: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, P: NodePointer> Default for Inserter<'a, P> {
+impl<P: NodePointer> Default for Inserter<'_, P> {
   #[inline]
   fn default() -> Self {
     Self {
@@ -1416,7 +1416,7 @@ pub(crate) enum Key<'a, 'b: 'a, A> {
   },
 }
 
-impl<'a, 'b: 'a, A: Allocator> Key<'a, 'b, A> {
+impl<A: Allocator> Key<'_, '_, A> {
   #[inline]
   pub(crate) fn on_fail(&self, arena: &A) {
     match self {
@@ -1428,7 +1428,7 @@ impl<'a, 'b: 'a, A: Allocator> Key<'a, 'b, A> {
   }
 }
 
-impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
+impl<A> Key<'_, '_, A> {
   /// Returns `true` if the key is a remove operation.
   #[inline]
   pub(crate) fn is_remove(&self) -> bool {
@@ -1439,7 +1439,7 @@ impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
   }
 }
 
-impl<'a, 'b: 'a, A: Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
+impl<A: Allocator> AsRef<[u8]> for Key<'_, '_, A> {
   #[inline]
   fn as_ref(&self) -> &[u8] {
     match self {
@@ -1452,7 +1452,7 @@ impl<'a, 'b: 'a, A: Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
   }
 }
 
-impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
+impl<'a, A> Key<'a, '_, A> {
   #[inline]
   const fn pointer(arena: &'a A, pointer: Pointer) -> Self {
     Self::Pointer {

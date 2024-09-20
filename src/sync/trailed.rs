@@ -172,7 +172,7 @@ impl<T: Trailer> SkipMap<T> {
   /// **Note:** The capacity stands for how many memory mmaped,
   /// it does not mean the skipmap can store `cap` entries.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -187,7 +187,7 @@ impl<T: Trailer> SkipMap<T> {
 
   /// Open an exist file and mmap it to create skipmap.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -214,7 +214,7 @@ impl<T: Trailer> SkipMap<T> {
   ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///    especially if you're frequently accessing or modifying it.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   ///
   /// [`SkipMap::new`]: #method.new
@@ -240,7 +240,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
   /// Returns the mutable reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - The caller need to make sure there is no data-race
   ///
   /// # Panics
@@ -349,7 +349,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
   ///
   /// This method is useful when you want to check if the underlying allocator can allocate a node.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, Options};
@@ -380,7 +380,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -397,7 +397,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -424,7 +424,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`].
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -441,7 +441,7 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
   /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
   ///
-  /// # Safety
+  /// ## Safety
   /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -480,11 +480,11 @@ impl<T: Trailer, C> SkipMap<T, C> {
 
   /// Clear the skiplist to empty and re-initialize.
   ///
-  /// # Safety
+  /// ## Safety
   /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
   /// - This method is not thread-safe.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// Undefine behavior:
   ///
@@ -550,7 +550,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, Options};
@@ -584,7 +584,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
@@ -620,9 +620,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn insert_with_value_builder<'a, 'b: 'a, E>(
+  pub fn insert_with_value_builder<'a, E>(
     &'a self,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
@@ -647,7 +647,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
@@ -683,10 +683,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, 10)
   /// .unwrap();
   /// ```
-  pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
+  pub fn insert_at_height_with_value_builder<'a, E>(
     &'a self,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
@@ -744,7 +744,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
@@ -779,9 +779,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// .unwrap();
   /// ```
   #[inline]
-  pub fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
+  pub fn get_or_insert_with_value_builder<'a, E>(
     &'a self,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
@@ -807,7 +807,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, ValueBuilder, Options};
@@ -843,10 +843,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, 10)
   /// .unwrap();
   /// ```
-  pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
+  pub fn get_or_insert_at_height_with_value_builder<'a, E>(
     &'a self,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: T,
   ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Either<E, Error>> {
@@ -871,7 +871,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -939,7 +939,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1002,7 +1002,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1068,7 +1068,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
@@ -1134,9 +1134,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
-  pub fn compare_remove<'a, 'b: 'a>(
+  pub fn compare_remove<'a>(
     &'a self,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: T,
     success: Ordering,
     failure: Ordering,
@@ -1159,10 +1159,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
-  pub fn compare_remove_at_height<'a, 'b: 'a>(
+  pub fn compare_remove_at_height<'a>(
     &'a self,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: T,
     success: Ordering,
     failure: Ordering,
@@ -1178,9 +1178,9 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
   #[inline]
-  pub fn get_or_remove<'a, 'b: 'a>(
+  pub fn get_or_remove<'a>(
     &'a self,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: T,
   ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
     self
@@ -1194,7 +1194,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, Options};
@@ -1206,10 +1206,10 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// let height = map.random_height();
   /// map.get_or_remove_at_height(height, b"hello", 10).unwrap();
   /// ```
-  pub fn get_or_remove_at_height<'a, 'b: 'a>(
+  pub fn get_or_remove_at_height<'a>(
     &'a self,
     height: Height,
-    key: &'b [u8],
+    key: &'a [u8],
     trailer: T,
   ) -> Result<Option<EntryRef<'a, Allocator<T>>>, Error> {
     self
@@ -1229,7 +1229,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, KeyBuilder, Options};
@@ -1287,7 +1287,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, KeyBuilder, Options};
@@ -1336,7 +1336,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// Returns `true` if the key exists in the map.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, Options};
@@ -1351,7 +1351,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   /// assert!(!map.contains_key(b"hello"));
   /// ```
   #[inline]
-  pub fn contains_key<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> bool {
+  pub fn contains_key(&self, key: &[u8]) -> bool {
     self.0.contains_key(MIN_VERSION, key)
   }
 
@@ -1367,7 +1367,7 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
 
   /// Returns the value associated with the given key, if it exists.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::{sync::trailed::SkipMap, Options};
@@ -1384,31 +1384,25 @@ impl<T: Trailer, C: Comparator> SkipMap<T, C> {
   ///
   /// assert!(map.get(b"hello").is_none());
   /// ```
-  pub fn get<'a, 'b: 'a>(&'a self, key: &'b [u8]) -> Option<EntryRef<'a, Allocator<T>>> {
+  pub fn get(&self, key: &[u8]) -> Option<EntryRef<'_, Allocator<T>>> {
     self.0.get(MIN_VERSION, key)
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, 'b: 'a>(
-    &'a self,
-    upper: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, Allocator<T>>> {
+  pub fn upper_bound(&self, upper: Bound<&[u8]>) -> Option<EntryRef<'_, Allocator<T>>> {
     self.0.upper_bound(MIN_VERSION, upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, 'b: 'a>(
-    &'a self,
-    lower: Bound<&'b [u8]>,
-  ) -> Option<EntryRef<'a, Allocator<T>>> {
+  pub fn lower_bound(&self, lower: Bound<&[u8]>) -> Option<EntryRef<'_, Allocator<T>>> {
     self.0.lower_bound(MIN_VERSION, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self) -> Iter<Allocator<T>, C> {
+  pub fn iter(&self) -> Iter<'_, Allocator<T>, C> {
     self.0.iter(MIN_VERSION)
   }
 

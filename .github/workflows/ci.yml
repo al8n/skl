@@ -239,16 +239,41 @@ jobs:
           cargo build --bin test-mmap-anon --target-dir .
           valgrind --error-exitcode=1 --leak-check=full --track-origins=yes --show-leak-kinds=all ./debug/test-mmap-anon 
         working-directory: integration
-      
- 
+  
   miri-tb:
-    name: miri-tb
+    name: miri-tb-${{ matrix.target }}-${{ matrix.cfg }}
     strategy:
       matrix:
         os:
           - ubuntu-latest
           - macos-latest
-          # - windows-latest
+        target:
+          - x86_64-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+          - powerpc64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+        cfg:
+          - unsync_map
+          - unsync_versioned
+          - unsync_trailed
+          - unsync_full
+          - sync_map
+          - sync_versioned
+          - sync_trailed
+          - sync_full
+        # Exclude invalid combinations
+        exclude:
+          - os: ubuntu-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: i686-unknown-linux-gnu
+          - os: macos-latest
+            target: powerpc64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -262,23 +287,44 @@ jobs:
           key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-miri-
-      - name: Install cargo-hack
-        run: cargo install cargo-hack
-      - name: Miri (Linux)
-        run: ci/miri_tb.sh
-        if: matrix.os == 'ubuntu-latest'
       - name: Miri
-        run: ci/miri_tb_generic.sh
-        if: matrix.os != 'ubuntu-latest'
+        run: |
+          bash ci/miri_tb.sh ${{ matrix.target }} ${{ matrix.cfg }}
 
   miri-sb:
-    name: miri-sb
+    name: miri-sb-${{ matrix.target }}-${{ matrix.cfg }}
     strategy:
       matrix:
         os:
           - ubuntu-latest
           - macos-latest
-          # - windows-latest
+        target:
+          - x86_64-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+          - powerpc64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+        cfg:
+          - unsync_map
+          - unsync_versioned
+          - unsync_trailed
+          - unsync_full
+          - sync_map
+          - sync_versioned
+          - sync_trailed
+          - sync_full
+        # Exclude invalid combinations
+        exclude:
+          - os: ubuntu-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: i686-unknown-linux-gnu
+          - os: macos-latest
+            target: powerpc64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -292,40 +338,9 @@ jobs:
           key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-miri-
-      - name: Install cargo-hack
-        run: cargo install cargo-hack
-      - name: Miri (Linux)
-        run: ci/miri_sb.sh
-        if: matrix.os == 'ubuntu-latest'
       - name: Miri
-        run: ci/miri_sb_generic.sh
-        if: matrix.os != 'ubuntu-latest'
-
-  # loom:
-  #   name: loom
-  #   strategy:
-  #     matrix:
-  #       os:
-  #         - ubuntu-latest
-  #         - macos-latest
-  #         - windows-latest
-  #   runs-on: ${{ matrix.os }}
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Cache cargo build and registry
-  #       uses: actions/cache@v3
-  #       with:
-  #         path: |
-  #           ~/.cargo/registry
-  #           ~/.cargo/git
-  #           target
-  #         key: ${{ runner.os }}-loom-${{ hashFiles('**/Cargo.lock') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-loom-
-  #     - name: Install Rust
-  #       run: rustup update $nightly && rustup default $nightly
-  #     - name: Loom tests
-  #       run: cargo test --tests --features loom,memmap
+        run: |
+          bash ci/miri_sb.sh ${{ matrix.target }} ${{ matrix.cfg }}
 
   coverage:
     name: cargo tarpaulin

@@ -418,6 +418,78 @@ mod sealed {
     ) -> Result<u8, u8>;
   }
 
+  impl<T: Allocator> AllocatorExt for T {}
+
+  pub trait AllocatorExt: Allocator {
+    /// Checks if the arena has enough capacity to store the skiplist,
+    /// and returns the data offset.
+    #[inline]
+    fn check_capacity(&self, max_height: u8) -> Result<u32, Error> {
+      let offset = self.data_offset();
+
+      let alignment = mem::align_of::<Self::Header>();
+      let meta_offset = (offset + alignment - 1) & !(alignment - 1);
+      let meta_end = meta_offset + mem::size_of::<Self::Header>();
+
+      let alignment = mem::align_of::<Self::Node>();
+      let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
+      let head_end = head_offset
+        + mem::size_of::<Self::Node>()
+        + mem::size_of::<<Self::Node as Node>::Link>() * max_height as usize;
+
+      let trailer_alignment = mem::align_of::<Self::Trailer>();
+      let trailer_size = mem::size_of::<Self::Trailer>();
+      let trailer_end = if trailer_size != 0 {
+        let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+        trailer_offset + trailer_size
+      } else {
+        head_end
+      };
+
+      let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
+      let tail_end = tail_offset
+        + mem::size_of::<Self::Node>()
+        + mem::size_of::<<Self::Node as Node>::Link>() * max_height as usize;
+      let trailer_end = if trailer_size != 0 {
+        let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+        trailer_offset + trailer_size
+      } else {
+        tail_end
+      };
+      if trailer_end > self.capacity() {
+        return Err(Error::ArenaTooSmall);
+      }
+
+      Ok(trailer_end as u32)
+    }
+
+    #[inline]
+    fn get_pointers(
+      &self,
+    ) -> (
+      NonNull<Self::Header>,
+      <Self::Node as Node>::Pointer,
+      <Self::Node as Node>::Pointer,
+    ) {
+      unsafe {
+        let offset = self.data_offset();
+        let meta = self.get_aligned_pointer::<Self::Header>(offset);
+
+        let offset = self.offset(meta as _) + mem::size_of::<Self::Header>();
+        let head_ptr = self.get_aligned_pointer::<Self::Node>(offset);
+        let head_offset = self.offset(head_ptr as _);
+        let head = <<Self::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
+
+        let (trailer_offset, _) = head.as_ref(self).value_pointer().load();
+        let offset = trailer_offset as usize + mem::size_of::<Self::Trailer>();
+        let tail_ptr = self.get_aligned_pointer::<Self::Node>(offset);
+        let tail_offset = self.offset(tail_ptr as _);
+        let tail = <<Self::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
+        (NonNull::new_unchecked(meta as _), head, tail)
+      }
+    }
+  }
+
   pub trait Sealed:
     Sized + Clone + core::fmt::Debug + core::ops::Deref<Target = Self::Allocator>
   {
@@ -429,6 +501,8 @@ mod sealed {
 
     type Allocator: ArenaAllocator;
 
+    fn options(&self) -> &Options;
+
     fn reserved_slice(&self) -> &[u8] {
       ArenaAllocator::reserved_slice(core::ops::Deref::deref(self))
     }
@@ -437,7 +511,7 @@ mod sealed {
       ArenaAllocator::reserved_slice_mut(core::ops::Deref::deref(self))
     }
 
-    fn new(arena_opts: ArenaOptions, opts: Options) -> Result<Self, Error>;
+    fn new(arena: Self::Allocator, opts: Options) -> Self;
 
     /// Creates a new ARENA backed by an anonymous mmap with the given capacity.
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -994,9 +1068,7 @@ mod sealed {
 #[derive(Debug)]
 pub struct GenericAllocator<H, N, A> {
   arena: A,
-  max_key_size: u32,
-  max_value_size: u32,
-  max_height: u32,
+  opts: Options,
   _m: PhantomData<(H, N)>,
 }
 
@@ -1004,9 +1076,7 @@ impl<H, N, A: Clone> Clone for GenericAllocator<H, N, A> {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
-      max_key_size: self.max_key_size,
-      max_value_size: self.max_value_size,
-      max_height: self.max_height,
+      opts: self.opts.clone(),
       _m: PhantomData,
     }
   }
@@ -1031,16 +1101,16 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   type Allocator = A;
 
-  fn new(arena_opts: ArenaOptions, opts: Options) -> Result<Self, Error> {
-    A::new(arena_opts)
-      .map(|arena| Self {
-        arena,
-        max_key_size: opts.max_key_size().into(),
-        max_value_size: opts.max_value_size(),
-        max_height: opts.max_height().into(),
-        _m: PhantomData,
-      })
-      .map_err(Into::into)
+  fn options(&self) -> &Options {
+    &self.opts
+  }
+
+  fn new(arena: Self::Allocator, opts: Options) -> Self {
+    Self {
+      arena,
+      opts,
+      _m: PhantomData,
+    }
   }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1052,9 +1122,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   ) -> std::io::Result<Self> {
     A::map_anon(arena_opts, mmap_options).map(|arena| Self {
       arena,
-      max_key_size: opts.max_key_size().into(),
-      max_value_size: opts.max_value_size(),
-      max_height: opts.max_height().into(),
+      opts,
       _m: PhantomData,
     })
   }
@@ -1070,9 +1138,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   ) -> std::io::Result<Self> {
     A::map_mut(path, arena_opts, open_options, mmap_options).map(|arena| Self {
       arena,
-      max_key_size: opts.max_key_size().into(),
-      max_value_size: opts.max_value_size(),
-      max_height: opts.max_height().into(),
+      opts,
       _m: PhantomData,
     })
   }
@@ -1088,9 +1154,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   ) -> std::io::Result<Self> {
     A::map(path, arena_options, open_options, mmap_options).map(|arena| Self {
       arena,
-      max_key_size: opts.max_key_size().into(),
-      max_value_size: opts.max_value_size(),
-      max_height: opts.max_height().into(),
+      opts,
       _m: PhantomData,
     })
   }
@@ -1110,9 +1174,7 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
     A::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options).map(
       |arena| Self {
         arena,
-        max_key_size: opts.max_key_size().into(),
-        max_value_size: opts.max_value_size(),
-        max_height: opts.max_height().into(),
+        opts,
         _m: PhantomData,
       },
     )
@@ -1133,23 +1195,21 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
     A::map_with_path_builder(path_builder, arena_options, open_options, mmap_options).map(|arena| {
       Self {
         arena,
-        max_key_size: opts.max_key_size().into(),
-        max_value_size: opts.max_value_size(),
-        max_height: opts.max_height().into(),
+        opts,
         _m: PhantomData,
       }
     })
   }
 
   fn max_key_size(&self) -> u32 {
-    self.max_key_size
+    self.opts.max_key_size().into()
   }
 
   fn max_value_size(&self) -> u32 {
-    self.max_value_size
+    self.opts.max_value_size().into()
   }
 
   fn max_height(&self) -> u32 {
-    self.max_height
+    self.opts.max_height().into()
   }
 }

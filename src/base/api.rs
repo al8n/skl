@@ -414,39 +414,6 @@ impl<A: Allocator, C> SkipList<A, C> {
       .map_err(Either::Right)
   }
 
-  /// Like [`SkipList::map_anon`], but with a custom [`Comparator`].
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub fn map_anon_with_comparator(
-    opts: Options,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    let alignment = mem::align_of::<A::Node>();
-    let arena_opts = ArenaOptions::new()
-      .with_maximum_alignment(alignment)
-      .with_unify(opts.unify())
-      .with_magic_version(CURRENT_VERSION)
-      .with_reserved(opts.reserved());
-    let arena = A::map_anon(arena_opts, mmap_options, opts)?;
-
-    // TODO: remove this when support mlock on windows
-    #[allow(clippy::bind_instead_of_map)]
-    Self::new_in(arena, cmp, opts)
-      .map_err(invalid_data)
-      .and_then(|map| {
-        // Lock the memory of first page to prevent it from being swapped out.
-        #[cfg(not(windows))]
-        unsafe {
-          map
-            .arena
-            .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-        }
-        Ok(map)
-      })
-  }
-
   /// Clear the skiplist to empty and re-initialize.
   ///
   /// ## Safety

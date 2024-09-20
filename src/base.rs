@@ -34,7 +34,6 @@ pub struct SkipList<A: Allocator, C = Ascend> {
   data_offset: u32,
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   on_disk: bool,
-  opts: Options,
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
@@ -70,7 +69,6 @@ where
       head: self.head,
       tail: self.tail,
       data_offset: self.data_offset,
-      opts: self.opts,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
       cmp: self.cmp.clone(),
@@ -85,7 +83,7 @@ where
   #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
     if self.arena.refs() == 1 {
-      if !self.opts.unify() {
+      if !self.arena.options().unify() {
         unsafe {
           let _ = Box::from_raw(self.meta.as_ptr());
         }
@@ -103,135 +101,133 @@ impl<A, C> SkipList<A, C>
 where
   A: Allocator,
 {
-  fn new_in(arena: A, cmp: C, opts: Options) -> Result<Self, Error> {
-    let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
-    if arena.read_only() {
-      let (meta, head, tail) = Self::get_pointers(&arena);
+  // fn new_in(arena: A, cmp: C, opts: Options) -> Result<Self, Error> {
+  //   let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
+  //   if arena.read_only() {
+  //     let (meta, head, tail) = Self::get_pointers(&arena);
 
-      return Ok(Self::construct(
-        arena,
-        meta,
-        head,
-        tail,
-        data_offset,
-        opts,
-        cmp,
-      ));
-    }
+  //     return Ok(Self::construct(
+  //       arena,
+  //       meta,
+  //       head,
+  //       tail,
+  //       data_offset,
+  //       cmp,
+  //     ));
+  //   }
 
-    let meta = if opts.unify() {
-      arena.allocate_header(opts.magic_version())?
-    } else {
-      unsafe {
-        NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-          opts.magic_version(),
-        ))))
-      }
-    };
+  //   let meta = if opts.unify() {
+  //     arena.allocate_header(opts.magic_version())?
+  //   } else {
+  //     unsafe {
+  //       NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
+  //         opts.magic_version(),
+  //       ))))
+  //     }
+  //   };
 
-    let max_height: u8 = opts.max_height().into();
-    let head = arena.allocate_full_node(max_height)?;
-    let tail = arena.allocate_full_node(max_height)?;
+  //   let max_height: u8 = opts.max_height().into();
+  //   let head = arena.allocate_full_node(max_height)?;
+  //   let tail = arena.allocate_full_node(max_height)?;
 
-    // Safety:
-    // We will always allocate enough space for the head node and the tail node.
-    unsafe {
-      // Link all head/tail levels together.
-      for i in 0..(max_height as usize) {
-        let head_link = head.tower::<A>(&arena, i);
-        let tail_link = tail.tower::<A>(&arena, i);
-        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
-      }
-    }
+  //   // Safety:
+  //   // We will always allocate enough space for the head node and the tail node.
+  //   unsafe {
+  //     // Link all head/tail levels together.
+  //     for i in 0..(max_height as usize) {
+  //       let head_link = head.tower::<A>(&arena, i);
+  //       let tail_link = tail.tower::<A>(&arena, i);
+  //       head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
+  //       tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
+  //     }
+  //   }
 
-    Ok(Self::construct(
-      arena,
-      meta,
-      head,
-      tail,
-      data_offset,
-      opts,
-      cmp,
-    ))
-  }
+  //   Ok(Self::construct(
+  //     arena,
+  //     meta,
+  //     head,
+  //     tail,
+  //     data_offset,
+  //     opts,
+  //     cmp,
+  //   ))
+  // }
 
-  /// Checks if the arena has enough capacity to store the skiplist,
-  /// and returns the data offset.
+  // /// Checks if the arena has enough capacity to store the skiplist,
+  // /// and returns the data offset.
+  // #[inline]
+  // fn check_capacity(arena: &A, max_height: u8) -> Result<u32, Error> {
+  //   let offset = arena.data_offset();
+
+  //   let alignment = mem::align_of::<A::Header>();
+  //   let meta_offset = (offset + alignment - 1) & !(alignment - 1);
+  //   let meta_end = meta_offset + mem::size_of::<A::Header>();
+
+  //   let alignment = mem::align_of::<A::Node>();
+  //   let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
+  //   let head_end = head_offset
+  //     + mem::size_of::<A::Node>()
+  //     + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
+
+  //   let trailer_alignment = mem::align_of::<A::Trailer>();
+  //   let trailer_size = mem::size_of::<A::Trailer>();
+  //   let trailer_end = if trailer_size != 0 {
+  //     let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+  //     trailer_offset + trailer_size
+  //   } else {
+  //     head_end
+  //   };
+
+  //   let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
+  //   let tail_end = tail_offset
+  //     + mem::size_of::<A::Node>()
+  //     + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
+  //   let trailer_end = if trailer_size != 0 {
+  //     let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+  //     trailer_offset + trailer_size
+  //   } else {
+  //     tail_end
+  //   };
+  //   if trailer_end > arena.capacity() {
+  //     return Err(Error::ArenaTooSmall);
+  //   }
+
+  //   Ok(trailer_end as u32)
+  // }
+
+  // #[inline]
+  // fn get_pointers(
+  //   arena: &A,
+  // ) -> (
+  //   NonNull<A::Header>,
+  //   <A::Node as Node>::Pointer,
+  //   <A::Node as Node>::Pointer,
+  // ) {
+  //   unsafe {
+  //     let offset = arena.data_offset();
+  //     let meta = arena.get_aligned_pointer::<A::Header>(offset);
+
+  //     let offset = arena.offset(meta as _) + mem::size_of::<A::Header>();
+  //     let head_ptr = arena.get_aligned_pointer::<A::Node>(offset);
+  //     let head_offset = arena.offset(head_ptr as _);
+  //     let head = <<A::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
+
+  //     let (trailer_offset, _) = head.as_ref(arena).value_pointer().load();
+  //     let offset = trailer_offset as usize + mem::size_of::<A::Trailer>();
+  //     let tail_ptr = arena.get_aligned_pointer::<A::Node>(offset);
+  //     let tail_offset = arena.offset(tail_ptr as _);
+  //     let tail = <<A::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
+  //     (NonNull::new_unchecked(meta as _), head, tail)
+  //   }
+  // }
+
   #[inline]
-  fn check_capacity(arena: &A, max_height: u8) -> Result<u32, Error> {
-    let offset = arena.data_offset();
-
-    let alignment = mem::align_of::<A::Header>();
-    let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-    let meta_end = meta_offset + mem::size_of::<A::Header>();
-
-    let alignment = mem::align_of::<A::Node>();
-    let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-    let head_end = head_offset
-      + mem::size_of::<A::Node>()
-      + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
-
-    let trailer_alignment = mem::align_of::<A::Trailer>();
-    let trailer_size = mem::size_of::<A::Trailer>();
-    let trailer_end = if trailer_size != 0 {
-      let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-      trailer_offset + trailer_size
-    } else {
-      head_end
-    };
-
-    let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
-    let tail_end = tail_offset
-      + mem::size_of::<A::Node>()
-      + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
-    let trailer_end = if trailer_size != 0 {
-      let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-      trailer_offset + trailer_size
-    } else {
-      tail_end
-    };
-    if trailer_end > arena.capacity() {
-      return Err(Error::ArenaTooSmall);
-    }
-
-    Ok(trailer_end as u32)
-  }
-
-  #[inline]
-  fn get_pointers(
-    arena: &A,
-  ) -> (
-    NonNull<A::Header>,
-    <A::Node as Node>::Pointer,
-    <A::Node as Node>::Pointer,
-  ) {
-    unsafe {
-      let offset = arena.data_offset();
-      let meta = arena.get_aligned_pointer::<A::Header>(offset);
-
-      let offset = arena.offset(meta as _) + mem::size_of::<A::Header>();
-      let head_ptr = arena.get_aligned_pointer::<A::Node>(offset);
-      let head_offset = arena.offset(head_ptr as _);
-      let head = <<A::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
-
-      let (trailer_offset, _) = head.as_ref(arena).value_pointer().load();
-      let offset = trailer_offset as usize + mem::size_of::<A::Trailer>();
-      let tail_ptr = arena.get_aligned_pointer::<A::Node>(offset);
-      let tail_offset = arena.offset(tail_ptr as _);
-      let tail = <<A::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
-      (NonNull::new_unchecked(meta as _), head, tail)
-    }
-  }
-
-  #[inline]
-  fn construct(
+  pub(crate) fn construct(
     arena: A,
     meta: NonNull<A::Header>,
     head: <A::Node as Node>::Pointer,
     tail: <A::Node as Node>::Pointer,
     data_offset: u32,
-    opts: Options,
     cmp: C,
   ) -> Self {
     Self {
@@ -242,7 +238,6 @@ where
       head,
       tail,
       data_offset,
-      opts,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
       cmp,
@@ -914,7 +909,7 @@ where
   }
 
   fn try_get_pointer(&self, next_node: &A::Node, next_key: &[u8], key: &[u8]) -> Option<Pointer> {
-    match self.opts.compression_policy() {
+    match self.arena.options().compression_policy() {
       CompressionPolicy::Fast => {
         if next_key.starts_with(key) {
           return Some(Pointer {
@@ -966,7 +961,7 @@ where
       return Err(Error::read_only());
     }
 
-    let max_height = self.opts.max_height();
+    let max_height = self.arena.options().max_height();
 
     if height > max_height {
       return Err(Error::invalid_height(height, max_height));

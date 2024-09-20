@@ -1,12 +1,20 @@
-use dbutils::Ascend;
+use core::mem;
 
+use dbutils::{Ascend, Comparator};
+
+use rarena_allocator::{Allocator as _, ArenaOptions};
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
 pub use rarena_allocator::{MmapOptions, OpenOptions};
 
 pub use rarena_allocator::Freelist;
 
-use crate::{Height, KeySize};
+use crate::{allocator::AllocatorExt, error::invalid_data};
+
+use super::{
+  allocator::{Allocator, Sealed},
+  Constructable, Error, Height, KeySize, CURRENT_VERSION,
+};
 
 /// Configuration for the compression policy of the key in [`Map`](super::Map).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -413,12 +421,12 @@ pub struct Builder<C = Ascend> {
 
 impl<C> Builder<C> {
   /// Returns a new map builder with the new [`Comparator`](super::Comparator).
-  /// 
+  ///
   /// ## Example
-  /// 
+  ///
   /// ```rust
   /// use skl::{Builder, Descend};
-  /// 
+  ///
   /// let builder = Builder::new().with_comparator(Descend);
   /// ```
   #[inline]
@@ -430,12 +438,12 @@ impl<C> Builder<C> {
   }
 
   /// Returns a new map builder with the new [`Options`].
-  /// 
+  ///
   /// ## Example
-  /// 
+  ///
   /// ```rust
   /// use skl::{Builder, Options};
-  /// 
+  ///
   /// let builder = Builder::new().with_options(Options::new().with_capacity(1024));
   /// ```
   #[inline]
@@ -789,5 +797,174 @@ impl<C> Builder<C> {
   #[inline]
   pub const fn compression_policy(&self) -> CompressionPolicy {
     self.opts.policy
+  }
+}
+
+impl<C: Comparator> Builder<C> {
+  /// Create a new [`Map`](super::Map) which is backed by a `Vec`.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{sync, unsync};
+  ///
+  /// // Create a sync skipmap which supports both trailer and version.
+  /// let map = Builder::new().alloc::<sync::full::SkipMap>().unwrap();
+  ///
+  /// // Create a unsync skipmap which supports trailer.
+  /// let arena = Builder::new().alloc::<unsync::trailed::SkipMap>().unwrap();
+  /// ```
+  #[inline]
+  pub fn alloc<T: Constructable<Comparator = C>>(self) -> Result<T, Error> {
+    let Self { opts, cmp } = self;
+
+    let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
+    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
+
+    ArenaOptions::new()
+      .with_capacity(opts.capacity())
+      .with_maximum_alignment(node_align.max(trailer_align))
+      .with_unify(opts.unify())
+      .with_magic_version(CURRENT_VERSION)
+      .with_freelist(opts.freelist())
+      .with_reserved(opts.reserved())
+      .alloc::<<T::Allocator as Sealed>::Allocator>()
+      .map_err(Into::into)
+      .and_then(|arena| T::new_in(arena, opts, cmp))
+  }
+
+  /// Create a new [`Map`](super::Map) which is backed by a anonymous memory map.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{sync, unsync, MmapOptions};
+  ///
+  /// // Create a sync skipmap which supports both trailer and version.
+  /// let map = Builder::new().map_anon::<sync::full::SkipMap>(MmapOptions::new().len(1024)).unwrap();
+  ///
+  /// // Create a unsync skipmap which supports trailer.
+  /// let arena = Builder::new().map_anon::<unsync::trailed::SkipMap>(MmapOptions::new().len(1024)).unwrap();
+  /// ```
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub fn map_anon<T: Constructable<Comparator = C>>(self, mmap_options: MmapOptions) -> std::io::Result<T> {
+    let Self { opts, cmp } = self;
+
+    let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
+    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
+
+    #[allow(clippy::bind_instead_of_map)]
+    ArenaOptions::new()
+      .with_capacity(opts.capacity())
+      .with_maximum_alignment(node_align.max(trailer_align))
+      .with_unify(opts.unify())
+      .with_magic_version(CURRENT_VERSION)
+      .with_freelist(opts.freelist())
+      .with_reserved(opts.reserved())
+      .map_anon::<<T::Allocator as Sealed>::Allocator>(mmap_options)
+      .map_err(Into::into)
+      .and_then(|arena| T::new_in(arena, opts, cmp)
+        .map_err(invalid_data)
+        .and_then(|map| {
+          // Lock the memory of first page to prevent it from being swapped out.
+          #[cfg(not(windows))]
+          unsafe {
+            let arena = map.allocator();
+            arena
+              .mlock(0, arena.page_size().min(arena.capacity()))?;
+          }
+          Ok(map)
+        }))
+  }
+
+  /// Like [`SkipList::map`], but with a custom [`Comparator`].
+  ///
+  /// ## Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub unsafe fn map<P: AsRef<std::path::Path>>(
+    self,
+    path: P,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+    cmp: C,
+  ) -> std::io::Result<Self> {
+    let Self { opts, cmp } = self;
+
+    let opts = opts.with_unify(true);
+    let magic_version = opts.magic_version();
+    let arena_opts = ArenaOptions::new()
+      .with_magic_version(CURRENT_VERSION)
+      .with_reserved(opts.reserved());
+    let arena = A::map(path, arena_opts, open_options, mmap_options, opts)?;
+    Self::new_in(arena, cmp, opts)
+      .map_err(invalid_data)
+      .and_then(|map| {
+        if map.magic_version() != magic_version {
+          Err(bad_magic_version())
+        } else if map.version() != CURRENT_VERSION {
+          Err(bad_version())
+        } else {
+          // Lock the memory of first page to prevent it from being swapped out.
+          #[cfg(not(windows))]
+          unsafe {
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          }
+
+          Ok(map)
+        }
+      })
+  }
+
+  /// Like [`SkipList::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  ///
+  /// ## Safety
+  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  pub unsafe fn map_with_path_builder<PB, E>(
+    self,
+    path_builder: PB,
+    open_options: OpenOptions,
+    mmap_options: MmapOptions,
+  ) -> Result<Self, Either<E, std::io::Error>>
+  where
+    PB: FnOnce() -> Result<std::path::PathBuf, E>,
+  {
+    let Self { opts, cmp } = self;
+    let opts = opts.with_unify(true);
+
+    let magic_version = opts.magic_version();
+    let arena_opts = ArenaOptions::new()
+      .with_magic_version(CURRENT_VERSION)
+      .with_reserved(opts.reserved());
+    let arena =
+      A::map_with_path_builder(path_builder, arena_opts, open_options, mmap_options, opts)?;
+    Self::new_in(arena, cmp, opts)
+      .map_err(invalid_data)
+      .and_then(|map| {
+        if map.magic_version() != magic_version {
+          Err(bad_magic_version())
+        } else if map.version() != CURRENT_VERSION {
+          Err(bad_version())
+        } else {
+          // Lock the memory of first page to prevent it from being swapped out.
+          #[cfg(not(windows))]
+          unsafe {
+            map
+              .arena
+              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
+          }
+          Ok(map)
+        }
+      })
+      .map_err(Either::Right)
   }
 }

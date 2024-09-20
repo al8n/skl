@@ -41,6 +41,9 @@ pub mod unsync;
 mod builder;
 pub use builder::*;
 
+mod constructor;
+pub use constructor::*;
+
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
 pub use builder::{MmapOptions, OpenOptions};

@@ -7,7 +7,7 @@ use rarena_allocator::Allocator;
 use super::{Builder, Options, CURRENT_VERSION};
 use crate::{
   allocator::Sealed,
-  constructor::BaseMap,
+  constructor::Arena,
   error::{bad_magic_version, bad_version, invalid_data},
 };
 
@@ -42,7 +42,7 @@ impl<C: Comparator> Builder<C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_anon<T: BaseMap<Comparator = C>>(self) -> std::io::Result<T> {
+  pub fn map_anon<T: Arena<Comparator = C>>(self) -> std::io::Result<T> {
     let Self { opts, cmp } = self;
 
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
@@ -82,7 +82,7 @@ impl<C: Comparator> Builder<C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map<T: BaseMap<Comparator = C>, P: AsRef<std::path::Path>>(
+  pub unsafe fn map<T: Arena<Comparator = C>, P: AsRef<std::path::Path>>(
     self,
     path: P,
   ) -> std::io::Result<T> {
@@ -109,7 +109,7 @@ impl<C: Comparator> Builder<C> {
     path_builder: PB,
   ) -> Result<T, Either<E, std::io::Error>>
   where
-    T: BaseMap<Comparator = C>,
+    T: Arena<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     let Self { opts, cmp } = self;
@@ -129,7 +129,7 @@ impl<C: Comparator> Builder<C> {
           .and_then(|map| {
             let allocator = map.allocator();
 
-            if map.magic_version() != magic_version {
+            if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
             } else if map.version() != CURRENT_VERSION {
               Err(bad_version())
@@ -163,7 +163,7 @@ impl<C: Comparator> Builder<C> {
   #[inline]
   pub unsafe fn map_mut<T, P: AsRef<std::path::Path>>(self, path: P) -> std::io::Result<T>
   where
-    T: BaseMap<Comparator = C>,
+    T: Arena<Comparator = C>,
   {
     self
       .map_mut_with_path_builder::<T, _, ()>(|| Ok(path.as_ref().to_path_buf()))
@@ -187,7 +187,7 @@ impl<C: Comparator> Builder<C> {
     path_builder: PB,
   ) -> Result<T, Either<E, std::io::Error>>
   where
-    T: BaseMap<Comparator = C>,
+    T: Arena<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     let Self { opts, cmp } = self;
@@ -207,7 +207,7 @@ impl<C: Comparator> Builder<C> {
           .and_then(|map| {
             let allocator = map.allocator();
 
-            if map.magic_version() != magic_version {
+            if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
             } else if map.version() != CURRENT_VERSION {
               Err(bad_version())

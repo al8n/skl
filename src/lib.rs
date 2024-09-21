@@ -42,7 +42,7 @@ mod builder;
 pub use builder::*;
 
 mod constructor;
-// pub use constructor::Map;
+pub use constructor::{map, trailed, Container};
 
 mod types;
 pub use types::*;

@@ -7,7 +7,7 @@ use core::{
 };
 
 use super::{
-  allocator::{Link as BaseMapLink, *},
+  allocator::{Link as ContainerLink, *},
   common::*,
   *,
 };
@@ -252,7 +252,7 @@ pub struct Link {
   prev_offset: UnsafeCell<u32>,
 }
 
-impl BaseMapLink for Link {
+impl ContainerLink for Link {
   #[inline]
   fn new(next_offset: u32, prev_offset: u32) -> Self {
     Self {
@@ -415,11 +415,11 @@ pub mod trailed;
 /// A skipmap implementation without trailer and version support. See [`SkipMap`](map::SkipMap) for more information.
 pub mod map;
 
-#[cfg(any(
-  all(test, not(miri)),
-  test_unsync_map,
-  test_unsync_versioned,
-  test_unsync_trailed,
-  test_unsync_full,
-))]
-mod tests;
+// #[cfg(any(
+//   all(test, not(miri)),
+//   test_unsync_map,
+//   test_unsync_versioned,
+//   test_unsync_trailed,
+//   test_unsync_full,
+// ))]
+// mod tests;

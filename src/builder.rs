@@ -6,7 +6,7 @@ use rarena_allocator::Options as ArenaOptions;
 
 pub use rarena_allocator::Freelist;
 
-use super::{allocator::Sealed, constructor::BaseMap, Error, Height, KeySize};
+use super::{allocator::Sealed, constructor::Container, Error, Height, KeySize};
 
 mod options;
 pub use options::*;
@@ -429,7 +429,7 @@ impl<C: Comparator> Builder<C> {
   ///
   /// [`Builder::mmap_anon`]: #method.mmap_anon
   #[inline]
-  pub fn alloc<T: BaseMap<Comparator = C>>(self) -> Result<T, Error> {
+  pub fn alloc<T: Container<Comparator = C>>(self) -> Result<T, Error> {
     let Self { opts, cmp } = self;
 
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();

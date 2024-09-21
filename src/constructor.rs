@@ -122,6 +122,7 @@ pub trait List:
   }
 }
 
+/// The wrapper trait over a underlying [`Allocator`](rarena_allocator::Allocator).
 pub trait Arena: List {
   /// Returns the reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
   fn reserved_slice(&self) -> &[u8];

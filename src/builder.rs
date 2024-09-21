@@ -14,10 +14,28 @@ pub use options::*;
 /// The memory format version.
 pub(crate) const CURRENT_VERSION: u16 = 0;
 
-/// The builder to build a `Map`
+/// The builder to build `SkipMap`
 pub struct Builder<C = Ascend> {
   pub(super) opts: Options,
   cmp: C,
+}
+
+impl Default for Builder {
+  #[inline]
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl Builder {
+  /// Create a new `Builder` with default values.
+  #[inline]
+  pub const fn new() -> Self {
+    Self {
+      opts: Options::new(),
+      cmp: Ascend,
+    }
+  }
 }
 
 impl<C> Builder<C> {

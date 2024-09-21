@@ -42,7 +42,7 @@ mod builder;
 pub use builder::*;
 
 mod constructor;
-pub use constructor::{full, map, trailed, versioned, Container, VersionedContainer};
+pub use constructor::{full, map, trailed, versioned, Arena, Container, VersionedContainer};
 
 mod types;
 pub use types::*;

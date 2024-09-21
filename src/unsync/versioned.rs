@@ -151,12 +151,12 @@ impl<C> From<SkipList<C>> for SkipMap<C> {
   }
 }
 
-impl<C> AsBase for SkipMap<C> {
+impl<C> crate::constructor::AsList for SkipMap<C> {
   type Allocator = Allocator;
   type Comparator = C;
 
   #[inline]
-  fn as_base(&self) -> &SkipList<Self::Comparator> {
+  fn as_list(&self) -> &SkipList<Self::Comparator> {
     &self.0
   }
 }

@@ -6,7 +6,7 @@ use rarena_allocator::Options as ArenaOptions;
 
 pub use rarena_allocator::Freelist;
 
-use super::{allocator::Sealed, Error, Height, KeySize, Map};
+use super::{allocator::Sealed, constructor::BaseMap, Error, Height, KeySize};
 
 mod options;
 pub use options::*;
@@ -398,7 +398,7 @@ impl<C> Builder<C> {
 }
 
 impl<C: Comparator> Builder<C> {
-  /// Create a new [`Map`](super::Map) which is backed by a `Vec`.
+  /// Create a new [`Map`] which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
   /// it does not mean the skiplist can store `cap` entries.
@@ -429,7 +429,7 @@ impl<C: Comparator> Builder<C> {
   ///
   /// [`Builder::mmap_anon`]: #method.mmap_anon
   #[inline]
-  pub fn alloc<T: Map<Comparator = C>>(self) -> Result<T, Error> {
+  pub fn alloc<T: BaseMap<Comparator = C>>(self) -> Result<T, Error> {
     let Self { opts, cmp } = self;
 
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();

@@ -4,7 +4,7 @@ use rarena_allocator::Allocator as _;
 use core::ops::{Bound, RangeBounds};
 
 use super::{
-  allocator::{Link as BaseLink, *},
+  allocator::{Link as BaseMapLink, *},
   common::*,
   *,
 };
@@ -251,7 +251,7 @@ pub struct Link {
   prev_offset: AtomicU32,
 }
 
-impl BaseLink for Link {
+impl BaseMapLink for Link {
   #[inline]
   fn new(next_offset: u32, prev_offset: u32) -> Self {
     Self {

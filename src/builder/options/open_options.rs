@@ -7,12 +7,12 @@ use rarena_allocator::Allocator;
 use super::{Builder, Options, CURRENT_VERSION};
 use crate::{
   allocator::Sealed,
+  constructor::BaseMap,
   error::{bad_magic_version, bad_version, invalid_data},
-  Map,
 };
 
 impl<C: Comparator> Builder<C> {
-  /// Create a new [`Map`](super::Map) which is backed by a anonymous memory map.
+  /// Create a new map which is backed by a anonymous memory map.
   ///
   /// **What the difference between this method and [`Builder::alloc`]?**
   ///
@@ -42,7 +42,7 @@ impl<C: Comparator> Builder<C> {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub fn map_anon<T: Map<Comparator = C>>(self) -> std::io::Result<T> {
+  pub fn map_anon<T: BaseMap<Comparator = C>>(self) -> std::io::Result<T> {
     let Self { opts, cmp } = self;
 
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
@@ -69,14 +69,20 @@ impl<C: Comparator> Builder<C> {
       })
   }
 
-  /// Like [`SkipList::map`], but with a custom [`Comparator`].
+  /// Opens a read-only map which backed by file-backed memory map.
   ///
   /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
+  /// - If `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
+  /// - The `C` must be the same as the one used to create the map.
+  /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
+  ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  ///   out of process. Applications must consider the risk and take appropriate precautions when
+  ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  ///   unlinked) files exist but are platform specific and limited.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map<T: Map<Comparator = C>, P: AsRef<std::path::Path>>(
+  pub unsafe fn map<T: BaseMap<Comparator = C>, P: AsRef<std::path::Path>>(
     self,
     path: P,
   ) -> std::io::Result<T> {
@@ -85,10 +91,16 @@ impl<C: Comparator> Builder<C> {
       .map_err(Either::unwrap_right)
   }
 
-  /// Like [`SkipList::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
+  /// Opens a read-only map which backed by file-backed memory map with a path builder.
   ///
   /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
+  /// - If `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
+  /// - The `C` must be the same as the one used to create the map.
+  /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
+  ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  ///   out of process. Applications must consider the risk and take appropriate precautions when
+  ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  ///   unlinked) files exist but are platform specific and limited.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -97,7 +109,7 @@ impl<C: Comparator> Builder<C> {
     path_builder: PB,
   ) -> Result<T, Either<E, std::io::Error>>
   where
-    T: Map<Comparator = C>,
+    T: BaseMap<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     let Self { opts, cmp } = self;
@@ -135,20 +147,39 @@ impl<C: Comparator> Builder<C> {
       })
   }
 
-  /// Creates a new ARENA backed by a mmap with the given options.
+  /// Creates a new map or reopens a map which backed by a file backed memory map.
+  ///
+  /// ## Safety
+  ///
+  /// - If trying to reopen a map and `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
+  /// - If trying to reopen a map, the `C` must be the same as the one used to create the map.
+  /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
+  ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  ///   out of process. Applications must consider the risk and take appropriate precautions when
+  ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  ///   unlinked) files exist but are platform specific and limited.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
   pub unsafe fn map_mut<T, P: AsRef<std::path::Path>>(self, path: P) -> std::io::Result<T>
   where
-    T: Map<Comparator = C>,
+    T: BaseMap<Comparator = C>,
   {
     self
       .map_mut_with_path_builder::<T, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
-  /// Creates a new ARENA backed by a mmap with the given options.
+  /// Creates a new map or reopens a map which backed by a file backed memory map with path builder.
+  ///
+  /// # Safety
+  /// - If trying to reopen a map and `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
+  /// - If trying to reopen a map, the `C` must be the same as the one used to create the map.
+  /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
+  ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
+  ///   out of process. Applications must consider the risk and take appropriate precautions when
+  ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
+  ///   unlinked) files exist but are platform specific and limited.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_mut_with_path_builder<T, PB, E>(
@@ -156,11 +187,9 @@ impl<C: Comparator> Builder<C> {
     path_builder: PB,
   ) -> Result<T, Either<E, std::io::Error>>
   where
-    T: Map<Comparator = C>,
+    T: BaseMap<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    use crate::error::{bad_magic_version, bad_version};
-
     let Self { opts, cmp } = self;
 
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();

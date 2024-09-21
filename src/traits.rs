@@ -1,0 +1,2 @@
+/// a
+pub trait TrailedMap {}

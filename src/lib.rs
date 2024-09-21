@@ -42,10 +42,16 @@ mod builder;
 pub use builder::*;
 
 mod constructor;
-pub use constructor::*;
+// pub use constructor::Map;
 
 mod types;
 pub use types::*;
+
+mod traits;
+pub use traits::*;
+
+#[cfg(test)]
+mod tests;
 
 pub use among;
 pub use dbutils::{Ascend, Comparator, Descend};

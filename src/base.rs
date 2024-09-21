@@ -7,9 +7,6 @@ use rarena_allocator::Allocator as _;
 
 use super::{allocator::*, common::*, *};
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-use error::{bad_magic_version, bad_version, invalid_data};
-
 mod api;
 
 mod entry;
@@ -151,74 +148,6 @@ where
   //     opts,
   //     cmp,
   //   ))
-  // }
-
-  // /// Checks if the arena has enough capacity to store the skiplist,
-  // /// and returns the data offset.
-  // #[inline]
-  // fn check_capacity(arena: &A, max_height: u8) -> Result<u32, Error> {
-  //   let offset = arena.data_offset();
-
-  //   let alignment = mem::align_of::<A::Header>();
-  //   let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-  //   let meta_end = meta_offset + mem::size_of::<A::Header>();
-
-  //   let alignment = mem::align_of::<A::Node>();
-  //   let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-  //   let head_end = head_offset
-  //     + mem::size_of::<A::Node>()
-  //     + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
-
-  //   let trailer_alignment = mem::align_of::<A::Trailer>();
-  //   let trailer_size = mem::size_of::<A::Trailer>();
-  //   let trailer_end = if trailer_size != 0 {
-  //     let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-  //     trailer_offset + trailer_size
-  //   } else {
-  //     head_end
-  //   };
-
-  //   let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
-  //   let tail_end = tail_offset
-  //     + mem::size_of::<A::Node>()
-  //     + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
-  //   let trailer_end = if trailer_size != 0 {
-  //     let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-  //     trailer_offset + trailer_size
-  //   } else {
-  //     tail_end
-  //   };
-  //   if trailer_end > arena.capacity() {
-  //     return Err(Error::ArenaTooSmall);
-  //   }
-
-  //   Ok(trailer_end as u32)
-  // }
-
-  // #[inline]
-  // fn get_pointers(
-  //   arena: &A,
-  // ) -> (
-  //   NonNull<A::Header>,
-  //   <A::Node as Node>::Pointer,
-  //   <A::Node as Node>::Pointer,
-  // ) {
-  //   unsafe {
-  //     let offset = arena.data_offset();
-  //     let meta = arena.get_aligned_pointer::<A::Header>(offset);
-
-  //     let offset = arena.offset(meta as _) + mem::size_of::<A::Header>();
-  //     let head_ptr = arena.get_aligned_pointer::<A::Node>(offset);
-  //     let head_offset = arena.offset(head_ptr as _);
-  //     let head = <<A::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
-
-  //     let (trailer_offset, _) = head.as_ref(arena).value_pointer().load();
-  //     let offset = trailer_offset as usize + mem::size_of::<A::Trailer>();
-  //     let tail_ptr = arena.get_aligned_pointer::<A::Node>(offset);
-  //     let tail_offset = arena.offset(tail_ptr as _);
-  //     let tail = <<A::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
-  //     (NonNull::new_unchecked(meta as _), head, tail)
-  //   }
   // }
 
   #[inline]

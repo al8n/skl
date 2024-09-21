@@ -1,99 +1,11 @@
 use core::borrow::Borrow;
 
-use rarena_allocator::ArenaOptions;
-
 use super::*;
 
 mod update;
 
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<(), E>>>;
-
-impl<A: Allocator> SkipList<A, Ascend> {
-  /// Create a new skipmap with default options.
-  ///
-  /// **Note:** The capacity stands for how many memory allocated,
-  /// it does not mean the skiplist can store `cap` entries.
-  ///
-  ///
-  ///
-  /// **What the difference between this method and [`SkipList::mmap_anon`]?**
-  ///
-  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// 2. Where as [`SkipList::mmap_anon`] will use mmap anonymous to require memory from the OS.
-  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// [`SkipList::mmap_anon`]: #method.mmap_anon
-  #[allow(dead_code)]
-  pub fn new(opts: Options) -> Result<Self, Error> {
-    Self::with_comparator(opts, Ascend)
-  }
-
-  /// Create a new memory map file backed with default options.
-  ///
-  /// **Note:** The capacity stands for how many memory mmaped,
-  /// it does not mean the skipmap can store `cap` entries.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[allow(dead_code)]
-  #[inline]
-  pub unsafe fn map_mut<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_comparator(path, opts, open_options, mmap_options, Ascend)
-  }
-
-  /// Open an exist file and mmap it to create skipmap.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[allow(dead_code)]
-  pub unsafe fn map<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, opts, open_options, mmap_options, Ascend)
-  }
-
-  /// Create a new memory map backed skipmap with default options.
-  ///
-  /// **What the difference between this method and [`SkipList::new`]?**
-  ///
-  /// 1. This method will use mmap anonymous to require memory from the OS directly.
-  ///    If you require very large contiguous memory regions, this method might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// 2. Where as [`SkipList::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// [`SkipList::new`]: #method.new
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[allow(dead_code)]
-  #[inline]
-  pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::map_anon_with_comparator(opts, mmap_options, Ascend)
-  }
-}
 
 impl<A: Allocator, C> SkipList<A, C> {
   /// Sets remove on drop, only works on mmap with a file backend.
@@ -206,7 +118,7 @@ impl<A: Allocator, C> SkipList<A, C> {
   /// This method is useful when you want to check if the underlying allocator can allocate a node.
   #[inline]
   pub fn random_height(&self) -> Height {
-    random_height(self.opts.max_height())
+    random_height(self.arena.options().max_height())
   }
 
   /// Returns the estimated size of a node with the given height and key/value sizes.
@@ -224,196 +136,6 @@ impl<A: Allocator, C> SkipList<A, C> {
       + value_size
   }
 
-  /// Like [`SkipList::new`], but with a custom [`Comparator`].
-  #[inline]
-  pub fn with_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
-    let arena_opts = ArenaOptions::new()
-      .with_capacity(opts.capacity())
-      .with_maximum_alignment(mem::align_of::<A::Node>())
-      .with_unify(opts.unify())
-      .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist())
-      .with_reserved(opts.reserved());
-    let arena = A::new(arena_opts, opts)?;
-    Self::new_in(arena, cmp, opts)
-  }
-
-  /// Like [`SkipList::map_mut`], but with [`Options`] and a custom [`Comparator`].
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    let alignment = mem::align_of::<A::Node>();
-    let arena_opts = ArenaOptions::new()
-      .with_maximum_alignment(alignment)
-      .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist())
-      .with_reserved(opts.reserved());
-    let arena = A::map_mut(path, arena_opts, open_options, mmap_options, opts)?;
-    Self::new_in(arena, cmp, opts.with_unify(true))
-      .map_err(invalid_data)
-      .and_then(|map| {
-        if map.magic_version() != opts.magic_version() {
-          Err(bad_magic_version())
-        } else if map.version() != CURRENT_VERSION {
-          Err(bad_version())
-        } else {
-          // Lock the memory of first page to prevent it from being swapped out.
-          #[cfg(not(windows))]
-          unsafe {
-            map
-              .arena
-              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-          }
-
-          Ok(map)
-        }
-      })
-  }
-
-  /// Like [`SkipList::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_mut_with_comparator_and_path_builder<PB, E>(
-    path_builder: PB,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> Result<Self, Either<E, std::io::Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  {
-    let alignment = mem::align_of::<A::Node>();
-    let arena_opts = ArenaOptions::new()
-      .with_maximum_alignment(alignment)
-      .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist())
-      .with_reserved(opts.reserved());
-    let arena =
-      A::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options, opts)?;
-    Self::new_in(arena, cmp, opts.with_unify(true))
-      .map_err(invalid_data)
-      .and_then(|map| {
-        if map.magic_version() != opts.magic_version() {
-          Err(bad_magic_version())
-        } else if map.version() != CURRENT_VERSION {
-          Err(bad_version())
-        } else {
-          // Lock the memory of first page to prevent it from being swapped out.
-          #[cfg(not(windows))]
-          unsafe {
-            map
-              .arena
-              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-          }
-
-          Ok(map)
-        }
-      })
-      .map_err(Either::Right)
-  }
-
-  /// Like [`SkipList::map`], but with a custom [`Comparator`].
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    let opts = opts.with_unify(true);
-    let magic_version = opts.magic_version();
-    let arena_opts = ArenaOptions::new()
-      .with_magic_version(CURRENT_VERSION)
-      .with_reserved(opts.reserved());
-    let arena = A::map(path, arena_opts, open_options, mmap_options, opts)?;
-    Self::new_in(arena, cmp, opts)
-      .map_err(invalid_data)
-      .and_then(|map| {
-        if map.magic_version() != magic_version {
-          Err(bad_magic_version())
-        } else if map.version() != CURRENT_VERSION {
-          Err(bad_version())
-        } else {
-          // Lock the memory of first page to prevent it from being swapped out.
-          #[cfg(not(windows))]
-          unsafe {
-            map
-              .arena
-              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-          }
-
-          Ok(map)
-        }
-      })
-  }
-
-  /// Like [`SkipList::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one.
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_with_comparator_and_path_builder<PB, E>(
-    path_builder: PB,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> Result<Self, Either<E, std::io::Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  {
-    let opts = opts.with_unify(true);
-
-    let magic_version = opts.magic_version();
-    let arena_opts = ArenaOptions::new()
-      .with_magic_version(CURRENT_VERSION)
-      .with_reserved(opts.reserved());
-    let arena =
-      A::map_with_path_builder(path_builder, arena_opts, open_options, mmap_options, opts)?;
-    Self::new_in(arena, cmp, opts)
-      .map_err(invalid_data)
-      .and_then(|map| {
-        if map.magic_version() != magic_version {
-          Err(bad_magic_version())
-        } else if map.version() != CURRENT_VERSION {
-          Err(bad_version())
-        } else {
-          // Lock the memory of first page to prevent it from being swapped out.
-          #[cfg(not(windows))]
-          unsafe {
-            map
-              .arena
-              .mlock(0, map.arena.page_size().min(map.arena.capacity()))?;
-          }
-          Ok(map)
-        }
-      })
-      .map_err(Either::Right)
-  }
-
   /// Clear the skiplist to empty and re-initialize.
   ///
   /// ## Safety
@@ -422,7 +144,9 @@ impl<A: Allocator, C> SkipList<A, C> {
   pub unsafe fn clear(&mut self) -> Result<(), Error> {
     self.arena.clear()?;
 
-    let meta = if self.opts.unify() {
+    let options = self.arena.options();
+
+    let meta = if options.unify() {
       self.arena.allocate_header(self.meta().magic_version())?
     } else {
       unsafe {
@@ -436,7 +160,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
     self.meta = meta;
 
-    let max_height: u8 = self.opts.max_height().into();
+    let max_height: u8 = options.max_height().into();
     let head = self.arena.allocate_full_node(max_height)?;
     let tail = self.arena.allocate_full_node(max_height)?;
 

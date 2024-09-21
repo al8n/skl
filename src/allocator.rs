@@ -1,5 +1,5 @@
 use either::Either;
-use rarena_allocator::{Allocator as ArenaAllocator, ArenaOptions, BytesRefMut, Memory};
+use rarena_allocator::{Allocator as ArenaAllocator, Buffer, BytesRefMut};
 
 use super::*;
 
@@ -513,63 +513,6 @@ mod sealed {
 
     fn new(arena: Self::Allocator, opts: Options) -> Self;
 
-    /// Creates a new ARENA backed by an anonymous mmap with the given capacity.
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    fn map_anon(
-      arena_opts: ArenaOptions,
-      mmap_options: MmapOptions,
-      opts: Options,
-    ) -> std::io::Result<Self>;
-
-    /// Creates a new ARENA backed by a mmap with the given options.
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    unsafe fn map_mut<P: AsRef<std::path::Path>>(
-      path: P,
-      arena_opts: ArenaOptions,
-      open_options: OpenOptions,
-      mmap_options: MmapOptions,
-      opts: Options,
-    ) -> std::io::Result<Self>;
-
-    /// Opens a read only ARENA backed by a mmap with the given capacity.
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    unsafe fn map<P: AsRef<std::path::Path>>(
-      path: P,
-      arena_opts: ArenaOptions,
-      open_options: OpenOptions,
-      mmap_options: MmapOptions,
-      opts: Options,
-    ) -> std::io::Result<Self>;
-
-    /// Creates a new ARENA backed by a mmap with the given options.
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    unsafe fn map_mut_with_path_builder<PB, E>(
-      path_builder: PB,
-      arena_opts: ArenaOptions,
-      open_options: OpenOptions,
-      mmap_options: MmapOptions,
-      opts: Options,
-    ) -> Result<Self, Either<E, std::io::Error>>
-    where
-      PB: FnOnce() -> Result<std::path::PathBuf, E>;
-
-    /// Opens a read only ARENA backed by a mmap with the given capacity.
-    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-    unsafe fn map_with_path_builder<PB, E>(
-      path_builder: PB,
-      arena_opts: ArenaOptions,
-      open_options: OpenOptions,
-      mmap_options: MmapOptions,
-      opts: Options,
-    ) -> Result<Self, Either<E, std::io::Error>>
-    where
-      PB: FnOnce() -> Result<std::path::PathBuf, E>;
-
     fn align_offset<T>(offset: u32) -> u32 {
       rarena_allocator::align_offset::<T>(offset)
     }
@@ -1076,7 +1019,7 @@ impl<H, N, A: Clone> Clone for GenericAllocator<H, N, A> {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
-      opts: self.opts.clone(),
+      opts: self.opts,
       _m: PhantomData,
     }
   }
@@ -1101,10 +1044,12 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
 
   type Allocator = A;
 
+  #[inline]
   fn options(&self) -> &Options {
     &self.opts
   }
 
+  #[inline]
   fn new(arena: Self::Allocator, opts: Options) -> Self {
     Self {
       arena,
@@ -1113,102 +1058,17 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
     }
   }
 
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  fn map_anon(
-    arena_opts: rarena_allocator::ArenaOptions,
-    mmap_options: MmapOptions,
-    opts: Options,
-  ) -> std::io::Result<Self> {
-    A::map_anon(arena_opts, mmap_options).map(|arena| Self {
-      arena,
-      opts,
-      _m: PhantomData,
-    })
-  }
-
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  unsafe fn map_mut<P: AsRef<std::path::Path>>(
-    path: P,
-    arena_opts: rarena_allocator::ArenaOptions,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    opts: Options,
-  ) -> std::io::Result<Self> {
-    A::map_mut(path, arena_opts, open_options, mmap_options).map(|arena| Self {
-      arena,
-      opts,
-      _m: PhantomData,
-    })
-  }
-
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  unsafe fn map<P: AsRef<std::path::Path>>(
-    path: P,
-    arena_options: rarena_allocator::ArenaOptions,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    opts: Options,
-  ) -> std::io::Result<Self> {
-    A::map(path, arena_options, open_options, mmap_options).map(|arena| Self {
-      arena,
-      opts,
-      _m: PhantomData,
-    })
-  }
-
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  unsafe fn map_mut_with_path_builder<PB, E>(
-    path_builder: PB,
-    arena_opts: rarena_allocator::ArenaOptions,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    opts: Options,
-  ) -> Result<Self, Either<E, std::io::Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  {
-    A::map_mut_with_path_builder(path_builder, arena_opts, open_options, mmap_options).map(
-      |arena| Self {
-        arena,
-        opts,
-        _m: PhantomData,
-      },
-    )
-  }
-
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  unsafe fn map_with_path_builder<PB, E>(
-    path_builder: PB,
-    arena_options: rarena_allocator::ArenaOptions,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    opts: Options,
-  ) -> Result<Self, Either<E, std::io::Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  {
-    A::map_with_path_builder(path_builder, arena_options, open_options, mmap_options).map(|arena| {
-      Self {
-        arena,
-        opts,
-        _m: PhantomData,
-      }
-    })
-  }
-
+  #[inline]
   fn max_key_size(&self) -> u32 {
     self.opts.max_key_size().into()
   }
 
+  #[inline]
   fn max_value_size(&self) -> u32 {
-    self.opts.max_value_size().into()
+    self.opts.max_value_size()
   }
 
+  #[inline]
   fn max_height(&self) -> u32 {
     self.opts.max_height().into()
   }

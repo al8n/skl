@@ -44,10 +44,6 @@ pub use builder::*;
 mod constructor;
 pub use constructor::*;
 
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-pub use builder::{MmapOptions, OpenOptions};
-
 mod types;
 pub use types::*;
 
@@ -58,8 +54,6 @@ pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as 
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
-/// The memory format version.
-const CURRENT_VERSION: u16 = 0;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
 const DANGLING_ZST: NonNull<()> = NonNull::dangling();

@@ -138,83 +138,20 @@ impl<C: Clone> Clone for SkipMap<C> {
   }
 }
 
-impl SkipMap {
-  /// Create a new skipmap with default options.
-  ///
-  /// **Note:** The capacity stands for how many memory allocated,
-  /// it does not mean the skiplist can store `cap` entries.
-  ///
-  ///
-  ///
-  /// **What the difference between this method and [`SkipMap::mmap_anon`]?**
-  ///
-  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// 2. Where as [`SkipMap::mmap_anon`] will use mmap anonymous to require memory from the OS.
-  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// [`SkipMap::mmap_anon`]: #method.mmap_anon
-  pub fn new(opts: Options) -> Result<Self, Error> {
-    Self::with_comparator(opts, Ascend)
+impl<C> From<SkipList<C>> for SkipMap<C> {
+  #[inline]
+  fn from(list: SkipList<C>) -> Self {
+    Self(list)
   }
+}
 
-  /// Create a new memory map file backed with default options.
-  ///
-  /// **Note:** The capacity stands for how many memory mmaped,
-  /// it does not mean the skipmap can store `cap` entries.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_mut<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_mut_with_comparator(path, opts, open_options, mmap_options, Ascend)
-  }
+impl<C> AsBase for SkipMap<C> {
+  type Allocator = Allocator;
+  type Comparator = C;
 
-  /// Open an exist file and mmap it to create skipmap.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-  ) -> std::io::Result<Self> {
-    Self::map_with_comparator(path, opts, open_options, mmap_options, Ascend)
-  }
-
-  /// Create a new memory map backed skipmap with default options.
-  ///
-  /// **What the difference between this method and [`SkipMap::new`]?**
-  ///
-  /// 1. This method will use mmap anonymous to require memory from the OS directly.
-  ///    If you require very large contiguous memory regions, this method might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// 2. Where as [`SkipMap::new`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// [`SkipMap::new`]: #method.new
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub fn map_anon(opts: Options, mmap_options: MmapOptions) -> std::io::Result<Self> {
-    Self::map_anon_with_comparator(opts, mmap_options, Ascend)
+  #[inline]
+  fn as_base(&self) -> &SkipList<Self::Comparator> {
+    &self.0
   }
 }
 
@@ -358,112 +295,6 @@ impl<C> SkipMap<C> {
   #[inline]
   pub fn estimated_node_size(height: Height, key_size: usize, value_size: usize) -> usize {
     SkipList::<C>::estimated_node_size(height, key_size, value_size)
-  }
-
-  /// Like [`SkipMap::new`], but with a custom [`Comparator`].
-  #[inline]
-  pub fn with_comparator(opts: Options, cmp: C) -> Result<Self, Error> {
-    SkipList::with_comparator(opts, cmp).map(Self)
-  }
-
-  /// Like [`SkipMap::map_mut`], but with a custom [`Comparator`].
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_mut_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    SkipList::map_mut_with_comparator(path, opts, open_options, mmap_options, cmp).map(Self)
-  }
-
-  /// Like [`SkipMap::map_mut`], but with [`Options`], a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_mut_with_comparator_and_path_builder<PB, E>(
-    path_builder: PB,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> Result<Self, either::Either<E, std::io::Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  {
-    SkipList::map_mut_with_comparator_and_path_builder(
-      path_builder,
-      opts,
-      open_options,
-      mmap_options,
-      cmp,
-    )
-    .map(Self)
-  }
-
-  /// Like [`SkipMap::map`], but with a custom [`Comparator`].
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_with_comparator<P: AsRef<std::path::Path>>(
-    path: P,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    SkipList::map_with_comparator(path, opts, open_options, mmap_options, cmp).map(Self)
-  }
-
-  /// Like [`SkipMap::map`], but with a custom [`Comparator`] and a [`PathBuf`](std::path::PathBuf) builder.
-  ///
-  /// ## Safety
-  /// - If trying to reopens a skiplist, then the trailer type must be the same as the previous one
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub unsafe fn map_with_comparator_and_path_builder<PB, E>(
-    path_builder: PB,
-    opts: Options,
-    open_options: OpenOptions,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> Result<Self, either::Either<E, std::io::Error>>
-  where
-    PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  {
-    SkipList::map_with_comparator_and_path_builder(
-      path_builder,
-      opts,
-      open_options,
-      mmap_options,
-      cmp,
-    )
-    .map(Self)
-  }
-
-  /// Like [`SkipMap::map_anon`], but with a custom [`Comparator`].
-  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  #[inline]
-  pub fn map_anon_with_comparator(
-    opts: Options,
-    mmap_options: MmapOptions,
-    cmp: C,
-  ) -> std::io::Result<Self> {
-    SkipList::map_anon_with_comparator(opts, mmap_options, cmp).map(Self)
   }
 
   /// Clear the skiplist to empty and re-initialize.

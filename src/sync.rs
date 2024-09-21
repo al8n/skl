@@ -1,16 +1,10 @@
 pub use rarena_allocator::sync::Arena;
-use rarena_allocator::Allocator as _;
-
-use core::ops::{Bound, RangeBounds};
 
 use super::{
   allocator::{Link as ContainerLink, *},
   common::*,
   *,
 };
-use crate::VacantBuffer;
-
-use either::Either;
 
 /// Versioned header of the skiplist.
 #[derive(Debug)]

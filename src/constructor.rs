@@ -20,11 +20,20 @@ use super::{
 mod container;
 pub use container::*;
 
+mod versioned_container;
+pub use versioned_container::*;
+
 /// [`TrailedMap`](trailed::TrailedMap) implementation
 pub mod trailed;
 
 /// [`Map`](map::Map) implementation
 pub mod map;
+
+/// [`VersionedMap`](versioned::VersionedMap) implementation
+pub mod versioned;
+
+/// [`FullMap`](full::FullMap) implementation
+pub mod full;
 
 /// The underlying skip list for skip maps
 pub trait List:

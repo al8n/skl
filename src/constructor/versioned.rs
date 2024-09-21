@@ -1,10 +1,13 @@
+use crate::{allocator::WithVersion, Version};
+
 use super::*;
 
 /// a
-pub trait Map
+pub trait VersionedMap
 where
-  Self: Container,
+  Self: VersionedContainer,
   Self::Comparator: Comparator,
+  <Self::Allocator as AllocatorSealed>::Node: WithVersion,
   <Self::Allocator as AllocatorSealed>::Trailer: Default,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -15,10 +18,13 @@ where
   #[inline]
   fn insert<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.insert_at_height(self.random_height(), key, value)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self
+      .as_ref()
+      .insert(version, key, value, Default::default())
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -30,23 +36,24 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, Options};
+  /// use skl::{sync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(height, b"hello", b"world").unwrap();
+  /// map.insert_at_height(0, height, b"hello", b"world").unwrap();
   /// ```
   #[inline]
   fn insert_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
     self
       .as_ref()
-      .insert_at_height(MIN_VERSION, height, key, value, Default::default())
+      .insert_at_height(version, height, key, value, Default::default())
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -64,7 +71,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -93,16 +100,23 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice", vb)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
-    self.insert_at_height_with_value_builder(self.random_height(), key, value_builder)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self.as_ref().insert_at_height_with_value_builder(
+      version,
+      self.random_height(),
+      key,
+      value_builder,
+      Default::default(),
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -120,7 +134,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -150,18 +164,19 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb)
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_at_height_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
     self.as_ref().insert_at_height_with_value_builder(
-      MIN_VERSION,
+      version,
       height,
       key,
       value_builder,
@@ -178,10 +193,17 @@ where
   #[inline]
   fn get_or_insert<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.get_or_insert_at_height(self.random_height(), key, value)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.as_ref().get_or_insert_at_height(
+      version,
+      self.random_height(),
+      key,
+      value,
+      Default::default(),
+    )
   }
 
   /// Inserts a new key-value pair at height if it does not yet exist.
@@ -193,13 +215,14 @@ where
   #[inline]
   fn get_or_insert_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
     self
       .as_ref()
-      .get_or_insert_at_height(MIN_VERSION, height, key, value, Default::default())
+      .get_or_insert_at_height(version, height, key, value, Default::default())
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -218,7 +241,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -246,16 +269,22 @@ where
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice", vb)
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
-    self.get_or_insert_at_height_with_value_builder(self.random_height(), key, value_builder)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self.get_or_insert_at_height_with_value_builder(
+      version,
+      self.random_height(),
+      key,
+      value_builder,
+    )
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -274,7 +303,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -304,18 +333,19 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb)
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_at_height_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
     self.as_ref().get_or_insert_at_height_with_value_builder(
-      MIN_VERSION,
+      version,
       height,
       key,
       value_builder,
@@ -338,7 +368,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -372,16 +402,23 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<(), ()>(kb, vb)
+  /// l.insert_with_builders::<(), ()>(1, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
-    self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
+    self.as_ref().insert_at_height_with_builders(
+      version,
+      self.random_height(),
+      key_builder,
+      value_builder,
+      Default::default(),
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -399,7 +436,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -434,18 +471,19 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<(), ()>(height, kb, vb)
+  /// l.insert_at_height_with_builders::<(), ()>(1, height, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
     self.as_ref().insert_at_height_with_builders(
-      MIN_VERSION,
+      version,
       height,
       key_builder,
       value_builder,
@@ -466,7 +504,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -500,16 +538,23 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<(), ()>(kb, vb)
+  /// l.get_or_insert_with_builders::<(), ()>(1, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
-    self.get_or_insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
+    self.as_ref().get_or_insert_at_height_with_builders(
+      version,
+      self.random_height(),
+      key_builder,
+      value_builder,
+      Default::default(),
+    )
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -525,7 +570,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -560,18 +605,19 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<(), ()>(height, kb, vb)
+  /// l.get_or_insert_at_height_with_builders::<(), ()>(1, height, kb, vb)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
     self.as_ref().get_or_insert_at_height_with_builders(
-      MIN_VERSION,
+      version,
       height,
       key_builder,
       value_builder,
@@ -590,11 +636,12 @@ where
   #[inline]
   fn compare_remove<'a>(
     &'a self,
+    version: Version,
     key: &'a [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.compare_remove_at_height(self.random_height(), key, success, failure)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.compare_remove_at_height(version, self.random_height(), key, success, failure)
   }
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
@@ -608,13 +655,14 @@ where
   #[inline]
   fn compare_remove_at_height<'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
     self.as_ref().compare_remove_at_height(
-      MIN_VERSION,
+      version,
       height,
       key,
       Default::default(),
@@ -631,9 +679,10 @@ where
   #[inline]
   fn get_or_remove<'a>(
     &'a self,
+    version: Version,
     key: &'a [u8],
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.get_or_remove_at_height(self.random_height(), key)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.get_or_remove_at_height(version, self.random_height(), key)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -645,24 +694,25 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, Options};
+  /// use skl::{sync::versioned::SkipMap, Options};
   ///
   /// let map = SkipMap::new(Options::new()).unwrap();
   ///
-  /// map.insert(b"hello", b"world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(height, b"hello").unwrap();
+  /// map.get_or_remove_at_height(0, height, b"hello").unwrap();
   /// ```
   #[inline]
   fn get_or_remove_at_height<'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
     self
       .as_ref()
-      .get_or_remove_at_height(MIN_VERSION, height, key, Default::default())
+      .get_or_remove_at_height(version, height, key, Default::default())
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -680,7 +730,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, KeyBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, KeyBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -707,15 +757,21 @@ where
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_remove_with_builder::<core::convert::Infallible>(kb)
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
-    self.get_or_remove_at_height_with_builder(self.random_height(), key_builder)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self.as_ref().get_or_remove_at_height_with_builder(
+      version,
+      self.random_height(),
+      key_builder,
+      Default::default(),
+    )
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -733,7 +789,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, KeyBuilder, Options};
+  /// use skl::{sync::versioned::SkipMap, KeyBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -761,17 +817,18 @@ where
   ///   Ok(())
   /// });
   /// let height = l.random_height();
-  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(height, kb)
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1, height, kb)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
     self.as_ref().get_or_remove_at_height_with_builder(
-      MIN_VERSION,
+      version,
       height,
       key_builder,
       Default::default(),
@@ -779,10 +836,11 @@ where
   }
 }
 
-impl<T> Map for T
+impl<T> VersionedMap for T
 where
-  T: Container,
+  T: VersionedContainer,
   T::Comparator: Comparator,
+  <T::Allocator as AllocatorSealed>::Node: WithVersion,
   <T::Allocator as AllocatorSealed>::Trailer: Default,
 {
 }

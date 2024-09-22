@@ -44,9 +44,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Builder, Arena};
   ///
-  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(height, b"hello", b"world", 10).unwrap();
@@ -79,7 +79,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, ValueBuilder, Builder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -100,7 +100,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -136,7 +136,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, ValueBuilder, Builder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -157,7 +157,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -237,7 +237,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, ValueBuilder, Builder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -258,7 +258,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -299,7 +299,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, ValueBuilder, Builder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -320,7 +320,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -364,7 +364,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, KeyBuilder, ValueBuilder, Builder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -385,7 +385,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -426,7 +426,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, KeyBuilder, ValueBuilder, Builder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -447,7 +447,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -494,7 +494,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, KeyBuilder, ValueBuilder, Builder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -515,7 +515,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -559,7 +559,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, KeyBuilder, ValueBuilder, Builder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -580,7 +580,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -637,7 +637,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::map::SkipMap, Options};
+  /// use skl::{map::{sync::SkipMap, Map}, Builder, Arena};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///

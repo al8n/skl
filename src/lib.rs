@@ -52,18 +52,19 @@ pub mod iter {
   pub use super::base::{AllVersionsIter, Iter};
 }
 
-#[cfg(any(
-  all(test, not(miri)),
-  all_tests,
-  test_unsync_map,
-  test_unsync_versioned,
-  test_unsync_trailed,
-  test_unsync_full,
-  test_sync_full,
-  test_sync_map,
-  test_sync_versioned,
-  test_sync_trailed,
-))]
+// #[cfg(any(
+//   all(test, not(miri)),
+//   all_tests,
+//   test_unsync_map,
+//   test_unsync_versioned,
+//   test_unsync_trailed,
+//   test_unsync_full,
+//   test_sync_full,
+//   test_sync_map,
+//   test_sync_versioned,
+//   test_sync_trailed,
+// ))]
+#[cfg(test)]
 mod tests;
 
 pub use among;

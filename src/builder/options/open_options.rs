@@ -122,6 +122,7 @@ impl<C: Comparator> Builder<C> {
     opts
       .to_arena_options()
       .with_maximum_alignment(node_align.max(trailer_align))
+      .with_unify(true)
       .map_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
         T::construct(arena, opts, cmp)
@@ -200,6 +201,7 @@ impl<C: Comparator> Builder<C> {
     opts
       .to_arena_options()
       .with_maximum_alignment(node_align.max(trailer_align))
+      .with_unify(true)
       .map_mut_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
         T::construct(arena, opts, cmp)

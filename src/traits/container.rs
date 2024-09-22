@@ -11,7 +11,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, Builder};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Container, Builder};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap::<u64>>().unwrap();
   ///
@@ -43,9 +43,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, Options};
+  /// use skl::{trailed::{sync::SkipMap, TrailedMap}, Container, Builder};
   ///
-  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// map.insert(b"hello", b"world", 10).unwrap();
   ///

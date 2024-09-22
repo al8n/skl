@@ -87,7 +87,7 @@ pub trait List:
       )));
     }
 
-    let meta = if opts.unify() {
+    let meta = if opts.unify() || arena.is_ondisk() {
       arena.allocate_header(opts.magic_version())?
     } else {
       unsafe {
@@ -208,7 +208,7 @@ pub trait Arena: List {
   /// ```rust
   /// use skl::{trailed::sync::SkipMap, Arena, Builder};
   ///
-  /// let map = Builder::new().with_capacity(100).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len(), b"k2".len());

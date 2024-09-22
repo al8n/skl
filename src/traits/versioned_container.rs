@@ -35,13 +35,13 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, VersionedContainer};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world", ()).unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello", ()).unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, b"hello"));
   /// assert!(map.contains_key_versioned(1, b"hello"));
@@ -56,13 +56,13 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, VersionedContainer, Builder};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world", ()).unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello", ()).unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, b"hello"));
   /// assert!(map.contains_key_versioned(1, b"hello"));
@@ -92,16 +92,16 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, VersionedContainer};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world", ()).unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
   /// let ent = map.get(0, b"hello").unwrap();
   /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.get_or_remove(1, b"hello", ()).unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
   /// assert!(map.get(1, b"hello").is_none());
   /// ```
@@ -117,13 +117,13 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, VersionedContainer};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world", ()).unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello", ()).unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
   /// assert!(map.get(1, b"hello").is_none());
   ///

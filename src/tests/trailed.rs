@@ -858,7 +858,6 @@ where
     }
 
     let l = Builder::new()
-      .with_create_new(true)
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
@@ -915,7 +914,6 @@ where
     }
 
     let l = Builder::new()
-      .with_create_new(true)
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)

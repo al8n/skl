@@ -146,7 +146,7 @@ impl<A: Allocator, C> SkipList<A, C> {
 
     let options = self.arena.options();
 
-    let meta = if options.unify() {
+    let meta = if options.unify() || self.arena.is_ondisk() {
       self.arena.allocate_header(self.meta().magic_version())?
     } else {
       unsafe {

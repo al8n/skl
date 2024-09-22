@@ -14,7 +14,8 @@ use super::{
     Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed, WithTrailer,
   },
   base::SkipList,
-  EntryRef, Error, Height, Iter, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
+  iter::Iter,
+  EntryRef, Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
 };
 
 mod container;
@@ -141,7 +142,9 @@ pub trait Arena: List {
   // #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   // #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   // #[inline]
-  // fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
+  // fn path(&self) -> Option<&<<Self::Allocator as AllocatorSealed>::Node as Node>::> {
+  //   use crate::allocator::Node;
+
   //   self.as_ref().arena.path()
   // }
 
@@ -203,9 +206,9 @@ pub trait Arena: List {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::trailed::SkipMap, Options};
+  /// use skl::{trailed::sync::SkipMap, Arena, Builder};
   ///
-  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(100).alloc::<SkipMap<u64>>().unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
@@ -231,7 +234,7 @@ pub trait Arena: List {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///

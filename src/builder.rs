@@ -429,23 +429,21 @@ impl<C: Comparator> Builder<C> {
   ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
   ///    especially if you're frequently accessing or modifying it.
   ///
-  /// 2. Where as [`Builder::mmap_anon`] will use mmap anonymous to require memory from the OS.
+  /// 2. Where as [`Builder::map_anon`] will use mmap anonymous to require memory from the OS.
   ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync, unsync};
+  /// use skl::{full::sync, trailed::unsync, Builder};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
-  /// let map = Builder::new().alloc::<sync::full::SkipMap>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<sync::SkipMap>().unwrap();
   ///
   /// // Create a unsync skipmap which supports trailer.
-  /// let arena = Builder::new().alloc::<unsync::trailed::SkipMap>().unwrap();
+  /// let arena = Builder::new().with_capacity(1024).alloc::<unsync::SkipMap>().unwrap();
   /// ```
-  ///
-  /// [`Builder::mmap_anon`]: #method.mmap_anon
   #[inline]
   pub fn alloc<T: Container<Comparator = C>>(self) -> Result<T, Error> {
     let Self { opts, cmp } = self;
@@ -453,13 +451,9 @@ impl<C: Comparator> Builder<C> {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
     let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
 
-    ArenaOptions::new()
-      .with_capacity(opts.capacity())
+    opts
+      .to_arena_options()
       .with_maximum_alignment(node_align.max(trailer_align))
-      .with_unify(opts.unify())
-      .with_magic_version(CURRENT_VERSION)
-      .with_freelist(opts.freelist())
-      .with_reserved(opts.reserved())
       .alloc::<<T::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| T::construct(arena, opts, cmp))

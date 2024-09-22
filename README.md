@@ -28,14 +28,14 @@
   
     ```toml
     [dependencies]
-    skl = "0.13"
+    skl = "0.15"
     ```
 
 - Enable memory map backend
 
     ```toml
     [dependencies]
-    skl = { version = "0.13", features = ["memmap"] }
+    skl = { version = "0.15", features = ["memmap"] }
     ```
 
 ## Features
@@ -79,7 +79,7 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
 - `miri`:
 
     ```sh
-    cargo miri test --all-features
+    RUSTFLAGS = "--cfg all_tests" cargo miri test --all-features
     ```
 
 ## Support Platforms

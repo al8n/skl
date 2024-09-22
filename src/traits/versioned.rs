@@ -51,7 +51,7 @@ where
   /// ```rust
   /// use skl::{sync::versioned::SkipMap, Options};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(0, height, b"hello", b"world").unwrap();
@@ -709,7 +709,7 @@ where
   /// ```rust
   /// use skl::{sync::versioned::SkipMap, Options};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///

@@ -1,10 +1,13 @@
 use super::*;
 
-#[cfg(test)]
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_map,))]
 mod tests {
   use super::*;
 
   container_tests!("sync_map": SkipMap);
+
+  map_tests!("sync_map": SkipMap);
+  map_tests!(go "sync_map": SkipMap);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
@@ -159,13 +162,5 @@ impl<C> crate::traits::List for SkipMap<C> {
   #[inline]
   fn as_mut(&mut self) -> &mut SkipList<Self::Comparator> {
     &mut self.0
-  }
-}
-
-impl<C> SkipMap<C> {
-  #[cfg(all(test, feature = "std"))]
-  #[inline]
-  pub(crate) fn with_yield_now(self) -> Self {
-    Self(self.0.with_yield_now())
   }
 }

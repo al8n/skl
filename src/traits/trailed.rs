@@ -614,6 +614,50 @@ where
     )
   }
 
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  #[inline]
+  fn get_or_remove<'a>(
+    &'a self,
+    key: &'a [u8],
+    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+    self.get_or_remove_at_height(self.random_height(), key, trailer)
+  }
+
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{sync::map::SkipMap, Options};
+  ///
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  ///
+  /// map.insert(b"hello", b"world").unwrap();
+  ///
+  /// let height = map.random_height();
+  /// map.get_or_remove_at_height(height, b"hello").unwrap();
+  /// ```
+  #[inline]
+  fn get_or_remove_at_height<'a>(
+    &'a self,
+    height: Height,
+    key: &'a [u8],
+    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+    self
+      .as_ref()
+      .get_or_remove_at_height(MIN_VERSION, height, key, trailer)
+  }
+
   /// Removes the key-value pair if it exists.
   #[inline]
   fn remove<'a>(
@@ -637,7 +681,7 @@ where
       height,
       key,
       trailer,
-      Ordering::Relaxed,
+      Ordering::AcqRel,
       Ordering::Relaxed,
     )
   }

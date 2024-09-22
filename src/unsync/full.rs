@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use super::*;
 
-#[cfg(test)]
+#[cfg(any(all(test, not(miri)), all_tests, test_unsync_full,))]
 mod tests {
   use super::*;
 

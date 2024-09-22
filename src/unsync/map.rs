@@ -1,10 +1,12 @@
 use super::*;
 
-#[cfg(test)]
+#[cfg(any(all(test, not(miri)), all_tests, test_unsync_map,))]
 mod tests {
   use super::*;
 
   container_tests!("unsync_map": SkipMap);
+
+  map_tests!("sync_map": SkipMap);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;

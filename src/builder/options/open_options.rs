@@ -4,7 +4,7 @@ use dbutils::Comparator;
 use either::Either;
 use rarena_allocator::Allocator;
 
-use super::{Builder, Options, CURRENT_VERSION};
+use super::{super::Builder, Options, CURRENT_VERSION};
 use crate::{
   allocator::Sealed,
   error::{bad_magic_version, bad_version, invalid_data},

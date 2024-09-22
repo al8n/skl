@@ -1,5 +1,14 @@
 use super::*;
 
+#[cfg(any(all(test, not(miri)), all_tests, test_unsync_versioned,))]
+mod tests {
+  use super::*;
+
+  container_tests!("unsync_versioned_map": SkipMap);
+
+  versioned_map_tests!("unsync_versioned_map": SkipMap<Ascend>);
+}
+
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
 type SkipList<C> = base::SkipList<Allocator, C>;
 

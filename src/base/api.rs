@@ -202,13 +202,6 @@ impl<A: Allocator, C> SkipList<A, C> {
   pub fn flush_async(&self) -> std::io::Result<()> {
     self.arena.flush_async()
   }
-
-  #[cfg(all(test, feature = "std"))]
-  #[inline]
-  pub(crate) fn with_yield_now(mut self) -> Self {
-    self.yield_now = true;
-    self
-  }
 }
 
 impl<A: Allocator, C: Comparator> SkipList<A, C> {

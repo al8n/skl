@@ -6,7 +6,7 @@ use core::{
 use dbutils::Comparator;
 
 use super::{AllocatorSealed, Arena, EntryRef, Iter};
-use crate::{allocator::WithVersion, AllVersionsIter, Version, VersionedEntryRef};
+use crate::{allocator::WithVersion, iter::AllVersionsIter, Version, VersionedEntryRef};
 
 /// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer
@@ -15,6 +15,18 @@ where
   Self::Comparator: Comparator,
   <Self::Allocator as AllocatorSealed>::Node: WithVersion,
 {
+  /// Returns the maximum version of all entries in the map.
+  #[inline]
+  fn max_version(&self) -> Version {
+    self.as_ref().max_version()
+  }
+
+  /// Returns the minimum version of all entries in the map.
+  #[inline]
+  fn min_version(&self) -> Version {
+    self.as_ref().min_version()
+  }
+
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
@@ -23,9 +35,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Options};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world", ()).unwrap();
   ///
@@ -44,9 +56,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Options};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world", ()).unwrap();
   ///
@@ -80,9 +92,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Options};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world", ()).unwrap();
   ///
@@ -105,9 +117,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Options};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, Arena};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world", ()).unwrap();
   ///

@@ -12,17 +12,27 @@ const ARENA_SIZE: usize = 1 << 20;
 #[cfg(feature = "std")]
 const BIG_ARENA_SIZE: usize = 120 << 20;
 pub(crate) const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
-const UNIFY_TEST_OPTIONS: Options = Options::new()
-  .with_capacity(ARENA_SIZE as u32)
-  .with_unify(true);
 #[cfg(feature = "std")]
-const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
-#[cfg(feature = "std")]
-const UNIFY_BIG_TEST_OPTIONS: Options = Options::new()
-  .with_capacity(BIG_ARENA_SIZE as u32)
-  .with_unify(true);
+pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
 
+#[cfg(any(all(test, not(miri)), all_tests, test_unsync_full, test_sync_full,))]
 pub(crate) mod full;
+#[cfg(any(all(test, not(miri)), all_tests, test_unsync_map, test_sync_map,))]
+pub(crate) mod map;
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_versioned,
+  test_sync_versioned,
+))]
+pub(crate) mod trailed;
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_trailed,
+  test_sync_trailed,
+))]
+pub(crate) mod versioned;
 
 /// Only used for testing
 pub fn key(i: usize) -> std::vec::Vec<u8> {
@@ -50,34 +60,45 @@ fn make_value(i: usize) -> std::vec::Vec<u8> {
 
 #[macro_export]
 macro_rules! unit_tests {
-  ($mod: path |$prefix:literal, $ty:ty| {
-    $($name:ident,)*
+  ($mod:path |$prefix:literal, $ty:ty, $opts:path| {
+    $(
+      $(#[cfg($cfg:meta)])?
+      $name:ident,
+    )*
   }) => {
     $(
-      unit_test_expand!($mod |$prefix, $name, $ty|);
+      unit_test_expand!(
+        $(#[cfg($cfg)])?
+        $mod |$prefix, $name, $ty, $opts|
+      );
     )*
   };
 }
 
 #[macro_export]
 macro_rules! unit_test_expand {
-  ($fn:path |$prefix:literal, $name:ident, $ty:ty|) => {
+  (
+    $(#[cfg($cfg:meta)])?
+    $fn:path |$prefix:literal, $name:ident, $ty:ty, $opts: path|
+  ) => {
     paste::paste! {
       #[test]
+      $(#[cfg($cfg)])?
       fn [< test_ $name >]() {
         $fn::$name(
           $crate::Builder::new()
-            .with_options($crate::tests::TEST_OPTIONS)
+            .with_options($opts)
             .alloc::<$ty>()
             .unwrap(),
         );
       }
 
       #[test]
+      $(#[cfg($cfg)])?
       fn [< test_ $name _unify >]() {
         $fn::$name(
           $crate::Builder::new()
-            .with_options($crate::tests::TEST_OPTIONS)
+            .with_options($opts)
             .with_unify(true)
             .alloc::<$ty>()
             .unwrap(),
@@ -85,6 +106,7 @@ macro_rules! unit_test_expand {
       }
 
       #[test]
+      $(#[cfg($cfg)])?
       #[cfg(feature = "memmap")]
       #[cfg_attr(miri, ignore)]
       #[allow(clippy::macro_metavars_in_unsafe)]
@@ -96,7 +118,7 @@ macro_rules! unit_test_expand {
             .join(::std::format!("test_{}_skipmap_{}_map_mut", $prefix, stringify!($name)));
           $fn::$name(
             $crate::Builder::new()
-              .with_options($crate::tests::TEST_OPTIONS)
+              .with_options($opts)
               .with_create_new(true)
               .with_read(true)
               .with_write(true)
@@ -107,22 +129,24 @@ macro_rules! unit_test_expand {
       }
 
       #[test]
+      $(#[cfg($cfg)])?
       #[cfg(feature = "memmap")]
       fn [< test_ $name _map_anon >] () {
         $fn::$name(
           $crate::Builder::new()
-            .with_options($crate::tests::TEST_OPTIONS)
+            .with_options($opts)
             .map_anon::<$ty>()
             .unwrap(),
         );
       }
 
       #[test]
+      $(#[cfg($cfg)])?
       #[cfg(feature = "memmap")]
       fn [< test_ $name _map_anon_unify >]() {
         $fn::$name(
           $crate::Builder::new()
-            .with_options($crate::tests::TEST_OPTIONS)
+            .with_options($opts)
             .with_unify(true)
             .map_anon::<$ty>()
             .unwrap(),

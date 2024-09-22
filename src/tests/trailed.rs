@@ -2,94 +2,82 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{
-  allocator::{WithTrailer, WithVersion},
-  full::FullMap,
-  KeyBuilder, ValueBuilder, MIN_VERSION,
-};
+use crate::{allocator::WithTrailer, trailed::TrailedMap, KeyBuilder, ValueBuilder};
 
 use super::*;
 
 pub(crate) fn basic<M>(mut l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   // Try adding values.
-  l.get_or_insert(0, b"key1", &make_value(1), Default::default())
+  l.get_or_insert(b"key1", &make_value(1), Default::default())
     .unwrap();
-  l.get_or_insert(0, b"key3", &make_value(3), Default::default())
+  l.get_or_insert(b"key3", &make_value(3), Default::default())
     .unwrap();
-  l.get_or_insert(0, b"key2", &make_value(2), Default::default())
+  l.get_or_insert(b"key2", &make_value(2), Default::default())
     .unwrap();
 
   {
-    let mut it = l.iter_all_versions(0);
+    let mut it = l.iter();
     let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
     assert_eq!(ent.key(), b"key1");
-    assert_eq!(ent.value().unwrap(), &make_value(1));
-    assert_eq!(ent.version(), 0);
+    assert_eq!(ent.value(), &make_value(1));
 
     let ent = it.seek_lower_bound(Bound::Included(b"key2")).unwrap();
     assert_eq!(ent.key(), b"key2");
-    assert_eq!(ent.value().unwrap(), &make_value(2));
-    assert_eq!(ent.version(), 0);
+    assert_eq!(ent.value(), &make_value(2));
 
     let ent = it.seek_lower_bound(Bound::Included(b"key3")).unwrap();
     assert_eq!(ent.key(), b"key3");
-    assert_eq!(ent.value().unwrap(), &make_value(3));
-    assert_eq!(ent.version(), 0);
+    assert_eq!(ent.value(), &make_value(3));
   }
 
-  l.get_or_insert(1, "a".as_bytes(), &[], Default::default())
+  l.get_or_insert("a".as_bytes(), &[], Default::default())
     .unwrap();
-  l.get_or_insert(2, "a".as_bytes(), &[], Default::default())
+  l.get_or_insert("a".as_bytes(), &[], Default::default())
     .unwrap();
 
   {
-    let mut it = l.iter_all_versions(2);
+    let mut it = l.iter();
     let ent = it.seek_lower_bound(Bound::Included(b"a")).unwrap();
     assert_eq!(ent.key(), b"a");
-    assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.version(), 2);
+    assert_eq!(ent.value(), &[]);
 
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), b"a");
-    assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.version(), 1);
+    assert_eq!(ent.key(), b"key1");
+    assert_eq!(ent.value(), &make_value(1));
   }
 
-  l.get_or_insert(2, "b".as_bytes(), &[], Default::default())
+  l.get_or_insert("b".as_bytes(), &[], Default::default())
     .unwrap();
-  l.get_or_insert(1, "b".as_bytes(), &[], Default::default())
+  l.get_or_insert("b".as_bytes(), &[], Default::default())
     .unwrap();
 
   {
-    let mut it = l.iter_all_versions(2);
+    let mut it = l.iter();
     let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
     assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.version(), 2);
+    assert_eq!(ent.value(), &[]);
 
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.version(), 1);
+    assert_eq!(ent.key(), b"key1");
+    assert_eq!(ent.value(), &make_value(1));
 
     let ent = it.entry().unwrap();
-    assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.version(), 1);
+    assert_eq!(ent.key(), b"key1");
+    assert_eq!(ent.value(), &make_value(1));
   }
 
-  l.get_or_insert(2, b"b", &[], Default::default())
+  l.get_or_insert(b"b", &[], Default::default())
     .unwrap()
     .unwrap();
 
   assert!(l
-    .get_or_insert(2, b"c", &[], Default::default())
+    .get_or_insert(b"c", &[], Default::default())
     .unwrap()
     .is_none());
 
@@ -99,7 +87,7 @@ where
 
   let l = l.clone();
   {
-    let mut it = l.iter_all_versions(0);
+    let mut it = l.iter();
     assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
     assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
   }
@@ -112,519 +100,223 @@ where
   l.flush_async().unwrap();
 }
 
-pub(crate) fn iter_all_versions_mvcc<M>(l: M)
+pub(crate) fn get<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a1", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a2", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c1", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c2", Default::default()).unwrap();
 
-  let mut it = l.iter_all_versions(0);
-  let mut num = 0;
-  while it.next().is_some() {
-    num += 1;
-  }
-  assert_eq!(num, 0);
-
-  let mut it = l.iter_all_versions(1);
-  let mut num = 0;
-  while it.next().is_some() {
-    num += 1;
-  }
-  assert_eq!(num, 2);
-
-  let mut it = l.iter_all_versions(2);
-  let mut num = 0;
-  while it.next().is_some() {
-    num += 1;
-  }
-  assert_eq!(num, 2);
-
-  let mut it = l.iter_all_versions(3);
-  let mut num = 0;
-  while it.next().is_some() {
-    num += 1;
-  }
-  assert_eq!(num, 4);
-
-  let mut it = l.iter_all_versions(0);
-  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
-  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
-
-  let mut it = l.iter_all_versions(1);
-  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value().unwrap(), b"a1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let mut it = l.iter_all_versions(2);
-  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value().unwrap(), b"a1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let mut it = l.iter_all_versions(3);
-
-  let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value().unwrap(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = it.seek_upper_bound(Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = it.seek_lower_bound(Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = it.seek_lower_bound(Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c2");
-  assert_eq!(ent.version(), 3);
-}
-
-pub(crate) fn get_mvcc<M>(l: M)
-where
-  M: FullMap + Clone,
-  M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
-  <M::Allocator as Sealed>::Trailer: Default,
-{
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
-
-  let ent = l.get(1, b"a").unwrap();
+  let ent = l.get(b"a").unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.get(2, b"a").unwrap();
+  let ent = l.get(b"a").unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.get(3, b"a").unwrap();
+  let ent = l.get(b"a").unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value(), b"a1");
+
+  l.insert(b"a", b"a2", Default::default()).unwrap();
+
+  let ent = l.get(b"a").unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
 
-  let ent = l.get(4, b"a").unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
+  assert!(l.get(b"b").is_none());
+  assert!(l.get(b"b").is_none());
+  assert!(l.get(b"b").is_none());
+  assert!(l.get(b"b").is_none());
+  assert!(l.get(b"b").is_none());
 
-  assert!(l.get(0, b"b").is_none());
-  assert!(l.get(1, b"b").is_none());
-  assert!(l.get(2, b"b").is_none());
-  assert!(l.get(3, b"b").is_none());
-  assert!(l.get(4, b"b").is_none());
-
-  let ent = l.get(1, b"c").unwrap();
+  let ent = l.get(b"c").unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.get(2, b"c").unwrap();
+  let ent = l.get(b"c").unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.get(3, b"c").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.get(4, b"c").unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  assert!(l.get(5, b"d").is_none());
+  assert!(l.get(b"d").is_none());
 }
 
 pub(crate) fn gt<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
-  l.get_or_insert(5, b"c", b"c3", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a1", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a2", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c1", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c3", Default::default()).unwrap();
 
-  assert!(l.lower_bound(0, Bound::Excluded(b"a")).is_none());
-  assert!(l.lower_bound(0, Bound::Excluded(b"b")).is_none());
-  assert!(l.lower_bound(0, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(Bound::Excluded(b"a")).is_some());
+  assert!(l.lower_bound(Bound::Excluded(b"b")).is_some());
+  assert!(l.lower_bound(Bound::Excluded(b"c")).is_none());
 
-  let ent = l.lower_bound(1, Bound::Excluded(b"")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Excluded(b"")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Excluded(b"")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(1, Bound::Excluded(b"a")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"a")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Excluded(b"a")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Excluded(b"a")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(1, Bound::Excluded(b"b")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.lower_bound(3, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(4, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(5, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c3");
-  assert_eq!(ent.version(), 5);
-
-  let ent = l.lower_bound(6, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c3");
-  assert_eq!(ent.version(), 5);
-
-  assert!(l.lower_bound(1, Bound::Excluded(b"c")).is_none());
-  assert!(l.lower_bound(2, Bound::Excluded(b"c")).is_none());
-  assert!(l.lower_bound(3, Bound::Excluded(b"c")).is_none());
-  assert!(l.lower_bound(4, Bound::Excluded(b"c")).is_none());
-  assert!(l.lower_bound(5, Bound::Excluded(b"c")).is_none());
-  assert!(l.lower_bound(6, Bound::Excluded(b"c")).is_none());
+  assert!(l.lower_bound(Bound::Excluded(b"c")).is_none());
 }
 
 pub(crate) fn ge<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a1", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a2", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c1", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c2", Default::default()).unwrap();
 
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"c")).is_none());
+  assert!(l.lower_bound(Bound::Included(b"a")).is_some());
+  assert!(l.lower_bound(Bound::Included(b"b")).is_some());
+  assert!(l.lower_bound(Bound::Included(b"c")).is_some());
 
-  let ent = l.lower_bound(1, Bound::Included(b"a")).unwrap();
+  let ent = l.lower_bound(Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Included(b"a")).unwrap();
+  let ent = l.lower_bound(Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Included(b"a")).unwrap();
+  l.insert(b"a", b"a2", Default::default()).unwrap();
+
+  let ent = l.lower_bound(Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound(4, Bound::Included(b"a")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(1, Bound::Included(b"b")).unwrap();
+  let ent = l.lower_bound(Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Included(b"b")).unwrap();
+  let ent = l.lower_bound(Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Included(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(4, Bound::Included(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(1, Bound::Included(b"c")).unwrap();
+  let ent = l.lower_bound(Bound::Included(b"c")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Included(b"c")).unwrap();
+  let ent = l.lower_bound(Bound::Included(b"c")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.lower_bound(4, Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(1, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(2, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(3, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(4, Bound::Included(b"d")).is_none());
+  assert!(l.lower_bound(Bound::Included(b"d")).is_none());
 }
 
 pub(crate) fn le<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a1", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a2", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c1", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c2", Default::default()).unwrap();
 
-  assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"c")).is_none());
+  assert!(l.upper_bound(Bound::Included(b"a")).is_some());
+  assert!(l.upper_bound(Bound::Included(b"b")).is_some());
+  assert!(l.upper_bound(Bound::Included(b"c")).is_some());
 
-  let ent = l.upper_bound(1, Bound::Included(b"a")).unwrap();
+  let ent = l.upper_bound(Bound::Included(b"a")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Included(b"a")).unwrap();
+  let ent = l.upper_bound(Bound::Included(b"b")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(3, Bound::Included(b"a")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Included(b"a")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(1, Bound::Included(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(2, Bound::Included(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(3, Bound::Included(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Included(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(1, Bound::Included(b"c")).unwrap();
+  let ent = l.upper_bound(Bound::Included(b"c")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Included(b"c")).unwrap();
+  let ent = l.upper_bound(Bound::Included(b"d")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(3, Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(1, Bound::Included(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(2, Bound::Included(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(3, Bound::Included(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Included(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
 }
 
 pub(crate) fn lt<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a1", Default::default()).unwrap();
+  l.get_or_insert(b"a", b"a2", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c1", Default::default()).unwrap();
+  l.get_or_insert(b"c", b"c2", Default::default()).unwrap();
 
-  assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"a")).is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"b")).is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"c")).is_none());
-  assert!(l.upper_bound(1, Bound::Excluded(b"a")).is_none());
-  assert!(l.upper_bound(2, Bound::Excluded(b"a")).is_none());
+  assert!(l.upper_bound(Bound::Excluded(b"a")).is_none());
+  assert!(l.upper_bound(Bound::Excluded(b"b")).is_some());
+  assert!(l.upper_bound(Bound::Excluded(b"c")).is_some());
 
-  let ent = l.upper_bound(1, Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(Bound::Excluded(b"c")).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(3, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(1, Bound::Excluded(b"c")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(2, Bound::Excluded(b"c")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(3, Bound::Excluded(b"c")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Excluded(b"c")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value(), b"a2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(1, Bound::Excluded(b"d")).unwrap();
+  let ent = l.upper_bound(Bound::Excluded(b"d")).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(2, Bound::Excluded(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c1");
-  assert_eq!(ent.version(), 1);
-
-  let ent = l.upper_bound(3, Bound::Excluded(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
-
-  let ent = l.upper_bound(4, Bound::Excluded(b"d")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value(), b"c2");
-  assert_eq!(ent.version(), 3);
 }
 
 pub(crate) fn basic_large<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let n = 1000;
 
   for i in 0..n {
-    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), Default::default())
+    l.get_or_insert(&key(i), &new_value(i), Default::default())
       .unwrap();
   }
 
   for i in 0..n {
     let k = key(i);
-    let ent = l.get(MIN_VERSION, &k).unwrap();
+    let ent = l.get(&k).unwrap();
     assert_eq!(new_value(i), ent.value());
-    assert_eq!(ent.version(), 0);
+
     assert_eq!(ent.key(), k);
   }
 
@@ -634,9 +326,9 @@ where
 #[cfg(feature = "std")]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
-  M: FullMap + Clone + Send + 'static,
+  M: TrailedMap + Clone + Send + 'static,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -647,7 +339,7 @@ where
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), Default::default())
+      l.get_or_insert(&key(i), &new_value(i), Default::default())
         .unwrap();
     });
   }
@@ -656,11 +348,7 @@ where
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(
-        l.get(MIN_VERSION, &k).unwrap().value(),
-        new_value(i),
-        "broken: {i}"
-      );
+      assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
     });
   }
 }
@@ -668,9 +356,9 @@ where
 #[cfg(all(feature = "std", not(miri)))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
-  M: FullMap + Clone + Send + 'static,
+  M: TrailedMap + Clone + Send + 'static,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -681,7 +369,7 @@ where
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &big_value(i), Default::default())
+      l.get_or_insert(&key(i), &big_value(i), Default::default())
         .unwrap();
     });
   }
@@ -691,11 +379,7 @@ where
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(
-        l.get(MIN_VERSION, &k).unwrap().value(),
-        big_value(i),
-        "broken: {i}"
-      );
+      assert_eq!(l.get(&k).unwrap().value(), big_value(i), "broken: {i}");
     });
   }
   while l.refs() > 1 {}
@@ -704,14 +388,12 @@ where
 #[cfg(feature = "std")]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
-  M: FullMap + Clone + Send + 'static,
+  M: TrailedMap + Clone + Send + 'static,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  use core::sync::atomic::Ordering;
   use std::sync::Arc;
-
   use wg::WaitGroup;
 
   #[cfg(not(any(miri, feature = "loom")))]
@@ -724,7 +406,7 @@ where
     let wg = wg.add(1);
     let l = l.clone();
     std::thread::spawn(move || {
-      let _ = l.get_or_insert(MIN_VERSION, b"thekey", &make_value(i), Default::default());
+      let _ = l.get_or_insert(b"thekey", &make_value(i), Default::default());
       wg.done();
     });
   }
@@ -737,14 +419,14 @@ where
     let l = l.clone();
     let saw_value = saw_value.clone();
     std::thread::spawn(move || {
-      let ent = l.get(MIN_VERSION, b"thekey").unwrap();
+      let ent = l.get(b"thekey").unwrap();
       let val = ent.value();
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
 
-      let mut it = l.iter_all_versions(MIN_VERSION);
+      let mut it = l.iter();
       let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
-      let val = ent.value().unwrap();
+      let val = ent.value();
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
       assert_eq!(ent.key(), b"thekey");
@@ -761,28 +443,23 @@ where
 
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter();
   let mut ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
   for i in 0..N {
     assert_eq!(ent.key(), make_int_key(i));
-    assert_eq!(ent.value().unwrap(), make_value(i));
+    assert_eq!(ent.value(), make_value(i));
     if i != N - 1 {
       ent = it.next().unwrap();
     }
@@ -793,25 +470,20 @@ where
 
 pub(crate) fn range_next<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
   let upper = make_int_key(50);
-  let mut it = l.range(MIN_VERSION, ..=upper.as_slice());
+  let mut it = l.range(..=upper.as_slice());
   let mut ent = it.seek_lower_bound(Bound::Unbounded);
   for i in 0..N {
     if i <= 50 {
@@ -832,28 +504,23 @@ where
 
 pub(crate) fn iter_all_versions_prev<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter();
   let mut ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
   for i in (0..N).rev() {
     assert_eq!(ent.key(), make_int_key(i));
-    assert_eq!(ent.value().unwrap(), make_value(i));
+    assert_eq!(ent.value(), make_value(i));
     if i != 0 {
       ent = it.next_back().unwrap();
     }
@@ -864,25 +531,20 @@ where
 
 pub(crate) fn range_prev<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
   let lower = make_int_key(50);
-  let mut it = l.range(MIN_VERSION, lower.as_slice()..);
+  let mut it = l.range(lower.as_slice()..);
   let mut ent = it.seek_upper_bound(Bound::Unbounded);
   for i in (0..N).rev() {
     if i >= 50 {
@@ -903,88 +565,77 @@ where
 
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(v),
-      &make_value(v),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(v), &make_value(v), Default::default())
+      .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter();
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
-  assert_eq!(ent.value().unwrap(), make_value(1000));
+  assert_eq!(ent.value(), make_value(1000));
 
   let ent = it.seek_lower_bound(Bound::Included(b"01000")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
-  assert_eq!(ent.value().unwrap(), make_value(1000));
+  assert_eq!(ent.value(), make_value(1000));
 
   let ent = it.seek_lower_bound(Bound::Included(b"01005")).unwrap();
   assert_eq!(ent.key(), make_int_key(1010));
-  assert_eq!(ent.value().unwrap(), make_value(1010));
+  assert_eq!(ent.value(), make_value(1010));
 
   let ent = it.seek_lower_bound(Bound::Included(b"01010")).unwrap();
   assert_eq!(ent.key(), make_int_key(1010));
-  assert_eq!(ent.value().unwrap(), make_value(1010));
+  assert_eq!(ent.value(), make_value(1010));
 
   let ent = it.seek_lower_bound(Bound::Included(b"01020")).unwrap();
   assert_eq!(ent.key(), make_int_key(1020));
-  assert_eq!(ent.value().unwrap(), make_value(1020));
+  assert_eq!(ent.value(), make_value(1020));
 
   let ent = it.seek_lower_bound(Bound::Included(b"01200")).unwrap();
   assert_eq!(ent.key(), make_int_key(1200));
-  assert_eq!(ent.value().unwrap(), make_value(1200));
+  assert_eq!(ent.value(), make_value(1200));
 
   let ent = it.seek_lower_bound(Bound::Included(b"01100")).unwrap();
   assert_eq!(ent.key(), make_int_key(1100));
-  assert_eq!(ent.value().unwrap(), make_value(1100));
+  assert_eq!(ent.value(), make_value(1100));
 
   let ent = it.seek_lower_bound(Bound::Included(b"99999"));
   assert!(ent.is_none());
 
-  l.get_or_insert(MIN_VERSION, &[], &[], Default::default())
-    .unwrap();
+  l.get_or_insert(&[], &[], Default::default()).unwrap();
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
-  assert_eq!(ent.value().unwrap(), &[]);
+  assert_eq!(ent.value(), &[]);
 
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
-  assert_eq!(ent.value().unwrap(), &[]);
+  assert_eq!(ent.value(), &[]);
 }
 
 pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(v),
-      &make_value(v),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(v), &make_value(v), Default::default())
+      .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter();
   assert!(it.seek_upper_bound(Bound::Excluded(b"")).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01000"));
@@ -992,48 +643,41 @@ where
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01001")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000));
-  assert_eq!(ent.value().unwrap(), make_value(1000));
+  assert_eq!(ent.value(), make_value(1000));
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01991")).unwrap();
   assert_eq!(ent.key(), make_int_key(1990));
-  assert_eq!(ent.value().unwrap(), make_value(1990));
+  assert_eq!(ent.value(), make_value(1990));
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"99999")).unwrap();
   assert_eq!(ent.key(), make_int_key(1990));
-  assert_eq!(ent.value().unwrap(), make_value(1990));
+  assert_eq!(ent.value(), make_value(1990));
 
-  l.get_or_insert(MIN_VERSION, &[], &[], Default::default())
-    .unwrap();
-  assert!(l.as_ref().lt(MIN_VERSION, &[], false).is_none());
+  l.get_or_insert(&[], &[], Default::default()).unwrap();
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"\x01")).unwrap();
   assert_eq!(ent.key(), &[]);
-  assert_eq!(ent.value().unwrap(), &[]);
+  assert_eq!(ent.value(), &[]);
 }
 
 pub(crate) fn range<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 1..10 {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
   let k3 = make_int_key(3);
   let k7 = make_int_key(7);
-  let mut it = l.range(MIN_VERSION, k3.as_slice()..k7.as_slice()).clone();
+  let mut it = l.range(k3.as_slice()..k7.as_slice()).clone();
   assert_eq!(it.bounds(), &(k3.as_slice()..k7.as_slice()));
 
   for i in 3..=6 {
@@ -1115,44 +759,29 @@ where
 
 pub(crate) fn iter_latest<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(
-      1,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), Default::default())
+      .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(
-      2,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), Default::default())
+      .unwrap();
   }
 
-  let mut it = l.iter(4);
+  let mut it = l.iter();
   let mut num = 0;
   for i in 0..N {
     let ent = it.next().unwrap();
@@ -1166,44 +795,29 @@ where
 
 pub(crate) fn range_latest<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(&make_int_key(i), &make_value(i), Default::default())
+      .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(
-      1,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), Default::default())
+      .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(
-      2,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.insert(&make_int_key(i), &make_value(i + 1000), Default::default())
+      .unwrap();
   }
 
-  let mut it = l.range::<[u8], _>(4, ..);
+  let mut it = l.range::<[u8], _>(..);
   let mut num = 0;
   for i in 0..N {
     let ent = it.next().unwrap();
@@ -1218,9 +832,9 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: TrailedMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   use crate::Builder;
@@ -1237,7 +851,7 @@ where
         .map_mut::<M, _>(&p)
         .unwrap();
       for i in 0..1000 {
-        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), Default::default())
+        l.get_or_insert(&key(i), &new_value(i), Default::default())
           .unwrap();
       }
       l.flush().unwrap();
@@ -1253,9 +867,8 @@ where
     assert_eq!(1000, l.len());
     for i in 0..1000 {
       let k = key(i);
-      let ent = l.get(MIN_VERSION, &k).unwrap();
+      let ent = l.get(&k).unwrap();
       assert_eq!(new_value(i), ent.value());
-      assert_eq!(ent.version(), 0);
       assert_eq!(ent.key(), k);
     }
   }
@@ -1264,9 +877,9 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: TrailedMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   use crate::Builder;
@@ -1288,18 +901,15 @@ where
       data.shuffle(&mut rand::thread_rng());
       for i in &data {
         let i = *i;
-        l.get_or_insert(i as u64, &key(i), &new_value(i), Default::default())
+        l.get_or_insert(&key(i), &new_value(i), Default::default())
           .unwrap();
       }
       l.flush_async().unwrap();
-      assert_eq!(l.max_version(), 999);
-      assert_eq!(l.min_version(), 0);
 
       for i in data {
         let k = key(i);
-        let ent = l.get(i as u64, &k).unwrap();
+        let ent = l.get(&k).unwrap();
         assert_eq!(new_value(i), ent.value());
-        assert_eq!(ent.version(), i as u64);
         assert_eq!(ent.key(), k);
       }
     }
@@ -1316,13 +926,10 @@ where
     data.shuffle(&mut rand::thread_rng());
     for i in data {
       let k = key(i);
-      let ent = l.get(i as u64, &k).unwrap();
+      let ent = l.get(&k).unwrap();
       assert_eq!(new_value(i), ent.value());
-      assert_eq!(ent.version(), i as u64);
       assert_eq!(ent.key(), k);
     }
-    assert_eq!(l.max_version(), 999);
-    assert_eq!(l.min_version(), 0);
   }
 }
 
@@ -1339,9 +946,9 @@ impl Person {
 
 pub(crate) fn get_or_insert_with_value<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1370,15 +977,15 @@ where
     Ok(())
   });
 
-  l.get_or_insert_with_value_builder::<()>(1, b"alice", vb, Default::default())
+  l.get_or_insert_with_value_builder::<()>(b"alice", vb, Default::default())
     .unwrap();
 }
 
 pub(crate) fn get_or_insert_with<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1412,37 +1019,37 @@ where
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<(), ()>(1, kb, vb, Default::default())
+  l.get_or_insert_with_builders::<(), ()>(kb, vb, Default::default())
     .unwrap();
 }
 
 pub(crate) fn insert<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let k = 0u64.to_le_bytes();
   for i in 0..100 {
     let v = new_value(i);
-    let old = l.insert(MIN_VERSION, &k, &v, Default::default()).unwrap();
+    let old = l.insert(&k, &v, Default::default()).unwrap();
     if let Some(old) = old {
       assert_eq!(old.key(), k);
       assert_eq!(old.value(), new_value(i - 1));
     }
   }
 
-  let ent = l.get(MIN_VERSION, &k).unwrap();
+  let ent = l.get(&k).unwrap();
   assert_eq!(ent.key(), k);
   assert_eq!(ent.value(), new_value(99));
 }
 
 pub(crate) fn insert_with_value<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1471,7 +1078,7 @@ where
     Ok(())
   });
 
-  l.insert_with_value_builder::<()>(1, b"alice", vb, Default::default())
+  l.insert_with_value_builder::<()>(b"alice", vb, Default::default())
     .unwrap();
 
   let alice2 = Person {
@@ -1499,23 +1106,23 @@ where
   });
 
   let old = l
-    .insert_with_value_builder::<()>(1, b"alice", vb, Default::default())
+    .insert_with_value_builder::<()>(b"alice", vb, Default::default())
     .unwrap()
     .unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
 
-  let ent = l.get(1, b"alice").unwrap();
+  let ent = l.get(b"alice").unwrap();
   assert_eq!(ent.key(), b"alice");
   assert!(ent.value().starts_with(&alice2.id.to_be_bytes()));
 }
 
 pub(crate) fn insert_with<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1549,7 +1156,7 @@ where
     Ok(())
   });
 
-  l.insert_with_builders::<(), ()>(1, kb, vb, Default::default())
+  l.insert_with_builders::<(), ()>(kb, vb, Default::default())
     .unwrap();
 
   let alice2 = Person {
@@ -1576,51 +1183,44 @@ where
     Ok(())
   });
   let old = l
-    .insert_with_builders::<(), ()>(1, kb, vb, Default::default())
+    .insert_with_builders::<(), ()>(kb, vb, Default::default())
     .unwrap()
     .unwrap();
 
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
 
-  let ent = l.get(1, b"alice").unwrap();
+  let ent = l.get(b"alice").unwrap();
   assert_eq!(ent.key(), b"alice");
   assert!(ent.value().starts_with(&alice2.id.to_be_bytes()));
 }
 
 pub(crate) fn get_or_remove<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, Default::default())
-      .unwrap();
+    l.insert(&key(i), &v, Default::default()).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
-    let old = l
-      .get_or_remove(MIN_VERSION, &k, Default::default())
-      .unwrap()
-      .unwrap();
+    let old = l.get_or_remove(&k, Default::default()).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
 
-    let old = l
-      .get_or_remove(MIN_VERSION, &k, Default::default())
-      .unwrap()
-      .unwrap();
+    let old = l.get_or_remove(&k, Default::default()).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
   }
 
   for i in 0..100 {
     let k = key(i);
-    let ent = l.get(MIN_VERSION, &k).unwrap();
+    let ent = l.get(&k).unwrap();
     assert_eq!(ent.key(), k);
     assert_eq!(ent.value(), new_value(i));
   }
@@ -1628,105 +1228,71 @@ where
 
 pub(crate) fn remove<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, Default::default())
-      .unwrap();
+    l.insert(&key(i), &v, Default::default()).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // no race, remove should succeed
-    let old = l
-      .compare_remove(
-        MIN_VERSION,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
-      .unwrap();
+    let old = l.remove(&k, Default::default()).unwrap();
     assert!(old.is_none());
 
     // key already removed
-    let old = l
-      .compare_remove(
-        MIN_VERSION,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
-      .unwrap();
+    let old = l.remove(&k, Default::default()).unwrap();
     assert!(old.is_none());
   }
 
   for i in 0..100 {
     let k = key(i);
-    let ent = l.get(MIN_VERSION, &k);
+    let ent = l.get(&k);
     assert!(ent.is_none());
   }
 }
 
 pub(crate) fn remove2<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: TrailedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, Default::default())
-      .unwrap();
+    l.insert(&key(i), &v, Default::default()).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // not found, remove should succeed
-    let old = l
-      .compare_remove(
-        1,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
-      .unwrap();
+    let old = l.remove(&k, Default::default()).unwrap();
     assert!(old.is_none());
 
     // no-race, remove should succeed
-    let old = l
-      .compare_remove(
-        MIN_VERSION,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
-      .unwrap();
+    let old = l.remove(&k, Default::default()).unwrap();
     assert!(old.is_none());
   }
 
   for i in 0..100 {
     let k = key(i);
-    let ent = l.get(MIN_VERSION, &k);
+    let ent = l.get(&k);
     assert!(ent.is_none());
   }
 }
 
 #[macro_export]
-macro_rules! full_map_tests {
+macro_rules! trailed_map_tests {
   ($prefix:literal: $ty:ty) => {
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
       basic_large,
-      iter_all_versions_mvcc,
+      get,
       iter_all_versions_next,
       range_next,
       iter_all_versions_prev,
@@ -1736,7 +1302,6 @@ macro_rules! full_map_tests {
       range,
       iter_latest,
       range_latest,
-      get_mvcc,
       get_or_insert_with_value,
       get_or_insert_with,
       insert,
@@ -1756,7 +1321,7 @@ macro_rules! full_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen() {
-      $crate::tests::full::reopen_mmap::<$ty>($prefix);
+      $crate::tests::trailed::reopen_mmap::<$ty>($prefix);
     }
 
     #[test]
@@ -1764,19 +1329,19 @@ macro_rules! full_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen2() {
-      $crate::tests::full::reopen_mmap2::<$ty>($prefix);
+      $crate::tests::trailed::reopen_mmap2::<$ty>($prefix);
     }
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty) => {
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
       concurrent_one_key,
     });
 
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

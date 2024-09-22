@@ -1,10 +1,10 @@
-use super::{ArenaOptions, Builder, Freelist, Height, KeySize, CURRENT_VERSION};
+use super::{ArenaOptions, Freelist, Height, KeySize, CURRENT_VERSION};
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
 mod open_options;
 
-/// Configuration for the compression policy of the key in [`Map`](super::Map).
+/// Configuration for the compression policy of the key in [`Arena`](crate::traits::Arena).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum CompressionPolicy {
@@ -15,7 +15,7 @@ pub enum CompressionPolicy {
   High,
 }
 
-/// Options for [`Map`](super::Map).
+/// Options for [`Arena`](crate::traits::Arena).
 #[viewit::viewit(vis_all = "pub(super)", getters(skip), setters(skip))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Options {
@@ -117,10 +117,10 @@ impl Options {
     self
   }
 
-  /// Set the magic version of the [`Map`](super::Map).
+  /// Set the magic version of the [`Arena`](crate::traits::Arena).
   ///
-  /// This is used by the application using [`Map`](super::Map)
-  /// to ensure that it doesn't open the [`Map`](super::Map)
+  /// This is used by the application using [`Arena`](crate::traits::Arena)
+  /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
   /// with incompatible data format.
   ///  
   /// The default value is `0`.
@@ -138,14 +138,14 @@ impl Options {
     self
   }
 
-  /// Set the [`Freelist`] kind of the [`Map`](super::Map).
+  /// Set the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`Freelist::Optimistic`].
   ///
   /// ## Example
   ///
   /// ```
-  /// use skl::{Options, options::Freelist};
+  /// use skl::{Options, Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
@@ -155,14 +155,14 @@ impl Options {
     self
   }
 
-  /// Set the compression policy of the key in [`Map`](super::Map).
+  /// Set the compression policy of the key in [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`CompressionPolicy::Fast`].
   ///
   /// ## Example
   ///
   /// ```
-  /// use skl::{Options, options::CompressionPolicy};
+  /// use skl::{Options, CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
   /// ```
@@ -172,13 +172,13 @@ impl Options {
     self
   }
 
-  /// Set if use the unify memory layout of the [`Map`](super::Map).
+  /// Set if use the unify memory layout of the [`Arena`](crate::traits::Arena).
   ///
-  /// File backed [`Map`](super::Map) has different memory layout with other kind backed [`Map`](super::Map),
-  /// set this value to `true` will unify the memory layout of the [`Map`](super::Map), which means
-  /// all kinds of backed [`Map`](super::Map) will have the same memory layout.
+  /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+  /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+  /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
   ///
-  /// This value will be ignored if the [`Map`](super::Map) is backed by a file backed memory map.
+  /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
   ///
   /// The default value is `false`.
   ///
@@ -356,13 +356,13 @@ impl Options {
     }
   }
 
-  /// Get if use the unify memory layout of the [`Map`](super::Map).
+  /// Get if use the unify memory layout of the [`Arena`](crate::traits::Arena).
   ///
-  /// File backed [`Map`](super::Map) has different memory layout with other kind backed [`Map`](super::Map),
-  /// set this value to `true` will unify the memory layout of the [`Map`](super::Map), which means
-  /// all kinds of backed [`Map`](super::Map) will have the same memory layout.
+  /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+  /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+  /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
   ///
-  /// This value will be ignored if the [`Map`](super::Map) is backed by a file backed memory map.
+  /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
   ///  
   /// The default value is `false`.
   ///
@@ -380,10 +380,10 @@ impl Options {
     self.unify
   }
 
-  /// Get the magic version of the [`Map`](super::Map).
+  /// Get the magic version of the [`Arena`](crate::traits::Arena).
   ///
-  /// This is used by the application using [`Map`](super::Map)
-  /// to ensure that it doesn't open the [`Map`](super::Map)
+  /// This is used by the application using [`Arena`](crate::traits::Arena)
+  /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
   /// with incompatible data format.
   ///
   /// The default value is `0`.
@@ -402,14 +402,14 @@ impl Options {
     self.magic_version
   }
 
-  /// Get the [`Freelist`] kind of the [`Map`](super::Map).
+  /// Get the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`Freelist::Optimistic`].
   ///
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, options::Freelist};
+  /// use skl::{Options, Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   ///
@@ -420,14 +420,14 @@ impl Options {
     self.freelist
   }
 
-  /// Get the compression policy of the key in [`Map`](super::Map).
+  /// Get the compression policy of the keys in [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`CompressionPolicy::Fast`].
   ///
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, options::CompressionPolicy};
+  /// use skl::{Options, CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
   ///
@@ -443,7 +443,7 @@ impl Options {
   #[allow(clippy::wrong_self_convention)]
   #[inline]
   pub(super) const fn to_arena_options(&self) -> ArenaOptions {
-    let mut opts = ArenaOptions::new()
+    let opts = ArenaOptions::new()
       .with_magic_version(CURRENT_VERSION)
       .with_freelist(self.freelist())
       .with_reserved(self.reserved())
@@ -452,7 +452,7 @@ impl Options {
 
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     {
-      opts = opts
+      opts
         .with_create(self.create())
         .with_create_new(self.create_new())
         .with_read(self.read())
@@ -462,9 +462,10 @@ impl Options {
         .with_offset(self.offset())
         .with_stack(self.stack())
         .with_huge(self.huge())
-        .with_populate(self.populate());
+        .with_populate(self.populate())
     }
 
+    #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
     opts
   }
 }

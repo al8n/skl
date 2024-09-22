@@ -2,11 +2,14 @@ use core::marker::PhantomData;
 
 use super::*;
 
-#[cfg(test)]
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_trailed,))]
 mod tests {
   use super::*;
 
   container_tests!("sync_trailed_map": SkipMap);
+
+  trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
+  trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;
@@ -166,13 +169,5 @@ impl<T: Trailer, C> crate::traits::List for SkipMap<T, C> {
   #[inline]
   fn as_mut(&mut self) -> &mut SkipList<T, Self::Comparator> {
     &mut self.0
-  }
-}
-
-impl<T: Trailer> SkipMap<T> {
-  #[cfg(all(test, feature = "std"))]
-  #[inline]
-  pub(crate) fn with_yield_now(self) -> Self {
-    Self(self.0.with_yield_now())
   }
 }

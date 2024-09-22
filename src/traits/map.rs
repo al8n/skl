@@ -1,8 +1,5 @@
 use super::*;
 
-#[cfg(test)]
-mod tests;
-
 /// [`Map`] implementation for concurrent environment.
 pub mod sync {
   pub use crate::sync::map::SkipMap;
@@ -48,7 +45,7 @@ where
   /// ```rust
   /// use skl::{sync::map::SkipMap, Options};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(height, b"hello", b"world").unwrap();
@@ -604,13 +601,11 @@ where
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
-  fn compare_remove<'a>(
+  fn remove<'a>(
     &'a self,
     key: &'a [u8],
-    success: Ordering,
-    failure: Ordering,
   ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.compare_remove_at_height(self.random_height(), key, success, failure)
+    self.remove_at_height(self.random_height(), key)
   }
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
@@ -622,20 +617,18 @@ where
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
-  fn compare_remove_at_height<'a>(
+  fn remove_at_height<'a>(
     &'a self,
     height: Height,
     key: &'a [u8],
-    success: Ordering,
-    failure: Ordering,
   ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
     self.as_ref().compare_remove_at_height(
       MIN_VERSION,
       height,
       key,
       Default::default(),
-      success,
-      failure,
+      Ordering::AcqRel,
+      Ordering::Relaxed,
     )
   }
 
@@ -663,7 +656,7 @@ where
   /// ```rust
   /// use skl::{sync::map::SkipMap, Options};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///

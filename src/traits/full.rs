@@ -2,9 +2,6 @@ use crate::{allocator::WithVersion, Version};
 
 use super::*;
 
-#[cfg(test)]
-mod tests;
-
 /// [`FullMap`] implementation for concurrent environment.
 pub mod sync {
   pub use crate::sync::full::SkipMap;
@@ -50,9 +47,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Options};
+  /// use skl::{full::{sync::SkipMap, FullMap}, Builder, Arena};
   ///
-  /// let map = SkipMap::new(Options::new()).unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(0, height, b"hello", b"world", 10).unwrap();
@@ -714,7 +711,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync::full::SkipMap, Options};
+  /// use skl::{full::{sync::SkipMap, FullMap}, Builder, Arena};
   ///
   /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
   ///

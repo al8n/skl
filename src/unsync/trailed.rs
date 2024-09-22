@@ -2,11 +2,13 @@ use core::marker::PhantomData;
 
 use super::*;
 
-#[cfg(test)]
+#[cfg(any(all(test, not(miri)), all_tests, test_unsync_trailed,))]
 mod tests {
   use super::*;
 
   container_tests!("unsync_trailed_map": SkipMap);
+
+  trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;

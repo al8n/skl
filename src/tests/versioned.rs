@@ -3,27 +3,22 @@ use core::sync::atomic::Ordering;
 use dbutils::buffer::VacantBuffer;
 
 use crate::{
-  allocator::{WithTrailer, WithVersion},
-  full::FullMap,
-  KeyBuilder, ValueBuilder, MIN_VERSION,
+  allocator::WithVersion, versioned::VersionedMap, KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
 use super::*;
 
 pub(crate) fn basic<M>(mut l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   // Try adding values.
-  l.get_or_insert(0, b"key1", &make_value(1), Default::default())
-    .unwrap();
-  l.get_or_insert(0, b"key3", &make_value(3), Default::default())
-    .unwrap();
-  l.get_or_insert(0, b"key2", &make_value(2), Default::default())
-    .unwrap();
+  l.get_or_insert(0, b"key1", &make_value(1)).unwrap();
+  l.get_or_insert(0, b"key3", &make_value(3)).unwrap();
+  l.get_or_insert(0, b"key2", &make_value(2)).unwrap();
 
   {
     let mut it = l.iter_all_versions(0);
@@ -43,10 +38,8 @@ where
     assert_eq!(ent.version(), 0);
   }
 
-  l.get_or_insert(1, "a".as_bytes(), &[], Default::default())
-    .unwrap();
-  l.get_or_insert(2, "a".as_bytes(), &[], Default::default())
-    .unwrap();
+  l.get_or_insert(1, "a".as_bytes(), &[]).unwrap();
+  l.get_or_insert(2, "a".as_bytes(), &[]).unwrap();
 
   {
     let mut it = l.iter_all_versions(2);
@@ -61,10 +54,8 @@ where
     assert_eq!(ent.version(), 1);
   }
 
-  l.get_or_insert(2, "b".as_bytes(), &[], Default::default())
-    .unwrap();
-  l.get_or_insert(1, "b".as_bytes(), &[], Default::default())
-    .unwrap();
+  l.get_or_insert(2, "b".as_bytes(), &[]).unwrap();
+  l.get_or_insert(1, "b".as_bytes(), &[]).unwrap();
 
   {
     let mut it = l.iter_all_versions(2);
@@ -84,14 +75,9 @@ where
     assert_eq!(ent.version(), 1);
   }
 
-  l.get_or_insert(2, b"b", &[], Default::default())
-    .unwrap()
-    .unwrap();
+  l.get_or_insert(2, b"b", &[]).unwrap().unwrap();
 
-  assert!(l
-    .get_or_insert(2, b"c", &[], Default::default())
-    .unwrap()
-    .is_none());
+  assert!(l.get_or_insert(2, b"c", &[]).unwrap().is_none());
 
   unsafe {
     l.clear().unwrap();
@@ -114,15 +100,15 @@ where
 
 pub(crate) fn iter_all_versions_mvcc<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   let mut it = l.iter_all_versions(0);
   let mut num = 0;
@@ -203,15 +189,15 @@ where
 
 pub(crate) fn get_mvcc<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   let ent = l.get(1, b"a").unwrap();
   assert_eq!(ent.key(), b"a");
@@ -264,16 +250,16 @@ where
 
 pub(crate) fn gt<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
-  l.get_or_insert(5, b"c", b"c3", Default::default()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
+  l.get_or_insert(5, b"c", b"c3").unwrap();
 
   assert!(l.lower_bound(0, Bound::Excluded(b"a")).is_none());
   assert!(l.lower_bound(0, Bound::Excluded(b"b")).is_none());
@@ -349,15 +335,15 @@ where
 
 pub(crate) fn ge<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
   assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
@@ -432,15 +418,15 @@ where
 
 pub(crate) fn le<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"a")).is_none());
   assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
@@ -529,15 +515,15 @@ where
 
 pub(crate) fn lt<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
-  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
-  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
-  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+  l.get_or_insert(1, b"a", b"a1").unwrap();
+  l.get_or_insert(3, b"a", b"a2").unwrap();
+  l.get_or_insert(1, b"c", b"c1").unwrap();
+  l.get_or_insert(3, b"c", b"c2").unwrap();
 
   assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"a")).is_none());
   assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"b")).is_none());
@@ -608,15 +594,15 @@ where
 
 pub(crate) fn basic_large<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let n = 1000;
 
   for i in 0..n {
-    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), Default::default())
+    l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
       .unwrap();
   }
 
@@ -634,9 +620,9 @@ where
 #[cfg(feature = "std")]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
-  M: FullMap + Clone + Send + 'static,
+  M: VersionedMap + Clone + Send + 'static,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -647,7 +633,7 @@ where
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), Default::default())
+      l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
         .unwrap();
     });
   }
@@ -668,9 +654,9 @@ where
 #[cfg(all(feature = "std", not(miri)))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
-  M: FullMap + Clone + Send + 'static,
+  M: VersionedMap + Clone + Send + 'static,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -681,7 +667,7 @@ where
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      l.get_or_insert(MIN_VERSION, &key(i), &big_value(i), Default::default())
+      l.get_or_insert(MIN_VERSION, &key(i), &big_value(i))
         .unwrap();
     });
   }
@@ -704,9 +690,9 @@ where
 #[cfg(feature = "std")]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
-  M: FullMap + Clone + Send + 'static,
+  M: VersionedMap + Clone + Send + 'static,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   use core::sync::atomic::Ordering;
@@ -724,7 +710,7 @@ where
     let wg = wg.add(1);
     let l = l.clone();
     std::thread::spawn(move || {
-      let _ = l.get_or_insert(MIN_VERSION, b"thekey", &make_value(i), Default::default());
+      let _ = l.get_or_insert(MIN_VERSION, b"thekey", &make_value(i));
       wg.done();
     });
   }
@@ -761,21 +747,16 @@ where
 
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
@@ -793,21 +774,16 @@ where
 
 pub(crate) fn range_next<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let upper = make_int_key(50);
@@ -832,21 +808,16 @@ where
 
 pub(crate) fn iter_all_versions_prev<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
@@ -864,21 +835,16 @@ where
 
 pub(crate) fn range_prev<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let lower = make_int_key(50);
@@ -903,22 +869,17 @@ where
 
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(v),
-      &make_value(v),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
@@ -953,8 +914,7 @@ where
   let ent = it.seek_lower_bound(Bound::Included(b"99999"));
   assert!(ent.is_none());
 
-  l.get_or_insert(MIN_VERSION, &[], &[], Default::default())
-    .unwrap();
+  l.get_or_insert(MIN_VERSION, &[], &[]).unwrap();
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
@@ -966,22 +926,17 @@ where
 
 pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in (0..N).rev() {
     let v = i * 10 + 1000;
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(v),
-      &make_value(v),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(v), &make_value(v))
+      .unwrap();
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
@@ -1002,8 +957,7 @@ where
   assert_eq!(ent.key(), make_int_key(1990));
   assert_eq!(ent.value().unwrap(), make_value(1990));
 
-  l.get_or_insert(MIN_VERSION, &[], &[], Default::default())
-    .unwrap();
+  l.get_or_insert(MIN_VERSION, &[], &[]).unwrap();
   assert!(l.as_ref().lt(MIN_VERSION, &[], false).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
@@ -1016,19 +970,14 @@ where
 
 pub(crate) fn range<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 1..10 {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   let k3 = make_int_key(3);
@@ -1115,41 +1064,26 @@ where
 
 pub(crate) fn iter_latest<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(
-      1,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(1, &make_int_key(i), &make_value(i + 1000))
+      .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(
-      2,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(2, &make_int_key(i), &make_value(i + 1000))
+      .unwrap();
   }
 
   let mut it = l.iter(4);
@@ -1166,41 +1100,26 @@ where
 
 pub(crate) fn range_latest<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   const N: usize = 100;
 
   for i in 0..N {
-    l.get_or_insert(
-      MIN_VERSION,
-      &make_int_key(i),
-      &make_value(i),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(MIN_VERSION, &make_int_key(i), &make_value(i))
+      .unwrap();
   }
 
   for i in 50..N {
-    l.get_or_insert(
-      1,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(1, &make_int_key(i), &make_value(i + 1000))
+      .unwrap();
   }
 
   for i in 0..50 {
-    l.get_or_insert(
-      2,
-      &make_int_key(i),
-      &make_value(i + 1000),
-      Default::default(),
-    )
-    .unwrap();
+    l.get_or_insert(2, &make_int_key(i), &make_value(i + 1000))
+      .unwrap();
   }
 
   let mut it = l.range::<[u8], _>(4, ..);
@@ -1218,9 +1137,9 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: VersionedMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   use crate::Builder;
@@ -1237,7 +1156,7 @@ where
         .map_mut::<M, _>(&p)
         .unwrap();
       for i in 0..1000 {
-        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i), Default::default())
+        l.get_or_insert(MIN_VERSION, &key(i), &new_value(i))
           .unwrap();
       }
       l.flush().unwrap();
@@ -1264,9 +1183,9 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: VersionedMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   use crate::Builder;
@@ -1288,8 +1207,7 @@ where
       data.shuffle(&mut rand::thread_rng());
       for i in &data {
         let i = *i;
-        l.get_or_insert(i as u64, &key(i), &new_value(i), Default::default())
-          .unwrap();
+        l.get_or_insert(i as u64, &key(i), &new_value(i)).unwrap();
       }
       l.flush_async().unwrap();
       assert_eq!(l.max_version(), 999);
@@ -1339,9 +1257,9 @@ impl Person {
 
 pub(crate) fn get_or_insert_with_value<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1370,15 +1288,15 @@ where
     Ok(())
   });
 
-  l.get_or_insert_with_value_builder::<()>(1, b"alice", vb, Default::default())
+  l.get_or_insert_with_value_builder::<()>(1, b"alice", vb)
     .unwrap();
 }
 
 pub(crate) fn get_or_insert_with<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1412,21 +1330,20 @@ where
     Ok(())
   });
 
-  l.get_or_insert_with_builders::<(), ()>(1, kb, vb, Default::default())
-    .unwrap();
+  l.get_or_insert_with_builders::<(), ()>(1, kb, vb).unwrap();
 }
 
 pub(crate) fn insert<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let k = 0u64.to_le_bytes();
   for i in 0..100 {
     let v = new_value(i);
-    let old = l.insert(MIN_VERSION, &k, &v, Default::default()).unwrap();
+    let old = l.insert(MIN_VERSION, &k, &v).unwrap();
     if let Some(old) = old {
       assert_eq!(old.key(), k);
       assert_eq!(old.value(), new_value(i - 1));
@@ -1440,9 +1357,9 @@ where
 
 pub(crate) fn insert_with_value<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1471,8 +1388,7 @@ where
     Ok(())
   });
 
-  l.insert_with_value_builder::<()>(1, b"alice", vb, Default::default())
-    .unwrap();
+  l.insert_with_value_builder::<()>(1, b"alice", vb).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -1499,7 +1415,7 @@ where
   });
 
   let old = l
-    .insert_with_value_builder::<()>(1, b"alice", vb, Default::default())
+    .insert_with_value_builder::<()>(1, b"alice", vb)
     .unwrap()
     .unwrap();
 
@@ -1513,9 +1429,9 @@ where
 
 pub(crate) fn insert_with<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let alice = Person {
@@ -1549,8 +1465,7 @@ where
     Ok(())
   });
 
-  l.insert_with_builders::<(), ()>(1, kb, vb, Default::default())
-    .unwrap();
+  l.insert_with_builders::<(), ()>(1, kb, vb).unwrap();
 
   let alice2 = Person {
     id: 2,
@@ -1576,7 +1491,7 @@ where
     Ok(())
   });
   let old = l
-    .insert_with_builders::<(), ()>(1, kb, vb, Default::default())
+    .insert_with_builders::<(), ()>(1, kb, vb)
     .unwrap()
     .unwrap();
 
@@ -1590,30 +1505,23 @@ where
 
 pub(crate) fn get_or_remove<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, Default::default())
-      .unwrap();
+    l.insert(MIN_VERSION, &key(i), &v).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
-    let old = l
-      .get_or_remove(MIN_VERSION, &k, Default::default())
-      .unwrap()
-      .unwrap();
+    let old = l.get_or_remove(MIN_VERSION, &k).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
 
-    let old = l
-      .get_or_remove(MIN_VERSION, &k, Default::default())
-      .unwrap()
-      .unwrap();
+    let old = l.get_or_remove(MIN_VERSION, &k).unwrap().unwrap();
     assert_eq!(old.key(), k);
     assert_eq!(old.value(), new_value(i));
   }
@@ -1628,40 +1536,27 @@ where
 
 pub(crate) fn remove<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, Default::default())
-      .unwrap();
+    l.insert(MIN_VERSION, &key(i), &v).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // no race, remove should succeed
     let old = l
-      .compare_remove(
-        MIN_VERSION,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
 
     // key already removed
     let old = l
-      .compare_remove(
-        MIN_VERSION,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
   }
@@ -1675,40 +1570,27 @@ where
 
 pub(crate) fn remove2<M>(l: M)
 where
-  M: FullMap + Clone,
+  M: VersionedMap + Clone,
   M::Comparator: Comparator,
-  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   for i in 0..100 {
     let v = new_value(i);
-    l.insert(MIN_VERSION, &key(i), &v, Default::default())
-      .unwrap();
+    l.insert(MIN_VERSION, &key(i), &v).unwrap();
   }
 
   for i in 0..100 {
     let k = key(i);
     // not found, remove should succeed
     let old = l
-      .compare_remove(
-        1,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
+      .compare_remove(1, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
 
     // no-race, remove should succeed
     let old = l
-      .compare_remove(
-        MIN_VERSION,
-        &k,
-        Default::default(),
-        Ordering::SeqCst,
-        Ordering::Acquire,
-      )
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
       .unwrap();
     assert!(old.is_none());
   }
@@ -1721,9 +1603,9 @@ where
 }
 
 #[macro_export]
-macro_rules! full_map_tests {
+macro_rules! versioned_map_tests {
   ($prefix:literal: $ty:ty) => {
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
       basic_large,
       iter_all_versions_mvcc,
@@ -1756,7 +1638,7 @@ macro_rules! full_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen() {
-      $crate::tests::full::reopen_mmap::<$ty>($prefix);
+      $crate::tests::versioned::reopen_mmap::<$ty>($prefix);
     }
 
     #[test]
@@ -1764,19 +1646,19 @@ macro_rules! full_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen2() {
-      $crate::tests::full::reopen_mmap2::<$ty>($prefix);
+      $crate::tests::versioned::reopen_mmap2::<$ty>($prefix);
     }
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty) => {
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
       concurrent_one_key,
     });
 
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

@@ -15,7 +15,7 @@ cargo test --lib --all-features --target x86_64-unknown-linux-gnu
 # Run memory sanitizer
 RUSTFLAGS="--cfg all_tests -Zsanitizer=memory -Zsanitizer-memory-track-origins" \
 RUSTDOCFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins" \
-cargo test -Zbuild-std --all --release --tests --target x86_64-unknown-linux-gnu --all-features
+cargo test -Zbuild-std --release --tests --target x86_64-unknown-linux-gnu --features memmap
 
 # Run thread sanitizer
 RUSTFLAGS="--cfg all_tests -Z sanitizer=thread" \

@@ -39,26 +39,26 @@ pub(crate) mod versioned;
 
 /// Only used for testing
 pub fn key(i: usize) -> std::vec::Vec<u8> {
-  format!("{:05}", i).into_bytes()
+  ::std::format!("{:05}", i).into_bytes()
 }
 
 /// Only used for testing
 #[cfg(feature = "std")]
 pub fn big_value(i: usize) -> std::vec::Vec<u8> {
-  format!("{:01048576}", i).into_bytes()
+  ::std::format!("{:01048576}", i).into_bytes()
 }
 
 /// Only used for testing
 pub fn new_value(i: usize) -> std::vec::Vec<u8> {
-  format!("{:05}", i).into_bytes()
+  ::std::format!("{:05}", i).into_bytes()
 }
 
 fn make_int_key(i: usize) -> std::vec::Vec<u8> {
-  format!("{:05}", i).into_bytes()
+  ::std::format!("{:05}", i).into_bytes()
 }
 
 fn make_value(i: usize) -> std::vec::Vec<u8> {
-  format!("v{:05}", i).into_bytes()
+  ::std::format!("v{:05}", i).into_bytes()
 }
 
 #[macro_export]

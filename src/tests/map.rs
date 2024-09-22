@@ -866,7 +866,7 @@ where
         .with_capacity(ARENA_SIZE as u32)
         .map_mut::<M, _>(&p)
         .unwrap();
-      let mut data = (0..1000).collect::<Vec<usize>>();
+      let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
       for i in &data {
         let i = *i;
@@ -889,7 +889,7 @@ where
       .map::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
-    let mut data = (0..1000).collect::<Vec<usize>>();
+    let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
     data.shuffle(&mut rand::thread_rng());
     for i in data {
       let k = key(i);

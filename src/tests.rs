@@ -49,6 +49,90 @@ fn make_value(i: usize) -> std::vec::Vec<u8> {
 }
 
 #[macro_export]
+macro_rules! unit_tests {
+  ($mod: path |$prefix:literal, $ty:ty| {
+    $($name:ident,)*
+  }) => {
+    $(
+      unit_test_expand!($mod |$prefix, $name, $ty|);
+    )*
+  };
+}
+
+#[macro_export]
+macro_rules! unit_test_expand {
+  ($fn:path |$prefix:literal, $name:ident, $ty:ty|) => {
+    paste::paste! {
+      #[test]
+      fn [< test_ $name >]() {
+        $fn::$name(
+          $crate::Builder::new()
+            .with_options($crate::tests::TEST_OPTIONS)
+            .alloc::<$ty>()
+            .unwrap(),
+        );
+      }
+
+      #[test]
+      fn [< test_ $name _unify >]() {
+        $fn::$name(
+          $crate::Builder::new()
+            .with_options($crate::tests::TEST_OPTIONS)
+            .with_unify(true)
+            .alloc::<$ty>()
+            .unwrap(),
+        );
+      }
+
+      #[test]
+      #[cfg(feature = "memmap")]
+      #[cfg_attr(miri, ignore)]
+      #[allow(clippy::macro_metavars_in_unsafe)]
+      fn [< test_ $name _map_mut >]() {
+        unsafe {
+          let dir = ::tempfile::tempdir().unwrap();
+          let p = dir
+            .path()
+            .join(::std::format!("test_{}_skipmap_{}_map_mut", $prefix, stringify!($name)));
+          $fn::$name(
+            $crate::Builder::new()
+              .with_options($crate::tests::TEST_OPTIONS)
+              .with_create_new(true)
+              .with_read(true)
+              .with_write(true)
+              .map_mut::<$ty, _>(p)
+              .unwrap(),
+          );
+        }
+      }
+
+      #[test]
+      #[cfg(feature = "memmap")]
+      fn [< test_ $name _map_anon >] () {
+        $fn::$name(
+          $crate::Builder::new()
+            .with_options($crate::tests::TEST_OPTIONS)
+            .map_anon::<$ty>()
+            .unwrap(),
+        );
+      }
+
+      #[test]
+      #[cfg(feature = "memmap")]
+      fn [< test_ $name _map_anon_unify >]() {
+        $fn::$name(
+          $crate::Builder::new()
+            .with_options($crate::tests::TEST_OPTIONS)
+            .with_unify(true)
+            .map_anon::<$ty>()
+            .unwrap(),
+        );
+      }
+    }
+  };
+}
+
+#[macro_export]
 macro_rules! container_tests {
   ($prefix:literal: $ty:ty) => {
     #[test]

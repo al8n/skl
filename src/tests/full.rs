@@ -8,71 +8,10 @@ use super::*;
 #[macro_export]
 macro_rules! full_map_tests {
   ($prefix:literal: $ty:ty) => {
-    #[test]
-    fn test_basic() {
-      $crate::tests::full::basic(
-        $crate::Builder::new()
-          .with_options($crate::tests::TEST_OPTIONS)
-          .alloc::<$ty>()
-          .unwrap(),
-      );
-    }
-
-    #[test]
-    fn test_basic_unify() {
-      $crate::tests::full::basic(
-        $crate::Builder::new()
-          .with_options($crate::tests::TEST_OPTIONS)
-          .with_unify(true)
-          .alloc::<$ty>()
-          .unwrap(),
-      );
-    }
-
-    #[test]
-    #[cfg(feature = "memmap")]
-    #[cfg_attr(miri, ignore)]
-    #[allow(clippy::macro_metavars_in_unsafe)]
-    fn test_basic_map_mut() {
-      unsafe {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir
-          .path()
-          .join(std::format!("test_{}_skipmap_basic_map_mut", $prefix));
-        $crate::tests::full::basic(
-          $crate::Builder::new()
-            .with_options($crate::tests::TEST_OPTIONS)
-            .with_create_new(true)
-            .with_read(true)
-            .with_write(true)
-            .map_mut::<$ty, _>(p)
-            .unwrap(),
-        );
-      }
-    }
-
-    #[test]
-    #[cfg(feature = "memmap")]
-    fn test_basic_map_anon() {
-      $crate::tests::full::basic(
-        $crate::Builder::new()
-          .with_options($crate::tests::TEST_OPTIONS)
-          .map_anon::<$ty>()
-          .unwrap(),
-      );
-    }
-
-    #[test]
-    #[cfg(feature = "memmap")]
-    fn test_basic_map_anon_unify() {
-      $crate::tests::full::basic(
-        $crate::Builder::new()
-          .with_options($crate::tests::TEST_OPTIONS)
-          .with_unify(true)
-          .map_anon::<$ty>()
-          .unwrap(),
-      );
-    }
+    unit_tests!($crate::tests::full |$prefix, $ty| {
+      basic,
+      iter_all_versions_mvcc,
+    });
   };
 }
 
@@ -176,4 +115,93 @@ where
 
   #[cfg(feature = "memmap")]
   l.flush_async().unwrap();
+}
+
+pub(crate) fn iter_all_versions_mvcc<M>(l: M)
+where
+  M: FullMap + Clone,
+  M::Comparator: Comparator,
+  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  l.get_or_insert(1, b"a", b"a1", Default::default()).unwrap();
+  l.get_or_insert(3, b"a", b"a2", Default::default()).unwrap();
+  l.get_or_insert(1, b"c", b"c1", Default::default()).unwrap();
+  l.get_or_insert(3, b"c", b"c2", Default::default()).unwrap();
+
+  let mut it = l.iter_all_versions(0);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 0);
+
+  let mut it = l.iter_all_versions(1);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut it = l.iter_all_versions(2);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 2);
+
+  let mut it = l.iter_all_versions(3);
+  let mut num = 0;
+  while it.next().is_some() {
+    num += 1;
+  }
+  assert_eq!(num, 4);
+
+  let mut it = l.iter_all_versions(0);
+  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
+
+  let mut it = l.iter_all_versions(1);
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value().unwrap(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value().unwrap(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter_all_versions(2);
+  let ent = it.seek_lower_bound(Bound::Unbounded).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value().unwrap(), b"a1");
+  assert_eq!(ent.version(), 1);
+
+  let ent = it.seek_upper_bound(Bound::Unbounded).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value().unwrap(), b"c1");
+  assert_eq!(ent.version(), 1);
+
+  let mut it = l.iter_all_versions(3);
+
+  let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"a");
+  assert_eq!(ent.value().unwrap(), b"a2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_upper_bound(Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value().unwrap(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_lower_bound(Bound::Excluded(b"b")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value().unwrap(), b"c2");
+  assert_eq!(ent.version(), 3);
+
+  let ent = it.seek_lower_bound(Bound::Included(b"c")).unwrap();
+  assert_eq!(ent.key(), b"c");
+  assert_eq!(ent.value().unwrap(), b"c2");
+  assert_eq!(ent.version(), 3);
 }

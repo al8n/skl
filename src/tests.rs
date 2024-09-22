@@ -20,18 +20,20 @@ pub(crate) mod full;
 
 #[cfg(any(all(test, not(miri)), all_tests, test_unsync_map, test_sync_map,))]
 pub(crate) mod map;
-#[cfg(any(
-  all(test, not(miri)),
-  all_tests,
-  test_unsync_versioned,
-  test_sync_versioned,
-))]
-pub(crate) mod trailed;
+
 #[cfg(any(
   all(test, not(miri)),
   all_tests,
   test_unsync_trailed,
   test_sync_trailed,
+))]
+pub(crate) mod trailed;
+
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_versioned,
+  test_sync_versioned,
 ))]
 pub(crate) mod versioned;
 

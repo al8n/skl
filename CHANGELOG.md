@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.15.0
+
+- Extract different kinds of `SkipMap` to traits to improve flexibility
+- Implementing a builder pattern to construct `SkipMap`s
+
 ## 0.14.0
 
 - Supports unsync version `SkipMap`s

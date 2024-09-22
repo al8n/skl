@@ -1,11 +1,26 @@
+use crate::{allocator::WithVersion, Version};
+
 use super::*;
 
-/// a
-pub trait TrailedMap
+/// [`FullMap`] implementation for concurrent environment.
+pub mod sync {
+  pub use crate::sync::full::SkipMap;
+}
+
+/// [`FullMap`] implementation for non-concurrent environment.
+pub mod unsync {
+  pub use crate::unsync::full::SkipMap;
+}
+
+/// A fast, ARENA based `SkipMap` that supports trailed structure, multiple versions, forward and backward iteration.
+///
+/// - For concurrent environment, use [`sync::SkipMap`].
+/// - For non-concurrent environment, use [`unsync::SkipMap`].
+pub trait FullMap
 where
-  Self: Container,
+  Self: VersionedContainer,
   Self::Comparator: Comparator,
-  <<Self as List>::Allocator as AllocatorSealed>::Node: WithTrailer,
+  <Self::Allocator as AllocatorSealed>::Node: WithVersion + WithTrailer,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipMap::get_or_insert), this method will update the value if the key with the given version already exists.
@@ -15,11 +30,12 @@ where
   #[inline]
   fn insert<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.insert_at_height(self.random_height(), key, value, trailer)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.insert_at_height(version, self.random_height(), key, value, trailer)
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -31,24 +47,24 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, Options};
+  /// use skl::{sync::full::SkipMap, Options};
   ///
-  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let map = SkipMap::new(Options::new()).unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(height, b"hello", b"world", 10).unwrap();
+  /// map.insert_at_height(0, height, b"hello", b"world", 10).unwrap();
   /// ```
-  #[inline]
   fn insert_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
     self
       .as_ref()
-      .insert_at_height(MIN_VERSION, height, key, value, trailer)
+      .insert_at_height(version, height, key, value, trailer)
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -66,7 +82,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -87,7 +103,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -95,17 +111,24 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice", vb, 10)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
-    self.insert_at_height_with_value_builder(self.random_height(), key, value_builder, trailer)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self.insert_at_height_with_value_builder(
+      version,
+      self.random_height(),
+      key,
+      value_builder,
+      trailer,
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -123,7 +146,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -144,7 +167,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -153,24 +176,21 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, 10)
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_at_height_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
-    self.as_ref().insert_at_height_with_value_builder(
-      MIN_VERSION,
-      height,
-      key,
-      value_builder,
-      trailer,
-    )
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self
+      .as_ref()
+      .insert_at_height_with_value_builder(version, height, key, value_builder, trailer)
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
@@ -182,11 +202,12 @@ where
   #[inline]
   fn get_or_insert<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.get_or_insert_at_height(self.random_height(), key, value, trailer)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.get_or_insert_at_height(version, self.random_height(), key, value, trailer)
   }
 
   /// Inserts a new key-value pair at height if it does not yet exist.
@@ -198,14 +219,15 @@ where
   #[inline]
   fn get_or_insert_at_height<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
     self
       .as_ref()
-      .get_or_insert_at_height(MIN_VERSION, height, key, value, trailer)
+      .get_or_insert_at_height(version, height, key, value, trailer)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -224,7 +246,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -245,24 +267,26 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice", vb, 10)
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
     self.get_or_insert_at_height_with_value_builder(
+      version,
       self.random_height(),
       key,
       value_builder,
@@ -286,7 +310,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -307,7 +331,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -316,19 +340,20 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb, 10)
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_at_height_with_value_builder<'a, E>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
     self.as_ref().get_or_insert_at_height_with_value_builder(
-      MIN_VERSION,
+      version,
       height,
       key,
       value_builder,
@@ -351,7 +376,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -372,7 +397,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -385,17 +410,24 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_builders::<(), ()>(kb, vb, 10)
+  /// l.insert_with_builders::<(), ()>(1, kb, vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
-    self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder, trailer)
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
+    self.insert_at_height_with_builders(
+      version,
+      self.random_height(),
+      key_builder,
+      value_builder,
+      trailer,
+    )
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -413,7 +445,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -434,7 +466,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -448,19 +480,20 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_builders::<(), ()>(height, kb, vb, 10)
+  /// l.insert_at_height_with_builders::<(), ()>(1, height, kb, vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
     self.as_ref().insert_at_height_with_builders(
-      MIN_VERSION,
+      version,
       height,
       key_builder,
       value_builder,
@@ -481,7 +514,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -502,7 +535,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -515,17 +548,19 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.get_or_insert_with_builders::<(), ()>(kb, vb, 10)
+  /// l.get_or_insert_with_builders::<(), ()>(1, kb, vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
     self.get_or_insert_at_height_with_builders(
+      version,
       self.random_height(),
       key_builder,
       value_builder,
@@ -546,7 +581,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{unsync::trailed::SkipMap, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{sync::full::SkipMap, KeyBuilder, ValueBuilder, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -567,7 +602,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = SkipMap::<u64>::new(Options::new()).unwrap();
+  /// let l = SkipMap::new(Options::new()).unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
   ///   key.put_slice(b"alice").unwrap();
@@ -581,19 +616,20 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_builders::<(), ()>(height, kb, vb, 10)
+  /// l.get_or_insert_at_height_with_builders::<(), ()>(1, height, kb, vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
   fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
+    version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Among<KE, VE, Error>> {
     self.as_ref().get_or_insert_at_height_with_builders(
-      MIN_VERSION,
+      version,
       height,
       key_builder,
       value_builder,
@@ -601,39 +637,221 @@ where
     )
   }
 
-  /// Removes the key-value pair if it exists.
+  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
+  ///
+  /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)`:
+  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
+  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
+  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
-  fn remove<'a>(
+  fn compare_remove<'a>(
     &'a self,
+    version: Version,
     key: &'a [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.remove_at_height(self.random_height(), key, trailer)
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.compare_remove_at_height(
+      version,
+      self.random_height(),
+      key,
+      trailer,
+      success,
+      failure,
+    )
   }
 
-  /// Removes the key-value pair if it exists.
+  /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
+  ///
+  /// Unlike [`get_or_remove_at_height`](SkipMap::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)`:
+  ///   - if the remove operation is successful or the key is marked in remove status by other threads.
+  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
+  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
-  fn remove_at_height<'a>(
+  fn compare_remove_at_height<'a>(
     &'a self,
+    version: Version,
     height: Height,
     key: &'a [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
-    self.as_ref().compare_remove_at_height(
-      MIN_VERSION,
-      height,
-      key,
-      trailer,
-      Ordering::Relaxed,
-      Ordering::Relaxed,
-    )
+    success: Ordering,
+    failure: Ordering,
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self
+      .as_ref()
+      .compare_remove_at_height(version, height, key, trailer, success, failure)
+  }
+
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  #[inline]
+  fn get_or_remove<'a>(
+    &'a self,
+    version: Version,
+    key: &'a [u8],
+    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self.get_or_remove_at_height(version, self.random_height(), key, trailer)
+  }
+
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{sync::full::SkipMap, Options};
+  ///
+  /// let map = SkipMap::<u64>::new(Options::new()).unwrap();
+  ///
+  /// map.insert(0, b"hello", b"world", 10).unwrap();
+  ///
+  /// let height = map.random_height();
+  /// map.get_or_remove_at_height(0, height, b"hello", 10).unwrap();
+  /// ```
+  #[inline]
+  fn get_or_remove_at_height<'a>(
+    &'a self,
+    version: Version,
+    height: Height,
+    key: &'a [u8],
+    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Error> {
+    self
+      .as_ref()
+      .get_or_remove_at_height(version, height, key, trailer)
+  }
+
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  ///
+  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
+  /// at this moment.
+  ///
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{sync::full::SkipMap, KeyBuilder, Options};
+  ///
+  /// struct Person {
+  ///   id: u32,
+  ///   name: String,
+  /// }
+  ///
+  /// impl Person {
+  ///   fn encoded_size(&self) -> usize {
+  ///     4 + self.name.len()
+  ///   }
+  /// }
+  ///
+  ///
+  /// let alice = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let encoded_size = alice.encoded_size();
+  ///
+  /// let l = SkipMap::new(Options::new()).unwrap();
+  ///
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
+  ///   key.put_slice(b"alice").unwrap();
+  ///   Ok(())
+  /// });
+  /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb, 10)
+  /// .unwrap();
+  /// ```
+  #[inline]
+  fn get_or_remove_with_builder<'a, 'b: 'a, E>(
+    &'a self,
+    version: Version,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self.get_or_remove_at_height_with_builder(version, self.random_height(), key_builder, trailer)
+  }
+
+  /// Gets or removes the key-value pair if it exists.
+  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  ///
+  /// - Returns `Ok(None)` if the key does not exist.
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  ///
+  /// This method is useful when you want to get_or_remove a key and you know the key size but you do not have the key
+  /// at this moment.
+  ///
+  /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
+  /// and you must fill the buffer with bytes later in the closure.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{sync::full::SkipMap, KeyBuilder, Options};
+  ///
+  /// struct Person {
+  ///   id: u32,
+  ///   name: String,
+  /// }
+  ///
+  /// impl Person {
+  ///   fn encoded_size(&self) -> usize {
+  ///     4 + self.name.len()
+  ///   }
+  /// }
+  ///
+  ///
+  /// let alice = Person {
+  ///   id: 1,
+  ///   name: "Alice".to_string(),
+  /// };
+  ///
+  /// let encoded_size = alice.encoded_size();
+  ///
+  /// let l = SkipMap::new(Options::new()).unwrap();
+  ///
+  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
+  ///   key.put_slice(b"alice").unwrap();
+  ///   Ok(())
+  /// });
+  /// let height = l.random_height();
+  /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1, height, kb, 10)
+  /// .unwrap();
+  /// ```
+  #[inline]
+  fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
+    &'a self,
+    version: Version,
+    height: Height,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, Self::Allocator>>, Either<E, Error>> {
+    self
+      .as_ref()
+      .get_or_remove_at_height_with_builder(version, height, key_builder, trailer)
   }
 }
 
-impl<T> TrailedMap for T
+impl<T> FullMap for T
 where
-  T: Container,
+  T: VersionedContainer,
   T::Comparator: Comparator,
-  <<T as List>::Allocator as AllocatorSealed>::Node: WithTrailer,
+  <T::Allocator as AllocatorSealed>::Node: WithVersion + WithTrailer,
 {
 }

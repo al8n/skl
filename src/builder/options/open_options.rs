@@ -7,8 +7,8 @@ use rarena_allocator::Allocator;
 use super::{Builder, Options, CURRENT_VERSION};
 use crate::{
   allocator::Sealed,
-  constructor::Arena,
   error::{bad_magic_version, bad_version, invalid_data},
+  traits::Arena,
 };
 
 impl<C: Comparator> Builder<C> {

@@ -2,7 +2,20 @@ use crate::{allocator::WithVersion, Version};
 
 use super::*;
 
-/// a
+/// [`VersionedMap`] implementation for concurrent environment.
+pub mod sync {
+  pub use crate::sync::versioned::SkipMap;
+}
+
+/// [`VersionedMap`] implementation for non-concurrent environment.
+pub mod unsync {
+  pub use crate::unsync::versioned::SkipMap;
+}
+
+/// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
+///
+/// - For concurrent environment, use [`sync::SkipMap`].
+/// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait VersionedMap
 where
   Self: VersionedContainer,

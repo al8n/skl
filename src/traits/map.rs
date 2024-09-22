@@ -1,6 +1,19 @@
 use super::*;
 
-/// a
+/// [`Map`] implementation for concurrent environment.
+pub mod sync {
+  pub use crate::sync::map::SkipMap;
+}
+
+/// [`Map`] implementation for non-concurrent environment.
+pub mod unsync {
+  pub use crate::unsync::map::SkipMap;
+}
+
+/// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
+///
+/// - For concurrent environment, use [`sync::SkipMap`].
+/// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait Map
 where
   Self: Container,

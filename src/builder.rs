@@ -6,7 +6,7 @@ use rarena_allocator::Options as ArenaOptions;
 
 pub use rarena_allocator::Freelist;
 
-use super::{allocator::Sealed, constructor::Container, Error, Height, KeySize};
+use super::{allocator::Sealed, traits::Container, Error, Height, KeySize};
 
 mod options;
 pub use options::*;

@@ -140,7 +140,7 @@ impl<C> From<SkipList<C>> for SkipMap<C> {
   }
 }
 
-impl<C> crate::constructor::List for SkipMap<C> {
+impl<C> crate::traits::List for SkipMap<C> {
   type Allocator = Allocator;
   type Comparator = C;
 

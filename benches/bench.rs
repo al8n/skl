@@ -1,7 +1,10 @@
 use criterion::*;
 use parking_lot::Mutex;
 use rand::prelude::*;
-use skl::{sync::map::SkipMap, *};
+use skl::{
+  map::{sync::SkipMap, Map},
+  *,
+};
 use std::{
   collections::*,
   sync::{atomic::*, *},
@@ -42,7 +45,10 @@ fn random_key(rng: &mut ThreadRng) -> Vec<u8> {
 fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
   let frac = *frac;
   let value = b"00123".to_vec();
-  let list = Arc::new(SkipMap::new(Options::new().with_capacity(512 << 20)).unwrap());
+  let list = Builder::new()
+    .with_capacity(512 << 20)
+    .alloc::<SkipMap>()
+    .unwrap();
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));
   let s = stop.clone();
@@ -164,9 +170,12 @@ fn bench_write_fixed_map(c: &mut Criterion) {
 }
 
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
-  let list = Arc::new(SkipMap::new(Options::new().with_capacity(512 << 21)).unwrap());
+  let list = Builder::new()
+    .with_capacity(512 << 20)
+    .alloc::<SkipMap>()
+    .unwrap();
+  let l = list.clone();
   let value = b"00123".to_vec();
-  let l = Arc::clone(&list);
   let stop = Arc::new(AtomicBool::new(false));
   let s = stop.clone();
   let v = value.clone();

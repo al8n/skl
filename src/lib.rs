@@ -33,22 +33,19 @@ mod error;
 pub use error::Error;
 
 /// Implementations for concurrent environments.
-pub mod sync;
+mod sync;
 
 /// Implementations for single-threaded environments.
-pub mod unsync;
+mod unsync;
 
 mod builder;
 pub use builder::*;
 
-mod constructor;
-pub use constructor::{full, map, trailed, versioned, Arena, Container, VersionedContainer};
+mod traits;
+pub use traits::{full, map, trailed, versioned, Arena, Container, VersionedContainer};
 
 mod types;
 pub use types::*;
-
-mod traits;
-pub use traits::*;
 
 #[cfg(test)]
 mod tests;

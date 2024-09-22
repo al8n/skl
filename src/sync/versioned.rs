@@ -4,10 +4,10 @@ use super::*;
 mod tests {
   use super::*;
 
-  container_tests!("sync_versioned_map": SkipMap);
+  __container_tests!("sync_versioned_map": SkipMap);
 
-  versioned_map_tests!("sync_versioned_map": SkipMap<Ascend>);
-  versioned_map_tests!(go "sync_versioned_map": SkipMap<Ascend>);
+  __versioned_map_tests!("sync_versioned_map": SkipMap<Ascend>);
+  __versioned_map_tests!(go "sync_versioned_map": SkipMap<Ascend>);
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;

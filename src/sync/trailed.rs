@@ -6,10 +6,10 @@ use super::*;
 mod tests {
   use super::*;
 
-  container_tests!("sync_trailed_map": SkipMap);
+  __container_tests!("sync_trailed_map": SkipMap);
 
-  trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
-  trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
+  __trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;

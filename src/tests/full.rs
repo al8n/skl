@@ -1719,9 +1719,10 @@ where
 }
 
 #[macro_export]
-macro_rules! full_map_tests {
+#[doc(hidden)]
+macro_rules! __full_map_tests {
   ($prefix:literal: $ty:ty) => {
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    __unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
       basic_large,
       iter_all_versions_mvcc,
@@ -1767,14 +1768,14 @@ macro_rules! full_map_tests {
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty) => {
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    __unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
       concurrent_one_key,
     });
 
-    unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    __unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

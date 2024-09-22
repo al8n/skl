@@ -60,7 +60,8 @@ fn make_value(i: usize) -> std::vec::Vec<u8> {
 }
 
 #[macro_export]
-macro_rules! unit_tests {
+#[doc(hidden)]
+macro_rules! __unit_tests {
   ($mod:path |$prefix:literal, $ty:ty, $opts:path| {
     $(
       $(#[cfg($cfg:meta)])?
@@ -68,7 +69,7 @@ macro_rules! unit_tests {
     )*
   }) => {
     $(
-      unit_test_expand!(
+      __unit_test_expand!(
         $(#[cfg($cfg)])?
         $mod |$prefix, $name, $ty, $opts|
       );
@@ -77,7 +78,8 @@ macro_rules! unit_tests {
 }
 
 #[macro_export]
-macro_rules! unit_test_expand {
+#[doc(hidden)]
+macro_rules! __unit_test_expand {
   (
     $(#[cfg($cfg:meta)])?
     $fn:path |$prefix:literal, $name:ident, $ty:ty, $opts: path|
@@ -158,7 +160,8 @@ macro_rules! unit_test_expand {
 }
 
 #[macro_export]
-macro_rules! container_tests {
+#[doc(hidden)]
+macro_rules! __container_tests {
   ($prefix:literal: $ty:ty) => {
     #[test]
     fn test_empty() {

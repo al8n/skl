@@ -6,10 +6,10 @@ use super::*;
 mod tests {
   use super::*;
 
-  container_tests!("sync_full_map": SkipMap);
+  __container_tests!("sync_full_map": SkipMap);
 
-  full_map_tests!("sync_full_map": SkipMap<u64, Ascend>);
-  full_map_tests!(go "sync_full_map": SkipMap<u64, Ascend>);
+  __full_map_tests!("sync_full_map": SkipMap<u64, Ascend>);
+  __full_map_tests!(go "sync_full_map": SkipMap<u64, Ascend>);
 }
 
 type Allocator<T> = GenericAllocator<VersionedMeta, FullNode<T>, Arena>;

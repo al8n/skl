@@ -98,58 +98,6 @@ impl<A, C> SkipList<A, C>
 where
   A: Allocator,
 {
-  // fn new_in(arena: A, cmp: C, opts: Options) -> Result<Self, Error> {
-  //   let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
-  //   if arena.read_only() {
-  //     let (meta, head, tail) = Self::get_pointers(&arena);
-
-  //     return Ok(Self::construct(
-  //       arena,
-  //       meta,
-  //       head,
-  //       tail,
-  //       data_offset,
-  //       cmp,
-  //     ));
-  //   }
-
-  //   let meta = if opts.unify() {
-  //     arena.allocate_header(opts.magic_version())?
-  //   } else {
-  //     unsafe {
-  //       NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-  //         opts.magic_version(),
-  //       ))))
-  //     }
-  //   };
-
-  //   let max_height: u8 = opts.max_height().into();
-  //   let head = arena.allocate_full_node(max_height)?;
-  //   let tail = arena.allocate_full_node(max_height)?;
-
-  //   // Safety:
-  //   // We will always allocate enough space for the head node and the tail node.
-  //   unsafe {
-  //     // Link all head/tail levels together.
-  //     for i in 0..(max_height as usize) {
-  //       let head_link = head.tower::<A>(&arena, i);
-  //       let tail_link = tail.tower::<A>(&arena, i);
-  //       head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-  //       tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
-  //     }
-  //   }
-
-  //   Ok(Self::construct(
-  //     arena,
-  //     meta,
-  //     head,
-  //     tail,
-  //     data_offset,
-  //     opts,
-  //     cmp,
-  //   ))
-  // }
-
   #[inline]
   pub(crate) fn construct(
     arena: A,

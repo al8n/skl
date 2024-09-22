@@ -4,10 +4,10 @@ use super::*;
 mod tests {
   use super::*;
 
-  container_tests!("sync_map": SkipMap);
+  __container_tests!("sync_map": SkipMap);
 
-  map_tests!("sync_map": SkipMap);
-  map_tests!(go "sync_map": SkipMap);
+  __map_tests!("sync_map": SkipMap);
+  __map_tests!(go "sync_map": SkipMap);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;

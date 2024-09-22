@@ -138,15 +138,13 @@ pub trait Arena: List {
   #[allow(clippy::mut_from_ref)]
   unsafe fn reserved_slice_mut(&self) -> &mut [u8];
 
-  // /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.
-  // #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  // #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  // #[inline]
-  // fn path(&self) -> Option<&<<Self::Allocator as AllocatorSealed>::Node as Node>::> {
-  //   use crate::allocator::Node;
-
-  //   self.as_ref().arena.path()
-  // }
+  /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+  #[inline]
+  fn path(&self) -> Option<&()> {
+    self.as_ref().arena.path()
+  }
 
   /// Sets remove on drop, only works on mmap with a file backend.
   ///

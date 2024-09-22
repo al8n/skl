@@ -199,12 +199,9 @@ jobs:
         run: rustup component add rust-src
       - name: Install cargo-hack
         run: cargo install cargo-hack
-      - name: ASAN / LSAN / TSAN (Linux)
+      - name: ASAN / LSAN / MSAN / TSAN (Linux)
         run: ci/sanitizer.sh
         if: matrix.os == 'ubuntu-latest'
-      - name: ASAN / LSAN / TSAN
-        run: ci/sanitizer_generic.sh
-        if: matrix.os != 'ubuntu-latest'
 
   # valgrind
   valgrind:

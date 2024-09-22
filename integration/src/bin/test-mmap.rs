@@ -49,7 +49,6 @@ fn main() {
     let l = unsafe {
       Builder::new()
         .with_capacity(120 << 20)
-        .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .map_mut::<SkipMap, _>(&p)

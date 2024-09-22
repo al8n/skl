@@ -12,7 +12,7 @@ impl<T> Allocator for T where T: Sealed {}
 pub(crate) use sealed::*;
 
 mod sealed {
-  use core::ptr;
+  use core::{ops::Deref, ptr};
 
   use super::*;
 
@@ -503,12 +503,27 @@ mod sealed {
 
     fn options(&self) -> &Options;
 
-    fn reserved_slice(&self) -> &[u8] {
-      ArenaAllocator::reserved_slice(core::ops::Deref::deref(self))
+    #[inline]
+    fn reserved_bytes(&self) -> usize {
+      ArenaAllocator::reserved_bytes(Deref::deref(self))
     }
 
+    #[inline]
+    fn reserved_slice(&self) -> &[u8] {
+      ArenaAllocator::reserved_slice(Deref::deref(self))
+    }
+
+    #[inline]
     unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
-      ArenaAllocator::reserved_slice_mut(core::ops::Deref::deref(self))
+      ArenaAllocator::reserved_slice_mut(Deref::deref(self))
+    }
+
+    #[inline]
+    fn prefix_slice(&self) -> &[u8] {
+      let arena = Deref::deref(self);
+
+      // Safety: the slice must within range
+      unsafe { arena.get_bytes(0, self.data_offset()) }
     }
 
     fn new(arena: Self::Allocator, opts: Options) -> Self;

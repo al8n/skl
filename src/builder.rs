@@ -456,6 +456,6 @@ impl<C: Comparator> Builder<C> {
       .with_maximum_alignment(node_align.max(trailer_align))
       .alloc::<<T::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
-      .and_then(|arena| T::construct(arena, opts, cmp))
+      .and_then(|arena| T::construct(arena, opts, cmp, false))
   }
 }

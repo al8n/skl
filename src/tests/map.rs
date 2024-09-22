@@ -857,7 +857,7 @@ where
     use rand::seq::SliceRandom;
 
     let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join(::std::format!("{prefix}_reopen_skipmap2"));
+    let p = dir.path().join(::std::format!("{prefix}_reopen2_skipmap"));
     {
       let l = Builder::new()
         .with_create_new(true)
@@ -892,6 +892,48 @@ where
     let mut data = (0..1000).collect::<Vec<usize>>();
     data.shuffle(&mut rand::thread_rng());
     for i in data {
+      let k = key(i);
+      let ent = l.get(&k).unwrap();
+      assert_eq!(new_value(i), ent.value());
+      assert_eq!(ent.key(), k);
+    }
+  }
+}
+
+#[cfg(feature = "memmap")]
+pub(crate) fn reopen_mmap3<M>(prefix: &str)
+where
+  M: Map<Comparator = dbutils::Ascend> + Clone,
+  M::Comparator: Comparator,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  use crate::Builder;
+
+  unsafe {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join(std::format!("{prefix}_reopen3_skipmap"));
+    {
+      let l = Builder::new()
+        .with_create_new(true)
+        .with_read(true)
+        .with_write(true)
+        .with_capacity(ARENA_SIZE as u32)
+        .map_mut::<M, _>(&p)
+        .unwrap();
+      for i in 0..1000 {
+        l.get_or_insert(&key(i), &new_value(i)).unwrap();
+      }
+      l.flush().unwrap();
+    }
+
+    let l = Builder::new()
+      .with_read(true)
+      .with_write(true)
+      .with_capacity((ARENA_SIZE * 2) as u32)
+      .map_mut::<M, _>(&p)
+      .unwrap();
+    assert_eq!(1000, l.len());
+    for i in 0..1000 {
       let k = key(i);
       let ent = l.get(&k).unwrap();
       assert_eq!(new_value(i), ent.value());
@@ -1292,6 +1334,14 @@ macro_rules! __map_tests {
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen2() {
       $crate::tests::map::reopen_mmap2::<$ty>($prefix);
+    }
+
+    #[test]
+    #[cfg(feature = "memmap")]
+    #[cfg_attr(miri, ignore)]
+    #[allow(clippy::macro_metavars_in_unsafe)]
+    fn reopen3() {
+      $crate::tests::map::reopen_mmap3::<$ty>($prefix);
     }
   };
   // Support from golang :)

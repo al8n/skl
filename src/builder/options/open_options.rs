@@ -57,7 +57,7 @@ impl<C: Comparator> Builder<C> {
       .map_anon::<<T::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| {
-        T::construct(arena, opts, cmp)
+        T::construct(arena, opts, cmp, false)
           .map_err(invalid_data)
           .and_then(|map| {
             // Lock the memory of first page to prevent it from being swapped out.
@@ -127,7 +127,7 @@ impl<C: Comparator> Builder<C> {
       .with_unify(true)
       .map_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
-        T::construct(arena, opts, cmp)
+        T::construct(arena, opts, cmp, true)
           .map_err(invalid_data)
           .and_then(|map| {
             if Arena::magic_version(&map) != magic_version {
@@ -197,15 +197,18 @@ impl<C: Comparator> Builder<C> {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
     let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
     let magic_version = opts.magic_version();
+    let path = path_builder().map_err(Either::Left)?;
+    let exist = path.exists();
 
     #[allow(clippy::bind_instead_of_map)]
     opts
       .to_arena_options()
       .with_maximum_alignment(node_align.max(trailer_align))
       .with_unify(true)
-      .map_mut_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
+      .map_mut::<<T::Allocator as Sealed>::Allocator, _>(path)
+      .map_err(Either::Right)
       .and_then(|arena| {
-        T::construct(arena, opts, cmp)
+        T::construct(arena, opts, cmp, exist)
           .map_err(invalid_data)
           .and_then(|map| {
             if Arena::magic_version(&map) != magic_version {

@@ -66,6 +66,7 @@ pub trait List:
     arena: <Self::Allocator as AllocatorSealed>::Allocator,
     opts: Options,
     cmp: Self::Comparator,
+    exist: bool,
   ) -> Result<Self, Error> {
     use std::boxed::Box;
 
@@ -74,7 +75,7 @@ pub trait List:
     let opts = arena.options();
     let max_height: u8 = opts.max_height().into();
     let data_offset = arena.check_capacity(max_height)?;
-    if arena.read_only() {
+    if arena.read_only() || exist {
       let (meta, head, tail) = arena.get_pointers();
 
       return Ok(Self::from(SkipList::construct(
@@ -125,6 +126,9 @@ pub trait List:
 
 /// The wrapper trait over a underlying [`Allocator`](rarena_allocator::Allocator).
 pub trait Arena: List {
+  /// Returns how many bytes are reserved by the ARENA.
+  fn reserved_bytes(&self) -> usize;
+
   /// Returns the reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
   fn reserved_slice(&self) -> &[u8];
 
@@ -142,7 +146,9 @@ pub trait Arena: List {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  fn path(&self) -> Option<&()> {
+  fn path(
+    &self,
+  ) -> Option<&<<Self::Allocator as AllocatorSealed>::Allocator as ArenaAllocator>::Path> {
     self.as_ref().arena.path()
   }
 
@@ -268,6 +274,11 @@ where
   T: List,
 {
   #[inline]
+  fn reserved_bytes(&self) -> usize {
+    self.as_ref().arena.reserved_bytes()
+  }
+
+  #[inline]
   fn reserved_slice(&self) -> &[u8] {
     self.as_ref().arena.reserved_slice()
   }
@@ -277,14 +288,6 @@ where
   unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
     self.as_ref().arena.reserved_slice_mut()
   }
-
-  // /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.
-  // #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-  // #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  // #[inline]
-  // fn path(&self) -> Option<&std::sync::Arc<std::path::PathBuf>> {
-  //   self.as_ref().arena.path()
-  // }
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]

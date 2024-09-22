@@ -48,7 +48,7 @@ dbutils = { version = "0.3", default-features = false }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-# rarena-allocator = { version = "0.2", default-features = false, path = "../arena/rarena-allocator" }
+# rarena-allocator = { version = "0.3", default-features = false, path = "../arena/rarena-allocator" }
 rarena-allocator = { version = "0.3", default-features = false }
 viewit = "0.1.5"
 

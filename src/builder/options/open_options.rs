@@ -2,6 +2,8 @@ use core::mem;
 
 use dbutils::Comparator;
 use either::Either;
+
+#[cfg(not(windows))]
 use rarena_allocator::Allocator;
 
 use super::{super::Builder, Options, CURRENT_VERSION};
@@ -29,13 +31,13 @@ impl<C: Comparator> Builder<C> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{sync, unsync, MmapOptions};
+  /// use skl::{full::sync, trailed::unsync, Builder};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
-  /// let map = Builder::new().map_anon::<sync::full::SkipMap>(MmapOptions::new().len(1024)).unwrap();
+  /// let map = Builder::new().with_capacity(1024).map_anon::<sync::SkipMap>().unwrap();
   ///
   /// // Create a unsync skipmap which supports trailer.
-  /// let arena = Builder::new().map_anon::<unsync::trailed::SkipMap>(MmapOptions::new().len(1024)).unwrap();
+  /// let arena = Builder::new().with_capacity(1024).map_anon::<unsync::SkipMap>().unwrap();
   /// ```
   ///
   /// [`Builder::alloc`]: #method.alloc
@@ -128,8 +130,6 @@ impl<C: Comparator> Builder<C> {
         T::construct(arena, opts, cmp)
           .map_err(invalid_data)
           .and_then(|map| {
-            let allocator = map.allocator();
-
             if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
             } else if map.version() != CURRENT_VERSION {
@@ -138,6 +138,7 @@ impl<C: Comparator> Builder<C> {
               // Lock the memory of first page to prevent it from being swapped out.
               #[cfg(not(windows))]
               unsafe {
+                let allocator = map.allocator();
                 allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
               }
 
@@ -207,8 +208,6 @@ impl<C: Comparator> Builder<C> {
         T::construct(arena, opts, cmp)
           .map_err(invalid_data)
           .and_then(|map| {
-            let allocator = map.allocator();
-
             if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
             } else if map.version() != CURRENT_VERSION {
@@ -217,6 +216,7 @@ impl<C: Comparator> Builder<C> {
               // Lock the memory of first page to prevent it from being swapped out.
               #[cfg(not(windows))]
               unsafe {
+                let allocator = map.allocator();
                 allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
               }
 

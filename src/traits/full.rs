@@ -2,6 +2,9 @@ use crate::{allocator::WithVersion, Version};
 
 use super::*;
 
+#[cfg(test)]
+mod tests;
+
 /// [`FullMap`] implementation for concurrent environment.
 pub mod sync {
   pub use crate::sync::full::SkipMap;

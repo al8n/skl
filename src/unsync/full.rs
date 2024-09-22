@@ -2,6 +2,15 @@ use core::marker::PhantomData;
 
 use super::*;
 
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  container_tests!("unsync_full_map": SkipMap);
+
+  full_map_tests!("unsync_full_map": SkipMap<u64, Ascend>);
+}
+
 type Allocator<T> = GenericAllocator<VersionedMeta, FullNode<T>, Arena>;
 type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
 

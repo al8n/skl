@@ -8,7 +8,7 @@ use dbutils::Comparator;
 use super::{AllocatorSealed, Arena, EntryRef, Iter};
 use crate::{allocator::WithVersion, AllVersionsIter, Version, VersionedEntryRef};
 
-/// a
+/// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer
 where
   Self: Arena,

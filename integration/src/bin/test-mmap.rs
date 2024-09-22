@@ -1,5 +1,8 @@
 use integration::{key, new_value};
-use skl::{sync::map::SkipMap, *};
+use skl::{
+  map::{sync::SkipMap, Map},
+  *,
+};
 
 fn main() {
   let dir = tempfile::tempdir().unwrap();
@@ -7,12 +10,16 @@ fn main() {
   {
     const N: usize = 10;
 
-    let open_options = OpenOptions::default()
-      .create_new(Some(1 << 20))
-      .read(true)
-      .write(true);
-    let mmap_options = MmapOptions::default();
-    let l = unsafe { SkipMap::map_mut(&p, Options::new(), open_options, mmap_options).unwrap() };
+    let l = unsafe {
+      Builder::new()
+        .with_capacity(1 << 20)
+        .with_create_new(true)
+        .with_read(true)
+        .with_write(true)
+        .map_mut::<SkipMap, _>(&p)
+        .unwrap()
+    };
+
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -39,9 +46,16 @@ fn main() {
   {
     const N2: usize = 10;
 
-    let open_options = OpenOptions::default().read(true);
-    let mmap_options = MmapOptions::default();
-    let l = unsafe { SkipMap::map(&p, Options::new(), open_options, mmap_options).unwrap() };
+    let l = unsafe {
+      Builder::new()
+        .with_capacity(120 << 20)
+        .with_create_new(true)
+        .with_read(true)
+        .with_write(true)
+        .map_mut::<SkipMap, _>(&p)
+        .unwrap()
+    };
+
     assert_eq!(N2, l.len());
     for i in 0..N2 {
       let l = l.clone();

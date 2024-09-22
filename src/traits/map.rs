@@ -1,5 +1,8 @@
 use super::*;
 
+#[cfg(test)]
+mod tests;
+
 /// [`Map`] implementation for concurrent environment.
 pub mod sync {
   pub use crate::sync::map::SkipMap;

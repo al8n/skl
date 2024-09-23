@@ -119,12 +119,12 @@ impl<C: Comparator> Builder<C> {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
     let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
     let magic_version = opts.magic_version();
+    let opts = opts.with_unify(true);
 
     #[allow(clippy::bind_instead_of_map)]
     opts
       .to_arena_options()
       .with_maximum_alignment(node_align.max(trailer_align))
-      .with_unify(true)
       .map_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
         T::construct(arena, opts, cmp, true)
@@ -199,6 +199,7 @@ impl<C: Comparator> Builder<C> {
     let magic_version = opts.magic_version();
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
+    let opts = opts.with_unify(true);
 
     #[allow(clippy::bind_instead_of_map)]
     opts

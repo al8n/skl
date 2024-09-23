@@ -80,7 +80,7 @@ where
   #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
     if self.arena.refs() == 1 {
-      if !self.arena.options().unify() && !self.arena.is_ondisk() {
+      if !self.arena.unify() {
         unsafe {
           let _ = Box::from_raw(self.meta.as_ptr());
         }

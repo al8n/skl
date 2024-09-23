@@ -51,8 +51,8 @@ rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 # rarena-allocator = { version = "0.3", default-features = false, path = "../arena/rarena-allocator" }
 rarena-allocator = { version = "0.3", default-features = false }
 viewit = "0.1.5"
-
 paste = "1"
+zerocopy = { version = "0.7", features = ["derive"] }
 
 time = { version = "0.3", optional = true, features = ["std"] }
 tracing = { version = "0.1", optional = true }

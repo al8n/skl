@@ -14,6 +14,8 @@ pub(crate) use sealed::*;
 mod sealed {
   use core::{ops::Deref, ptr};
 
+  use rarena_allocator::align_offset;
+
   use super::*;
 
   pub struct Pointer {
@@ -243,7 +245,11 @@ mod sealed {
       }
 
       let (offset, _) = self.value_pointer().load();
-      &*arena.get_aligned_pointer(offset as usize)
+      let offset = align_offset::<Self::Trailer>(offset);
+      zerocopy::FromBytes::ref_from_prefix(
+        arena.get_bytes(offset as usize, mem::size_of::<Self::Trailer>()),
+      )
+      .unwrap()
     }
 
     /// ## Safety
@@ -259,7 +265,11 @@ mod sealed {
         return dangling_zst_ref();
       }
 
-      &*arena.get_aligned_pointer::<Self::Trailer>(offset as usize)
+      let offset = align_offset::<Self::Trailer>(offset);
+      zerocopy::FromBytes::ref_from_prefix(
+        arena.get_bytes(offset as usize, mem::size_of::<Self::Trailer>()),
+      )
+      .unwrap()
     }
 
     /// ## Safety
@@ -516,6 +526,11 @@ mod sealed {
     #[inline]
     unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
       ArenaAllocator::reserved_slice_mut(Deref::deref(self))
+    }
+
+    #[inline]
+    fn unify(&self) -> bool {
+      ArenaAllocator::unify(Deref::deref(self))
     }
 
     #[inline]

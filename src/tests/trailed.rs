@@ -298,6 +298,7 @@ where
   assert_eq!(ent.value(), b"c1");
 }
 
+#[cfg(not(miri))]
 pub(crate) fn basic_large<M>(l: M)
 where
   M: TrailedMap + Clone,
@@ -1343,6 +1344,7 @@ macro_rules! __trailed_map_tests {
   ($prefix:literal: $ty:ty) => {
     __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
+      #[cfg(not(miri))]
       basic_large,
       get,
       iter_all_versions_next,

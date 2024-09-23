@@ -606,6 +606,7 @@ where
   assert_eq!(ent.version(), 3);
 }
 
+#[cfg(not(miri))]
 pub(crate) fn basic_large<M>(l: M)
 where
   M: FullMap + Clone,
@@ -1772,6 +1773,7 @@ macro_rules! __full_map_tests {
   ($prefix:literal: $ty:ty) => {
     __unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
+      #[cfg(not(miri))]
       basic_large,
       iter_all_versions_mvcc,
       iter_all_versions_next,

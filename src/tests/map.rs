@@ -285,6 +285,7 @@ where
   assert_eq!(ent.value(), b"c1");
 }
 
+#[cfg(not(miri))]
 pub(crate) fn basic_large<M>(l: M)
 where
   M: Map + Clone,
@@ -314,7 +315,6 @@ pub(crate) fn concurrent_basic<M>(l: M)
 where
   M: Map + Clone + Send + 'static,
   M::Comparator: Comparator,
-
   <M::Allocator as Sealed>::Trailer: Default,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -1298,6 +1298,7 @@ macro_rules! __map_tests {
   ($prefix:literal: $ty:ty) => {
     __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
+      #[cfg(not(miri))]
       basic_large,
       get,
       iter_all_versions_next,

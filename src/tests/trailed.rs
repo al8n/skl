@@ -1453,6 +1453,19 @@ macro_rules! __trailed_map_tests {
       concurrent_one_key,
     });
 
+    mod high_compression {
+      use super::*;
+
+      __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
+        #[cfg(feature = "std")]
+        concurrent_basic,
+        #[cfg(feature = "std")]
+        concurrent_basic2,
+        #[cfg(feature = "std")]
+        concurrent_one_key,
+      });
+    }
+
     __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,

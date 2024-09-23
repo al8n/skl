@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2021"
 rust-version = "1.77.0"
 repository = "https://github.com/al8n/skl"
@@ -37,22 +37,22 @@ memmap = ["rarena-allocator/memmap", "std"]
 std = ["rand/default", "either/default", "rarena-allocator/std", "memchr/default", "among/default"]
 tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
-# loom = ["dep:loom", "rarena-allocator/loom"]
-
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
 among = { version = "0.1", default-features = false }
+arbitrary-int = { version = "1.2", default-features = false }
 derive_more = "0.99"
 dbutils = { version = "0.3", default-features = false }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-# rarena-allocator = { version = "0.2", default-features = false, path = "../arena/rarena-allocator" }
-rarena-allocator = { version = "0.2", default-features = false }
-arbitrary-int = { version = "1.2", default-features = false }
+# rarena-allocator = { version = "0.3", default-features = false, path = "../arena/rarena-allocator" }
+rarena-allocator = { version = "0.3", default-features = false }
+viewit = "0.1.5"
 paste = "1"
+zerocopy = { version = "0.7", features = ["derive"] }
 
 time = { version = "0.3", optional = true, features = ["std"] }
 tracing = { version = "0.1", optional = true }
@@ -61,8 +61,6 @@ tracing = { version = "0.1", optional = true }
 criterion = "0.5"
 tempfile = "3"
 parking_lot = "0.12"
-paste = "1"
-wg = { version = "0.9", default-features = false, features = ["std"] }
 
 
 [profile.bench]
@@ -81,3 +79,18 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
 members = ["integration"]
+
+[lints.rust]
+rust_2018_idioms = "warn"
+single_use_lifetimes = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(all_tests)',
+  'cfg(test_unsync_full)',
+  'cfg(test_unsync_versioned)',
+  'cfg(test_unsync_trailed)',
+  'cfg(test_unsync_map)',
+  'cfg(test_sync_full)',
+  'cfg(test_sync_versioned)',
+  'cfg(test_sync_trailed)',
+  'cfg(test_sync_map)',
+] }

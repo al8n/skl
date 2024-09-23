@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.15.0
+
+- Extract different kinds of `SkipMap` to traits to improve flexibility
+- Implementing a builder pattern to construct `SkipMap`s
+- Make the crate compatible with [Tree Borrows](https://www.ralfj.de/blog/2023/06/02/tree-borrows.html)
+
 ## 0.14.0
 
 - Supports unsync version `SkipMap`s

@@ -1,12 +1,10 @@
+use super::{ArenaOptions, Freelist, Height, KeySize, CURRENT_VERSION};
+
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-pub use rarena_allocator::{MmapOptions, OpenOptions};
+mod open_options;
 
-pub use rarena_allocator::Freelist;
-
-use crate::{Height, KeySize};
-
-/// Configuration for the compression policy of the key in [`SkipMap`](super::SkipMap).
+/// Configuration for the compression policy of the key in [`Arena`](crate::traits::Arena).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum CompressionPolicy {
@@ -17,18 +15,41 @@ pub enum CompressionPolicy {
   High,
 }
 
-/// Options for [`SkipMap`](super::SkipMap).
+/// Options for [`Arena`](crate::traits::Arena).
+#[viewit::viewit(vis_all = "pub(super)", getters(skip), setters(skip))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Options {
   max_value_size: u32,
   max_key_size: KeySize,
   max_height: Height,
   magic_version: u16,
-  capacity: u32,
+  capacity: Option<u32>,
   unify: bool,
   freelist: Freelist,
   policy: CompressionPolicy,
   reserved: u32,
+  lock_meta: bool,
+
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  create_new: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  create: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  read: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  write: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  append: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  truncate: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  offset: u64,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  stack: bool,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  huge: Option<u8>,
+  #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+  populate: bool,
 }
 
 impl Default for Options {
@@ -46,12 +67,34 @@ impl Options {
       max_value_size: u32::MAX,
       max_key_size: KeySize::MAX,
       max_height: Height::new(),
-      capacity: 1024,
+      capacity: None,
       unify: false,
       magic_version: 0,
       freelist: Freelist::Optimistic,
       policy: CompressionPolicy::Fast,
       reserved: 0,
+      lock_meta: true,
+
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      create_new: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      create: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      read: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      write: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      append: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      truncate: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      offset: 0,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      stack: false,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      huge: None,
+      #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+      populate: false,
     }
   }
 
@@ -63,7 +106,7 @@ impl Options {
   ///
   /// The default reserved is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::Options;
@@ -72,23 +115,43 @@ impl Options {
   /// ```
   #[inline]
   pub const fn with_reserved(mut self, reserved: u32) -> Self {
-    self.reserved = if self.capacity <= reserved {
-      self.capacity
-    } else {
-      reserved
-    };
+    self.reserved = reserved;
     self
   }
 
-  /// Set the magic version of the [`SkipMap`](super::SkipMap).
+  /// Set if lock the meta of the ARENA in the memory to prevent OS from swapping out the first page of ARENA.
+  /// When using memory map backed ARENA, the meta of the ARENA
+  /// is in the first page, meta is frequently accessed,
+  /// lock (`mlock` on the first page) the meta can reduce the page fault,
+  /// but yes, this means that one `SkipMap` will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
   ///
-  /// This is used by the application using [`SkipMap`](super::SkipMap)
-  /// to ensure that it doesn't open the [`SkipMap`](super::SkipMap)
+  /// Default is `true`.
+  ///
+  /// This configuration has no effect on windows and vec backed ARENA.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_lock_meta(false);
+  /// ```
+  #[inline]
+  pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
+    self.lock_meta = lock_meta;
+    self
+  }
+
+  /// Set the magic version of the [`Arena`](crate::traits::Arena).
+  ///
+  /// This is used by the application using [`Arena`](crate::traits::Arena)
+  /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
   /// with incompatible data format.
   ///  
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::Options;
@@ -101,14 +164,14 @@ impl Options {
     self
   }
 
-  /// Set the [`Freelist`] kind of the [`SkipMap`](super::SkipMap).
+  /// Set the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`Freelist::Optimistic`].
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
-  /// use skl::{Options, options::Freelist};
+  /// use skl::{Options, Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
@@ -118,14 +181,14 @@ impl Options {
     self
   }
 
-  /// Set the compression policy of the key in [`SkipMap`](super::SkipMap).
+  /// Set the compression policy of the key in [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`CompressionPolicy::Fast`].
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
-  /// use skl::{Options, options::CompressionPolicy};
+  /// use skl::{Options, CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
   /// ```
@@ -135,17 +198,17 @@ impl Options {
     self
   }
 
-  /// Set if use the unify memory layout of the [`SkipMap`](super::SkipMap).
+  /// Set if use the unify memory layout of the [`Arena`](crate::traits::Arena).
   ///
-  /// File backed [`SkipMap`](super::SkipMap) has different memory layout with other kind backed [`SkipMap`](super::SkipMap),
-  /// set this value to `true` will unify the memory layout of the [`SkipMap`](super::SkipMap), which means
-  /// all kinds of backed [`SkipMap`](super::SkipMap) will have the same memory layout.
+  /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+  /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+  /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
   ///
-  /// This value will be ignored if the [`SkipMap`](super::SkipMap) is backed by a file backed memory map.
+  /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
   ///
   /// The default value is `false`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::Options;
@@ -162,7 +225,7 @@ impl Options {
   ///
   /// Default is `u32::MAX`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::Options;
@@ -181,7 +244,7 @@ impl Options {
   ///
   /// Default is `65535`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::{Options, KeySize};
@@ -198,7 +261,7 @@ impl Options {
   ///
   /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::{Options, Height};
@@ -213,9 +276,7 @@ impl Options {
 
   /// Sets the capacity of the underlying ARENA.
   ///
-  /// Default is `1024`. This configuration will be ignored if the map is memory-mapped.
-  ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::Options;
@@ -224,7 +285,7 @@ impl Options {
   /// ```
   #[inline]
   pub const fn with_capacity(mut self, capacity: u32) -> Self {
-    self.capacity = capacity;
+    self.capacity = Some(capacity);
     self
   }
 
@@ -236,7 +297,7 @@ impl Options {
   ///
   /// The default reserved is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::Options;
@@ -250,11 +311,32 @@ impl Options {
     self.reserved
   }
 
+  /// Get if lock the meta of the ARENA in the memory to prevent OS from swapping out the first page of ARENA.
+  /// When using memory map backed ARENA, the meta of the ARENA
+  /// is in the first page, meta is frequently accessed,
+  /// lock (`mlock` on the first page) the meta can reduce the page fault,
+  /// but yes, this means that one `SkipMap` will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_lock_meta(false);
+  ///
+  /// assert_eq!(opts.lock_meta(), false);
+  /// ```
+  #[inline]
+  pub const fn lock_meta(&self) -> bool {
+    self.lock_meta
+  }
+
   /// Returns the maximum size of the value.
   ///
   /// Default is `u32::MAX`. The maximum size of the value is `u32::MAX - header`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::Options;
@@ -272,7 +354,7 @@ impl Options {
   ///
   /// Default is `65535`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::{Options, KeySize};
@@ -290,7 +372,7 @@ impl Options {
   ///
   /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```
   /// use skl::{Options, Height};
@@ -306,9 +388,7 @@ impl Options {
 
   /// Returns the configuration of underlying ARENA size.
   ///
-  /// Default is `1024`. This configuration will be ignored if the map is memory-mapped.
-  ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::Options;
@@ -317,20 +397,23 @@ impl Options {
   /// ```
   #[inline]
   pub const fn capacity(&self) -> u32 {
-    self.capacity
+    match self.capacity {
+      Some(capacity) => capacity,
+      None => 0,
+    }
   }
 
-  /// Get if use the unify memory layout of the [`SkipMap`](super::SkipMap).
+  /// Get if use the unify memory layout of the [`Arena`](crate::traits::Arena).
   ///
-  /// File backed [`SkipMap`](super::SkipMap) has different memory layout with other kind backed [`SkipMap`](super::SkipMap),
-  /// set this value to `true` will unify the memory layout of the [`SkipMap`](super::SkipMap), which means
-  /// all kinds of backed [`SkipMap`](super::SkipMap) will have the same memory layout.
+  /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+  /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+  /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
   ///
-  /// This value will be ignored if the [`SkipMap`](super::SkipMap) is backed by a file backed memory map.
+  /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
   ///  
   /// The default value is `false`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::Options;
@@ -344,15 +427,15 @@ impl Options {
     self.unify
   }
 
-  /// Get the magic version of the [`SkipMap`](super::SkipMap).
+  /// Get the magic version of the [`Arena`](crate::traits::Arena).
   ///
-  /// This is used by the application using [`SkipMap`](super::SkipMap)
-  /// to ensure that it doesn't open the [`SkipMap`](super::SkipMap)
+  /// This is used by the application using [`Arena`](crate::traits::Arena)
+  /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
   /// with incompatible data format.
   ///
   /// The default value is `0`.
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
   /// use skl::Options;
@@ -366,14 +449,14 @@ impl Options {
     self.magic_version
   }
 
-  /// Get the [`Freelist`] kind of the [`SkipMap`](super::SkipMap).
+  /// Get the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`Freelist::Optimistic`].
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, options::Freelist};
+  /// use skl::{Options, Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   ///
@@ -384,14 +467,14 @@ impl Options {
     self.freelist
   }
 
-  /// Get the compression policy of the key in [`SkipMap`](super::SkipMap).
+  /// Get the compression policy of the keys in [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`CompressionPolicy::Fast`].
   ///
-  /// # Example
+  /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, options::CompressionPolicy};
+  /// use skl::{Options, CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
   ///
@@ -400,5 +483,36 @@ impl Options {
   #[inline]
   pub const fn compression_policy(&self) -> CompressionPolicy {
     self.policy
+  }
+}
+
+impl Options {
+  #[allow(clippy::wrong_self_convention)]
+  #[inline]
+  pub(super) const fn to_arena_options(&self) -> ArenaOptions {
+    let opts = ArenaOptions::new()
+      .with_magic_version(CURRENT_VERSION)
+      .with_freelist(self.freelist())
+      .with_reserved(self.reserved())
+      .with_unify(self.unify())
+      .maybe_capacity(self.capacity);
+
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    {
+      opts
+        .with_create(self.create())
+        .with_create_new(self.create_new())
+        .with_read(self.read())
+        .with_write(self.write())
+        .with_append(self.append())
+        .with_truncate(self.truncate())
+        .with_offset(self.offset())
+        .with_stack(self.stack())
+        .with_huge(self.huge())
+        .with_populate(self.populate())
+    }
+
+    #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
+    opts
   }
 }

@@ -6,13 +6,13 @@ pub struct Iter<'a, A: Allocator, C, Q: ?Sized = &'static [u8], R = core::ops::R
   AllVersionsIter<'a, A, C, Q, R>,
 );
 
-impl<'a, A: Allocator, C, R: Clone, Q: Clone> Clone for Iter<'a, A, C, Q, R> {
+impl<A: Allocator, C, R: Clone, Q: Clone> Clone for Iter<'_, A, C, Q, R> {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, A: Allocator, C, R: Copy, Q: Copy> Copy for Iter<'a, A, C, Q, R> {}
+impl<A: Allocator, C, R: Copy, Q: Copy> Copy for Iter<'_, A, C, Q, R> {}
 
 impl<'a, A, C> Iter<'a, A, C>
 where
@@ -36,7 +36,7 @@ where
   }
 }
 
-impl<'a, A, C, Q: ?Sized, R> Iter<'a, A, C, Q, R>
+impl<A, C, Q: ?Sized, R> Iter<'_, A, C, Q, R>
 where
   A: Allocator,
 {
@@ -101,7 +101,7 @@ where
   }
 }
 
-impl<'a, A, C, Q, R> DoubleEndedIterator for Iter<'a, A, C, Q, R>
+impl<A, C, Q, R> DoubleEndedIterator for Iter<'_, A, C, Q, R>
 where
   A: Allocator,
   C: Comparator,

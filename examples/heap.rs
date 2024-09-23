@@ -1,4 +1,7 @@
-use skl::{sync::map::*, *};
+use skl::{
+  map::{sync::SkipMap, Map},
+  Arena, Builder, Container,
+};
 
 pub fn key(i: usize) -> Vec<u8> {
   format!("{:05}", i).into_bytes()
@@ -11,7 +14,10 @@ pub fn new_value(i: usize) -> Vec<u8> {
 fn main() {
   const N: usize = 1000;
 
-  let l = SkipMap::new(Options::new().with_capacity(1 << 20)).unwrap();
+  let l = Builder::new()
+    .with_capacity(1 << 20)
+    .alloc::<SkipMap>()
+    .unwrap();
 
   for i in 0..N {
     let l = l.clone();

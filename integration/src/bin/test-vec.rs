@@ -1,10 +1,16 @@
 use integration::{big_value, key, new_value};
-use skl::{sync::map::SkipMap, *};
+use skl::{
+  map::{sync::SkipMap, Map},
+  *,
+};
 
 fn main() {
   {
     const N: usize = 10;
-    let l = SkipMap::new(Options::new().with_capacity(1 << 20)).unwrap();
+    let l = Builder::new()
+      .with_capacity(1 << 20)
+      .alloc::<SkipMap>()
+      .unwrap();
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
@@ -30,7 +36,10 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = SkipMap::new(Options::new().with_capacity(120 << 20)).unwrap();
+    let l = Builder::new()
+      .with_capacity(120 << 20)
+      .alloc::<SkipMap>()
+      .unwrap();
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {

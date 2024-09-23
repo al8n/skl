@@ -1,19 +1,12 @@
 pub use rarena_allocator::unsync::Arena;
-use rarena_allocator::Allocator as _;
 
-use core::{
-  cell::UnsafeCell,
-  ops::{Bound, RangeBounds},
-};
+use core::cell::UnsafeCell;
 
 use super::{
-  allocator::{Link as BaseLink, *},
+  allocator::{Link as ContainerLink, *},
   common::*,
   *,
 };
-use crate::VacantBuffer;
-
-use either::Either;
 
 /// Versioned header of the skipmap.
 #[derive(Debug)]
@@ -252,7 +245,7 @@ pub struct Link {
   prev_offset: UnsafeCell<u32>,
 }
 
-impl BaseLink for Link {
+impl ContainerLink for Link {
   #[inline]
   fn new(next_offset: u32, prev_offset: u32) -> Self {
     Self {
@@ -414,6 +407,3 @@ pub mod trailed;
 
 /// A skipmap implementation without trailer and version support. See [`SkipMap`](map::SkipMap) for more information.
 pub mod map;
-
-#[cfg(test)]
-mod tests;

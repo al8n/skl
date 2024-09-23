@@ -1,14 +1,11 @@
 use core::{mem, ptr::NonNull};
 use std::boxed::Box;
 
+use builder::CompressionPolicy;
 use either::Either;
-use options::CompressionPolicy;
 use rarena_allocator::Allocator as _;
 
 use super::{allocator::*, common::*, *};
-
-#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
-use error::{bad_magic_version, bad_version, invalid_data};
 
 mod api;
 
@@ -34,7 +31,6 @@ pub struct SkipList<A: Allocator, C = Ascend> {
   data_offset: u32,
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   on_disk: bool,
-  opts: Options,
   /// If set to true by tests, then extra delays are added to make it easier to
   /// detect unusual race conditions.
   #[cfg(all(test, feature = "std"))]
@@ -70,7 +66,6 @@ where
       head: self.head,
       tail: self.tail,
       data_offset: self.data_offset,
-      opts: self.opts,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
       cmp: self.cmp.clone(),
@@ -85,14 +80,14 @@ where
   #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
     if self.arena.refs() == 1 {
-      if !self.opts.unify() {
+      if !self.arena.unify() {
         unsafe {
           let _ = Box::from_raw(self.meta.as_ptr());
         }
       }
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(windows)))]
-      if self.arena.is_mmap() {
+      if self.arena.is_mmap() && self.arena.options().lock_meta() {
         let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
       }
     }
@@ -103,135 +98,13 @@ impl<A, C> SkipList<A, C>
 where
   A: Allocator,
 {
-  fn new_in(arena: A, cmp: C, opts: Options) -> Result<Self, Error> {
-    let data_offset = Self::check_capacity(&arena, opts.max_height().into())?;
-    if arena.read_only() {
-      let (meta, head, tail) = Self::get_pointers(&arena);
-
-      return Ok(Self::construct(
-        arena,
-        meta,
-        head,
-        tail,
-        data_offset,
-        opts,
-        cmp,
-      ));
-    }
-
-    let meta = if opts.unify() {
-      arena.allocate_header(opts.magic_version())?
-    } else {
-      unsafe {
-        NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-          opts.magic_version(),
-        ))))
-      }
-    };
-
-    let max_height: u8 = opts.max_height().into();
-    let head = arena.allocate_full_node(max_height)?;
-    let tail = arena.allocate_full_node(max_height)?;
-
-    // Safety:
-    // We will always allocate enough space for the head node and the tail node.
-    unsafe {
-      // Link all head/tail levels together.
-      for i in 0..(max_height as usize) {
-        let head_link = head.tower::<A>(&arena, i);
-        let tail_link = tail.tower::<A>(&arena, i);
-        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
-      }
-    }
-
-    Ok(Self::construct(
-      arena,
-      meta,
-      head,
-      tail,
-      data_offset,
-      opts,
-      cmp,
-    ))
-  }
-
-  /// Checks if the arena has enough capacity to store the skiplist,
-  /// and returns the data offset.
   #[inline]
-  fn check_capacity(arena: &A, max_height: u8) -> Result<u32, Error> {
-    let offset = arena.data_offset();
-
-    let alignment = mem::align_of::<A::Header>();
-    let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-    let meta_end = meta_offset + mem::size_of::<A::Header>();
-
-    let alignment = mem::align_of::<A::Node>();
-    let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-    let head_end = head_offset
-      + mem::size_of::<A::Node>()
-      + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
-
-    let trailer_alignment = mem::align_of::<A::Trailer>();
-    let trailer_size = mem::size_of::<A::Trailer>();
-    let trailer_end = if trailer_size != 0 {
-      let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-      trailer_offset + trailer_size
-    } else {
-      head_end
-    };
-
-    let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
-    let tail_end = tail_offset
-      + mem::size_of::<A::Node>()
-      + mem::size_of::<<A::Node as Node>::Link>() * max_height as usize;
-    let trailer_end = if trailer_size != 0 {
-      let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-      trailer_offset + trailer_size
-    } else {
-      tail_end
-    };
-    if trailer_end > arena.capacity() {
-      return Err(Error::ArenaTooSmall);
-    }
-
-    Ok(trailer_end as u32)
-  }
-
-  #[inline]
-  fn get_pointers(
-    arena: &A,
-  ) -> (
-    NonNull<A::Header>,
-    <A::Node as Node>::Pointer,
-    <A::Node as Node>::Pointer,
-  ) {
-    unsafe {
-      let offset = arena.data_offset();
-      let meta = arena.get_aligned_pointer::<A::Header>(offset);
-
-      let offset = arena.offset(meta as _) + mem::size_of::<A::Header>();
-      let head_ptr = arena.get_aligned_pointer::<A::Node>(offset);
-      let head_offset = arena.offset(head_ptr as _);
-      let head = <<A::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
-
-      let (trailer_offset, _) = head.as_ref(arena).value_pointer().load();
-      let offset = trailer_offset as usize + mem::size_of::<A::Trailer>();
-      let tail_ptr = arena.get_aligned_pointer::<A::Node>(offset);
-      let tail_offset = arena.offset(tail_ptr as _);
-      let tail = <<A::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
-      (NonNull::new_unchecked(meta as _), head, tail)
-    }
-  }
-
-  #[inline]
-  fn construct(
+  pub(crate) fn construct(
     arena: A,
     meta: NonNull<A::Header>,
     head: <A::Node as Node>::Pointer,
     tail: <A::Node as Node>::Pointer,
     data_offset: u32,
-    opts: Options,
     cmp: C,
   ) -> Self {
     Self {
@@ -242,7 +115,6 @@ where
       head,
       tail,
       data_offset,
-      opts,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
       cmp,
@@ -260,11 +132,11 @@ impl<A, C> SkipList<A, C>
 where
   A: Allocator,
 {
-  fn new_node<'a, 'b: 'a, E>(
+  fn new_node<'a, E>(
     &'a self,
     version: Version,
     height: u32,
-    key: &Key<'a, 'b, A>,
+    key: &Key<'a, '_, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     trailer: A::Trailer,
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
@@ -479,10 +351,10 @@ where
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub(crate) fn gt<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn gt(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -504,10 +376,10 @@ where
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub(crate) fn lt<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn lt(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -528,10 +400,10 @@ where
   ///
   /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
   /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub(crate) fn ge<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn ge(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -553,10 +425,10 @@ where
   ///
   /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
   /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub(crate) fn le<'a, 'b: 'a>(
-    &'a self,
+  pub(crate) fn le(
+    &self,
     version: Version,
-    key: &'b [u8],
+    key: &[u8],
     ignore_invalid_trailer: bool,
   ) -> Option<<A::Node as Node>::Pointer> {
     unsafe {
@@ -769,11 +641,11 @@ where
   ///
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
-  unsafe fn find_splice<'a, 'b: 'a>(
+  unsafe fn find_splice<'a>(
     &'a self,
     version: Version,
-    key: &'b [u8],
-    ins: &mut Inserter<<A::Node as Node>::Pointer>,
+    key: &[u8],
+    ins: &mut Inserter<'a, <A::Node as Node>::Pointer>,
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>) {
     let list_height = self.meta().height() as u32;
@@ -842,7 +714,7 @@ where
 
   /// Find the splice for the given level.
   ///
-  /// # Safety
+  /// ## Safety
   /// - `level` is less than `MAX_HEIGHT`.
   /// - `start` must be allocated by self's arena.
   unsafe fn find_splice_for_level(
@@ -914,7 +786,7 @@ where
   }
 
   fn try_get_pointer(&self, next_node: &A::Node, next_key: &[u8], key: &[u8]) -> Option<Pointer> {
-    match self.opts.compression_policy() {
+    match self.arena.options().compression_policy() {
       CompressionPolicy::Fast => {
         if next_key.starts_with(key) {
           return Some(Pointer {
@@ -966,7 +838,7 @@ where
       return Err(Error::read_only());
     }
 
-    let max_height = self.opts.max_height();
+    let max_height = self.arena.options().max_height();
 
     if height > max_height {
       return Err(Error::invalid_height(height, max_height));
@@ -1332,7 +1204,7 @@ pub struct Inserter<'a, P> {
   _m: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, P: NodePointer> Default for Inserter<'a, P> {
+impl<P: NodePointer> Default for Inserter<'_, P> {
   #[inline]
   fn default() -> Self {
     Self {
@@ -1416,7 +1288,7 @@ pub(crate) enum Key<'a, 'b: 'a, A> {
   },
 }
 
-impl<'a, 'b: 'a, A: Allocator> Key<'a, 'b, A> {
+impl<A: Allocator> Key<'_, '_, A> {
   #[inline]
   pub(crate) fn on_fail(&self, arena: &A) {
     match self {
@@ -1428,7 +1300,7 @@ impl<'a, 'b: 'a, A: Allocator> Key<'a, 'b, A> {
   }
 }
 
-impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
+impl<A> Key<'_, '_, A> {
   /// Returns `true` if the key is a remove operation.
   #[inline]
   pub(crate) fn is_remove(&self) -> bool {
@@ -1439,7 +1311,7 @@ impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
   }
 }
 
-impl<'a, 'b: 'a, A: Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
+impl<A: Allocator> AsRef<[u8]> for Key<'_, '_, A> {
   #[inline]
   fn as_ref(&self) -> &[u8] {
     match self {
@@ -1452,7 +1324,7 @@ impl<'a, 'b: 'a, A: Allocator> AsRef<[u8]> for Key<'a, 'b, A> {
   }
 }
 
-impl<'a, 'b: 'a, A> Key<'a, 'b, A> {
+impl<'a, A> Key<'a, '_, A> {
   #[inline]
   const fn pointer(arena: &'a A, pointer: Pointer) -> Self {
     Self::Pointer {

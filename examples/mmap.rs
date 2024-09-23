@@ -1,4 +1,7 @@
-use skl::{sync::map::SkipMap, Options};
+use skl::{
+  map::{sync::SkipMap, Map},
+  Arena, Builder, Container,
+};
 
 pub fn key(i: usize) -> Vec<u8> {
   format!("{:05}", i).into_bytes()
@@ -10,14 +13,15 @@ pub fn new_value(i: usize) -> Vec<u8> {
 fn main() {
   const N: usize = 1000;
 
-  let mmap_options = skl::MmapOptions::default();
-  let open_options = skl::OpenOptions::default()
-    .create_new(Some(1 << 20))
-    .read(true)
-    .write(true);
-
-  let l =
-    unsafe { SkipMap::map_mut("test.wal", Options::new(), open_options, mmap_options).unwrap() };
+  let l = unsafe {
+    Builder::new()
+      .with_capacity(1 << 20)
+      .with_read(true)
+      .with_write(true)
+      .with_create_new(true)
+      .map_mut::<SkipMap, _>("test.wal")
+      .unwrap()
+  };
 
   for i in 0..N {
     let l = l.clone();

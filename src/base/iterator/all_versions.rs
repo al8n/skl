@@ -13,7 +13,7 @@ pub struct AllVersionsIter<'a, A: Allocator, C, Q: ?Sized = &'static [u8], R = c
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, A: Allocator, C, Q: Clone, R: Clone> Clone for AllVersionsIter<'a, A, C, Q, R> {
+impl<A: Allocator, C, Q: Clone, R: Clone> Clone for AllVersionsIter<'_, A, C, Q, R> {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
@@ -27,7 +27,7 @@ impl<'a, A: Allocator, C, Q: Clone, R: Clone> Clone for AllVersionsIter<'a, A, C
   }
 }
 
-impl<'a, A: Allocator, C, Q: Copy, R: Copy> Copy for AllVersionsIter<'a, A, C, Q, R> {}
+impl<A: Allocator, C, Q: Copy, R: Copy> Copy for AllVersionsIter<'_, A, C, Q, R> {}
 
 impl<'a, A, C> AllVersionsIter<'a, A, C>
 where
@@ -126,7 +126,7 @@ where
 
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn next_in(&mut self) -> Option<VersionedEntryRef<A>> {
+  fn next_in(&mut self) -> Option<VersionedEntryRef<'_, A>> {
     loop {
       unsafe {
         self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
@@ -170,7 +170,7 @@ where
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn prev(&mut self) -> Option<VersionedEntryRef<A>> {
+  fn prev(&mut self) -> Option<VersionedEntryRef<'_, A>> {
     loop {
       unsafe {
         self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
@@ -516,7 +516,7 @@ where
   }
 }
 
-impl<'a, A, C, Q, R> DoubleEndedIterator for AllVersionsIter<'a, A, C, Q, R>
+impl<A, C, Q, R> DoubleEndedIterator for AllVersionsIter<'_, A, C, Q, R>
 where
   A: Allocator,
   C: Comparator,

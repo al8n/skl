@@ -14,8 +14,6 @@ pub(crate) use sealed::*;
 mod sealed {
   use core::{ops::Deref, ptr};
 
-  use rarena_allocator::align_offset;
-
   use super::*;
 
   pub struct Pointer {
@@ -141,6 +139,7 @@ mod sealed {
 
     fn full(value_offset: u32, max_height: u8) -> Self;
 
+    #[inline]
     fn size(max_height: u8) -> usize {
       mem::size_of::<Self>() + (max_height as usize) * mem::size_of::<Self::Link>()
     }
@@ -189,6 +188,7 @@ mod sealed {
     /// ## Safety
     ///
     /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
     unsafe fn get_key<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b [u8] {
       arena.get_bytes(self.key_offset() as usize, self.key_size() as usize)
     }
@@ -245,11 +245,7 @@ mod sealed {
       }
 
       let (offset, _) = self.value_pointer().load();
-      let offset = align_offset::<Self::Trailer>(offset);
-      zerocopy::FromBytes::ref_from_prefix(
-        arena.get_bytes(offset as usize, mem::size_of::<Self::Trailer>()),
-      )
-      .unwrap()
+      &*arena.get_aligned_pointer(offset as usize)
     }
 
     /// ## Safety
@@ -265,11 +261,7 @@ mod sealed {
         return dangling_zst_ref();
       }
 
-      let offset = align_offset::<Self::Trailer>(offset);
-      zerocopy::FromBytes::ref_from_prefix(
-        arena.get_bytes(offset as usize, mem::size_of::<Self::Trailer>()),
-      )
-      .unwrap()
+      &*arena.get_aligned_pointer(offset as usize)
     }
 
     /// ## Safety
@@ -323,8 +315,6 @@ mod sealed {
     }
 
     fn offset(&self) -> u32;
-
-    // fn ptr(&self) -> *mut Self::Node;
 
     #[inline]
     unsafe fn tower<A: Sealed>(&self, arena: &A, idx: usize) -> &<Self::Node as Node>::Link {
@@ -543,6 +533,7 @@ mod sealed {
 
     fn new(arena: Self::Allocator, opts: Options) -> Self;
 
+    #[inline]
     fn align_offset<T>(offset: u32) -> u32 {
       rarena_allocator::align_offset::<T>(offset)
     }

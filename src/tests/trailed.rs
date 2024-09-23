@@ -413,28 +413,25 @@ where
   <M::Allocator as Sealed>::Trailer: Default,
 {
   use std::sync::Arc;
-  use wg::WaitGroup;
 
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 5;
   #[cfg(any(miri, feature = "loom"))]
   const N: usize = 5;
 
-  let wg = WaitGroup::new();
   for i in 0..N {
-    let wg = wg.add(1);
     let l = l.clone();
     std::thread::spawn(move || {
       let _ = l.get_or_insert(b"thekey", &make_value(i), Default::default());
-      wg.done();
     });
   }
 
-  wg.wait();
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
 
   let saw_value = Arc::new(crate::common::AtomicU32::new(0));
   for _ in 0..N {
-    let wg = wg.add(1);
     let l = l.clone();
     let saw_value = saw_value.clone();
     std::thread::spawn(move || {
@@ -450,11 +447,12 @@ where
       assert!((0..N).contains(&num));
       assert_eq!(ent.key(), b"thekey");
       saw_value.fetch_add(1, Ordering::SeqCst);
-      wg.done();
     });
   }
 
-  wg.wait();
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
 
   assert_eq!(N, saw_value.load(Ordering::SeqCst) as usize);
   assert_eq!(l.len(), 1);

@@ -83,7 +83,7 @@ pub trait List:
 
       return Ok(Self::from(SkipList::construct(
         arena,
-        Either::Right(meta),
+        meta,
         head,
         tail,
         data_offset,
@@ -92,12 +92,12 @@ pub trait List:
     }
 
     let meta = if arena.unify() {
-      Either::Right(arena.allocate_header(opts.magic_version())?)
+      arena.allocate_header(opts.magic_version())?
     } else {
       unsafe {
-        Either::Left(NonNull::new_unchecked(Box::into_raw(Box::new(
+        NonNull::new_unchecked(Box::into_raw(Box::new(
           <<Self::Allocator as AllocatorSealed>::Header as Header>::new(opts.magic_version()),
-        ))))
+        )))
       }
     };
 

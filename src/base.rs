@@ -25,8 +25,7 @@ type UpdateOk<'a, 'b, A> = Either<
 #[derive(Debug)]
 pub struct SkipList<A: Allocator, C = Ascend> {
   pub(crate) arena: A,
-  /// left is created from `Box::into_raw`, right is from the arena buffer.
-  meta: Either<NonNull<A::Header>, NonNull<A::Header>>,
+  meta: NonNull<A::Header>,
   head: <A::Node as Node>::Pointer,
   tail: <A::Node as Node>::Pointer,
   data_offset: u32,
@@ -81,9 +80,9 @@ where
   #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
     if self.arena.refs() == 1 {
-      if let Either::Left(ptr) = self.meta {
+      if !self.arena.unify() {
         unsafe {
-          let _ = Box::from_raw(ptr.as_ptr());
+          let _ = Box::from_raw(self.meta.as_ptr());
         }
       }
 
@@ -102,7 +101,7 @@ where
   #[inline]
   pub(crate) fn construct(
     arena: A,
-    meta: Either<NonNull<A::Header>, NonNull<A::Header>>,
+    meta: NonNull<A::Header>,
     head: <A::Node as Node>::Pointer,
     tail: <A::Node as Node>::Pointer,
     data_offset: u32,
@@ -125,12 +124,7 @@ where
   #[inline]
   const fn meta(&self) -> &A::Header {
     // Safety: the pointer is well aligned and initialized.
-    unsafe {
-      match &self.meta {
-        Either::Left(ptr) => ptr.as_ref(),
-        Either::Right(ptr) => ptr.as_ref(),
-      }
-    }
+    unsafe { self.meta.as_ref() }
   }
 }
 

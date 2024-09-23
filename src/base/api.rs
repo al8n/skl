@@ -146,19 +146,16 @@ impl<A: Allocator, C> SkipList<A, C> {
 
     let options = self.arena.options();
 
-    match &mut self.meta {
-      Either::Left(meta) => {
-        *meta = {
-          let magic_version = meta.as_ref().magic_version();
-          let _ = Box::from_raw(meta.as_ptr());
-          NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-            magic_version,
-          ))))
-        };
-      }
-      Either::Right(meta) => {
-        *meta = self.arena.allocate_header(meta.as_ref().magic_version())?;
-      }
+    if self.arena.unify() {
+      self.meta = self
+        .arena
+        .allocate_header(self.meta.as_ref().magic_version())?;
+    } else {
+      let magic_version = self.meta.as_ref().magic_version();
+      let _ = Box::from_raw(self.meta.as_ptr());
+      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
+        magic_version,
+      ))));
     }
 
     let max_height: u8 = options.max_height().into();

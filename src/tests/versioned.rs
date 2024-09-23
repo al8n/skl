@@ -617,7 +617,10 @@ where
   assert_eq!(n, l.len());
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(
+  feature = "std",
+  any(all(test, not(miri)), all_tests, test_sync_versioned,)
+))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
   M: VersionedMap + Clone + Send + 'static,
@@ -651,7 +654,10 @@ where
   }
 }
 
-#[cfg(all(feature = "std", not(miri)))]
+#[cfg(all(
+  all(feature = "std", not(miri)),
+  any(all(test, not(miri)), all_tests, test_sync_versioned,)
+))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
   M: VersionedMap + Clone + Send + 'static,
@@ -687,7 +693,10 @@ where
   while l.refs() > 1 {}
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(
+  feature = "std",
+  any(all(test, not(miri)), all_tests, test_sync_versioned,)
+))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
   M: VersionedMap + Clone + Send + 'static,

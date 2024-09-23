@@ -9,10 +9,32 @@ use super::{Container, Options};
 
 pub(crate) const KB: usize = 1 << 10;
 const ARENA_SIZE: usize = 1 << 20;
-#[cfg(feature = "std")]
-const BIG_ARENA_SIZE: usize = 120 << 20;
 pub(crate) const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
-#[cfg(feature = "std")]
+
+#[cfg(all(
+  all(feature = "std", not(miri)),
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_full,
+    test_sync_map,
+    test_sync_trailed,
+    test_sync_versioned,
+  )
+))]
+const BIG_ARENA_SIZE: usize = 120 << 20;
+
+#[cfg(all(
+  all(feature = "std", not(miri)),
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_full,
+    test_sync_map,
+    test_sync_trailed,
+    test_sync_versioned,
+  )
+))]
 pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
 
 #[cfg(any(all(test, not(miri)), all_tests, test_unsync_full, test_sync_full,))]

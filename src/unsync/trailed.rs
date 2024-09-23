@@ -8,7 +8,7 @@ mod tests {
 
   __container_tests!("unsync_trailed_map": SkipMap);
 
-  __trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
+  __trailed_map_tests!("unsync_trailed_map": SkipMap<u64>);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;

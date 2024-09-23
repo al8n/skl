@@ -30,6 +30,7 @@ pub struct FullNode<T> {
   key_offset: u32,
   // Immutable. No need to lock to access key.
   key_size_and_height: u32,
+
   version: u64,
   trailer: PhantomData<T>,
   // ** DO NOT REMOVE BELOW COMMENT**

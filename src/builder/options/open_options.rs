@@ -405,7 +405,7 @@ impl<C> Builder<C> {
 
   /// Configures the memory map to start at byte `offset` from the beginning of the file.
   ///
-  /// This option has no effect on anonymous memory maps or vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on anonymous memory maps or vec backed [`Arena`](crate::traits::Arena).
   ///
   /// By default, the offset is 0.
   ///
@@ -428,7 +428,7 @@ impl<C> Builder<C> {
   ///
   /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Windows.
   ///
-  /// This option has no effect on file-backed memory maps and vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on file-backed memory maps and vec backed [`Arena`](crate::traits::Arena).
   ///
   /// ## Example
   ///
@@ -453,7 +453,7 @@ impl<C> Builder<C> {
   /// default is requested. The requested length should be a multiple of this, or the mapping
   /// will fail.
   ///
-  /// This option has no effect on file-backed memory maps and vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on file-backed memory maps and vec backed [`Arena`](crate::traits::Arena).
   ///
   /// ## Example
   ///
@@ -476,7 +476,7 @@ impl<C> Builder<C> {
   ///
   /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Windows.
   ///
-  /// This option has no effect on vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on vec backed [`Arena`](crate::traits::Arena).
   ///
   /// ## Example
   ///
@@ -839,7 +839,7 @@ impl Options {
 
   /// Configures the memory map to start at byte `offset` from the beginning of the file.
   ///
-  /// This option has no effect on anonymous memory maps or vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on anonymous memory maps or vec backed [`Arena`](crate::traits::Arena).
   ///
   /// By default, the offset is 0.
   ///
@@ -862,7 +862,7 @@ impl Options {
   ///
   /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Windows.
   ///
-  /// This option has no effect on file-backed memory maps and vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on file-backed memory maps and vec backed [`Arena`](crate::traits::Arena).
   ///
   /// ## Example
   ///
@@ -887,7 +887,7 @@ impl Options {
   /// default is requested. The requested length should be a multiple of this, or the mapping
   /// will fail.
   ///
-  /// This option has no effect on file-backed memory maps and vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on file-backed memory maps and vec backed [`Arena`](crate::traits::Arena).
   ///
   /// ## Example
   ///
@@ -910,7 +910,7 @@ impl Options {
   ///
   /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Windows.
   ///
-  /// This option has no effect on vec backed [`Allocator`](crate::Allocator).
+  /// This option has no effect on vec backed [`Arena`](crate::traits::Arena).
   ///
   /// ## Example
   ///

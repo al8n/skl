@@ -135,13 +135,13 @@ pub trait Arena: List {
     self.as_ref().arena.reserved_bytes()
   }
 
-  /// Returns the reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
+  /// Returns the reserved bytes of the allocator specified in the [`Options::with_reserved`].
   #[inline]
   fn reserved_slice(&self) -> &[u8] {
     self.as_ref().arena.reserved_slice()
   }
 
-  /// Returns the mutable reserved bytes of the allocator specified in the [`ArenaOptions::with_reserved`].
+  /// Returns the mutable reserved bytes of the allocator specified in the [`Options::with_reserved`].
   ///
   /// ## Safety
   /// - The caller need to make sure there is no data-race
@@ -188,9 +188,9 @@ pub trait Arena: List {
     self.as_ref().data_offset()
   }
 
-  /// Returns the magic version number of the [`SkipMap`].
+  /// Returns the magic version number of the [`Arena`].
   ///
-  /// This value can be used to check the compatibility for application using [`SkipMap`].
+  /// This value can be used to check the compatibility for application using [`Arena`].
   #[inline]
   fn magic_version(&self) -> u16 {
     self.as_ref().magic_version()

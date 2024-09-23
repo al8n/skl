@@ -434,7 +434,7 @@ macro_rules! builder {
   ($($name:ident($size:ident)),+ $(,)?) => {
     $(
       paste::paste! {
-        #[doc = "A " [< $name: snake>] " builder for the [`SkipList`], which requires the " [< $name: snake>] " size for accurate allocation and a closure to build the " [< $name: snake>]]
+        #[doc = "A " [< $name: snake>] " builder for the `SkipMap`s, which requires the " [< $name: snake>] " size for accurate allocation and a closure to build the " [< $name: snake>]]
         #[derive(Copy, Clone, Debug)]
         pub struct [< $name Builder >] <F> {
           size: $size,

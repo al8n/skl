@@ -23,7 +23,7 @@ where
   <Self::Allocator as AllocatorSealed>::Node: WithVersion + WithTrailer,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert`](SkipMap::get_or_insert), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert`](FullMap::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -39,7 +39,7 @@ where
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height`](SkipMap::get_or_insert_at_height), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height`](FullMap::get_or_insert_at_height), this method will update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -68,7 +68,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_value_builder`](SkipMap::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_value_builder`](FullMap::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -132,7 +132,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height_with_value_builder`](SkipMap::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height_with_value_builder`](FullMap::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -195,7 +195,7 @@ where
 
   /// Inserts a new key-value pair if it does not yet exist.
   ///
-  /// Unlike [`insert`](SkipMap::insert), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert`](FullMap::insert), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -212,7 +212,7 @@ where
 
   /// Inserts a new key-value pair at height if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height`](SkipMap::insert_at_height), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height`](FullMap::insert_at_height), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -232,7 +232,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_value_builder`](SkipMap::insert_with_value_builder), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_value_builder`](FullMap::insert_with_value_builder), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -296,7 +296,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_value_builder`](SkipMap::insert_at_height_with_value_builder), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_value_builder`](FullMap::insert_at_height_with_value_builder), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -362,7 +362,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](FullMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -431,7 +431,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](FullMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -503,7 +503,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_builders`](SkipMap::insert_with_builders), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_builders`](FullMap::insert_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -570,7 +570,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_builders`](SkipMap::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_builders`](FullMap::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -639,7 +639,7 @@ where
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove`](SkipMap::get_or_remove), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove`](FullMap::get_or_remove), this method will remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
@@ -666,7 +666,7 @@ where
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove_at_height`](SkipMap::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove_at_height`](FullMap::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
@@ -688,7 +688,7 @@ where
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove`](FullMap::compare_remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -703,7 +703,7 @@ where
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height`](FullMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -734,7 +734,7 @@ where
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove`](FullMap::compare_remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -789,7 +789,7 @@ where
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`compare_remove_at_height`](FullMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.

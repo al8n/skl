@@ -1,28 +1,26 @@
 use super::Height;
 
-/// Error type for the [`SkipMap`](crate::SkipMap).
-///
-/// [`SkipMap`]: crate::SkipMap
+/// Error type for the `SkipMap`s.
 #[derive(Debug)]
 pub enum Error {
   /// Indicates that the arena is full
   Arena(rarena_allocator::Error),
 
-  /// Indicates that the value is too large to be stored in the [`SkipMap`](super::SkipMap).
+  /// Indicates that the value is too large to be stored in the `SkipMap`.
   ValueTooLarge(u64),
 
-  /// Indicates that the key is too large to be stored in the [`SkipMap`](super::SkipMap).
+  /// Indicates that the key is too large to be stored in the `SkipMap`.
   KeyTooLarge(u64),
 
-  /// Indicates that the entry is too large to be stored in the [`SkipMap`](super::SkipMap).
+  /// Indicates that the entry is too large to be stored in the `SkipMap`.
   EntryTooLarge(u64),
 
-  /// Indicates that the height of the [`SkipMap`](super::SkipMap) is too large.
+  /// Indicates that the height of the `SkipMap` is too large.
   InvalidHeight {
-    /// The height of the [`SkipMap`](super::SkipMap).
+    /// The height of the `SkipMap`.
     height: Height,
 
-    /// The max height of the [`SkipMap`](super::SkipMap).
+    /// The max height of the `SkipMap`.
     max_height: Height,
   },
 

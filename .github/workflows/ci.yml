@@ -338,6 +338,30 @@ jobs:
       - name: Miri
         run: |
           bash ci/miri_sb.sh ${{ matrix.target }} ${{ matrix.cfg }}
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cache cargo build and registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-latest-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ubuntu-latest-docs-
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.nightly }}
+          override: true
+      - name: "doc --lib --all-features"
+        run: cargo doc --lib --no-deps --all-features
+        env:
+          RUSTFLAGS: --cfg docsrs
+          RUSTDOCFLAGS: --cfg docsrs -Dwarnings
 
   coverage:
     name: cargo tarpaulin
@@ -349,6 +373,7 @@ jobs:
       - test
       - sanitizer
       - valgrind
+      - docs
     steps:
       - uses: actions/checkout@v3
       - name: Install latest nightly

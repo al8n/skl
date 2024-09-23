@@ -92,10 +92,10 @@ impl<C> Builder<C> {
     self
   }
 
-  /// Set the magic version of the [`Map`](super::Map).
+  /// Set the magic version of the [`Arena`](crate::traits::Arena).
   ///
-  /// This is used by the application using [`Map`](super::Map)
-  /// to ensure that it doesn't open the [`Map`](super::Map)
+  /// This is used by the application using [`Arena`](crate::traits::Arena)
+  /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
   /// with incompatible data format.
   ///  
   /// The default value is `0`.
@@ -113,7 +113,7 @@ impl<C> Builder<C> {
     self
   }
 
-  /// Set the [`Freelist`] kind of the [`Map`](super::Map).
+  /// Set the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`Freelist::Optimistic`].
   ///
@@ -130,7 +130,7 @@ impl<C> Builder<C> {
     self
   }
 
-  /// Set the compression policy of the key in [`Map`](super::Map).
+  /// Set the compression policy of the key in [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`CompressionPolicy::Fast`].
   ///
@@ -147,13 +147,13 @@ impl<C> Builder<C> {
     self
   }
 
-  /// Set if use the unify memory layout of the [`Map`](super::Map).
+  /// Set if use the unify memory layout of the [`Arena`](crate::traits::Arena).
   ///
-  /// File backed [`Map`](super::Map) has different memory layout with other kind backed [`Map`](super::Map),
-  /// set this value to `true` will unify the memory layout of the [`Map`](super::Map), which means
-  /// all kinds of backed [`Map`](super::Map) will have the same memory layout.
+  /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+  /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+  /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
   ///
-  /// This value will be ignored if the [`Map`](super::Map) is backed by a file backed memory map.
+  /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
   ///
   /// The default value is `false`.
   ///
@@ -332,13 +332,13 @@ impl<C> Builder<C> {
     self.opts.capacity()
   }
 
-  /// Get if use the unify memory layout of the [`Map`](super::Map).
+  /// Get if use the unify memory layout of the [`Arena`](crate::traits::Arena).
   ///
-  /// File backed [`Map`](super::Map) has different memory layout with other kind backed [`Map`](super::Map),
-  /// set this value to `true` will unify the memory layout of the [`Map`](super::Map), which means
-  /// all kinds of backed [`Map`](super::Map) will have the same memory layout.
+  /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+  /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+  /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
   ///
-  /// This value will be ignored if the [`Map`](super::Map) is backed by a file backed memory map.
+  /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
   ///  
   /// The default value is `false`.
   ///
@@ -356,10 +356,10 @@ impl<C> Builder<C> {
     self.opts.unify
   }
 
-  /// Get the magic version of the [`Map`](super::Map).
+  /// Get the magic version of the [`Arena`](crate::traits::Arena).
   ///
-  /// This is used by the application using [`Map`](super::Map)
-  /// to ensure that it doesn't open the [`Map`](super::Map)
+  /// This is used by the application using [`Arena`](crate::traits::Arena)
+  /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
   /// with incompatible data format.
   ///
   /// The default value is `0`.
@@ -378,7 +378,7 @@ impl<C> Builder<C> {
     self.opts.magic_version
   }
 
-  /// Get the [`Freelist`] kind of the [`Map`](super::Map).
+  /// Get the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`Freelist::Optimistic`].
   ///
@@ -396,7 +396,7 @@ impl<C> Builder<C> {
     self.opts.freelist
   }
 
-  /// Get the compression policy of the key in [`Map`](super::Map).
+  /// Get the compression policy of the key in [`Arena`](crate::traits::Arena).
   ///
   /// The default value is [`CompressionPolicy::Fast`].
   ///
@@ -416,7 +416,7 @@ impl<C> Builder<C> {
 }
 
 impl<C: Comparator> Builder<C> {
-  /// Create a new [`Map`] which is backed by a `AlignedVec`.
+  /// Create a new map which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
   /// it does not mean the skiplist can store `cap` entries.

@@ -1,6 +1,6 @@
 use super::*;
 
-/// A trait which can be constructed from a [`Builder`](super::Builder) and some options.
+/// The `Container` trait provides a set of read methods for interacting with the map.
 pub trait Container
 where
   Self: Arena,

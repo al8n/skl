@@ -21,7 +21,7 @@ where
   <<Self as List>::Allocator as AllocatorSealed>::Node: WithTrailer,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert`](SkipMap::get_or_insert), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert`](TrailedMap::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -36,7 +36,7 @@ where
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height`](SkipMap::get_or_insert_at_height), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height`](TrailedMap::get_or_insert_at_height), this method will update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
@@ -65,7 +65,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_value_builder`](SkipMap::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_value_builder`](TrailedMap::get_or_insert_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -122,7 +122,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_at_height_with_value_builder`](SkipMap::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_at_height_with_value_builder`](TrailedMap::get_or_insert_at_height_with_value_builder), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -188,7 +188,7 @@ where
 
   /// Inserts a new key-value pair if it does not yet exist.
   ///
-  /// Unlike [`insert`](SkipMap::insert), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert`](TrailedMap::insert), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -204,7 +204,7 @@ where
 
   /// Inserts a new key-value pair at height if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height`](SkipMap::insert_at_height), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height`](TrailedMap::insert_at_height), this method will not update the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
@@ -223,7 +223,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_value_builder`](SkipMap::insert_with_value_builder), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_value_builder`](TrailedMap::insert_with_value_builder), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -285,7 +285,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_value_builder`](SkipMap::insert_at_height_with_value_builder), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_value_builder`](TrailedMap::insert_at_height_with_value_builder), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -350,7 +350,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](TrailedMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -412,7 +412,7 @@ where
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
-  /// Unlike [`get_or_insert_with_builders`](SkipMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
+  /// Unlike [`get_or_insert_with_builders`](TrailedMap::get_or_insert_with_builders), this method will update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to insert a key and you know the key size and value size but you do not have the key and value
   /// at this moment.
@@ -483,7 +483,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_with_builders`](SkipMap::insert_with_builders), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_with_builders`](TrailedMap::insert_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -548,7 +548,7 @@ where
 
   /// Inserts a new key if it does not yet exist.
   ///
-  /// Unlike [`insert_at_height_with_builders`](SkipMap::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
+  /// Unlike [`insert_at_height_with_builders`](TrailedMap::insert_at_height_with_builders), this method will not update the value if the key with the given version already exists.
   ///
   /// This method is useful when you want to get_or_insert a key and you know the value size but you do not have the value
   /// at this moment.
@@ -615,7 +615,7 @@ where
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove`](SkipMap::compare_remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`remove`](TrailedMap::remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
@@ -629,7 +629,7 @@ where
   }
 
   /// Gets or removes the key-value pair if it exists.
-  /// Unlike [`compare_remove_at_height`](SkipMap::compare_remove_at_height), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`remove_at_height`](TrailedMap::remove_at_height), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.

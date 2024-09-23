@@ -30,7 +30,7 @@ where
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](SkipMap::contains_key_versioned).
+  /// you can use [`contains_key_versioned`](VersionedContainer::contains_key_versioned).
   ///
   /// ## Example
   ///
@@ -87,7 +87,7 @@ where
   /// Returns the value associated with the given key, if it exists.
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
-  /// you can use [`get_versioned`](SkipMap::get_versioned).
+  /// you can use [`get_versioned`](VersionedContainer::get_versioned).
   ///
   /// ## Example
   ///

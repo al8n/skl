@@ -1620,10 +1620,25 @@ where
     assert!(old.is_none());
   }
 
+  for i in 100..150 {
+    let k = key(i);
+    let res = l
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
+      .unwrap();
+    assert!(res.is_none());
+  }
+
   for i in 0..100 {
     let k = key(i);
     let ent = l.get(MIN_VERSION, &k);
     assert!(ent.is_none());
+  }
+
+  for i in 100..150 {
+    let k = key(i);
+    let ent = l.get_versioned(MIN_VERSION, &k).unwrap();
+    assert_eq!(ent.key(), k);
+    assert_eq!(ent.value(), None);
   }
 }
 
@@ -1654,10 +1669,25 @@ where
     assert!(old.is_none());
   }
 
+  for i in 100..150 {
+    let k = key(i);
+    let res = l
+      .compare_remove(MIN_VERSION, &k, Ordering::SeqCst, Ordering::Acquire)
+      .unwrap();
+    assert!(res.is_none());
+  }
+
   for i in 0..100 {
     let k = key(i);
     let ent = l.get(MIN_VERSION, &k);
     assert!(ent.is_none());
+  }
+
+  for i in 100..150 {
+    let k = key(i);
+    let ent = l.get_versioned(MIN_VERSION, &k).unwrap();
+    assert_eq!(ent.key(), k);
+    assert_eq!(ent.value(), None);
   }
 }
 

@@ -124,6 +124,7 @@ impl<C: Comparator> Builder<C> {
     #[allow(clippy::bind_instead_of_map)]
     opts
       .to_arena_options()
+      .with_unify(true)
       .with_maximum_alignment(node_align.max(trailer_align))
       .map_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {

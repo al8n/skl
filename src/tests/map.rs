@@ -343,6 +343,43 @@ where
   }
 }
 
+#[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_map,)))]
+pub(crate) fn concurrent_basic2<M>(l: M)
+where
+  M: Map + Clone + Send + 'static,
+  M::Comparator: Comparator,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  #[cfg(not(any(miri, feature = "loom")))]
+  const N: usize = 1000;
+  #[cfg(any(miri, feature = "loom"))]
+  const N: usize = 5;
+
+  for i in 0..N {
+    let l1 = l.clone();
+    let l2 = l.clone();
+    std::thread::spawn(move || {
+      let _ = l1.insert(&key(i), &new_value(i));
+    });
+    std::thread::spawn(move || {
+      let _ = l2.insert(&key(i), &new_value(i));
+    });
+  }
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
+  for i in 0..N {
+    let l = l.clone();
+    std::thread::spawn(move || {
+      let k = key(i);
+      assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
+    });
+  }
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
+}
+
 #[cfg(all(
   all(feature = "std", not(miri)),
   any(all(test, not(miri)), all_tests, test_sync_map,)
@@ -1360,6 +1397,8 @@ macro_rules! __map_tests {
     __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       #[cfg(feature = "std")]
       concurrent_basic,
+      #[cfg(feature = "std")]
+      concurrent_basic2,
       #[cfg(feature = "std")]
       concurrent_one_key,
     });

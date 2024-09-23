@@ -1394,7 +1394,7 @@ macro_rules! __map_tests {
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]

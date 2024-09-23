@@ -65,8 +65,16 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
 
 - Does the on-disk version `SkipMap` ensure crash safety or power failure resilience?
   
-  No, on-disk version `SkipMap` does not ensure crash safety or power failure resilience. Hence, it is not recommended to directly
+  No, If you really need a crash safe, power failure resilience, concurrent-safe and durable ordered write-ahead log implementation,
+  see [`orderwal`](https://github.com/al8n/orderwal) project.
+  
+  On-disk version `SkipMap` does not ensure crash safety or power failure resilience. Hence, it is not recommended to directly
   use the `SkipMap` as a durable database. It is recommended to use the on-disk version `SkipMap` as a final frozen file for quick lookup.
+
+## Related projects
+
+- [`aol`](https://github.com/al8n/aol): Yet another generic purpose, append-only write-ahead log implementation.
+- [`orderwal`](https://github.com/al8n/orderwal): A generic-purpose, atomic, ordered, zero-copy, concurrent-safe, pre-allocate style (memory map) write-ahead-log for developing databases.
 
 ## Tests
 
@@ -76,30 +84,25 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
     cargo test --all-features
     ```
 
-- `miri`:
+- `miri` (Stack Borrows)
 
     ```sh
-    RUSTFLAGS = "--cfg all_tests" cargo miri test --all-features
+    MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check" \
+    RUSTFLAGS = "--cfg all_tests" \
+    cargo miri test --all-features
+    ```
+
+- `miri` (Tree Borrows)
+
+    ```sh
+    MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check -Zmiri-tree-borrows" \
+    RUSTFLAGS = "--cfg all_tests" \
+    cargo miri test --all-features
     ```
 
 ## Support Platforms
 
-| targets                       |   status  |
-|:-----------------------------:|:---------:|
-| aarch64-linux-android         |  &#9989;  |
-| aarch64-unknown-linux-gnu     |  &#9989;  |
-| aarch64-unknown-linux-musl    |  &#9989;  |
-| i686-pc-windows-gnu           |  &#9989;  |
-| i686-linux-android            |  &#9989;  |
-| i686-unknown-linux-gnu        |  &#9989;  |
-| mips64-unknown-linux-gnuabi64 |  &#9989;  |
-| powerpc64-unknown-linux-gnu   |  &#9989;  |
-| riscv64gc-unknown-linux-gnu   |  &#9989;  |
-| wasm32-unknown-unknown        |  &#9989;  |
-| wasm32-unknown-emscripten     |  &#9989;  |
-| x86_64-unknown-linux-gnu      |  &#9989;  |
-| x86_64-pc-windows-gnu         |  &#9989;  |
-| x86_64-linux-android          |  &#9989;  |
+See `cross` section in [GitHub CI file](https://github.com/al8n/skl/blob/main/.github/workflows/ci.yml#L69).
 
 ## Pedigree
 

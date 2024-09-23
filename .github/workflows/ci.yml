@@ -84,22 +84,33 @@ jobs:
           - riscv64gc-unknown-linux-gnu
           - wasm32-unknown-unknown
           - wasm32-unknown-emscripten
+          - wasm32-wasi
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Cache cargo build and registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cross-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cross-
       - name: Install Rust
         run: rustup update stable && rustup default stable
       - name: cross build --target ${{ matrix.target }}
         run: |
           cargo install cross
           cross build --target ${{ matrix.target }}
-        if: matrix.target != 'wasm32-unknown-unknown'
+        if: matrix.target != 'wasm32-unknown-unknown' && matrix.target != 'wasm32-wasi'
       # WASM support
       - name: cargo build --target ${{ matrix.target }}
         run: |
           rustup target add ${{ matrix.target }}
           cargo build --target ${{ matrix.target }}
-        if: matrix.target == 'wasm32-unknown-unknown'
+        if: matrix.target == 'wasm32-unknown-unknown' || matrix.target == 'wasm32-wasi'
       # - name: cargo build --target ${{ matrix.target }}
       #   run: |
       #     rustup target add ${{ matrix.target }}
@@ -294,7 +305,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          # - macos-latest
+          - macos-latest
         target:
           - x86_64-unknown-linux-gnu
           - i686-unknown-linux-gnu

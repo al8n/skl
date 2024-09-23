@@ -7,7 +7,7 @@ repository = "https://github.com/al8n/skl"
 description = "A lock-free thread-safe concurrent ARENA based (heap backend or memory map backend) skiplist implementation which helps develop MVCC memtable for LSM-Tree."
 documentation = "https://docs.rs/skl"
 homepage = "https://github.com/al8n/skl"
-keywords = ["skiplist", "lock-free", "memtable", "concurrency", "arena"]
+keywords = ["skiplist", "lock-free", "memtable", "crossbeam-skiplist", "arena"]
 categories = ["database", "data-structures", "concurrency", "no-std"]
 license = "MIT OR Apache-2.0"
 

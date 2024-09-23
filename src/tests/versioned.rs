@@ -1740,7 +1740,7 @@ where
 #[doc(hidden)]
 macro_rules! __versioned_map_tests {
   ($prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    __unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
       basic,
       #[cfg(not(miri))]
       basic_large,
@@ -1795,7 +1795,7 @@ macro_rules! __versioned_map_tests {
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    __unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]

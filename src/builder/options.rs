@@ -28,6 +28,7 @@ pub struct Options {
   freelist: Freelist,
   policy: CompressionPolicy,
   reserved: u32,
+  lock_meta: bool,
 
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   create_new: bool,
@@ -72,6 +73,7 @@ impl Options {
       freelist: Freelist::Optimistic,
       policy: CompressionPolicy::Fast,
       reserved: 0,
+      lock_meta: true,
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       create_new: false,
@@ -114,6 +116,30 @@ impl Options {
   #[inline]
   pub const fn with_reserved(mut self, reserved: u32) -> Self {
     self.reserved = reserved;
+    self
+  }
+
+  /// Set if lock the meta of the ARENA in the memory to prevent OS from swapping out the first page of ARENA.
+  /// When using memory map backed ARENA, the meta of the ARENA
+  /// is in the first page, meta is frequently accessed,
+  /// lock (`mlock` on the first page) the meta can reduce the page fault,
+  /// but yes, this means that one `SkipMap` will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// Default is `true`.
+  ///
+  /// This configuration has no effect on windows and vec backed ARENA.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_lock_meta(false);
+  /// ```
+  #[inline]
+  pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
+    self.lock_meta = lock_meta;
     self
   }
 
@@ -283,6 +309,27 @@ impl Options {
   #[inline]
   pub const fn reserved(&self) -> u32 {
     self.reserved
+  }
+
+  /// Get if lock the meta of the ARENA in the memory to prevent OS from swapping out the first page of ARENA.
+  /// When using memory map backed ARENA, the meta of the ARENA
+  /// is in the first page, meta is frequently accessed,
+  /// lock (`mlock` on the first page) the meta can reduce the page fault,
+  /// but yes, this means that one `SkipMap` will have one page are locked in memory,
+  /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::Options;
+  ///
+  /// let opts = Options::new().with_lock_meta(false);
+  ///
+  /// assert_eq!(opts.lock_meta(), false);
+  /// ```
+  #[inline]
+  pub const fn lock_meta(&self) -> bool {
+    self.lock_meta
   }
 
   /// Returns the maximum size of the value.

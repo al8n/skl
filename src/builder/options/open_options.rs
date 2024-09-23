@@ -62,10 +62,13 @@ impl<C: Comparator> Builder<C> {
           .and_then(|map| {
             // Lock the memory of first page to prevent it from being swapped out.
             #[cfg(not(windows))]
-            unsafe {
-              let arena = map.allocator();
-              arena.mlock(0, arena.page_size().min(arena.capacity()))?;
+            if opts.lock_meta {
+              unsafe {
+                let arena = map.allocator();
+                arena.mlock(0, arena.page_size().min(arena.capacity()))?;
+              }
             }
+
             Ok(map)
           })
       })
@@ -137,9 +140,11 @@ impl<C: Comparator> Builder<C> {
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
               #[cfg(not(windows))]
-              unsafe {
-                let allocator = map.allocator();
-                allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
+              if opts.lock_meta {
+                unsafe {
+                  let allocator = map.allocator();
+                  allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
+                }
               }
 
               Ok(map)
@@ -218,9 +223,11 @@ impl<C: Comparator> Builder<C> {
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
               #[cfg(not(windows))]
-              unsafe {
-                let allocator = map.allocator();
-                allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
+              if opts.lock_meta {
+                unsafe {
+                  let allocator = map.allocator();
+                  allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
+                }
               }
 
               Ok(map)

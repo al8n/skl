@@ -119,7 +119,6 @@ impl<C: Comparator> Builder<C> {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
     let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
     let magic_version = opts.magic_version();
-    let opts = opts.with_unify(true);
 
     #[allow(clippy::bind_instead_of_map)]
     opts
@@ -200,7 +199,6 @@ impl<C: Comparator> Builder<C> {
     let magic_version = opts.magic_version();
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
-    let opts = opts.with_unify(true);
 
     #[allow(clippy::bind_instead_of_map)]
     opts

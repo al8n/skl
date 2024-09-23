@@ -328,13 +328,18 @@ where
       l.get_or_insert(&key(i), &new_value(i)).unwrap();
     });
   }
-  while l.refs() > 1 {}
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
       assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
     });
+  }
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
   }
 }
 
@@ -360,7 +365,9 @@ where
       l.get_or_insert(&key(i), &big_value(i)).unwrap();
     });
   }
-  while l.refs() > 1 {}
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
   // assert_eq!(N, l.len());
   for i in 0..N {
     let l = l.clone();
@@ -369,7 +376,9 @@ where
       assert_eq!(l.get(&k).unwrap().value(), big_value(i), "broken: {i}");
     });
   }
-  while l.refs() > 1 {}
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
 }
 
 #[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_map,)))]

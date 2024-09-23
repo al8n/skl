@@ -317,10 +317,10 @@ where
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  #[cfg(not(any(miri, feature = "loom")))]
+  #[cfg(not(miri))]
   const N: usize = 1000;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
+  #[cfg(miri)]
+  const N: usize = 200;
 
   for i in 0..N {
     let l = l.clone();
@@ -350,10 +350,10 @@ where
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  #[cfg(not(any(miri, feature = "loom")))]
+  #[cfg(not(miri))]
   const N: usize = 1000;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
+  #[cfg(miri)]
+  const N: usize = 200;
 
   for i in 0..N {
     let l1 = l.clone();
@@ -391,10 +391,10 @@ where
 
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 100;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
+  #[cfg(not(miri))]
+  const N: usize = 1000;
+  #[cfg(miri)]
+  const N: usize = 200;
 
   for i in 0..N {
     let l = l.clone();

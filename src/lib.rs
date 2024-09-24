@@ -61,6 +61,10 @@ pub mod iter {
   test_sync_map,
   test_sync_versioned,
   test_sync_trailed,
+  test_sync_full_concurrent,
+  test_sync_map_concurrent,
+  test_sync_versioned_concurrent,
+  test_sync_trailed_concurrent,
 ))]
 mod tests;
 

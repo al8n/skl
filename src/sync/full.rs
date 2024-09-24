@@ -10,6 +10,13 @@ mod tests {
   __full_map_tests!(go "sync_full_map": SkipMap<u64, Ascend>);
 }
 
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_full_concurrent,))]
+mod concurrent_tests {
+  use super::*;
+
+  __full_map_tests!(go "sync_full_map": SkipMap<u64, Ascend>);
+}
+
 type Allocator<T> = GenericAllocator<VersionedMeta, FullNode<T>, Arena>;
 type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
 

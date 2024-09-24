@@ -10,6 +10,13 @@ mod tests {
   __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
 }
 
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,))]
+mod concurrent_tests {
+  use super::*;
+
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
+}
+
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;
 type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
 

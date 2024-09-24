@@ -632,7 +632,10 @@ where
   assert_eq!(n, l.len());
 }
 
-#[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_full,)))]
+#[cfg(all(
+  feature = "std",
+  any(all(test, not(miri)), all_tests, test_sync_full_concurrent,)
+))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
   M: FullMap + Clone + Send + 'static,
@@ -671,7 +674,10 @@ where
   }
 }
 
-#[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_full,)))]
+#[cfg(all(
+  feature = "std",
+  any(all(test, not(miri)), all_tests, test_sync_full_concurrent,)
+))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
   M: FullMap + Clone + Send + 'static,
@@ -722,7 +728,7 @@ where
 
 #[cfg(all(
   all(feature = "std", not(miri)),
-  any(all(test, not(miri)), all_tests, test_sync_full,)
+  any(all(test, not(miri)), all_tests, test_sync_full_concurrent,)
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
@@ -763,7 +769,10 @@ where
   }
 }
 
-#[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_full,)))]
+#[cfg(all(
+  feature = "std",
+  any(all(test, not(miri)), all_tests, test_sync_full_concurrent,)
+))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
   M: FullMap + Clone + Send + 'static,
@@ -818,7 +827,10 @@ where
   assert_eq!(l.len(), 1);
 }
 
-#[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_full,)))]
+#[cfg(all(
+  feature = "std",
+  any(all(test, not(miri)), all_tests, test_sync_full_concurrent,)
+))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
   M: FullMap + Clone + Send + 'static,

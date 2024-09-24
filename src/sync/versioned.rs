@@ -7,6 +7,12 @@ mod tests {
   __container_tests!("sync_versioned_map": SkipMap);
 
   __versioned_map_tests!("sync_versioned_map": SkipMap<Ascend>);
+}
+
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned_concurrent,))]
+mod concurrent_tests {
+  use super::*;
+
   __versioned_map_tests!(go "sync_versioned_map": SkipMap<Ascend>);
 }
 

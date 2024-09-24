@@ -95,4 +95,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(test_sync_versioned)',
   'cfg(test_sync_trailed)',
   'cfg(test_sync_map)',
+  'cfg(test_sync_full_concurrent)',
+  'cfg(test_sync_versioned_concurrent)',
+  'cfg(test_sync_trailed_concurrent)',
+  'cfg(test_sync_map_concurrent)',
 ] }

@@ -326,7 +326,7 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
@@ -364,7 +364,7 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
@@ -412,7 +412,7 @@ where
 
 #[cfg(all(
   all(feature = "std", not(miri)),
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
@@ -451,7 +451,7 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
@@ -508,7 +508,7 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where

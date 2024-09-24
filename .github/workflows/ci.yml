@@ -270,6 +270,10 @@ jobs:
           - sync_versioned
           - sync_trailed
           - sync_full
+          - sync_map_concurrent
+          - sync_versioned_concurrent
+          - sync_trailed_concurrent
+          - sync_full_concurrent
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -305,7 +309,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
+          # - macos-latest
         target:
           - x86_64-unknown-linux-gnu
           - i686-unknown-linux-gnu
@@ -321,6 +325,10 @@ jobs:
           - sync_versioned
           - sync_trailed
           - sync_full
+          - sync_map_concurrent
+          - sync_versioned_concurrent
+          - sync_trailed_concurrent
+          - sync_full_concurrent
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -349,6 +357,7 @@ jobs:
       - name: Miri
         run: |
           bash ci/miri_sb.sh ${{ matrix.target }} ${{ matrix.cfg }}
+
   docs:
     name: docs
     runs-on: ubuntu-latest

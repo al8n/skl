@@ -498,10 +498,12 @@ impl Options {
   pub(super) const fn to_arena_options(&self) -> ArenaOptions {
     let opts = ArenaOptions::new()
       .with_magic_version(CURRENT_VERSION)
-      .with_freelist(self.freelist())
       .with_reserved(self.reserved())
       .with_unify(self.unify())
       .maybe_capacity(self.capacity);
+
+    #[cfg(feature = "experimental")]
+    let opts = opts.with_freelist(self.freelist());
 
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     {

@@ -19,6 +19,7 @@ mod sealed {
   pub struct Pointer {
     pub(crate) offset: u32,
     pub(crate) size: u32,
+    #[allow(dead_code)]
     pub(crate) height: Option<u8>,
   }
 
@@ -430,8 +431,10 @@ mod sealed {
         })
     }
 
+    #[allow(dead_code)]
     fn set_key_size_and_height(&self, key_size_and_height: u32);
 
+    #[allow(dead_code)]
     fn set_key_offset(&self, key_offset: u32);
 
     fn key_size_and_height(&self) -> u32;

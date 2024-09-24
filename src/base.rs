@@ -926,7 +926,7 @@ where
       }
     };
 
-    let (unlinked_node, mut deallocator) = self
+    let (unlinked_node, deallocator) = self
       .new_node(version, height, &k, value_builder, trailer)
       .inspect_err(|_| {
         k.on_fail(&self.arena);

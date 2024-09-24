@@ -7,7 +7,6 @@ mod tests {
   __container_tests!("sync_full_map": SkipMap);
 
   __full_map_tests!("sync_full_map": SkipMap<u64, Ascend>);
-  __full_map_tests!(go "sync_full_map": SkipMap<u64, Ascend>);
 }
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_full_concurrent,))]

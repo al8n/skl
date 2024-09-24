@@ -7,7 +7,6 @@ mod tests {
   __container_tests!("sync_trailed_map": SkipMap);
 
   __trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
-  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
 }
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,))]

@@ -7,7 +7,6 @@ mod tests {
   __container_tests!("sync_map": SkipMap);
 
   __map_tests!("sync_map": SkipMap);
-  __map_tests!(go "sync_map": SkipMap);
 }
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_map_concurrent,))]

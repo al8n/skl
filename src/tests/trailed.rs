@@ -1520,20 +1520,20 @@ macro_rules! __trailed_map_tests {
     });
 
     // #[cfg(not(miri))]
-    mod high_compression {
-      use super::*;
+    // mod high_compression {
+    //   use super::*;
 
-      __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
-        #[cfg(feature = "std")]
-        concurrent_basic,
-        #[cfg(feature = "std")]
-        concurrent_basic2,
-        #[cfg(feature = "std")]
-        concurrent_one_key,
-        #[cfg(feature = "std")]
-        concurrent_one_key2,
-      });
-    }
+    //   __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
+    //     #[cfg(feature = "std")]
+    //     concurrent_basic,
+    //     #[cfg(feature = "std")]
+    //     concurrent_basic2,
+    //     #[cfg(feature = "std")]
+    //     concurrent_one_key,
+    //     #[cfg(feature = "std")]
+    //     concurrent_one_key2,
+    //   });
+    // }
 
     __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]

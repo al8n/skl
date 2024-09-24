@@ -1081,16 +1081,16 @@ where
                 }));
               }
 
-              if let Some(p) = fr.found_key {
-                // if key is already in the underlying allocator, we should deallocate the key
-                // in deallocator, and let the underlying allocator reclaim it, so that we do not store the same key twice.
-                if deallocator.key.is_some() {
-                  unlinked_node.set_key_offset(p.offset);
-                  unlinked_node
-                    .set_key_size_and_height(encode_key_size_and_height(p.size, p.height.unwrap()));
-                  deallocator.dealloc_key_by_ref(&self.arena)
-                }
-              }
+              // if let Some(p) = fr.found_key {
+              //   // if key is already in the underlying allocator, we should deallocate the key
+              //   // in deallocator, and let the underlying allocator reclaim it, so that we do not store the same key twice.
+              //   if deallocator.key.is_some() {
+              //     unlinked_node.set_key_offset(p.offset);
+              //     unlinked_node
+              //       .set_key_size_and_height(encode_key_size_and_height(p.size, p.height.unwrap()));
+              //     deallocator.dealloc_key_by_ref(&self.arena)
+              //   }
+              // }
 
               invalid_data_splice = true;
               prev = fr.splice.prev;

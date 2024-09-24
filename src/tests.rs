@@ -39,10 +39,22 @@ const BIG_ARENA_SIZE: usize = 120 << 20;
 ))]
 pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
 
-#[cfg(any(all(test, not(miri)), all_tests, test_unsync_full, test_sync_full,))]
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_full,
+  test_sync_full,
+  test_sync_full_concurrent
+))]
 pub(crate) mod full;
 
-#[cfg(any(all(test, not(miri)), all_tests, test_unsync_map, test_sync_map,))]
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_map,
+  test_sync_map,
+  test_sync_map_concurrent
+))]
 pub(crate) mod map;
 
 #[cfg(any(
@@ -50,6 +62,7 @@ pub(crate) mod map;
   all_tests,
   test_unsync_trailed,
   test_sync_trailed,
+  test_sync_trailed_concurrent,
 ))]
 pub(crate) mod trailed;
 
@@ -58,6 +71,7 @@ pub(crate) mod trailed;
   all_tests,
   test_unsync_versioned,
   test_sync_versioned,
+  test_sync_versioned_concurrent,
 ))]
 pub(crate) mod versioned;
 

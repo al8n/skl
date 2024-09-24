@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;

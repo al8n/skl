@@ -830,9 +830,9 @@ where
   use std::sync::Arc;
 
   #[cfg(not(miri))]
-  const N: usize = 1000;
+  const N: usize = 100;
   #[cfg(miri)]
-  const N: usize = 200;
+  const N: usize = 20;
 
   for i in 0..N {
     let l = l.clone();

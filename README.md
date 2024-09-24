@@ -48,7 +48,7 @@
   - **Prefix compression:**
     - Same key will only be stored once.
     - Keys with common prefix will be stored once (longest one must be inserted first).
-    - Keys are sub-slice of negeibours will be stored once (require `CompressionPolicy::High`).
+    - (experimental) Keys are sub-slice of negeibours will be stored once (require `CompressionPolicy::High`).
   - **Discard tracker:** Builtin discard tracker, which will track discarded bytes to help end-users decide when to compact or rewrite.
 - **Efficient Iteration:** Enjoy fast forward and backward iteration through the elements in your `SkipMap`. Additionally, bounded iterators are supported, allowing you to traverse only a specified range of elements efficiently.
 - **Snapshot Support:** Create snapshots of your `SkipMap`, offering a read-only view of the contents at a specific moment in time. Snapshots provide a consistent view of the data, enabling implementations of transactional semantics and other use cases where data consistency is crucial.

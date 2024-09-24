@@ -1805,7 +1805,7 @@ where
 #[doc(hidden)]
 macro_rules! __versioned_map_tests {
   ($prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
+    __unit_tests!($crate::tests::versioned |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       basic,
       #[cfg(not(miri))]
       basic_large,

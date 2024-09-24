@@ -804,6 +804,7 @@ where
           });
         }
       }
+      #[cfg(feature = "experimental")]
       CompressionPolicy::High => {
         if let Some(idx) = memchr::memmem::find(next_key, key) {
           return Some(Pointer {

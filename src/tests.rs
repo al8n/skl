@@ -10,9 +10,9 @@ use super::{Container, Options};
 pub(crate) const KB: usize = 1 << 10;
 const ARENA_SIZE: usize = 1 << 20;
 pub(crate) const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
-pub(crate) const TEST_HIGH_COMPRESSION_OPTIONS: Options = Options::new()
-  .with_capacity(ARENA_SIZE as u32)
-  .with_compression_policy(crate::CompressionPolicy::High);
+// pub(crate) const TEST_HIGH_COMPRESSION_OPTIONS: Options = Options::new()
+//   .with_capacity(ARENA_SIZE as u32)
+//   .with_compression_policy(crate::CompressionPolicy::High);
 #[cfg(all(
   all(feature = "std", not(miri)),
   any(

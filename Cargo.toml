@@ -34,8 +34,10 @@ required-features = ["memmap"]
 default = ["std"]
 alloc = ["rarena-allocator/alloc"]
 memmap = ["rarena-allocator/memmap", "std"]
-std = ["rand/default", "either/default", "rarena-allocator/std", "memchr/default", "among/default"]
+std = ["rand/default", "either/default", "rarena-allocator/std", "memchr?/default", "among/default"]
 tracing = ["dep:tracing", "rarena-allocator/tracing"]
+
+experimental = ["memchr"]
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
@@ -46,7 +48,7 @@ arbitrary-int = { version = "1.2", default-features = false }
 derive_more = "0.99"
 dbutils = { version = "0.3", default-features = false }
 either = { version = "1", default-features = false }
-memchr = { version = "2", default-features = false }
+memchr = { version = "2", default-features = false, optional = true }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 # rarena-allocator = { version = "0.3", default-features = false, path = "../arena/rarena-allocator" }
 rarena-allocator = { version = "0.3", default-features = false }

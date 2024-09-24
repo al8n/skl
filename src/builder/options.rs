@@ -12,6 +12,8 @@ pub enum CompressionPolicy {
   #[default]
   Fast,
   /// High compression policy, which checks if the key is a substring of the next key.
+  #[cfg(feature = "experimental")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   High,
 }
 
@@ -70,7 +72,7 @@ impl Options {
       capacity: None,
       unify: false,
       magic_version: 0,
-      freelist: Freelist::Optimistic,
+      freelist: Freelist::None,
       policy: CompressionPolicy::Fast,
       reserved: 0,
       lock_meta: true,
@@ -175,6 +177,8 @@ impl Options {
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
+  #[cfg(feature = "experimental")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
     self.freelist = freelist;
@@ -462,6 +466,8 @@ impl Options {
   ///
   /// assert_eq!(opts.freelist(), Freelist::Optimistic);
   /// ```
+  #[cfg(feature = "experimental")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn freelist(&self) -> Freelist {
     self.freelist

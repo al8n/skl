@@ -428,15 +428,69 @@ where
 {
   use std::sync::Arc;
 
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 5;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
+  #[cfg(not(miri))]
+  const N: usize = 1000;
+  #[cfg(miri)]
+  const N: usize = 200;
 
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
       let _ = l.get_or_insert(b"thekey", &make_value(i));
+    });
+  }
+
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
+
+  let saw_value = Arc::new(crate::common::AtomicU32::new(0));
+  for _ in 0..N {
+    let l = l.clone();
+    let saw_value = saw_value.clone();
+    std::thread::spawn(move || {
+      let ent = l.get(b"thekey").unwrap();
+      let val = ent.value();
+      let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
+      assert!((0..N).contains(&num));
+
+      let mut it = l.iter();
+      let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
+      let val = ent.value();
+      let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
+      assert!((0..N).contains(&num));
+      assert_eq!(ent.key(), b"thekey");
+      saw_value.fetch_add(1, Ordering::SeqCst);
+    });
+  }
+
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
+
+  assert_eq!(N, saw_value.load(Ordering::SeqCst) as usize);
+  assert_eq!(l.len(), 1);
+}
+
+#[cfg(all(feature = "std", any(all(test, not(miri)), all_tests, test_sync_map,)))]
+pub(crate) fn concurrent_one_key2<M>(l: M)
+where
+  M: Map + Clone + Send + 'static,
+  M::Comparator: Comparator,
+
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  use std::sync::Arc;
+
+  #[cfg(not(miri))]
+  const N: usize = 1000;
+  #[cfg(miri)]
+  const N: usize = 200;
+
+  for i in 0..N {
+    let l = l.clone();
+    std::thread::spawn(move || {
+      let _ = l.insert(b"thekey", &make_value(i));
     });
   }
 
@@ -1401,6 +1455,8 @@ macro_rules! __map_tests {
       concurrent_basic2,
       #[cfg(feature = "std")]
       concurrent_one_key,
+      #[cfg(feature = "std")]
+      concurrent_one_key2,
     });
 
     mod high_compression {
@@ -1413,6 +1469,8 @@ macro_rules! __map_tests {
         concurrent_basic2,
         #[cfg(feature = "std")]
         concurrent_one_key,
+        #[cfg(feature = "std")]
+        concurrent_one_key2,
       });
     }
 

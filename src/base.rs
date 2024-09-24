@@ -929,8 +929,8 @@ where
     let (unlinked_node, mut deallocator) = self
       .new_node(version, height, &k, value_builder, trailer)
       .inspect_err(|_| {
-      k.on_fail(&self.arena);
-    })?;
+        k.on_fail(&self.arena);
+      })?;
 
     let is_removed = unsafe { unlinked_node.get_value(&self.arena).is_none() };
 

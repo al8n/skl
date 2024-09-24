@@ -381,13 +381,19 @@ where
   for i in 0..N {
     let l1 = l.clone();
     let l2 = l.clone();
-    std::thread::Builder::new().name(format!("trailedmap-concurrent-basic2-writer-{i}-1")).spawn(move || {
-      let _ = l1.insert(&key(i), &new_value(i), Default::default());
-    }).unwrap();
+    std::thread::Builder::new()
+      .name(format!("trailedmap-concurrent-basic2-writer-{i}-1"))
+      .spawn(move || {
+        let _ = l1.insert(&key(i), &new_value(i), Default::default());
+      })
+      .unwrap();
 
-    std::thread::Builder::new().name(format!("trailedmap-concurrent-basic2-writer{i}-2")).spawn(move || {
-      let _ = l2.insert(&key(i), &new_value(i), Default::default());
-    }).unwrap();
+    std::thread::Builder::new()
+      .name(format!("trailedmap-concurrent-basic2-writer{i}-2"))
+      .spawn(move || {
+        let _ = l2.insert(&key(i), &new_value(i), Default::default());
+      })
+      .unwrap();
   }
   while l.refs() > 1 {
     ::core::hint::spin_loop();
@@ -1513,7 +1519,7 @@ macro_rules! __trailed_map_tests {
       concurrent_one_key2,
     });
 
-    #[cfg(not(miri))]
+    // #[cfg(not(miri))]
     mod high_compression {
       use super::*;
 

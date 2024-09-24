@@ -2,7 +2,7 @@
 name = "skl"
 version = "0.15.0"
 edition = "2021"
-rust-version = "1.77.0"
+rust-version = "1.80.0"
 repository = "https://github.com/al8n/skl"
 description = "A lock-free thread-safe concurrent ARENA based (heap backend or memory map backend) skiplist implementation which helps develop MVCC memtable for LSM-Tree."
 documentation = "https://docs.rs/skl"

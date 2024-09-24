@@ -14,7 +14,11 @@ mod tests {
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;
 type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
 
-node_pointer!(TrailedNode<T>);
+node_pointer!(TrailedNode<T> {{
+  fn version(&self) -> Version {
+    MIN_VERSION
+  }
+}});
 
 /// A node that supports both trailer.
 #[repr(C)]

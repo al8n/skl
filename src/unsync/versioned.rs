@@ -12,7 +12,15 @@ mod tests {
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
 type SkipList<C> = base::SkipList<Allocator, C>;
 
-node_pointer!(VersionedNode);
+node_pointer!(VersionedNode {
+  version = MIN_VERSION;
+
+  {
+    fn version(&self) -> Version {
+      { self.version }
+    }
+  }
+});
 
 /// A node that supports version.
 #[repr(C)]

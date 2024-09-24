@@ -135,9 +135,8 @@ where
           return None;
         }
 
-        let node = self.nd.as_ref(&self.map.arena);
-        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
-        if node.version() > self.version {
+        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
+        if self.nd.version() > self.version {
           continue;
         }
 
@@ -145,7 +144,7 @@ where
           continue;
         }
 
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
 
         if !self.all_versions {
           if let Some(last) = self.last {
@@ -179,9 +178,8 @@ where
           return None;
         }
 
-        let node = self.nd.as_ref(&self.map.arena);
-        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
-        if node.version() > self.version {
+        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
+        if self.nd.version() > self.version {
           continue;
         }
 
@@ -189,7 +187,7 @@ where
           continue;
         }
 
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
 
         if !self.all_versions {
           if let Some(last) = self.last {
@@ -224,9 +222,8 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this
-        let node = self.nd.as_ref(&self.map.arena);
         // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
 
         if self.map.cmp.contains(
           self.range.start_bound().map(Borrow::borrow),
@@ -269,9 +266,8 @@ where
     loop {
       unsafe {
         // Safety: the nd is valid, we already check this
-        let node = self.nd.as_ref(&self.map.arena);
         // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
 
         if self.map.cmp.contains(
           self.range.start_bound().map(Borrow::borrow),
@@ -309,11 +305,8 @@ where
 
     loop {
       unsafe {
-        // Safety: the nd is valid, we already check this on line 75
-        let node = self.nd.as_ref(&self.map.arena);
-
         // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
 
         if self.map.cmp.contains(
           self.range.start_bound().map(Borrow::borrow),
@@ -353,10 +346,8 @@ where
 
     loop {
       unsafe {
-        // Safety: the nd is valid, we already check this on line 75
-        let node = self.nd.as_ref(&self.map.arena);
         // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
 
         if self.map.cmp.contains(
           self.range.start_bound().map(Borrow::borrow),
@@ -397,11 +388,10 @@ where
       }
 
       unsafe {
-        let node = self.nd.as_ref(&self.map.arena);
-        let nk = node.get_key(&self.map.arena);
-        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
+        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
 
-        if node.version() > self.version {
+        if self.nd.version() > self.version {
           self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
           continue;
         }
@@ -437,10 +427,9 @@ where
           return None;
         }
 
-        let node = self.nd.as_ref(&self.map.arena);
-        let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.map.arena);
+        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
 
-        if node.version() > self.version {
+        if self.nd.version() > self.version {
           self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
           continue;
         }
@@ -450,7 +439,7 @@ where
           continue;
         }
 
-        let nk = node.get_key(&self.map.arena);
+        let nk = self.nd.get_key(&self.map.arena);
         if self.map.cmp.contains(
           self.range.start_bound().map(Borrow::borrow),
           self.range.end_bound().map(Borrow::borrow),

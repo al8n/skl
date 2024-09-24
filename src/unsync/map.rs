@@ -12,7 +12,11 @@ mod tests {
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
 type SkipList<C> = base::SkipList<Allocator, C>;
 
-node_pointer!(RawNode);
+node_pointer!(RawNode {{
+  fn version(&self) -> Version {
+    MIN_VERSION
+  }
+}});
 
 /// A raw node that does not support version and trailer.
 #[repr(C)]

@@ -236,14 +236,13 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
 
-      let n = n?;
-      let node = n.as_ref(&self.arena);
+      let node = n?;
       let node_key = node.get_key(&self.arena);
       let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
         return value.map(|_| {
           EntryRef(VersionedEntryRef::from_node_with_pointer(
-            n,
+            node,
             &self.arena,
             pointer,
           ))
@@ -260,7 +259,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
 
       value.map(|_| {
         EntryRef(VersionedEntryRef::from_node_with_pointer(
-          n,
+          node,
           &self.arena,
           pointer,
         ))
@@ -275,13 +274,12 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
 
-      let n = n?;
-      let node = n.as_ref(&self.arena);
+      let node = n?;
       let node_key = node.get_key(&self.arena);
       let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
-          n,
+          node,
           &self.arena,
           pointer,
         ));
@@ -296,7 +294,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
       }
 
       Some(VersionedEntryRef::from_node_with_pointer(
-        n,
+        node,
         &self.arena,
         pointer,
       ))

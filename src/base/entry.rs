@@ -29,8 +29,9 @@ where
   #[inline]
   pub fn trailer(&self) -> &A::Trailer {
     unsafe {
-      let node = self.ptr.as_ref(self.arena);
-      let trailer = node.get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset);
+      let trailer = self
+        .ptr
+        .get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset);
       trailer
     }
   }
@@ -47,8 +48,7 @@ impl<A: Allocator> VersionedEntryRef<'_, A> {
   #[inline]
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
-      let node = self.ptr.as_ref(self.arena);
-      let value = node.get_value_by_value_offset(
+      let value = self.ptr.get_value_by_value_offset(
         self.arena,
         self.value_part_pointer.value_offset,
         self.value_part_pointer.value_len,
@@ -90,17 +90,16 @@ impl<'a, A: Allocator> From<VersionedEntryRef<'a, A>> for VersionedEntry<A> {
 impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   #[inline]
   pub(super) fn from_node(
-    node_ptr: <A::Node as Node>::Pointer,
+    node: <A::Node as Node>::Pointer,
     arena: &'a A,
   ) -> VersionedEntryRef<'a, A> {
     unsafe {
-      let node = node_ptr.as_ref(arena);
       let vp = node.trailer_offset_and_value_size();
       VersionedEntryRef {
         key: node.get_key(arena),
         value_part_pointer: vp,
         arena,
-        ptr: node_ptr,
+        ptr: node,
         version: node.version(),
       }
     }
@@ -108,17 +107,16 @@ impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
 
   #[inline]
   pub(super) fn from_node_with_pointer(
-    node_ptr: <A::Node as Node>::Pointer,
+    node: <A::Node as Node>::Pointer,
     arena: &'a A,
     pointer: ValuePartPointer<A::Trailer>,
   ) -> VersionedEntryRef<'a, A> {
     unsafe {
-      let node = node_ptr.as_ref(arena);
       VersionedEntryRef {
         key: node.get_key(arena),
         value_part_pointer: pointer,
         arena,
-        ptr: node_ptr,
+        ptr: node,
         version: node.version(),
       }
     }
@@ -160,8 +158,9 @@ where
   #[inline]
   pub fn trailer(&self) -> &A::Trailer {
     unsafe {
-      let node = self.ptr.as_ref(&self.arena);
-      let trailer = node.get_trailer_by_offset(&self.arena, self.value_part_pointer.trailer_offset);
+      let trailer = self
+        .ptr
+        .get_trailer_by_offset(&self.arena, self.value_part_pointer.trailer_offset);
       trailer
     }
   }
@@ -171,18 +170,14 @@ impl<A: Allocator> VersionedEntry<A> {
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &[u8] {
-    unsafe {
-      let node = self.ptr.as_ref(&self.arena);
-      node.get_key(&self.arena)
-    }
+    unsafe { self.ptr.get_key(&self.arena) }
   }
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
   pub fn value(&self) -> Option<&[u8]> {
     unsafe {
-      let node = self.ptr.as_ref(&self.arena);
-      let value = node.get_value_by_value_offset(
+      let value = self.ptr.get_value_by_value_offset(
         &self.arena,
         self.value_part_pointer.value_offset,
         self.value_part_pointer.value_len,
@@ -206,10 +201,7 @@ impl<A: Allocator> VersionedEntry<A> {
   /// Returns the version of the entry
   #[inline]
   pub fn version(&self) -> Version {
-    unsafe {
-      let node = self.ptr.as_ref(&self.arena);
-      node.version()
-    }
+    self.ptr.version()
   }
 }
 

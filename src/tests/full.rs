@@ -855,7 +855,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_full_concurrent,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_full_concurrent,
+    test_sync_full_concurrent_with_optimistic_freelist,
+    test_sync_full_concurrent_with_pessimistic_freelist
+  )
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where

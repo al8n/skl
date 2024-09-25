@@ -13,7 +13,29 @@ mod tests {
 mod concurrent_tests {
   use super::*;
 
-  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64>);
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64> => crate::tests::TEST_OPTIONS);
+}
+
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_sync_trailed_concurrent_with_optimistic_freelist,
+))]
+mod concurrent_tests_with_optimistic_freelist {
+  use super::*;
+
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+}
+
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_sync_trailed_concurrent_with_pessimistic_freelist,
+))]
+mod concurrent_tests_with_pessimistic_freelist {
+  use super::*;
+
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;

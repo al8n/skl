@@ -1991,8 +1991,8 @@ macro_rules! __full_map_tests {
     }
   };
   // Support from golang :)
-  (go $prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::full |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+  (go $prefix:literal: $ty:ty => $opts:path) => {
+    __unit_tests!($crate::tests::full |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]

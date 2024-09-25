@@ -702,7 +702,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 1000;
   #[cfg(miri)]
-  const N: usize = 300;
+  const N: usize = 200;
 
   for i in 0..N {
     let l1 = l.clone();
@@ -876,7 +876,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 100;
   #[cfg(miri)]
-  const N: usize = 50;
+  const N: usize = 20;
 
   for i in 0..N {
     let l = l.clone();

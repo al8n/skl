@@ -52,10 +52,6 @@ node!(
       type ValuePointer = AtomicValuePointer;
       type Pointer = NodePointer<T>;
 
-      fn version(&self) -> Version {
-        MIN_VERSION
-      }
-
       fn set_version(&mut self, version: Version) {}
 
       impl<T: Trailer> WithTrailer for TrailedNode<T> {}

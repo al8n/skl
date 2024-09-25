@@ -77,7 +77,10 @@ pub mod iter {
 mod tests;
 
 pub use among;
-pub use dbutils::{Ascend, Comparator, Descend};
+pub use dbutils::{
+  traits::{Ascend, Descend},
+  Comparator,
+};
 pub use either;
 pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
 
@@ -195,11 +198,6 @@ macro_rules! node {
 
         type Pointer = $pointer:ty;
 
-        fn version(&self) -> Version {
-          $($default_version_getter:ident)?
-          $({ $getter_this:ident.$version_getter:ident })?
-        }
-
         fn set_version(&mut self, version: Version) {
           $(
             self.$version_setter:ident = version;
@@ -251,7 +249,7 @@ macro_rules! node {
           .field("key_offset", &self.key_offset)
           .field("key_size", &key_size)
           .field("height", &height)
-          // $(.field("version", &self.$version))?
+          $(.field("version", &self.$version_setter))?
           .finish()
       }
     }
@@ -295,24 +293,8 @@ macro_rules! node {
       }
 
       #[inline]
-      fn version(&self) -> Version {
-        $($default_version_getter)?
-        $(self.$version_getter)?
-      }
-
-      #[inline]
       fn set_version(&mut self, _version: Version) {
         $(self.$version_setter = _version)?
-      }
-
-      #[inline]
-      fn key_size_and_height(&self) -> u32 {
-        self.key_size_and_height
-      }
-
-      #[inline]
-      fn key_offset(&self) -> u32 {
-        self.key_offset
       }
     }
 

@@ -49,10 +49,6 @@ node!(
     type ValuePointer = AtomicValuePointer;
     type Pointer = NodePointer;
 
-    fn version(&self) -> Version {
-      MIN_VERSION
-    }
-
     fn set_version(&mut self, version: Version) {}
 
     node_pointer!(RawNode {{

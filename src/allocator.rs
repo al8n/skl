@@ -184,31 +184,7 @@ mod sealed {
 
     fn set_key_offset(&mut self, key_offset: u32);
 
-    fn version(&self) -> Version;
-
     fn set_version(&mut self, version: Version);
-
-    fn key_size_and_height(&self) -> u32;
-
-    fn key_offset(&self) -> u32;
-
-    #[inline]
-    fn key_size(&self) -> u32 {
-      decode_key_size_and_height(self.key_size_and_height()).0
-    }
-
-    #[inline]
-    fn height(&self) -> u8 {
-      decode_key_size_and_height(self.key_size_and_height()).1
-    }
-
-    /// ## Safety
-    ///
-    /// - The caller must ensure that the node is allocated by the arena.
-    #[inline]
-    unsafe fn get_key<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b [u8] {
-      arena.get_bytes(self.key_offset() as usize, self.key_size() as usize)
-    }
 
     /// ## Safety
     ///

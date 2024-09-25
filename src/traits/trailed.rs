@@ -102,7 +102,7 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -159,7 +159,7 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -260,7 +260,7 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -322,7 +322,7 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -387,12 +387,12 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -449,12 +449,12 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -517,12 +517,12 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -582,12 +582,12 @@ where
   ///
   /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |mut key| {
+  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |mut val| {
+  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())

@@ -52,10 +52,6 @@ node!(
       type ValuePointer = AtomicValuePointer;
       type Pointer = NodePointer<T>;
 
-      fn version(&self) -> Version {
-        { self.version }
-      }
-
       fn set_version(&mut self, version: Version) {
         self.version = version;
       }

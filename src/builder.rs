@@ -1,6 +1,6 @@
 use core::mem;
 
-use dbutils::{Ascend, Comparator};
+use dbutils::{traits::Ascend, Comparator};
 
 use rarena_allocator::Options as ArenaOptions;
 

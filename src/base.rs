@@ -142,12 +142,13 @@ where
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
       Key::Occupied(key) => {
-        let kb = KeyBuilder::new(KeySize::from_u32_unchecked(key.len() as u32), |buf| {
-          buf
-            .put_slice(key)
-            .expect("buffer must be large enough for key");
-          Ok(())
-        });
+        let kb = KeyBuilder::new(
+          KeySize::from_u32_unchecked(key.len() as u32),
+          |buf: &mut VacantBuffer<'_>| {
+            buf.put_slice_unchecked(key);
+            Ok(())
+          },
+        );
         let vb = value_builder.unwrap();
         self
           .arena

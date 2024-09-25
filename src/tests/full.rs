@@ -702,7 +702,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 1000;
   #[cfg(miri)]
-  const N: usize = 200;
+  const N: usize = 300;
 
   for i in 0..N {
     let l1 = l.clone();
@@ -760,7 +760,7 @@ where
   #[cfg(not(any(miri, feature = "loom")))]
   const N: usize = 100;
   #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
+  const N: usize = 20;
 
   for i in 0..N {
     let l = l.clone();
@@ -876,7 +876,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 100;
   #[cfg(miri)]
-  const N: usize = 20;
+  const N: usize = 50;
 
   for i in 0..N {
     let l = l.clone();
@@ -1376,7 +1376,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: FullMap<Comparator = dbutils::traits::Ascend> + Clone,
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
@@ -1421,7 +1421,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: FullMap<Comparator = dbutils::traits::Ascend> + Clone,
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
@@ -1485,7 +1485,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap3<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::Ascend> + Clone,
+  M: FullMap<Comparator = dbutils::traits::Ascend> + Clone,
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
@@ -1552,7 +1552,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1653,7 +1653,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1680,7 +1680,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();

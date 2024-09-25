@@ -52,7 +52,9 @@ pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_AR
   all_tests,
   test_unsync_full,
   test_sync_full,
-  test_sync_full_concurrent
+  test_sync_full_concurrent,
+  test_sync_full_concurrent_with_optimistic_freelist,
+  test_sync_full_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod full;
 
@@ -61,7 +63,9 @@ pub(crate) mod full;
   all_tests,
   test_unsync_map,
   test_sync_map,
-  test_sync_map_concurrent
+  test_sync_map_concurrent,
+  test_sync_map_concurrent_with_optimistic_freelist,
+  test_sync_map_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod map;
 
@@ -71,6 +75,8 @@ pub(crate) mod map;
   test_unsync_trailed,
   test_sync_trailed,
   test_sync_trailed_concurrent,
+  test_sync_trailed_concurrent_with_optimistic_freelist,
+  test_sync_trailed_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod trailed;
 
@@ -80,6 +86,8 @@ pub(crate) mod trailed;
   test_unsync_versioned,
   test_sync_versioned,
   test_sync_versioned_concurrent,
+  test_sync_versioned_concurrent_with_optimistic_freelist,
+  test_sync_versioned_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod versioned;
 

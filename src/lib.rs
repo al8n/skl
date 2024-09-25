@@ -65,6 +65,14 @@ pub mod iter {
   test_sync_map_concurrent,
   test_sync_versioned_concurrent,
   test_sync_trailed_concurrent,
+  test_sync_full_concurrent_with_optimistic_freelist,
+  test_sync_map_concurrent_with_optimistic_freelist,
+  test_sync_versioned_concurrent_with_optimistic_freelist,
+  test_sync_trailed_concurrent_with_optimistic_freelist,
+  test_sync_full_concurrent_with_pessimistic_freelist,
+  test_sync_map_concurrent_with_pessimistic_freelist,
+  test_sync_versioned_concurrent_with_pessimistic_freelist,
+  test_sync_trailed_concurrent_with_pessimistic_freelist,
 ))]
 mod tests;
 

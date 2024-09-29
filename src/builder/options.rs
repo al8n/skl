@@ -502,6 +502,7 @@ impl Options {
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     {
       opts
+        .with_lock_meta(false) // we need to avoid arena's lock_meta
         .with_create(self.create())
         .with_create_new(self.create_new())
         .with_read(self.read())

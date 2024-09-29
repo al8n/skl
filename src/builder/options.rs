@@ -12,6 +12,8 @@ pub enum CompressionPolicy {
   #[default]
   Fast,
   /// High compression policy, which checks if the key is a substring of the next key.
+  #[cfg(feature = "experimental")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   High,
 }
 
@@ -70,7 +72,7 @@ impl Options {
       capacity: None,
       unify: false,
       magic_version: 0,
-      freelist: Freelist::Optimistic,
+      freelist: Freelist::None,
       policy: CompressionPolicy::Fast,
       reserved: 0,
       lock_meta: true,
@@ -492,14 +494,15 @@ impl Options {
   pub(super) const fn to_arena_options(&self) -> ArenaOptions {
     let opts = ArenaOptions::new()
       .with_magic_version(CURRENT_VERSION)
-      .with_freelist(self.freelist())
       .with_reserved(self.reserved())
       .with_unify(self.unify())
-      .maybe_capacity(self.capacity);
+      .maybe_capacity(self.capacity)
+      .with_freelist(self.freelist());
 
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     {
       opts
+        .with_lock_meta(false) // we need to avoid arena's lock_meta
         .with_create(self.create())
         .with_create_new(self.create_new())
         .with_read(self.read())

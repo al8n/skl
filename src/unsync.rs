@@ -203,19 +203,6 @@ impl UnsyncValuePointer {
   fn new(offset: u32, len: u32) -> Self {
     Self(UnsafeCell::new(encode_value_pointer(offset, len)))
   }
-
-  #[inline]
-  fn compare_remove(&self, _: Ordering, _: Ordering) -> Result<(u32, u32), (u32, u32)> {
-    unsafe {
-      let ptr = self.0.get();
-      let old = *ptr;
-
-      let (offset, size) = decode_value_pointer(old);
-      *ptr = encode_value_pointer(offset, REMOVE);
-
-      Ok((offset, size))
-    }
-  }
 }
 
 impl ValuePointer for UnsyncValuePointer {
@@ -233,6 +220,19 @@ impl ValuePointer for UnsyncValuePointer {
       let old = *self.0.get();
       *self.0.get() = new;
       decode_value_pointer(old)
+    }
+  }
+
+  #[inline]
+  fn compare_remove(&self, _: Ordering, _: Ordering) -> Result<(u32, u32), (u32, u32)> {
+    unsafe {
+      let ptr = self.0.get();
+      let old = *ptr;
+
+      let (offset, size) = decode_value_pointer(old);
+      *ptr = encode_value_pointer(offset, REMOVE);
+
+      Ok((offset, size))
     }
   }
 }
@@ -270,25 +270,42 @@ impl ContainerLink for Link {
 }
 
 macro_rules! node_pointer {
-  ($node: ident $(<$t:ident>)?) => {
+  ($node: ident $(<$t:ident>)? {
+    $($version_field:ident = $default_version:ident;)?
+
+    {
+      fn version(&self) -> Version {
+        $($default_version_getter:ident)?
+        $({ $getter_this:ident.$version_getter:ident })?
+      }
+    }
+  }) => {
     #[doc(hidden)]
     #[derive(Debug)]
-    pub struct NodePointer $(<$t>)? {
+    pub struct NodePointer $(<$t: $crate::Trailer>)? {
       offset: u32,
+      value_ptr: NonNull<<<Self as $crate::allocator::NodePointer>::Node as Node>::ValuePointer>,
+      key_offset_ptr: NonNull<u32>,
+      key_size_and_height_ptr: NonNull<u32>,
+      $($version_field: Version,)?
       _m: core::marker::PhantomData<$node $(<$t>)?>,
     }
 
-    impl $(<$t>)?  Clone for NodePointer $(<$t>)? {
+    impl $(<$t: $crate::Trailer>)?  Clone for NodePointer $(<$t>)? {
       fn clone(&self) -> Self {
         *self
       }
     }
 
-    impl $(<$t>)? Copy for NodePointer $(<$t>)? {}
+    impl $(<$t: $crate::Trailer>)? Copy for NodePointer $(<$t>)? {}
 
     impl $(<$t: $crate::Trailer>)? $crate::allocator::NodePointer for NodePointer $(<$t>)? {
       const NULL: Self = Self {
         offset: 0,
+        value_ptr: NonNull::dangling(),
+        key_offset_ptr: NonNull::dangling(),
+        key_size_and_height_ptr: NonNull::dangling(),
+        $($version_field: $default_version,)?
         _m: core::marker::PhantomData,
       };
 
@@ -299,14 +316,21 @@ macro_rules! node_pointer {
         self.offset == 0
       }
 
+      #[inline]
       fn offset(&self) -> u32 {
         self.offset
       }
+
+      // #[inline]
+      // fn pointer(&self) -> &NonNull<u8> {
+      //   &self.ptr
+      // }
 
       /// ## Safety
       ///
       /// - The caller must ensure that the node is allocated by the arena.
       /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
+      #[inline]
       unsafe fn next_offset<A: $crate::allocator::Allocator>(&self, arena: &A, idx: usize) -> u32 {
         unsafe { *self.tower(arena, idx).next_offset.get() }
       }
@@ -315,6 +339,7 @@ macro_rules! node_pointer {
       ///
       /// - The caller must ensure that the node is allocated by the arena.
       /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
+      #[inline]
       unsafe fn prev_offset<A: $crate::allocator::Allocator>(&self, arena: &A, idx: usize) -> u32 {
         unsafe { *self.tower(arena, idx).prev_offset.get() }
       }
@@ -372,25 +397,82 @@ macro_rules! node_pointer {
       }
 
       #[inline]
-      fn new(offset: u32) -> Self {
-        Self {
-          offset,
-          _m: core::marker::PhantomData,
+      fn new(offset: u32, ptr: NonNull<u8>) -> Self {
+        unsafe {
+          Self {
+            offset,
+            value_ptr: ptr.cast(),
+            key_offset_ptr: ptr.add(core::mem::size_of::<<Self::Node as Node>::ValuePointer>()).cast(),
+            key_size_and_height_ptr: ptr.add(core::mem::size_of::<<Self::Node as Node>::ValuePointer>() + 4).cast(),
+            $($version_field: {
+              let ptr = ptr.add(core::mem::size_of::<<Self::Node as Node>::ValuePointer>() + 8).cast::<Version>();
+              core::ptr::read(ptr.as_ptr())
+            },)?
+            _m: core::marker::PhantomData,
+          }
         }
       }
 
-      /// ## Safety
-      /// - the pointer must be valid
+      // /// ## Safety
+      // /// - the pointer must be valid
+      // #[inline]
+      // unsafe fn as_ref<A: $crate::allocator::Sealed>(&self, arena: &A) -> &Self::Node {
+      //   &*(arena.get_pointer(self.offset as usize) as *const Self::Node)
+      // }
+
+      // /// ## Safety
+      // /// - the pointer must be valid
+      // #[inline]
+      // unsafe fn as_mut<A: $crate::allocator::Sealed>(&self, arena: &A) -> &mut Self::Node {
+      //   &mut *(arena.get_pointer_mut(self.offset as usize) as *mut Self::Node)
+      // }
+
       #[inline]
-      unsafe fn as_ref<A: $crate::allocator::Sealed>(&self, arena: &A) -> &Self::Node {
-        &*(arena.get_pointer(self.offset as usize) as *const Self::Node)
+      fn value_pointer(&self) -> &<Self::Node as Node>::ValuePointer {
+        // SAFETY: the pointer is valid, and the value pointer is at the beginning of the node.
+        unsafe {
+          &*self.value_ptr.as_ptr()
+        }
       }
 
-      /// ## Safety
-      /// - the pointer must be valid
       #[inline]
-      unsafe fn as_mut<A: $crate::allocator::Sealed>(&self, arena: &A) -> &mut Self::Node {
-        &mut *(arena.get_pointer_mut(self.offset as usize) as *mut Self::Node)
+      fn set_key_size_and_height(&self, key_size_and_height: u32) {
+        // SAFETY: the pointer is valid, and the key size and height is offset 12 to the beginning of the node.
+        unsafe {
+          let ptr = self.key_size_and_height_ptr.as_ptr();
+          *ptr = key_size_and_height;
+        }
+      }
+
+      #[inline]
+      fn set_key_offset(&self, key_offset: u32) {
+        // SAFETY: the pointer is valid, and the key size and height is offset 8 to the beginning of the node.
+        unsafe {
+          let ptr = self.key_offset_ptr.as_ptr();
+          *ptr = key_offset;
+        }
+      }
+
+      #[inline]
+      fn key_size_and_height(&self) -> u32 {
+        // SAFETY: the pointer is valid, and the key size and height is offset 8 to the beginning of the node.
+        unsafe {
+          core::ptr::read(self.key_size_and_height_ptr.as_ptr())
+        }
+      }
+
+      #[inline]
+      fn key_offset(&self) -> u32 {
+        // SAFETY: the pointer is valid, and the key size and height is offset 8 to the beginning of the node.
+        unsafe {
+          core::ptr::read(self.key_offset_ptr.as_ptr())
+        }
+      }
+
+      #[inline]
+      fn version(&self) -> Version {
+        $($default_version_getter)?
+        $(self.$version_getter)?
       }
     }
   };

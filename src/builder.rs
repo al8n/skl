@@ -165,6 +165,8 @@ impl<C> Builder<C> {
   ///
   /// let builder = Builder::new().with_compression_policy(CompressionPolicy::High);
   /// ```
+  #[cfg(feature = "experimental")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn with_compression_policy(mut self, policy: CompressionPolicy) -> Self {
     self.opts.policy = policy;
@@ -454,6 +456,8 @@ impl<C> Builder<C> {
   ///
   /// assert_eq!(builder.compression_policy(), CompressionPolicy::High);
   /// ```
+  #[cfg(feature = "experimental")]
+  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn compression_policy(&self) -> CompressionPolicy {
     self.opts.policy

@@ -19,6 +19,7 @@ mod sealed {
   pub struct Pointer {
     pub(crate) offset: u32,
     pub(crate) size: u32,
+    #[allow(dead_code)]
     pub(crate) height: Option<u8>,
   }
 
@@ -115,6 +116,12 @@ mod sealed {
     fn swap(&self, offset: u32, size: u32) -> (u32, u32);
 
     fn load(&self) -> (u32, u32);
+
+    fn compare_remove(
+      &self,
+      success: Ordering,
+      failure: Ordering,
+    ) -> Result<(u32, u32), (u32, u32)>;
   }
 
   pub trait Link {
@@ -156,42 +163,28 @@ mod sealed {
       }
     }
 
+    #[inline]
     fn clear_value<A: Allocator>(
       &self,
       arena: &A,
       success: Ordering,
       failure: Ordering,
-    ) -> Result<(), (u32, u32)>;
+    ) -> Result<(), (u32, u32)> {
+      self
+        .value_pointer()
+        .compare_remove(success, failure)
+        .map(|(_, old_len)| {
+          if old_len != REMOVE {
+            arena.increase_discarded(old_len);
+          }
+        })
+    }
 
     fn set_key_size_and_height(&mut self, key_size_and_height: u32);
 
     fn set_key_offset(&mut self, key_offset: u32);
 
-    fn version(&self) -> Version;
-
     fn set_version(&mut self, version: Version);
-
-    fn key_size_and_height(&self) -> u32;
-
-    fn key_offset(&self) -> u32;
-
-    #[inline]
-    fn key_size(&self) -> u32 {
-      decode_key_size_and_height(self.key_size_and_height()).0
-    }
-
-    #[inline]
-    fn height(&self) -> u8 {
-      decode_key_size_and_height(self.key_size_and_height()).1
-    }
-
-    /// ## Safety
-    ///
-    /// - The caller must ensure that the node is allocated by the arena.
-    #[inline]
-    unsafe fn get_key<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b [u8] {
-      arena.get_bytes(self.key_offset() as usize, self.key_size() as usize)
-    }
 
     /// ## Safety
     ///
@@ -306,8 +299,7 @@ mod sealed {
 
     const NULL: Self;
 
-    // fn new(ptr: *mut u8, offset: u32) -> Self;
-    fn new(offset: u32) -> Self;
+    fn new(offset: u32, ptr: NonNull<u8>) -> Self;
 
     #[inline]
     fn is_null(&self) -> bool {
@@ -381,13 +373,182 @@ mod sealed {
       failure: Ordering,
     ) -> Result<u32, u32>;
 
-    /// ## Safety
-    /// - the pointer must be valid
-    unsafe fn as_ref<A: Sealed>(&self, arena: &A) -> &Self::Node;
+    // /// ## Safety
+    // /// - the pointer must be valid
+    // unsafe fn as_ref<A: Sealed>(&self, arena: &A) -> &Self::Node;
+
+    // /// ## Safety
+    // /// - the pointer must be valid
+    // unsafe fn as_mut<A: Sealed>(&self, arena: &A) -> &mut Self::Node;
+
+    fn value_pointer(&self) -> &<Self::Node as Node>::ValuePointer;
+
+    #[inline]
+    fn update_value<A: Allocator>(&self, arena: &A, offset: u32, value_size: u32) {
+      let (_, old_len) = NodePointer::value_pointer(self).swap(offset, value_size);
+      if old_len != <Self::Node as Node>::ValuePointer::REMOVE {
+        arena.increase_discarded(old_len);
+      }
+    }
+
+    #[inline]
+    fn clear_value<A: super::Allocator>(
+      &self,
+      arena: &A,
+      success: Ordering,
+      failure: Ordering,
+    ) -> Result<(), (u32, u32)> {
+      NodePointer::value_pointer(self)
+        .compare_remove(success, failure)
+        .map(|(_, old_len)| {
+          if old_len != REMOVE {
+            arena.increase_discarded(old_len);
+          }
+        })
+    }
+
+    #[allow(dead_code)]
+    fn set_key_size_and_height(&self, key_size_and_height: u32);
+
+    #[allow(dead_code)]
+    fn set_key_offset(&self, key_offset: u32);
+
+    fn key_size_and_height(&self) -> u32;
+
+    fn key_offset(&self) -> u32;
+
+    fn version(&self) -> Version;
+
+    #[inline]
+    fn key_size(&self) -> u32 {
+      decode_key_size_and_height(self.key_size_and_height()).0
+    }
+
+    #[inline]
+    fn height(&self) -> u8 {
+      decode_key_size_and_height(self.key_size_and_height()).1
+    }
 
     /// ## Safety
-    /// - the pointer must be valid
-    unsafe fn as_mut<A: Sealed>(&self, arena: &A) -> &mut Self::Node;
+    ///
+    /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
+    unsafe fn get_key<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b [u8] {
+      arena.get_bytes(self.key_offset() as usize, self.key_size() as usize)
+    }
+
+    /// ## Safety
+    ///
+    /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
+    unsafe fn get_value<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> Option<&'b [u8]> {
+      let (offset, len) = self.value_pointer().load();
+
+      if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
+        return None;
+      }
+      let align_offset = Self::align_offset(offset);
+      Some(arena.get_bytes(
+        align_offset as usize + mem::size_of::<<Self::Node as Node>::Trailer>(),
+        len as usize,
+      ))
+    }
+
+    /// ## Safety
+    ///
+    /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
+    unsafe fn get_value_by_value_offset<'a, 'b: 'a, A: Allocator>(
+      &'a self,
+      arena: &'b A,
+      offset: u32,
+      len: u32,
+    ) -> Option<&'b [u8]> {
+      if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
+        return None;
+      }
+
+      Some(arena.get_bytes(offset as usize, len as usize))
+    }
+
+    #[inline]
+    fn trailer_offset_and_value_size(&self) -> ValuePartPointer<<Self::Node as Node>::Trailer> {
+      let (offset, len) = self.value_pointer().load();
+      let align_offset = Self::align_offset(offset);
+      ValuePartPointer::new(
+        align_offset,
+        align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
+        len,
+      )
+    }
+
+    #[inline]
+    unsafe fn get_trailer<'a, 'b: 'a, A: Allocator>(
+      &'a self,
+      arena: &'b A,
+    ) -> &'b <Self::Node as Node>::Trailer {
+      if mem::size_of::<<Self::Node as Node>::Trailer>() == 0 {
+        return dangling_zst_ref();
+      }
+
+      let (offset, _) = self.value_pointer().load();
+      &*arena.get_aligned_pointer(offset as usize)
+    }
+
+    /// ## Safety
+    ///
+    /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
+    unsafe fn get_trailer_by_offset<'a, 'b: 'a, A: Allocator>(
+      &'a self,
+      arena: &'b A,
+      offset: u32,
+    ) -> &'b <Self::Node as Node>::Trailer {
+      if mem::size_of::<<Self::Node as Node>::Trailer>() == 0 {
+        return dangling_zst_ref();
+      }
+
+      &*arena.get_aligned_pointer(offset as usize)
+    }
+
+    /// ## Safety
+    ///
+    /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
+    unsafe fn get_value_and_trailer_with_pointer<'a, 'b: 'a, A: Allocator>(
+      &'a self,
+      arena: &'b A,
+    ) -> (
+      Option<&'b [u8]>,
+      ValuePartPointer<<Self::Node as Node>::Trailer>,
+    ) {
+      let (offset, len) = self.value_pointer().load();
+
+      let align_offset = A::align_offset::<<Self::Node as Node>::Trailer>(offset);
+
+      if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
+        return (
+          None,
+          ValuePartPointer::new(
+            offset,
+            align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
+            len,
+          ),
+        );
+      }
+
+      let value_offset = align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32;
+      (
+        Some(arena.get_bytes(value_offset as usize, len as usize)),
+        ValuePartPointer::new(offset, value_offset, len),
+      )
+    }
+
+    #[inline]
+    fn align_offset(current_offset: u32) -> u32 {
+      let alignment = mem::align_of::<<Self::Node as Node>::Trailer>() as u32;
+      (current_offset + alignment - 1) & !(alignment - 1)
+    }
   }
 
   pub trait Header: core::fmt::Debug {
@@ -478,13 +639,19 @@ mod sealed {
         let offset = self.offset(meta as _) + mem::size_of::<Self::Header>();
         let head_ptr = self.get_aligned_pointer::<Self::Node>(offset);
         let head_offset = self.offset(head_ptr as _);
-        let head = <<Self::Node as Node>::Pointer as NodePointer>::new(head_offset as u32);
+        let head = <<Self::Node as Node>::Pointer as NodePointer>::new(
+          head_offset as u32,
+          NonNull::new_unchecked(head_ptr as _),
+        );
 
-        let (trailer_offset, _) = head.as_ref(self).value_pointer().load();
+        let (trailer_offset, _) = head.value_pointer().load();
         let offset = trailer_offset as usize + mem::size_of::<Self::Trailer>();
         let tail_ptr = self.get_aligned_pointer::<Self::Node>(offset);
         let tail_offset = self.offset(tail_ptr as _);
-        let tail = <<Self::Node as Node>::Pointer as NodePointer>::new(tail_offset as u32);
+        let tail = <<Self::Node as Node>::Pointer as NodePointer>::new(
+          tail_offset as u32,
+          NonNull::new_unchecked(tail_ptr as _),
+        );
         (NonNull::new_unchecked(meta as _), head, tail)
       }
     }
@@ -724,7 +891,10 @@ mod sealed {
           value: Some(value_deallocate_info),
         };
 
-        Ok((NodePointer::new(node_offset as u32), deallocator))
+        Ok((
+          NodePointer::new(node_offset as u32, NonNull::new_unchecked(node_ptr as _)),
+          deallocator,
+        ))
       }
     }
 
@@ -776,7 +946,10 @@ mod sealed {
           )),
         };
 
-        Ok((NodePointer::new(node_offset as u32), deallocator))
+        Ok((
+          NodePointer::new(node_offset as u32, NonNull::new_unchecked(node_ptr as _)),
+          deallocator,
+        ))
       }
     }
 
@@ -839,7 +1012,10 @@ mod sealed {
           )),
         };
 
-        Ok((NodePointer::new(node_offset as u32), deallocator))
+        Ok((
+          NodePointer::new(node_offset as u32, NonNull::new_unchecked(node_ptr as _)),
+          deallocator,
+        ))
       }
     }
 
@@ -904,7 +1080,10 @@ mod sealed {
           value: Some(value_deallocate_info),
         };
 
-        Ok((NodePointer::new(node_offset as u32), deallocator))
+        Ok((
+          NodePointer::new(node_offset as u32, NonNull::new_unchecked(node_ptr as _)),
+          deallocator,
+        ))
       }
     }
 
@@ -934,14 +1113,17 @@ mod sealed {
         let full_node = <Self::Node as Node>::full(trailer_offset as u32, max_height);
         ptr::write(node_ptr, full_node);
 
-        Ok(NodePointer::new(node_offset as u32))
+        Ok(NodePointer::new(
+          node_offset as u32,
+          NonNull::new_unchecked(node_ptr as _),
+        ))
       }
     }
 
     #[inline]
     fn allocate_and_update_value<'a, E>(
       &'a self,
-      node: &Self::Node,
+      node: &<Self::Node as Node>::Pointer,
       trailer: <Self::Node as Node>::Trailer,
       value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     ) -> Result<(), Either<E, Error>> {

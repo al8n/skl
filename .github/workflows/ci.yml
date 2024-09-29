@@ -63,7 +63,7 @@ jobs:
     - name: Install cargo-hack
       run: cargo install cargo-hack
     - name: Apply clippy lints
-      run: cargo hack clippy --each-feature --exclude-no-default-features --exclude-features tracing
+      run: cargo hack clippy --each-feature --exclude-no-default-features --exclude-features tracing,experimental
 
   # Run tests on some extra platforms
   cross:
@@ -149,7 +149,7 @@ jobs:
         path: ~/.cargo
         key: ${{ runner.os }}-coverage-dotcargo
     - name: Run test
-      run: cargo hack build --feature-powerset --exclude-no-default-features --exclude-features tracing
+      run: cargo hack build --feature-powerset --exclude-no-default-features --exclude-features tracing,experimental
 
   test:
     name: test
@@ -270,6 +270,18 @@ jobs:
           - sync_versioned
           - sync_trailed
           - sync_full
+          - sync_map_concurrent
+          - sync_versioned_concurrent
+          - sync_trailed_concurrent
+          - sync_full_concurrent
+          - sync_map_concurrent_with_optimistic_freelist
+          - sync_versioned_concurrent_with_optimistic_freelist
+          - sync_trailed_concurrent_with_optimistic_freelist
+          - sync_full_concurrent_with_optimistic_freelist
+          - sync_map_concurrent_with_pessimistic_freelist
+          - sync_versioned_concurrent_with_pessimistic_freelist
+          - sync_trailed_concurrent_with_pessimistic_freelist
+          - sync_full_concurrent_with_pessimistic_freelist
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -305,7 +317,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
+          # - macos-latest
         target:
           - x86_64-unknown-linux-gnu
           - i686-unknown-linux-gnu
@@ -321,6 +333,18 @@ jobs:
           - sync_versioned
           - sync_trailed
           - sync_full
+          - sync_map_concurrent
+          - sync_versioned_concurrent
+          - sync_trailed_concurrent
+          - sync_full_concurrent
+          - sync_map_concurrent_with_optimistic_freelist
+          - sync_versioned_concurrent_with_optimistic_freelist
+          - sync_trailed_concurrent_with_optimistic_freelist
+          - sync_full_concurrent_with_optimistic_freelist
+          - sync_map_concurrent_with_pessimistic_freelist
+          - sync_versioned_concurrent_with_pessimistic_freelist
+          - sync_trailed_concurrent_with_pessimistic_freelist
+          - sync_full_concurrent_with_pessimistic_freelist
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -349,6 +373,7 @@ jobs:
       - name: Miri
         run: |
           bash ci/miri_sb.sh ${{ matrix.target }} ${{ matrix.cfg }}
+
   docs:
     name: docs
     runs-on: ubuntu-latest

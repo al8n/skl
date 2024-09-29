@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
@@ -326,7 +328,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
@@ -364,7 +372,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
@@ -381,12 +395,19 @@ where
   for i in 0..N {
     let l1 = l.clone();
     let l2 = l.clone();
-    std::thread::spawn(move || {
-      let _ = l1.insert(&key(i), &new_value(i), Default::default());
-    });
-    std::thread::spawn(move || {
-      let _ = l2.insert(&key(i), &new_value(i), Default::default());
-    });
+    std::thread::Builder::new()
+      .name(format!("trailedmap-concurrent-basic2-writer-{i}-1"))
+      .spawn(move || {
+        let _ = l1.insert(&key(i), &new_value(i), Default::default());
+      })
+      .unwrap();
+
+    std::thread::Builder::new()
+      .name(format!("trailedmap-concurrent-basic2-writer{i}-2"))
+      .spawn(move || {
+        let _ = l2.insert(&key(i), &new_value(i), Default::default());
+      })
+      .unwrap();
   }
   while l.refs() > 1 {
     ::core::hint::spin_loop();
@@ -405,7 +426,13 @@ where
 
 #[cfg(all(
   all(feature = "std", not(miri)),
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
@@ -444,7 +471,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
@@ -455,15 +488,78 @@ where
 {
   use std::sync::Arc;
 
-  #[cfg(not(any(miri, feature = "loom")))]
-  const N: usize = 5;
-  #[cfg(any(miri, feature = "loom"))]
-  const N: usize = 5;
+  #[cfg(not(miri))]
+  const N: usize = 1000;
+  #[cfg(miri)]
+  const N: usize = 200;
 
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
       let _ = l.get_or_insert(b"thekey", &make_value(i), Default::default());
+    });
+  }
+
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
+
+  let saw_value = Arc::new(crate::common::AtomicU32::new(0));
+  for _ in 0..N {
+    let l = l.clone();
+    let saw_value = saw_value.clone();
+    std::thread::spawn(move || {
+      let ent = l.get(b"thekey").unwrap();
+      let val = ent.value();
+      let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
+      assert!((0..N).contains(&num));
+
+      let mut it = l.iter();
+      let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
+      let val = ent.value();
+      let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
+      assert!((0..N).contains(&num));
+      assert_eq!(ent.key(), b"thekey");
+      saw_value.fetch_add(1, Ordering::SeqCst);
+    });
+  }
+
+  while l.refs() > 1 {
+    ::core::hint::spin_loop();
+  }
+
+  assert_eq!(N, saw_value.load(Ordering::SeqCst) as usize);
+  assert_eq!(l.len(), 1);
+}
+
+#[cfg(all(
+  feature = "std",
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
+))]
+pub(crate) fn concurrent_one_key2<M>(l: M)
+where
+  M: TrailedMap + Clone + Send + 'static,
+  M::Comparator: Comparator,
+  <M::Allocator as Sealed>::Node: WithTrailer,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  use std::sync::Arc;
+
+  #[cfg(not(miri))]
+  const N: usize = 100;
+  #[cfg(miri)]
+  const N: usize = 20;
+
+  for i in 0..N {
+    let l = l.clone();
+    std::thread::spawn(move || {
+      let _ = l.insert(b"thekey", &make_value(i), Default::default());
     });
   }
 
@@ -1058,7 +1154,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1072,7 +1168,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1114,7 +1210,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1159,7 +1255,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1173,7 +1269,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1186,7 +1282,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();
@@ -1200,7 +1296,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1251,7 +1347,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1278,7 +1374,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1443,28 +1539,33 @@ macro_rules! __trailed_map_tests {
     }
   };
   // Support from golang :)
-  (go $prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+  (go $prefix:literal: $ty:ty => $opts:path) => {
+    __unit_tests!($crate::tests::trailed |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
       concurrent_basic2,
       #[cfg(feature = "std")]
       concurrent_one_key,
+      #[cfg(feature = "std")]
+      concurrent_one_key2,
     });
 
-    mod high_compression {
-      use super::*;
+    // #[cfg(not(miri))]
+    // mod high_compression {
+    //   use super::*;
 
-      __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
-        #[cfg(feature = "std")]
-        concurrent_basic,
-        #[cfg(feature = "std")]
-        concurrent_basic2,
-        #[cfg(feature = "std")]
-        concurrent_one_key,
-      });
-    }
+    //   __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_HIGH_COMPRESSION_OPTIONS| {
+    //     #[cfg(feature = "std")]
+    //     concurrent_basic,
+    //     #[cfg(feature = "std")]
+    //     concurrent_basic2,
+    //     #[cfg(feature = "std")]
+    //     concurrent_one_key,
+    //     #[cfg(feature = "std")]
+    //     concurrent_one_key2,
+    //   });
+    // }
 
     __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]

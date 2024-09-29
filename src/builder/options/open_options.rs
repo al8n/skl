@@ -61,7 +61,7 @@ impl<C: Comparator> Builder<C> {
           .map_err(invalid_data)
           .and_then(|map| {
             // Lock the memory of first page to prevent it from being swapped out.
-            #[cfg(not(any(windows, miri)))]
+            #[cfg(not(miri))]
             if opts.lock_meta {
               unsafe {
                 let arena = map.allocator();
@@ -145,7 +145,7 @@ impl<C: Comparator> Builder<C> {
               Err(bad_version())
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
-              #[cfg(not(any(windows, miri)))]
+              #[cfg(not(miri))]
               if opts.lock_meta {
                 unsafe {
                   let allocator = map.allocator();
@@ -228,7 +228,7 @@ impl<C: Comparator> Builder<C> {
               Err(bad_version())
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
-              #[cfg(not(any(windows, miri)))]
+              #[cfg(not(miri))]
               if opts.lock_meta {
                 unsafe {
                   let allocator = map.allocator();

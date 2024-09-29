@@ -86,7 +86,7 @@ where
         }
       }
 
-      #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(windows)))]
+      #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(miri)))]
       if self.arena.is_map() && self.arena.options().lock_meta() {
         let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
       }

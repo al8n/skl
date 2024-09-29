@@ -6,7 +6,10 @@ pub use zerocopy;
 pub trait Trailer: core::fmt::Debug + zerocopy::FromBytes + zerocopy::FromZeroes {
   /// Returns `true` if the trailer is valid. If a trailer is not valid, it will be ignored when
   /// read or iterated, but users can still access such entry through `get_versioned` or `iter_all_versions`.
-  fn is_valid(&self) -> bool;
+  #[inline]
+  fn is_valid(&self) -> bool {
+    true
+  }
 }
 
 macro_rules! dummy_trailer {

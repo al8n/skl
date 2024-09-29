@@ -13,9 +13,30 @@ mod tests {
 mod concurrent_tests {
   use super::*;
 
-  __full_map_tests!(go "sync_full_map": SkipMap<u64, Ascend>);
+  __full_map_tests!(go "sync_full_map": SkipMap<u64> => crate::tests::TEST_OPTIONS);
 }
 
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_sync_full_concurrent_with_optimistic_freelist,
+))]
+mod concurrent_tests_with_optimistic_freelist {
+  use super::*;
+
+  __full_map_tests!(go "sync_full_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+}
+
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_sync_full_concurrent_with_pessimistic_freelist,
+))]
+mod concurrent_tests_with_pessimistic_freelist {
+  use super::*;
+
+  __full_map_tests!(go "sync_full_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+}
 type Allocator<T> = GenericAllocator<VersionedMeta, FullNode<T>, Arena>;
 type SkipList<T, C> = base::SkipList<Allocator<T>, C>;
 
@@ -30,10 +51,6 @@ node!(
       type Trailer = T;
       type ValuePointer = AtomicValuePointer;
       type Pointer = NodePointer<T>;
-
-      fn version(&self) -> Version {
-        { self.version }
-      }
 
       fn set_version(&mut self, version: Version) {
         self.version = version;
@@ -55,7 +72,7 @@ node!(
   }
 );
 
-/// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports trailed structure, multiple versions, forward and backward iteration.
+/// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports full structure, multiple versions, forward and backward iteration.
 ///
 /// If you want to use in non-concurrent environment, you can use [`unsync::full::SkipMap`].
 #[repr(transparent)]

@@ -2,8 +2,6 @@ use core::mem;
 
 use dbutils::Comparator;
 use either::Either;
-
-#[cfg(not(windows))]
 use rarena_allocator::Allocator;
 
 use super::{super::Builder, Options, CURRENT_VERSION};
@@ -61,7 +59,7 @@ impl<C: Comparator> Builder<C> {
           .map_err(invalid_data)
           .and_then(|map| {
             // Lock the memory of first page to prevent it from being swapped out.
-            #[cfg(not(windows))]
+            #[cfg(not(miri))]
             if opts.lock_meta {
               unsafe {
                 let arena = map.allocator();
@@ -127,6 +125,12 @@ impl<C: Comparator> Builder<C> {
     opts
       .to_arena_options()
       .with_unify(true)
+      .with_read(true)
+      .with_create(false)
+      .with_create_new(false)
+      .with_write(false)
+      .with_truncate(false)
+      .with_append(false)
       .with_maximum_alignment(node_align.max(trailer_align))
       .map_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
@@ -139,7 +143,7 @@ impl<C: Comparator> Builder<C> {
               Err(bad_version())
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
-              #[cfg(not(windows))]
+              #[cfg(not(miri))]
               if opts.lock_meta {
                 unsafe {
                   let allocator = map.allocator();
@@ -222,7 +226,7 @@ impl<C: Comparator> Builder<C> {
               Err(bad_version())
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
-              #[cfg(not(windows))]
+              #[cfg(not(miri))]
               if opts.lock_meta {
                 unsafe {
                   let allocator = map.allocator();

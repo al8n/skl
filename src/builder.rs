@@ -148,8 +148,6 @@ impl<C> Builder<C> {
   ///
   /// let builder = Builder::new().with_freelist(Freelist::Optimistic);
   /// ```
-  #[cfg(feature = "experimental")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
     self.opts.freelist = freelist;
@@ -440,8 +438,6 @@ impl<C> Builder<C> {
   ///
   /// assert_eq!(builder.freelist(), Freelist::Optimistic);
   /// ```
-  #[cfg(feature = "experimental")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn freelist(&self) -> Freelist {
     self.opts.freelist

@@ -13,7 +13,29 @@ mod tests {
 mod concurrent_tests {
   use super::*;
 
-  __map_tests!(go "sync_map": SkipMap);
+  __map_tests!(go "sync_map_map": SkipMap => crate::tests::TEST_OPTIONS);
+}
+
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_sync_map_concurrent_with_optimistic_freelist,
+))]
+mod concurrent_tests_with_optimistic_freelist {
+  use super::*;
+
+  __map_tests!(go "sync_map_map": SkipMap => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+}
+
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_sync_map_concurrent_with_pessimistic_freelist,
+))]
+mod concurrent_tests_with_pessimistic_freelist {
+  use super::*;
+
+  __map_tests!(go "sync_map_map": SkipMap => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
@@ -26,10 +48,6 @@ node!(
     type Trailer = ();
     type ValuePointer = AtomicValuePointer;
     type Pointer = NodePointer;
-
-    fn version(&self) -> Version {
-      MIN_VERSION
-    }
 
     fn set_version(&mut self, version: Version) {}
 

@@ -86,8 +86,8 @@ where
         }
       }
 
-      #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(windows)))]
-      if self.arena.is_mmap() && self.arena.options().lock_meta() {
+      #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(miri)))]
+      if self.arena.is_map() && self.arena.options().lock_meta() {
         let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
       }
     }
@@ -142,12 +142,13 @@ where
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
       Key::Occupied(key) => {
-        let kb = KeyBuilder::new(KeySize::from_u32_unchecked(key.len() as u32), |buf| {
-          buf
-            .put_slice(key)
-            .expect("buffer must be large enough for key");
-          Ok(())
-        });
+        let kb = KeyBuilder::new(
+          KeySize::from_u32_unchecked(key.len() as u32),
+          |buf: &mut VacantBuffer<'_>| {
+            buf.put_slice_unchecked(key);
+            Ok(())
+          },
+        );
         let vb = value_builder.unwrap();
         self
           .arena

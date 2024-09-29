@@ -177,8 +177,6 @@ impl Options {
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
-  #[cfg(feature = "experimental")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
     self.freelist = freelist;
@@ -466,8 +464,6 @@ impl Options {
   ///
   /// assert_eq!(opts.freelist(), Freelist::Optimistic);
   /// ```
-  #[cfg(feature = "experimental")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
   #[inline]
   pub const fn freelist(&self) -> Freelist {
     self.freelist
@@ -500,14 +496,13 @@ impl Options {
       .with_magic_version(CURRENT_VERSION)
       .with_reserved(self.reserved())
       .with_unify(self.unify())
-      .maybe_capacity(self.capacity);
-
-    #[cfg(feature = "experimental")]
-    let opts = opts.with_freelist(self.freelist());
+      .maybe_capacity(self.capacity)
+      .with_freelist(self.freelist());
 
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     {
       opts
+        .with_lock_meta(false) // we need to avoid arena's lock_meta
         .with_create(self.create())
         .with_create_new(self.create_new())
         .with_read(self.read())

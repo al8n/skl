@@ -328,7 +328,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
@@ -366,7 +372,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
@@ -414,7 +426,13 @@ where
 
 #[cfg(all(
   all(feature = "std", not(miri)),
-  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
@@ -453,7 +471,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
@@ -510,7 +534,13 @@ where
 
 #[cfg(all(
   feature = "std",
-  any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,)
+  any(
+    all(test, not(miri)),
+    all_tests,
+    test_sync_trailed_concurrent,
+    test_sync_trailed_concurrent_with_optimistic_freelist,
+    test_sync_trailed_concurrent_with_pessimistic_freelist,
+  )
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
@@ -1124,7 +1154,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1138,7 +1168,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1180,7 +1210,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1225,7 +1255,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1239,7 +1269,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1252,7 +1282,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueBuilder::new(encoded_size, |val| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();
@@ -1266,7 +1296,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1317,7 +1347,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1344,7 +1374,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "buffer does not have enough space (remaining 0, want 1)"
+      "vacant buffer does not have enough space (remaining 0, want 1)"
     );
     Ok(())
   });
@@ -1509,8 +1539,8 @@ macro_rules! __trailed_map_tests {
     }
   };
   // Support from golang :)
-  (go $prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::trailed |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+  (go $prefix:literal: $ty:ty => $opts:path) => {
+    __unit_tests!($crate::tests::trailed |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]

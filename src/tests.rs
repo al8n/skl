@@ -12,6 +12,12 @@ use super::{Container, Options};
 pub(crate) const KB: usize = 1 << 10;
 const ARENA_SIZE: usize = 1 << 20;
 pub(crate) const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
+pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Options = Options::new()
+  .with_capacity(ARENA_SIZE as u32)
+  .with_freelist(rarena_allocator::Freelist::Optimistic);
+pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Options = Options::new()
+  .with_capacity(ARENA_SIZE as u32)
+  .with_freelist(rarena_allocator::Freelist::Pessimistic);
 // pub(crate) const TEST_HIGH_COMPRESSION_OPTIONS: Options = Options::new()
 //   .with_capacity(ARENA_SIZE as u32)
 //   .with_compression_policy(crate::CompressionPolicy::High);
@@ -46,7 +52,9 @@ pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_AR
   all_tests,
   test_unsync_full,
   test_sync_full,
-  test_sync_full_concurrent
+  test_sync_full_concurrent,
+  test_sync_full_concurrent_with_optimistic_freelist,
+  test_sync_full_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod full;
 
@@ -55,7 +63,9 @@ pub(crate) mod full;
   all_tests,
   test_unsync_map,
   test_sync_map,
-  test_sync_map_concurrent
+  test_sync_map_concurrent,
+  test_sync_map_concurrent_with_optimistic_freelist,
+  test_sync_map_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod map;
 
@@ -65,6 +75,8 @@ pub(crate) mod map;
   test_unsync_trailed,
   test_sync_trailed,
   test_sync_trailed_concurrent,
+  test_sync_trailed_concurrent_with_optimistic_freelist,
+  test_sync_trailed_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod trailed;
 
@@ -74,6 +86,8 @@ pub(crate) mod trailed;
   test_unsync_versioned,
   test_sync_versioned,
   test_sync_versioned_concurrent,
+  test_sync_versioned_concurrent_with_optimistic_freelist,
+  test_sync_versioned_concurrent_with_pessimistic_freelist,
 ))]
 pub(crate) mod versioned;
 

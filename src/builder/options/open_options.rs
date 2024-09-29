@@ -2,8 +2,6 @@ use core::mem;
 
 use dbutils::Comparator;
 use either::Either;
-
-#[cfg(not(windows))]
 use rarena_allocator::Allocator;
 
 use super::{super::Builder, Options, CURRENT_VERSION};

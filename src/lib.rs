@@ -77,10 +77,7 @@ pub mod iter {
 mod tests;
 
 pub use among;
-pub use dbutils::{
-  traits::{Ascend, Descend},
-  Comparator,
-};
+pub use dbutils::{Ascend, Comparator, Descend};
 pub use either;
 pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
 

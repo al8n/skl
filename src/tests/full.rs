@@ -1376,7 +1376,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::traits::Ascend> + Clone,
+  M: FullMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
@@ -1421,7 +1421,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::traits::Ascend> + Clone,
+  M: FullMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
@@ -1485,7 +1485,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap3<M>(prefix: &str)
 where
-  M: FullMap<Comparator = dbutils::traits::Ascend> + Clone,
+  M: FullMap<Comparator = dbutils::Ascend> + Clone,
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,

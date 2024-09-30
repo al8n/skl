@@ -333,7 +333,7 @@ where
   #[cfg(miri)]
   const N: usize = 200;
 
-  for i in 0..N {
+  for i in (0..N).rev() {
     let l = l.clone();
     std::thread::spawn(move || {
       l.get_or_insert(&key(i), &new_value(i)).unwrap();

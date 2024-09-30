@@ -704,7 +704,7 @@ where
   #[cfg(miri)]
   const N: usize = 200;
 
-  for i in 0..N {
+  for i in (0..N).rev() {
     let l1 = l.clone();
     let l2 = l.clone();
     std::thread::Builder::new()

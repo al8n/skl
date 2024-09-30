@@ -97,6 +97,11 @@ pub fn key(i: usize) -> std::vec::Vec<u8> {
 }
 
 /// Only used for testing
+pub fn int_key(i: usize) -> std::vec::Vec<u8> {
+  ::std::format!("{i}").into_bytes()
+}
+
+/// Only used for testing
 #[cfg(all(feature = "std", not(miri)))]
 pub fn big_value(i: usize) -> std::vec::Vec<u8> {
   ::std::format!("{:01048576}", i).into_bytes()

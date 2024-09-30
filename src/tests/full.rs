@@ -704,20 +704,20 @@ where
   #[cfg(miri)]
   const N: usize = 200;
 
-  for i in 0..N {
+  for i in (0..N).rev() {
     let l1 = l.clone();
     let l2 = l.clone();
     std::thread::Builder::new()
       .name(format!("fullmap-concurrent-basic2-writer-{i}-1"))
       .spawn(move || {
-        let _ = l1.insert(MIN_VERSION, &key(i), &new_value(i), Default::default());
+        let _ = l1.insert(MIN_VERSION, &int_key(i), &new_value(i), Default::default());
       })
       .unwrap();
 
     std::thread::Builder::new()
       .name(format!("fullmap-concurrent-basic2-writer{i}-2"))
       .spawn(move || {
-        let _ = l2.insert(MIN_VERSION, &key(i), &new_value(i), Default::default());
+        let _ = l2.insert(MIN_VERSION, &int_key(i), &new_value(i), Default::default());
       })
       .unwrap();
   }
@@ -727,7 +727,7 @@ where
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      let k = key(i);
+      let k = int_key(i);
       assert_eq!(
         l.get(MIN_VERSION, &k).unwrap().value(),
         new_value(i),

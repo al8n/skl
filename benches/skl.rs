@@ -69,6 +69,7 @@ fn bench_read_write_fixed_skiplist(c: &mut Criterion) {
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
   let list = Builder::new()
     .with_capacity(512 << 20)
+    .with_freelist(Freelist::None)
     .alloc::<SkipMap>()
     .unwrap();
   let l = list.clone();

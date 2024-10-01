@@ -8,8 +8,10 @@ mod open_options;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum CompressionPolicy {
-  /// Fast compression policy, which only checks if the key is a prefix of the next key.
+  /// No compression policy will be applied on the key.
   #[default]
+  None,
+  /// Fast compression policy, which only checks if the key is a prefix of the next key.
   Fast,
   /// High compression policy, which checks if the key is a substring of the next key.
   #[cfg(feature = "experimental")]
@@ -73,7 +75,7 @@ impl Options {
       unify: false,
       magic_version: 0,
       freelist: Freelist::None,
-      policy: CompressionPolicy::Fast,
+      policy: CompressionPolicy::None,
       reserved: 0,
       lock_meta: true,
 

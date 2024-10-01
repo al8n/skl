@@ -796,6 +796,7 @@ where
     key: &[u8],
   ) -> Option<Pointer> {
     match self.arena.options().compression_policy() {
+      CompressionPolicy::None => {}
       CompressionPolicy::Fast => {
         if next_key.starts_with(key) {
           return Some(Pointer {

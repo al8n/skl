@@ -12,8 +12,18 @@ categories = ["database", "data-structures", "concurrency", "no-std"]
 license = "MIT OR Apache-2.0"
 
 [[bench]]
-path = "benches/bench.rs"
-name = "bench"
+path = "benches/skl.rs"
+name = "skl"
+harness = false
+
+[[bench]]
+path = "benches/crossbeam_skiplist.rs"
+name = "crossbeam_skiplist"
+harness = false
+
+[[bench]]
+path = "benches/hashmap_parkinglot.rs"
+name = "hashmap_parkinglot"
 harness = false
 
 [[example]]
@@ -63,7 +73,7 @@ tracing = { version = "0.1", optional = true }
 criterion = "0.5"
 tempfile = "3"
 parking_lot = "0.12"
-
+crossbeam-skiplist = "0.1"
 
 [profile.bench]
 opt-level = 3

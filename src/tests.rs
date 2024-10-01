@@ -14,9 +14,11 @@ const ARENA_SIZE: usize = 1 << 20;
 pub(crate) const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
 pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Options = Options::new()
   .with_capacity(ARENA_SIZE as u32)
+  .with_compression_policy(crate::CompressionPolicy::Fast)
   .with_freelist(rarena_allocator::Freelist::Optimistic);
 pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Options = Options::new()
   .with_capacity(ARENA_SIZE as u32)
+  .with_compression_policy(crate::CompressionPolicy::Fast)
   .with_freelist(rarena_allocator::Freelist::Pessimistic);
 // pub(crate) const TEST_HIGH_COMPRESSION_OPTIONS: Options = Options::new()
 //   .with_capacity(ARENA_SIZE as u32)

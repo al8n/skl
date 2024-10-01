@@ -26,6 +26,9 @@ use core::{
 mod base;
 pub use base::{Entry, EntryRef, VersionedEntry, VersionedEntryRef};
 
+/// Skiplist implementation which supports generic key and value.
+mod generic;
+
 mod allocator;
 pub use allocator::GenericAllocator;
 

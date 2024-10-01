@@ -1,7 +1,8 @@
-use core::{mem, ptr::NonNull};
+use core::{marker::PhantomData, mem, ptr::NonNull};
 use std::boxed::Box;
 
 use builder::CompressionPolicy;
+use dbutils::traits::Type;
 use either::Either;
 use rarena_allocator::Allocator as _;
 
@@ -16,14 +17,19 @@ mod iterator;
 pub use iterator::*;
 
 type UpdateOk<'a, 'b, A> = Either<
-  Option<VersionedEntryRef<'a, A>>,
-  Result<VersionedEntryRef<'a, A>, VersionedEntryRef<'a, A>>,
+  Option<entry::VersionedEntryRef<'a, A>>,
+  Result<entry::VersionedEntryRef<'a, A>, entry::VersionedEntryRef<'a, A>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<A: Allocator, C = Ascend> {
+pub struct SkipList<K, V, A>
+where
+  K: ?Sized,
+  V: ?Sized,
+  A: Allocator,
+{
   pub(crate) arena: A,
   meta: NonNull<A::Header>,
   head: <A::Node as Node>::Pointer,
@@ -36,26 +42,29 @@ pub struct SkipList<A: Allocator, C = Ascend> {
   #[cfg(all(test, feature = "std"))]
   yield_now: bool,
 
-  cmp: C,
+  _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-unsafe impl<A, C> Send for SkipList<A, C>
+unsafe impl<K, V, A> Send for SkipList<K, V, A>
 where
+  K: ?Sized + Send,
+  V: ?Sized + Send,
   A: Allocator + Send,
-  C: Comparator + Send,
 {
 }
-unsafe impl<A, C> Sync for SkipList<A, C>
+unsafe impl<K, V, A> Sync for SkipList<K, V, A>
 where
+  K: ?Sized + Sync,
+  V: ?Sized + Sync,
   A: Allocator + Sync,
-  C: Comparator + Sync,
 {
 }
 
-impl<A, C: Clone> Clone for SkipList<A, C>
+impl<K, V, A> Clone for SkipList<K, V, A>
 where
   A: Allocator,
-  C: Clone,
+  K: ?Sized,
+  V: ?Sized,
 {
   fn clone(&self) -> Self {
     Self {
@@ -68,14 +77,16 @@ where
       data_offset: self.data_offset,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
-      cmp: self.cmp.clone(),
+      _m: PhantomData,
     }
   }
 }
 
-impl<A, C> Drop for SkipList<A, C>
+impl<K, V, A> Drop for SkipList<K, V, A>
 where
   A: Allocator,
+  K: ?Sized,
+  V: ?Sized,
 {
   #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
@@ -94,8 +105,10 @@ where
   }
 }
 
-impl<A, C> SkipList<A, C>
+impl<K, V, A> SkipList<K, V, A>
 where
+  K: ?Sized,
+  V: ?Sized,
   A: Allocator,
 {
   #[inline]
@@ -105,7 +118,6 @@ where
     head: <A::Node as Node>::Pointer,
     tail: <A::Node as Node>::Pointer,
     data_offset: u32,
-    cmp: C,
   ) -> Self {
     Self {
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -117,7 +129,7 @@ where
       data_offset,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
-      cmp,
+      _m: PhantomData,
     }
   }
 
@@ -126,12 +138,7 @@ where
     // Safety: the pointer is well aligned and initialized.
     unsafe { self.meta.as_ref() }
   }
-}
 
-impl<A, C> SkipList<A, C>
-where
-  A: Allocator,
-{
   fn new_node<'a, E>(
     &'a self,
     version: Version,
@@ -218,14 +225,8 @@ where
     }
     Ok((nd, deallocator))
   }
-}
 
-impl<A, C> SkipList<A, C>
-where
-  A: Allocator,
-  C: Comparator,
-{
-  /// ## Safety
+    /// ## Safety
   ///
   /// - The caller must ensure that the node is allocated by the arena.
   #[inline]
@@ -310,7 +311,14 @@ where
       NonNull::new_unchecked(self.arena.raw_mut_ptr().add(offset as usize))
     })
   }
+}
 
+impl<K, V, A> SkipList<K, V, A>
+where
+  A: Allocator,
+  K: ?Sized + Type,
+  V: ?Sized,
+{
   /// Returns the first entry in the map.
   fn first_in(
     &self,
@@ -585,7 +593,6 @@ where
         return (Some(x), false);
       }
 
-      
       let next_key = next.get_key(&self.arena);
       let cmp = self
         .cmp
@@ -881,7 +888,7 @@ where
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let k = found_key.expect("the key cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
+        let old = entry::VersionedEntryRef::from_node(node_ptr, &self.arena);
 
         if upsert {
           return self.upsert(
@@ -1051,7 +1058,7 @@ where
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
+                let old = entry::VersionedEntryRef::from_node(node_ptr, &self.arena);
 
                 if upsert {
                   // let curr = nd.as_ref(&self.arena);
@@ -1126,7 +1133,7 @@ where
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
-    old: VersionedEntryRef<'a, A>,
+    old: entry::VersionedEntryRef<'a, A>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_offset: u32,
@@ -1148,7 +1155,7 @@ where
         match old_node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => Ok(Either::Right(Err(
-            VersionedEntryRef::from_node_with_pointer(
+            entry::VersionedEntryRef::from_node_with_pointer(
               old_node,
               &self.arena,
               ValuePartPointer::new(
@@ -1166,7 +1173,7 @@ where
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
-    old: VersionedEntryRef<'a, A>,
+    old: entry::VersionedEntryRef<'a, A>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     trailer: A::Trailer,
@@ -1183,7 +1190,7 @@ where
         match old_node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
           Err((offset, len)) => Ok(Either::Right(Err(
-            VersionedEntryRef::from_node_with_pointer(
+            entry::VersionedEntryRef::from_node_with_pointer(
               old_node,
               &self.arena,
               ValuePartPointer::new(

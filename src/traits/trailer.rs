@@ -2,8 +2,8 @@ pub use zerocopy;
 
 /// A trait for extra information that can be stored with entry in the skiplist. e.g. TTL information and etc.
 ///
-/// For more details, see [`FromBytes`](zerocopy::FromBytes) and [`FromZeroes`](zerocopy::FromZeroes).
-pub trait Trailer: core::fmt::Debug + zerocopy::FromBytes + zerocopy::FromZeroes {
+/// For more details, see [`FromBytes`](zerocopy::FromBytes).
+pub trait Trailer: core::fmt::Debug + zerocopy::FromBytes {
   /// Returns `true` if the trailer is valid. If a trailer is not valid, it will be ignored when
   /// read or iterated, but users can still access such entry through `get_versioned` or `iter_all_versions`.
   #[inline]
@@ -46,17 +46,16 @@ dummy_trailer!(
   i64,
   i128,
   isize,
-  // core::sync::atomic::AtomicUsize,
-  // core::sync::atomic::AtomicIsize,
-  // core::sync::atomic::AtomicU8,
-  // core::sync::atomic::AtomicI8,
-  // core::sync::atomic::AtomicU16,
-  // core::sync::atomic::AtomicI16,
-  // core::sync::atomic::AtomicU32,
-  // core::sync::atomic::AtomicI32,
-  // core::sync::atomic::AtomicU64,
-  // core::sync::atomic::AtomicI64,
-  // core::sync::atomic::AtomicBool,
+  core::sync::atomic::AtomicUsize,
+  core::sync::atomic::AtomicIsize,
+  core::sync::atomic::AtomicU8,
+  core::sync::atomic::AtomicI8,
+  core::sync::atomic::AtomicU16,
+  core::sync::atomic::AtomicI16,
+  core::sync::atomic::AtomicU32,
+  core::sync::atomic::AtomicI32,
+  core::sync::atomic::AtomicU64,
+  core::sync::atomic::AtomicI64,
 );
 
 /// Time related trailers.
@@ -112,7 +111,7 @@ pub mod time {
         $(
           #[$meta]
         )*
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, zerocopy::FromBytes, zerocopy::FromZeroes)]
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, zerocopy::FromBytes)]
         pub struct $ident($inner);
 
         methods!($ident($inner: $from <-> $into));
@@ -146,7 +145,7 @@ pub mod time {
         $(
           #[$meta]
         )*
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, zerocopy::FromBytes, zerocopy::FromZeroes)]
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, zerocopy::FromBytes)]
         pub struct $ident($inner);
 
         methods!($ident($inner: $from <-> $into));

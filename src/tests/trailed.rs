@@ -1168,7 +1168,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "vacant buffer does not have enough space (remaining 0, want 1)"
+      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
     Ok(())
   });
@@ -1210,7 +1210,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "vacant buffer does not have enough space (remaining 0, want 1)"
+      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
     Ok(())
   });
@@ -1269,7 +1269,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "vacant buffer does not have enough space (remaining 0, want 1)"
+      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
     Ok(())
   });
@@ -1296,7 +1296,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "vacant buffer does not have enough space (remaining 0, want 1)"
+      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
     Ok(())
   });
@@ -1347,7 +1347,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "vacant buffer does not have enough space (remaining 0, want 1)"
+      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
     Ok(())
   });
@@ -1374,7 +1374,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "vacant buffer does not have enough space (remaining 0, want 1)"
+      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
     Ok(())
   });

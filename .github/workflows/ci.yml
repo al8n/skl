@@ -225,7 +225,7 @@ jobs:
         with:
             toolchain: ${{ env.stable }}
             override: true
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install Valgrind
         run: |

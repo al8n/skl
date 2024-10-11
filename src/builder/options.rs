@@ -192,7 +192,7 @@ impl Options {
   /// ```
   /// use skl::{Options, CompressionPolicy};
   ///
-  /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
+  /// let opts = Options::new().with_compression_policy(CompressionPolicy::Fast);
   /// ```
   #[inline]
   pub const fn with_compression_policy(mut self, policy: CompressionPolicy) -> Self {
@@ -478,9 +478,9 @@ impl Options {
   /// ```rust
   /// use skl::{Options, CompressionPolicy};
   ///
-  /// let opts = Options::new().with_compression_policy(CompressionPolicy::High);
+  /// let opts = Options::new().with_compression_policy(CompressionPolicy::Fast);
   ///
-  /// assert_eq!(opts.compression_policy(), CompressionPolicy::High);
+  /// assert_eq!(opts.compression_policy(), CompressionPolicy::Fast);
   /// ```
   #[inline]
   pub const fn compression_policy(&self) -> CompressionPolicy {

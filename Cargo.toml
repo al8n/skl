@@ -1,8 +1,8 @@
 [package]
 name = "skl"
-version = "0.16.0"
+version = "0.16.2"
 edition = "2021"
-rust-version = "1.80.0"
+rust-version = "1.81.0"
 repository = "https://github.com/al8n/skl"
 description = "A lock-free thread-safe concurrent ARENA based (heap backend or memory map backend) skiplist implementation which helps develop MVCC memtable for LSM-Tree."
 documentation = "https://docs.rs/skl"
@@ -46,7 +46,7 @@ getrandom = { version = "0.2", features = ["js"] }
 among = { version = "0.1", default-features = false }
 arbitrary-int = { version = "1.2", default-features = false }
 derive_more = { version = "1", features = ["display"] }
-dbutils = { version = "0.6", default-features = false }
+dbutils = { version = "0.7", default-features = false }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }

@@ -24,14 +24,15 @@ use core::{
 
 /// Skiplist implementation. See [`SkipList`](base::SkipList) for more information.
 mod base;
-pub use base::{Entry, EntryRef, VersionedEntry, VersionedEntryRef, GenericEntryRef, GenericVersionedEntryRef};
+pub use base::{
+  Entry, EntryRef, GenericEntryRef, GenericVersionedEntryRef, VersionedEntry, VersionedEntryRef,
+};
 
 mod allocator;
 pub use allocator::GenericAllocator;
 
 /// Skiplist implementation which supports generic key-value types.
 pub mod generic;
-
 
 mod error;
 pub use error::Error;

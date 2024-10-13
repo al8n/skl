@@ -46,7 +46,7 @@ getrandom = { version = "0.2", features = ["js"] }
 among = { version = "0.1", default-features = false }
 arbitrary-int = { version = "1.2", default-features = false }
 derive_more = { version = "1", features = ["display"] }
-dbutils = { version = "0.7", default-features = false }
+dbutils = { version = "0.7", path = "../layer0/dbutils", default-features = false }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }

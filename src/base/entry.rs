@@ -89,7 +89,7 @@ impl<'a, A: Allocator> From<VersionedEntryRef<'a, A>> for VersionedEntry<A> {
 
 impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   #[inline]
-  pub(super) fn from_node(
+  pub(crate) fn from_node(
     node: <A::Node as Node>::Pointer,
     arena: &'a A,
   ) -> VersionedEntryRef<'a, A> {
@@ -106,7 +106,7 @@ impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   }
 
   #[inline]
-  pub(super) fn from_node_with_pointer(
+  pub(crate) fn from_node_with_pointer(
     node: <A::Node as Node>::Pointer,
     arena: &'a A,
     pointer: ValuePartPointer<A::Trailer>,

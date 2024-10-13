@@ -41,6 +41,15 @@ mod concurrent_tests_with_pessimistic_freelist {
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
 type SkipList<C> = base::SkipList<Allocator, C>;
 
+/// Iterator over the [`SkipMap`].
+pub type Iter<'a, C = Ascend> = crate::iter::Iter<'a, Allocator, C>;
+
+/// Iterator over a subset of the [`SkipMap`].
+pub type Range<'a, Q, R, C = Ascend> = crate::iter::Iter<'a, Allocator, C, Q, R>;
+
+/// The entry reference of the [`SkipMap`].
+pub type Entry<'a> = crate::EntryRef<'a, Allocator>;
+
 node!(
   /// A raw node that does not support version and trailer.
   struct RawNode {{

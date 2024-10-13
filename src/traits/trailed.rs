@@ -2,12 +2,12 @@ use super::*;
 
 /// [`TrailedMap`] implementation for concurrent environment.
 pub mod sync {
-  pub use crate::sync::trailed::SkipMap;
+  pub use crate::sync::trailed::{Entry, Iter, Range, SkipMap};
 }
 
 /// [`TrailedMap`] implementation for non-concurrent environment.
 pub mod unsync {
-  pub use crate::unsync::trailed::SkipMap;
+  pub use crate::unsync::trailed::{Entry, Iter, Range, SkipMap};
 }
 
 /// A fast, ARENA based `SkipMap` that supports trailed structure, forward and backward iteration.

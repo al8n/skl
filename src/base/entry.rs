@@ -37,16 +37,16 @@ where
   }
 }
 
-impl<A: Allocator> VersionedEntryRef<'_, A> {
+impl<'a, A: Allocator> VersionedEntryRef<'a, A> {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &[u8] {
+  pub const fn key(&'a self) -> &'a [u8] {
     self.key
   }
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> Option<&[u8]> {
+  pub fn value(&'a self) -> Option<&'a [u8]> {
     unsafe {
       let value = self.ptr.get_value_by_value_offset(
         self.arena,
@@ -290,14 +290,14 @@ impl<'a, A: Allocator> From<EntryRef<'a, A>> for Entry<A> {
   }
 }
 
-impl<A> EntryRef<'_, A>
+impl<'a, A> EntryRef<'a, A>
 where
   A: Allocator,
   A::Node: WithTrailer,
 {
   /// Returns the trailer of the entry
   #[inline]
-  pub fn trailer(&self) -> &A::Trailer {
+  pub fn trailer(&'a self) -> &'a A::Trailer {
     self.0.trailer()
   }
 }
@@ -314,16 +314,16 @@ where
   }
 }
 
-impl<A: Allocator> EntryRef<'_, A> {
+impl<'a, A: Allocator> EntryRef<'a, A> {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &[u8] {
+  pub const fn key(&'a self) -> &'a [u8] {
     self.0.key()
   }
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> &[u8] {
+  pub fn value(&'a self) -> &'a [u8] {
     match self.0.value() {
       Some(value) => value,
       None => panic!("EntryRef's value cannot be `None`"),

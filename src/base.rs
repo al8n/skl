@@ -8,9 +8,10 @@ use rarena_allocator::Allocator as _;
 use super::{allocator::*, common::*, *};
 
 mod api;
-
 mod entry;
 pub use entry::*;
+mod generic;
+pub use generic::*;
 
 mod iterator;
 pub use iterator::*;

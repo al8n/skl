@@ -1,4 +1,5 @@
 use super::{entry::VersionedEntryRef, *};
+use dbutils::traits::ComparableRangeBounds;
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
@@ -129,7 +130,7 @@ where
   K::Ref<'a>: Ord,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   /// Advances to the next position. Returns the key and value if the
@@ -161,7 +162,7 @@ where
           }
         }
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
@@ -199,7 +200,7 @@ where
           }
         }
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
@@ -215,7 +216,7 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
@@ -225,7 +226,7 @@ where
     upper: Bound<&QR>,
   ) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     match upper {
       Bound::Included(key) => self.seek_le(key).map(|n| {
@@ -249,7 +250,7 @@ where
     lower: Bound<&QR>,
   ) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     match lower {
       Bound::Included(key) => self.seek_ge(key).map(|n| {
@@ -271,7 +272,7 @@ where
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_ge<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.nd = self.map.ge(self.version, key, !self.all_versions)?;
     if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
@@ -284,7 +285,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
@@ -313,7 +314,7 @@ where
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_gt<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.nd = self.map.gt(self.version, key, self.all_versions)?;
 
@@ -327,7 +328,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
@@ -356,7 +357,7 @@ where
   /// pointing at a valid entry, and `None` otherwise.
   fn seek_le<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.nd = self.map.le(self.version, key, self.all_versions)?;
 
@@ -365,7 +366,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
@@ -394,7 +395,7 @@ where
   /// and `None` otherwise.
   fn seek_lt<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     // NB: the top-level AllVersionsIter has already adjusted key based on
     // the upper-bound.
@@ -405,7 +406,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
@@ -453,7 +454,7 @@ where
           continue;
         }
 
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
@@ -488,7 +489,7 @@ where
         }
 
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if contains(&self.range, &nk) {
+        if self.range.comparable_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           return Some(ent);
         }
@@ -505,7 +506,7 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   type Item = VersionedEntryRef<'a, K, V, A>;
@@ -559,7 +560,7 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   fn next_back(&mut self) -> Option<Self::Item> {

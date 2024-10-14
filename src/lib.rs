@@ -24,9 +24,9 @@ use core::{
 
 /// Skiplist implementation. See [`SkipList`](base::SkipList) for more information.
 mod base;
-pub use base::{
-  Entry, EntryRef, GenericEntryRef, GenericVersionedEntryRef, VersionedEntry, VersionedEntryRef,
-};
+// pub use base::{
+//   Entry, EntryRef, GenericEntryRef, GenericVersionedEntryRef, VersionedEntry, VersionedEntryRef,
+// };
 
 mod allocator;
 pub use allocator::GenericAllocator;
@@ -52,7 +52,7 @@ pub use types::*;
 
 /// Iterators for the skipmaps.
 pub mod iter {
-  pub use super::base::{AllVersionsIter, Iter};
+  pub use super::generic::iterator::{AllVersionsIter, Iter};
 }
 
 #[cfg(any(

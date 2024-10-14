@@ -16,7 +16,7 @@ mod sealed {
 
   use among::Among;
 
-use super::*;
+  use super::*;
 
   pub struct Pointer {
     pub(crate) offset: u32,

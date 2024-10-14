@@ -1,9 +1,17 @@
-use core::convert::Infallible;
+use core::sync::atomic::Ordering;
 
 use among::Among;
-use dbutils::traits::MaybeStructured;
+use dbutils::{
+  buffer::VacantBuffer,
+  traits::{KeyRef, MaybeStructured, Type},
+};
+use either::Either;
+use rarena_allocator::Allocator as _;
 
-use super::*;
+use super::{
+  entry::EntryRef, Allocator, Error, Height, Inserter, Key, KeyBuilder, RemoveValueBuilder,
+  SkipList, ValueBuilder, Version,
+};
 
 impl<K, V, A> SkipList<K, V, A>
 where
@@ -59,7 +67,7 @@ where
         version,
         trailer,
         height.into(),
-        Key::from(key),
+        Key::from((false, key)),
         Some(ValueBuilder::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -74,7 +82,7 @@ where
             Some(EntryRef(old))
           }
         })
-      }) 
+      })
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -109,7 +117,7 @@ where
         version,
         trailer,
         height.into(),
-        Key::from(key),
+        Key::from((false, key)),
         Some(value_builder),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -156,7 +164,7 @@ where
         version,
         trailer,
         height.into(),
-        Key::from(key),
+        Key::from((false, key)),
         Some(ValueBuilder::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -206,7 +214,7 @@ where
         version,
         trailer,
         height.into(),
-        Key::from(key),
+        Key::from((false, key)),
         Some(value_builder),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -338,6 +346,7 @@ where
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
   /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
   ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
+  #[allow(single_use_lifetimes)]
   pub fn compare_remove_at_height<'a, 'b: 'a>(
     &'a self,
     version: Version,
@@ -359,8 +368,8 @@ where
         version,
         trailer,
         height.into(),
-        Key::Remove(key),
-        Option::<RemoveValueBuilder<Infallible>>::None,
+        Key::from((true, key)),
+        Option::<RemoveValueBuilder<V::Error>>::None,
         success,
         failure,
         Inserter::default(),
@@ -393,22 +402,27 @@ where
   ///
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
-  pub fn get_or_remove_at_height<'a>(
+  #[allow(single_use_lifetimes)]
+  pub fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'a, K>>,
+    key: impl Into<MaybeStructured<'b, K>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Error> {
-    self.check_height_and_ro(height)?;
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    self.check_height_and_ro(height).map_err(Either::Right)?;
+    let key: MaybeStructured<'_, K> = key.into();
 
     self
       .update(
         version,
         trailer,
         height.into(),
-        Key::Remove(key),
-        Option::<RemoveValueBuilder<Infallible>>::None,
+        Key::from((true, key)),
+        Option::<RemoveValueBuilder<V::Error>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -427,7 +441,7 @@ where
         },
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
-      .map_err(|e| e.expect_right("must be map::Error"))
+      .map_err(Among::into_left_right)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -441,13 +455,16 @@ where
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
+  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), K::Error>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
     self.check_height_and_ro(height).map_err(Either::Right)?;
 
     let (key_size, key) = key_builder.into_components();
@@ -459,7 +476,7 @@ where
         trailer,
         height.into(),
         key,
-        Option::<RemoveValueBuilder<Infallible>>::None,
+        Option::<RemoveValueBuilder<V::Error>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -478,6 +495,6 @@ where
         },
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
-      .map_err(|e| Either::Right(e.expect_right("must be map::Error")))
+      .map_err(Among::into_left_right)
   }
 }

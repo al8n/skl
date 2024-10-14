@@ -88,14 +88,14 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, K, V, A>>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.0.seek_upper_bound(upper).map(EntryRef)
   }
@@ -104,7 +104,7 @@ where
   /// If no such element is found then `None` is returned.
   pub fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, K, V, A>>
   where
-    QR: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.0.seek_lower_bound(lower).map(EntryRef)
   }
@@ -116,7 +116,7 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   type Item = EntryRef<'a, K, V, A>;
@@ -141,7 +141,7 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
-  Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+  Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
   fn next_back(&mut self) -> Option<Self::Item> {

@@ -212,7 +212,7 @@ where
   #[inline]
   pub fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.get(version, key).is_some()
   }
@@ -221,7 +221,7 @@ where
   #[inline]
   pub fn contains_key_versioned<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.get_versioned(version, key).is_some()
   }
@@ -252,7 +252,7 @@ where
   /// you can use [`get_versioned`](SkipList::get_versioned).
   pub fn get<'a, Q>(&'a self, version: Version, key: &Q) -> Option<EntryRef<'a, K, V, A>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
@@ -300,7 +300,7 @@ where
     key: &Q,
   ) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
@@ -344,7 +344,7 @@ where
   ) -> Option<EntryRef<'a, K, V, A>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.iter(version).seek_upper_bound(upper)
   }
@@ -358,7 +358,7 @@ where
   ) -> Option<EntryRef<'a, K, V, A>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     self.iter(version).seek_lower_bound(lower)
   }
@@ -386,7 +386,7 @@ where
   pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> iterator::Iter<'a, K, V, A, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     R: RangeBounds<Q> + 'a,
   {
     iterator::Iter::range(version, self, range)
@@ -401,7 +401,7 @@ where
   ) -> iterator::AllVersionsIter<'a, K, V, A, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Ord + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
     R: RangeBounds<Q> + 'a,
   {
     iterator::AllVersionsIter::range(version, self, range, true)

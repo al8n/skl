@@ -83,11 +83,9 @@ where
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
   pub fn value(&self) -> Option<&V::Ref<'a>> {
-    self.raw_value.map(|raw_value| {
-      self
-        .value
-        .get_or_init(|| ty_ref::<V>(raw_value))
-    })
+    self
+      .raw_value
+      .map(|raw_value| self.value.get_or_init(|| ty_ref::<V>(raw_value)))
   }
 
   /// Returns if the entry is marked as removed
@@ -124,8 +122,7 @@ where
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
       let vp = node.trailer_offset_and_value_size();
-      let raw_value = node
-        .get_value_by_value_offset(arena, vp.value_offset, vp.value_len);
+      let raw_value = node.get_value_by_value_offset(arena, vp.value_offset, vp.value_len);
 
       let raw_key = node.get_key(arena);
       VersionedEntryRef {
@@ -149,8 +146,8 @@ where
     pointer: ValuePartPointer<A::Trailer>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
-      let raw_value = node
-        .get_value_by_value_offset(arena, pointer.value_offset, pointer.value_len);
+      let raw_value =
+        node.get_value_by_value_offset(arena, pointer.value_offset, pointer.value_len);
 
       let raw_key = node.get_key(arena);
       VersionedEntryRef {

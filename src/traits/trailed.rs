@@ -31,7 +31,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self.insert_at_height(self.random_height(), key, value, trailer)
   }
 
@@ -58,7 +58,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self
       .as_ref()
       .insert_at_height(MIN_VERSION, height, key, value, trailer)
@@ -117,7 +117,7 @@ where
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
     self.insert_at_height_with_value_builder(self.random_height(), key, value_builder, trailer)
   }
 
@@ -176,7 +176,7 @@ where
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
     self.as_ref().insert_at_height_with_value_builder(
       MIN_VERSION,
       height,
@@ -198,7 +198,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self.get_or_insert_at_height(self.random_height(), key, value, trailer)
   }
 
@@ -215,7 +215,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self
       .as_ref()
       .get_or_insert_at_height(MIN_VERSION, height, key, value, trailer)
@@ -274,7 +274,7 @@ where
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
     self.get_or_insert_at_height_with_value_builder(
       self.random_height(),
       key,
@@ -339,7 +339,7 @@ where
     key: &'a [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
     self.as_ref().get_or_insert_at_height_with_value_builder(
       MIN_VERSION,
       height,
@@ -407,7 +407,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
     self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder, trailer)
   }
 
@@ -471,7 +471,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
     self.as_ref().insert_at_height_with_builders(
       MIN_VERSION,
       height,
@@ -537,7 +537,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
     self.get_or_insert_at_height_with_builders(
       self.random_height(),
       key_builder,
@@ -604,7 +604,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
     self.as_ref().get_or_insert_at_height_with_builders(
       MIN_VERSION,
       height,
@@ -624,7 +624,7 @@ where
     &'a self,
     key: &'a [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self.get_or_remove_at_height(self.random_height(), key, trailer)
   }
 
@@ -652,7 +652,7 @@ where
     height: Height,
     key: &'a [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self
       .as_ref()
       .get_or_remove_at_height(MIN_VERSION, height, key, trailer)
@@ -664,7 +664,7 @@ where
     &'a self,
     key: &'a [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self.remove_at_height(self.random_height(), key, trailer)
   }
 
@@ -675,7 +675,7 @@ where
     height: Height,
     key: &'a [u8],
     trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, <Self as List>::Allocator>>, Error> {
+  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
     self.as_ref().compare_remove_at_height(
       MIN_VERSION,
       height,

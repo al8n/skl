@@ -14,7 +14,7 @@ where
   pub(super) version: Version,
   pub(super) range: R,
   pub(super) all_versions: bool,
-  pub(super) last: Option<K::Ref<'a>>,
+  pub(super) last: Option<VersionedEntryRef<'a, K, V, A>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
@@ -155,7 +155,7 @@ where
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
         if !self.all_versions {
           if let Some(ref last) = self.last {
-            if Comparable::compare(last, &nk) == cmp::Ordering::Equal {
+            if Comparable::compare(last.key(), &nk) == cmp::Ordering::Equal {
               continue;
             }
           }
@@ -163,7 +163,7 @@ where
 
         if contains(&self.range, &nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          self.last = Some(ent.key);
+          self.last = Some(ent.clone());
           return Some(ent);
         }
       }
@@ -193,7 +193,7 @@ where
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
         if !self.all_versions {
           if let Some(ref last) = self.last {
-            if Comparable::compare(last, &nk) == cmp::Ordering::Equal {
+            if Comparable::compare(last.key(), &nk) == cmp::Ordering::Equal {
               continue;
             }
           }
@@ -201,7 +201,7 @@ where
 
         if contains(&self.range, &nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          self.last = Some(ent.key);
+          self.last = Some(ent.clone());
           return Some(ent);
         }
       }
@@ -230,12 +230,12 @@ where
     match upper {
       Bound::Included(key) => self.seek_le(key).map(|n| {
         let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.key);
+        self.last = Some(ent.clone());
         ent
       }),
       Bound::Excluded(key) => self.seek_lt(key).map(|n| {
         let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.key);
+        self.last = Some(ent.clone());
         ent
       }),
       Bound::Unbounded => self.last(),
@@ -254,12 +254,12 @@ where
     match lower {
       Bound::Included(key) => self.seek_ge(key).map(|n| {
         let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.key);
+        self.last = Some(ent.clone());
         ent
       }),
       Bound::Excluded(key) => self.seek_gt(key).map(|n| {
         let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.key);
+        self.last = Some(ent.clone());
         ent
       }),
       Bound::Unbounded => self.first(),
@@ -455,7 +455,7 @@ where
 
         if contains(&self.range, &nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          self.last = Some(ent.key);
+          self.last = Some(ent.clone());
           return Some(ent);
         }
 

@@ -25,15 +25,6 @@ where
   }
 }
 
-impl<K, V, A, R: Copy, Q> Copy for Iter<'_, K, V, A, Q, R>
-where
-  A: Allocator,
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  Q: ?Sized,
-{
-}
-
 impl<'a, K, V, A> Iter<'a, K, V, A>
 where
   K: ?Sized + Type,

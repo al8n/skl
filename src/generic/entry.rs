@@ -1,3 +1,5 @@
+use core::cell::OnceCell;
+
 use crate::allocator::{WithTrailer, WithVersion};
 
 use super::*;
@@ -14,9 +16,11 @@ where
 {
   pub(super) arena: &'a A,
   pub(super) raw_key: &'a [u8],
-  pub(super) key: K::Ref<'a>,
-  pub(super) value: Option<V::Ref<'a>>,
+  pub(super) key: OnceCell<K::Ref<'a>>,
+  pub(super) raw_value: Option<&'a [u8]>,
+  pub(super) value: OnceCell<V::Ref<'a>>,
   pub(super) value_part_pointer: ValuePartPointer<A::Trailer>,
+  pub(super) trailer: OnceCell<&'a A::Trailer>,
   pub(super) version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
@@ -34,22 +38,14 @@ where
       arena: self.arena,
       raw_key: self.raw_key,
       key: self.key.clone(),
+      raw_value: self.raw_value,
       value: self.value.clone(),
       value_part_pointer: self.value_part_pointer,
+      trailer: self.trailer.clone(),
       version: self.version,
       ptr: self.ptr,
     }
   }
-}
-
-impl<'a, K, V, A: Allocator> Copy for VersionedEntryRef<'a, K, V, A>
-where
-  K: ?Sized + Type,
-  K::Ref<'a>: Copy,
-  V: ?Sized + Type,
-  V::Ref<'a>: Copy,
-  A: Allocator,
-{
 }
 
 impl<'a, K, V, A> VersionedEntryRef<'a, K, V, A>
@@ -63,10 +59,11 @@ where
   #[inline]
   pub fn trailer(&self) -> &'a A::Trailer {
     unsafe {
-      let trailer = self
-        .ptr
-        .get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset);
-      trailer
+      self.trailer.get_or_init(|| {
+        self
+          .ptr
+          .get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset)
+      })
     }
   }
 }
@@ -79,14 +76,18 @@ where
 {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &K::Ref<'a> {
-    &self.key
+  pub fn key(&self) -> &K::Ref<'a> {
+    self.key.get_or_init(|| ty_ref::<K>(self.raw_key))
   }
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
   pub fn value(&self) -> Option<&V::Ref<'a>> {
-    self.value.as_ref()
+    self.raw_value.map(|raw_value| {
+      self
+        .value
+        .get_or_init(|| ty_ref::<V>(raw_value))
+    })
   }
 
   /// Returns if the entry is marked as removed
@@ -123,19 +124,20 @@ where
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
       let vp = node.trailer_offset_and_value_size();
-      let value = node
-        .get_value_by_value_offset(arena, vp.value_offset, vp.value_len)
-        .map(ty_ref::<V>);
+      let raw_value = node
+        .get_value_by_value_offset(arena, vp.value_offset, vp.value_len);
 
       let raw_key = node.get_key(arena);
       VersionedEntryRef {
-        key: <K::Ref<'_> as TypeRef<'_>>::from_slice(raw_key),
-        raw_key,
-        value,
-        value_part_pointer: vp,
         arena,
-        ptr: node,
+        raw_key,
+        key: OnceCell::new(),
+        raw_value,
+        value: OnceCell::new(),
+        value_part_pointer: vp,
+        trailer: OnceCell::new(),
         version: node.version(),
+        ptr: node,
       }
     }
   }
@@ -147,19 +149,20 @@ where
     pointer: ValuePartPointer<A::Trailer>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
-      let value = node
-        .get_value_by_value_offset(arena, pointer.value_offset, pointer.value_len)
-        .map(ty_ref::<V>);
+      let raw_value = node
+        .get_value_by_value_offset(arena, pointer.value_offset, pointer.value_len);
 
       let raw_key = node.get_key(arena);
       VersionedEntryRef {
-        key: <K::Ref<'_> as TypeRef<'_>>::from_slice(raw_key),
-        raw_key,
-        value,
-        value_part_pointer: pointer,
         arena,
-        ptr: node,
+        raw_key,
+        key: OnceCell::new(),
+        raw_value,
+        value: OnceCell::new(),
+        value_part_pointer: pointer,
+        trailer: OnceCell::new(),
         version: node.version(),
+        ptr: node,
       }
     }
   }
@@ -186,16 +189,6 @@ where
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
-}
-
-impl<'a, K, V, A: Allocator> Copy for EntryRef<'a, K, V, A>
-where
-  K: ?Sized + Type,
-  K::Ref<'a>: Copy,
-  V: ?Sized + Type,
-  V::Ref<'a>: Copy,
-  A: Allocator,
-{
 }
 
 impl<'a, K, V, A> EntryRef<'a, K, V, A>
@@ -234,7 +227,7 @@ where
 {
   /// Returns the reference to the key
   #[inline]
-  pub const fn key(&self) -> &K::Ref<'a> {
+  pub fn key(&self) -> &K::Ref<'a> {
     self.0.key()
   }
 

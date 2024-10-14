@@ -9,10 +9,11 @@ use core::{
 
 use std::boxed::Box;
 
+use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
-  traits::{KeyRef, Type, TypeRef},
+  traits::{KeyRef, MaybeStructured, Type, TypeRef},
   CheapClone, Comparator,
 };
 use either::Either;
@@ -23,13 +24,14 @@ use crate::{
     Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePartPointer, ValuePointer,
   },
   encode_key_size_and_height, CompressionPolicy, Error, Height, KeyBuilder, KeySize, Trailer,
-  ValueBuilder, Version, VersionedEntryRef,
+  ValueBuilder, Version,
 };
 
 mod container;
 
 mod api;
 mod entry;
+use entry::VersionedEntryRef;
 mod iterator;
 
 struct GenericComparator<K: ?Sized> {
@@ -72,9 +74,9 @@ where
   }
 }
 
-type UpdateOk<'a, 'b, A> = Either<
-  Option<VersionedEntryRef<'a, A>>,
-  Result<VersionedEntryRef<'a, A>, VersionedEntryRef<'a, A>>,
+type UpdateOk<'a, 'b, K, V, A> = Either<
+  Option<VersionedEntryRef<'a, K, V, A>>,
+  Result<VersionedEntryRef<'a, K, V, A>, VersionedEntryRef<'a, K, V, A>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -194,19 +196,29 @@ where
 
 impl<K, V, A> SkipList<K, V, A>
 where
-  K: ?Sized,
+  K: ?Sized + Type,
   V: ?Sized,
   A: Allocator,
 {
-  fn new_node<'a, E>(
+  fn new_node<'a, VE>(
     &'a self,
     version: Version,
     height: u32,
-    key: &Key<'a, '_, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    key: &Key<'a, '_, K, A>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>>,
     trailer: A::Trailer,
-  ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
+  ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Among<K::Error, VE, Error>> {
     let (nd, deallocator) = match key {
+      Key::Structured(key) => {
+        let kb = KeyBuilder::new(
+          KeySize::from_u32_unchecked(key.encoded_len() as u32),
+          |buf: &mut VacantBuffer<'_>| key.encode_to_buffer(buf).map(|_| ()),
+        );
+        let vb = value_builder.unwrap();
+        self
+          .arena
+          .allocate_entry_node::<K::Error, VE>(version, height, trailer, kb, vb)?
+      },
       Key::Occupied(key) => {
         let kb = KeyBuilder::new(
           KeySize::from_u32_unchecked(key.len() as u32),
@@ -218,25 +230,25 @@ where
         let vb = value_builder.unwrap();
         self
           .arena
-          .allocate_entry_node::<E>(version, height, trailer, kb, vb)?
+          .allocate_entry_node::<K::Error, VE>(version, height, trailer, kb, vb)?
       }
-      Key::Vacant { buf: key, offset } => self.arena.allocate_value_node::<E>(
+      Key::Vacant { buf: key, offset } => self.arena.allocate_value_node::<VE>(
         version,
         height,
         trailer,
         key.len() as u32,
         *offset,
         value_builder.unwrap(),
-      )?,
-      Key::Pointer { offset, len, .. } => self.arena.allocate_value_node::<E>(
+      ).map_err(Among::from_either_to_middle_right)?,
+      Key::Pointer { offset, len, .. } => self.arena.allocate_value_node::<VE>(
         version,
         height,
         trailer,
         *len,
         *offset,
         value_builder.unwrap(),
-      )?,
-      Key::Remove(key) => self.arena.allocate_key_node::<E>(
+      ).map_err(Among::from_either_to_middle_right)?,
+      Key::Remove(key) => self.arena.allocate_key_node::<VE>(
         version,
         height,
         trailer,
@@ -248,23 +260,23 @@ where
           Ok(())
         },
         <A::Node as Node>::ValuePointer::REMOVE,
-      )?,
-      Key::RemoveVacant { buf: key, offset } => self.arena.allocate_node_in::<E>(
+      ).map_err(Among::from_either_to_middle_right)?,
+      Key::RemoveVacant { buf: key, offset } => self.arena.allocate_node_in::<VE>(
         version,
         height,
         trailer,
         *offset,
         key.len() as u32,
         <A::Node as Node>::ValuePointer::REMOVE,
-      )?,
-      Key::RemovePointer { offset, len, .. } => self.arena.allocate_node_in::<E>(
+      ).map_err(Among::from_either_to_middle_right)?,
+      Key::RemovePointer { offset, len, .. } => self.arena.allocate_node_in::<VE>(
         version,
         height,
         trailer,
         *offset,
         *len,
         <A::Node as Node>::ValuePointer::REMOVE,
-      )?,
+      ).map_err(Among::from_either_to_middle_right)?,
     };
 
     // Try to increase self.height via CAS.
@@ -745,10 +757,10 @@ where
   ///
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
-  unsafe fn find_splice<'a>(
+  unsafe fn find_splice<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    key: &[u8],
+    key: Among<&'a [u8], &'b [u8], &'b K>,
     ins: &mut Inserter<'a, <A::Node as Node>::Pointer>,
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>)
@@ -824,10 +836,10 @@ where
   /// ## Safety
   /// - `level` is less than `MAX_HEIGHT`.
   /// - `start` must be allocated by self's arena.
-  unsafe fn find_splice_for_level<'a>(
+  unsafe fn find_splice_for_level<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    key: &[u8],
+    key: Among<&'a [u8], &'b [u8], &'b K>,
     level: usize,
     start: <A::Node as Node>::Pointer,
   ) -> FindResult<<A::Node as Node>::Pointer>
@@ -853,7 +865,7 @@ where
       // let next_node = next.as_ref(&self.arena);
       let next_key = next.get_key(&self.arena);
 
-      let cmp = <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(key, next_key);
+      let cmp = Key::<'a, '_, K, A>::compare(key, Either::Left(next_key));
 
       let mut found_key = None;
 
@@ -895,56 +907,57 @@ where
     }
   }
 
-  fn try_get_pointer(
-    &self,
+  fn try_get_pointer<'a, 'b: 'a>(
+    &'a self,
     next_node: &<A::Node as Node>::Pointer,
     next_key: &[u8],
-    key: &[u8],
+    key: Among<&'a [u8], &'b [u8], &'b K>,
   ) -> Option<Pointer> {
-    match self.arena.options().compression_policy() {
-      CompressionPolicy::Fast => {
-        if next_key.starts_with(key) {
-          return Some(Pointer {
-            offset: next_node.key_offset(),
-            size: key.len() as u32,
-            height: Some(next_node.height()),
-          });
+    if let Among::Left(key) | Among::Middle(key) = key {
+      match self.arena.options().compression_policy() {
+        CompressionPolicy::Fast => {
+          if next_key.starts_with(key) {
+            return Some(Pointer {
+              offset: next_node.key_offset(),
+              size: key.len() as u32,
+              height: Some(next_node.height()),
+            });
+          }
         }
-      }
-      #[cfg(feature = "experimental")]
-      CompressionPolicy::High => {
-        if let Some(idx) = memchr::memmem::find(next_key, key) {
-          return Some(Pointer {
-            offset: next_node.key_offset() + idx as u32,
-            size: key.len() as u32,
-            height: Some(next_node.height()),
-          });
+        #[cfg(feature = "experimental")]
+        CompressionPolicy::High => {
+          if let Some(idx) = memchr::memmem::find(next_key, key) {
+            return Some(Pointer {
+              offset: next_node.key_offset() + idx as u32,
+              size: key.len() as u32,
+              height: Some(next_node.height()),
+            });
+          }
         }
       }
     }
+
     None
   }
 
   /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
-  unsafe fn key_is_after_node<'a>(
+  unsafe fn key_is_after_node<'a, 'b: 'a>(
     &'a self,
     nd: <A::Node as Node>::Pointer,
     version: Version,
-    key: &[u8],
+    key: Among<&'a [u8], &'b [u8], &'b K>,
   ) -> bool
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    // let nd = nd.as_ref(&self.arena);
     let nd_key = self
       .arena
       .get_bytes(nd.key_offset() as usize, nd.key_size() as usize);
-
-    match <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(nd_key, key) {
-      cmp::Ordering::Less => true,
-      cmp::Ordering::Greater => false,
+    match Key::<'a, '_, K, A>::compare(key, Either::Left(nd_key)) {
+      cmp::Ordering::Less => false,
+      cmp::Ordering::Greater => true,
       cmp::Ordering::Equal => {
         matches!(version.cmp(&nd.version()), cmp::Ordering::Less)
       }
@@ -971,13 +984,13 @@ where
     version: Version,
     trailer: A::Trailer,
     height: u32,
-    key: Key<'a, 'b, A>,
+    key: Key<'a, 'b, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, A>, Either<E, Error>>
+  ) -> Result<UpdateOk<'a, 'b, K, V, A>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -985,7 +998,7 @@ where
 
     // Safety: a fresh new Inserter, so safe here
     let found_key = unsafe {
-      let (found, found_key, ptr) = self.find_splice(version, key.as_ref(), &mut ins, true);
+      let (found, found_key, ptr) = self.find_splice(version, key.as_slice(), &mut ins, true);
       if found_key.is_some() {
         key.on_fail(&self.arena);
       }
@@ -1008,7 +1021,7 @@ where
             value_builder,
             success,
             failure,
-          );
+          ).map_err(Among::from_either_to_middle_right);
         }
 
         return Ok(Either::Left(if old.is_removed() {
@@ -1154,7 +1167,7 @@ where
               // because it is unlikely that lots of nodes are inserted between prev
               // and next.
               let fr =
-                self.find_splice_for_level(version, unlinked_node.get_key(&self.arena), i, prev);
+                self.find_splice_for_level(version, Among::Left(unlinked_node.get_key(&self.arena)), i, prev);
               if fr.found {
                 if i != 0 {
                   panic!("how can another thread have inserted a node at a non-base level?");
@@ -1175,16 +1188,16 @@ where
                       old,
                       node_ptr,
                       &if is_removed {
-                        Key::remove_pointer(&self.arena, fr.found_key.unwrap())
+                        Key::<K, _>::remove_pointer(&self.arena, fr.found_key.unwrap())
                       } else {
-                        Key::pointer(&self.arena, fr.found_key.unwrap())
+                        Key::<K, _>::pointer(&self.arena, fr.found_key.unwrap())
                       },
                       new_value_offset,
                       new_value_size,
                       success,
                       failure,
                     )
-                    .map_err(Either::Right);
+                    .map_err(Among::Right);
                 }
 
                 deallocator.dealloc(&self.arena);
@@ -1238,16 +1251,16 @@ where
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
-    old: VersionedEntryRef<'a, A>,
+    old: VersionedEntryRef<'a, K, V, A>,
     old_node: <A::Node as Node>::Pointer,
-    key: &Key<'a, 'b, A>,
+    key: &Key<'a, 'b, K, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, A>, Error> {
+  ) -> Result<UpdateOk<'a, 'b, K, V, A>, Error> {
     match key {
-      Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
+      Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
 
         Ok(Either::Left(if old.is_removed() {
@@ -1278,16 +1291,16 @@ where
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
-    old: VersionedEntryRef<'a, A>,
+    old: VersionedEntryRef<'a, K, V, A>,
     old_node: <A::Node as Node>::Pointer,
-    key: &Key<'a, 'b, A>,
+    key: &Key<'a, 'b, K, A>,
     trailer: A::Trailer,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, A>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, K, V, A>, Either<E, Error>> {
     match key {
-      Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
+      Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena
         .allocate_and_update_value(&old_node, trailer, value_builder.unwrap())
         .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
@@ -1378,7 +1391,8 @@ impl<P: NodePointer> Default for Splice<P> {
   }
 }
 
-pub(crate) enum Key<'a, 'b: 'a, A> {
+pub(crate) enum Key<'a, 'b: 'a, K: ?Sized, A> {
+  Structured(&'b K),
   Occupied(&'b [u8]),
   Vacant {
     buf: VacantBuffer<'a>,
@@ -1402,11 +1416,25 @@ pub(crate) enum Key<'a, 'b: 'a, A> {
   },
 }
 
-impl<A: Allocator> Key<'_, '_, A> {
+impl<'a, 'b: 'a, K: ?Sized + Type, A> From<MaybeStructured<'b, K>> for Key<'a, 'b, K, A> {
+  #[inline]
+  fn from(src: MaybeStructured<'b, K>) -> Self {
+    match src.data() {
+      Either::Left(k) => k.as_encoded().map_or_else(|| Self::Structured(k), Self::Occupied),
+      Either::Right(k) => Self::Occupied(k),
+    }
+  }
+}
+
+impl<K: ?Sized, A: Allocator> Key<'_, '_, K, A> {
   #[inline]
   pub(crate) fn on_fail(&self, arena: &A) {
     match self {
-      Self::Occupied(_) | Self::Remove(_) | Self::Pointer { .. } | Self::RemovePointer { .. } => {}
+      Self::Structured(_)
+      | Self::Occupied(_)
+      | Self::Remove(_)
+      | Self::Pointer { .. }
+      | Self::RemovePointer { .. } => {}
       Self::Vacant { buf, offset } | Self::RemoveVacant { buf, offset } => unsafe {
         arena.dealloc(*offset, buf.capacity() as u32);
       },
@@ -1414,7 +1442,48 @@ impl<A: Allocator> Key<'_, '_, A> {
   }
 }
 
-impl<A> Key<'_, '_, A> {
+impl<'a, 'b: 'a, K: ?Sized + Type, A: Allocator> Key<'a, 'b, K, A> {
+  #[inline]
+  fn as_slice(&self) -> Among<&'a [u8], &'b [u8], &'b K> {
+    match self {
+      Self::Structured(k) => return k.as_encoded().map_or_else(|| Among::Right(*k), Among::Middle),
+      Self::Occupied(key) | Self::Remove(key) => Among::Middle(key),
+      Self::Vacant { buf, .. } | Self::RemoveVacant { buf, .. } => Among::Left(buf.as_slice()),
+      Self::Pointer { arena, offset, len } | Self::RemovePointer { arena, offset, len } => unsafe {
+        Among::Left(arena.get_bytes(*offset as usize, *len as usize))
+      },
+    }
+  }
+}
+
+impl<'a, 'b: 'a, K, A> Key<'a, 'b, K, A>
+where
+  K: ?Sized + Type,
+  A: Allocator,
+{
+  #[inline]
+  fn compare(this: Among<&'a [u8], &'b [u8], &'b K>, other: Either<&'a [u8], &K::Ref<'a>>) -> cmp::Ordering
+  where
+    K::Ref<'a>: Comparable<K> + KeyRef<'a, K>,
+  {
+    match this {
+      Among::Right(key) => {
+        match other {
+          Either::Left(other) => Comparable::compare(&ty_ref::<K>(other), key).reverse(),
+          Either::Right(other) => Comparable::compare(other, key).reverse(),
+        }
+      },
+      Among::Left(key) | Among::Middle(key) => {
+        match other {
+          Either::Left(other) => unsafe { K::Ref::compare_binary(key, other) },
+          Either::Right(other) => ty_ref::<K>(key).cmp(other),
+        }
+      },
+    }
+  }
+}
+
+impl<K: ?Sized, A> Key<'_, '_, K, A> {
   /// Returns `true` if the key is a remove operation.
   #[inline]
   pub(crate) fn is_remove(&self) -> bool {
@@ -1425,20 +1494,7 @@ impl<A> Key<'_, '_, A> {
   }
 }
 
-impl<A: Allocator> AsRef<[u8]> for Key<'_, '_, A> {
-  #[inline]
-  fn as_ref(&self) -> &[u8] {
-    match self {
-      Self::Occupied(key) | Self::Remove(key) => key,
-      Self::Vacant { buf, .. } | Self::RemoveVacant { buf, .. } => buf.as_ref(),
-      Self::Pointer { arena, offset, len } | Self::RemovePointer { arena, offset, len } => unsafe {
-        arena.get_bytes(*offset as usize, *len as usize)
-      },
-    }
-  }
-}
-
-impl<'a, A> Key<'a, '_, A> {
+impl<'a, K: ?Sized, A> Key<'a, '_, K, A> {
   #[inline]
   const fn pointer(arena: &'a A, pointer: Pointer) -> Self {
     Self::Pointer {

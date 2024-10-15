@@ -97,14 +97,14 @@ where
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
   #[allow(single_use_lifetimes)]
-  pub fn insert_at_height_with_value_builder<'a, 'b: 'a>(
+  pub fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), V::Error>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -195,14 +195,14 @@ where
   /// - Returns `Ok(None)` if the key was successfully get_or_inserted.
   /// - Returns `Ok(Some(_))` if the key with the given version already exists.
   #[allow(single_use_lifetimes)]
-  pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a>(
+  pub fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), V::Error>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -243,14 +243,14 @@ where
   ///
   /// - Returns `Ok(None)` if the key was successfully inserted.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists and the value is successfully updated.
-  pub fn insert_at_height_with_builders<'a, 'b: 'a>(
+  pub fn insert_at_height_with_builders<'a, 'b: 'a, KE, VE>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), K::Error>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), V::Error>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -283,6 +283,13 @@ where
           }
         })
       })
+      .map_err(|e| {
+        match e {
+          Among::Left(_) => unreachable!(),
+          Among::Right(e) => Among::Right(e),
+          Among::Middle(e) => Among::Middle(e),
+        }
+      })
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -294,14 +301,14 @@ where
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  pub fn get_or_insert_at_height_with_builders<'a>(
+  pub fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), K::Error>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), V::Error>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -335,6 +342,13 @@ where
             Some(EntryRef(old))
           }
         })
+      })
+      .map_err(|e| {
+        match e {
+          Among::Left(_) => unreachable!(),
+          Among::Right(e) => Among::Right(e),
+          Among::Middle(e) => Among::Middle(e),
+        }
       })
   }
 
@@ -455,13 +469,13 @@ where
   ///
   /// A placeholder will be inserted first, then you will get an [`VacantBuffer`],
   /// and you must fill the buffer with bytes later in the closure.
-  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a>(
+  pub fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), K::Error>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -495,6 +509,11 @@ where
         },
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
-      .map_err(Among::into_left_right)
+      .map_err(|e| {
+        match e {
+          Among::Right(e) => Either::Right(e),
+          _ => unreachable!()
+        }
+      })
   }
 }

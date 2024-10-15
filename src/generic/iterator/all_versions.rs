@@ -162,7 +162,7 @@ where
           }
         }
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
@@ -200,7 +200,7 @@ where
           }
         }
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
@@ -267,6 +267,7 @@ where
     }
   }
 
+
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
@@ -285,7 +286,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
@@ -328,7 +329,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           return Some(self.nd);
         } else {
           let upper = self.range.end_bound();
@@ -366,7 +367,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
@@ -406,7 +407,7 @@ where
         // Safety: the node is allocated by the map's arena, so the key is valid
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           return Some(self.nd);
         } else {
           let lower = self.range.start_bound();
@@ -454,7 +455,7 @@ where
           continue;
         }
 
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
@@ -489,7 +490,7 @@ where
         }
 
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if self.range.comparable_contains(&nk) {
+        if self.range.compare_contains(&nk) {
           let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
           return Some(ent);
         }

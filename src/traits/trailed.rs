@@ -1,3 +1,5 @@
+use dbutils::traits::{KeyRef, MaybeStructured, Type};
+
 use super::*;
 
 /// [`TrailedMap`] implementation for concurrent environment.
@@ -14,11 +16,12 @@ pub mod unsync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait TrailedMap
+pub trait TrailedMap<K, V>
 where
-  Self: Container,
-  Self::Comparator: Comparator,
-  <<Self as List>::Allocator as AllocatorSealed>::Node: WithTrailer,
+  K: ?Sized,
+  V: ?Sized,
+  Self: Container<K, V>,
+  <Self::Allocator as AllocatorSealed>::Node: WithTrailer,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](TrailedMap::get_or_insert), this method will update the value if the key with the given version already exists.
@@ -28,10 +31,15 @@ where
   #[inline]
   fn insert<'a, 'b: 'a>(
     &'a self,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    value: impl Into<MaybeStructured<'b, V>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, V::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self.insert_at_height(self.random_height(), key, value, trailer)
   }
 
@@ -55,10 +63,15 @@ where
   fn insert_at_height<'a, 'b: 'a>(
     &'a self,
     height: Height,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    value: impl Into<MaybeStructured<'b, V>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, V::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self
       .as_ref()
       .insert_at_height(MIN_VERSION, height, key, value, trailer)
@@ -112,12 +125,17 @@ where
   /// .unwrap();
   /// ```
   #[inline]
-  fn insert_with_value_builder<'a, E>(
+  fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    key: &'a [u8],
+    key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self.insert_at_height_with_value_builder(self.random_height(), key, value_builder, trailer)
   }
 
@@ -170,13 +188,18 @@ where
   /// .unwrap();
   /// ```
   #[inline]
-  fn insert_at_height_with_value_builder<'a, E>(
+  fn insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     height: Height,
-    key: &'a [u8],
+    key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self.as_ref().insert_at_height_with_value_builder(
       MIN_VERSION,
       height,
@@ -195,10 +218,15 @@ where
   #[inline]
   fn get_or_insert<'a, 'b: 'a>(
     &'a self,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    value: impl Into<MaybeStructured<'b, V>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, V::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self.get_or_insert_at_height(self.random_height(), key, value, trailer)
   }
 
@@ -212,10 +240,15 @@ where
   fn get_or_insert_at_height<'a, 'b: 'a>(
     &'a self,
     height: Height,
-    key: &'b [u8],
-    value: &'b [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    value: impl Into<MaybeStructured<'b, V>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, V::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self
       .as_ref()
       .get_or_insert_at_height(MIN_VERSION, height, key, value, trailer)
@@ -269,12 +302,17 @@ where
   /// .unwrap();
   /// ```
   #[inline]
-  fn get_or_insert_with_value_builder<'a, E>(
+  fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
-    key: &'a [u8],
+    key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self.get_or_insert_at_height_with_value_builder(
       self.random_height(),
       key,
@@ -333,13 +371,18 @@ where
   /// .unwrap();
   /// ```
   #[inline]
-  fn get_or_insert_at_height_with_value_builder<'a, E>(
+  fn get_or_insert_at_height_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     height: Height,
-    key: &'a [u8],
+    key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Either<E, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type + 'b,
+  {
     self.as_ref().get_or_insert_at_height_with_value_builder(
       MIN_VERSION,
       height,
@@ -406,8 +449,13 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder, trailer)
   }
 
@@ -470,8 +518,13 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.as_ref().insert_at_height_with_builders(
       MIN_VERSION,
       height,
@@ -536,8 +589,13 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.get_or_insert_at_height_with_builders(
       self.random_height(),
       key_builder,
@@ -603,8 +661,13 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Among<KE, VE, Error>> {
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.as_ref().get_or_insert_at_height_with_builders(
       MIN_VERSION,
       height,
@@ -620,11 +683,16 @@ where
   /// - Returns `Ok(None)` if the key does not exist.
   /// - Returns `Ok(Some(old))` if the key with the given version already exists.
   #[inline]
-  fn get_or_remove<'a>(
+  fn get_or_remove<'a, 'b: 'a>(
     &'a self,
-    key: &'a [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Either<K::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.get_or_remove_at_height(self.random_height(), key, trailer)
   }
 
@@ -647,12 +715,17 @@ where
   /// map.get_or_remove_at_height(height, b"hello").unwrap();
   /// ```
   #[inline]
-  fn get_or_remove_at_height<'a>(
+  fn get_or_remove_at_height<'a, 'b: 'a>(
     &'a self,
     height: Height,
-    key: &'a [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Either<K::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self
       .as_ref()
       .get_or_remove_at_height(MIN_VERSION, height, key, trailer)
@@ -660,22 +733,32 @@ where
 
   /// Removes the key-value pair if it exists.
   #[inline]
-  fn remove<'a>(
+  fn remove<'a, 'b: 'a>(
     &'a self,
-    key: &'a [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Either<K::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.remove_at_height(self.random_height(), key, trailer)
   }
 
   /// Removes the key-value pair if it exists.
   #[inline]
-  fn remove_at_height<'a>(
+  fn remove_at_height<'a, 'b: 'a>(
     &'a self,
     height: Height,
-    key: &'a [u8],
-    trailer: <<Self as List>::Allocator as AllocatorSealed>::Trailer,
-  ) -> Result<Option<EntryRef<'a, K, V, <Self as List<K, V>>::Allocator>>, Error> {
+    key: impl Into<MaybeStructured<'b, K>>,
+    trailer: <Self::Allocator as AllocatorSealed>::Trailer,
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Either<K::Error, Error>>
+  where
+    K: Type + 'b,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
     self.as_ref().compare_remove_at_height(
       MIN_VERSION,
       height,
@@ -687,10 +770,11 @@ where
   }
 }
 
-impl<T> TrailedMap for T
+impl<K, V, T> TrailedMap<K, V> for T
 where
-  T: Container,
-  T::Comparator: Comparator,
-  <<T as List>::Allocator as AllocatorSealed>::Node: WithTrailer,
+  K: ?Sized,
+  V: ?Sized,
+  T: Container<K, V>,
+  <Self::Allocator as AllocatorSealed>::Node: WithTrailer,
 {
 }

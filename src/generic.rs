@@ -31,7 +31,7 @@ mod container;
 
 mod api;
 pub(super) mod entry;
-use entry::VersionedEntryRef;
+pub use entry::{EntryRef, VersionedEntryRef};
 pub(super) mod iterator;
 
 struct GenericComparator<K: ?Sized> {
@@ -118,7 +118,7 @@ impl<K, V, A> Clone for SkipList<K, V, A>
 where
   K: ?Sized,
   V: ?Sized,
-  A: Allocator + Send,
+  A: Allocator,
 {
   fn clone(&self) -> Self {
     Self {
@@ -200,14 +200,14 @@ where
   V: ?Sized + Type,
   A: Allocator,
 {
-  fn new_node<'a>(
+  fn new_node<'a, E>(
     &'a self,
     version: Version,
     height: u32,
     key: &Key<'a, '_, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), V::Error>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     trailer: A::Trailer,
-  ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Among<K::Error, V::Error, Error>> {
+  ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Among<K::Error, E, Error>> {
     let (nd, deallocator) = match key {
       Key::Structured(key) => {
         let kb = KeyBuilder::new(
@@ -217,7 +217,7 @@ where
         let vb = value_builder.unwrap();
         self
           .arena
-          .allocate_entry_node::<K::Error, V::Error>(version, height, trailer, kb, vb)?
+          .allocate_entry_node::<K::Error, E>(version, height, trailer, kb, vb)?
       }
       Key::Occupied(key) => {
         let kb = KeyBuilder::new(
@@ -230,11 +230,11 @@ where
         let vb = value_builder.unwrap();
         self
           .arena
-          .allocate_entry_node::<K::Error, V::Error>(version, height, trailer, kb, vb)?
+          .allocate_entry_node::<K::Error, E>(version, height, trailer, kb, vb)?
       }
       Key::Vacant { buf: key, offset } => self
         .arena
-        .allocate_value_node::<V::Error>(
+        .allocate_value_node::<E>(
           version,
           height,
           trailer,
@@ -245,7 +245,7 @@ where
         .map_err(Among::from_either_to_middle_right)?,
       Key::Pointer { offset, len, .. } => self
         .arena
-        .allocate_value_node::<V::Error>(
+        .allocate_value_node::<E>(
           version,
           height,
           trailer,
@@ -1005,18 +1005,18 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  fn update<'a, 'b: 'a>(
+  fn update<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
     trailer: A::Trailer,
     height: u32,
     key: Key<'a, 'b, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), V::Error>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A>, Among<K::Error, V::Error, Error>>
+  ) -> Result<UpdateOk<'a, 'b, K, V, A>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {

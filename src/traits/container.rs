@@ -17,15 +17,15 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Container, Options};
+  /// use skl::{map::{unsync::SkipMap, Map}, Container, Options};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap::<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap::<str, str>>().unwrap();
   ///
-  /// map.insert(b"hello", b"world", 10).unwrap();
+  /// map.insert("hello", "world").unwrap();
   ///
-  /// map.remove(b"hello", 10).unwrap();
+  /// map.remove("hello").unwrap();
   ///
-  /// assert!(!map.contains_key(b"hello"));
+  /// assert!(!map.contains_key("hello"));
   /// ```
   #[inline]
   fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
@@ -66,16 +66,16 @@ where
   /// ```rust
   /// use skl::{trailed::{sync::SkipMap, TrailedMap}, Container, Options};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<str, str, u64>>().unwrap();
   ///
-  /// map.insert(b"hello", b"world", 10).unwrap();
+  /// map.insert("hello", "world", 10).unwrap();
   ///
-  /// let ent = map.get(b"hello").unwrap();
-  /// assert_eq!(ent.value(), b"world");
+  /// let ent = map.get("hello").unwrap();
+  /// assert_eq!(ent.value(), "world");
   ///
-  /// map.remove(b"hello", 10).unwrap();
+  /// map.remove("hello", 10).unwrap();
   ///
-  /// assert!(map.get(b"hello").is_none());
+  /// assert!(map.get("hello").is_none());
   /// ```
   #[inline]
   fn get<'a, Q>(&'a self, key: &Q) -> Option<EntryRef<'a, K, V, Self::Allocator>>

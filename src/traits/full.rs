@@ -57,10 +57,10 @@ where
   /// ```rust
   /// use skl::{full::{sync::SkipMap, FullMap}, Options, Arena};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<str, str, u64>>().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(0, height, b"hello", b"world", 10).unwrap();
+  /// map.insert_at_height(0, height, "hello", "world", 10).unwrap();
   /// ```
   fn insert_at_height<'a, 'b: 'a>(
     &'a self,
@@ -116,7 +116,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<str, [u8], u64>>().unwrap();
   ///
   /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -124,7 +124,7 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb, 10)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1, "alice", vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
@@ -185,7 +185,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -300,7 +300,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -369,7 +369,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -440,7 +440,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -514,7 +514,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -588,7 +588,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -660,7 +660,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -791,12 +791,12 @@ where
   /// ```rust
   /// use skl::{full::{sync::SkipMap, FullMap}, Options, Arena};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<str, str, u64>>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world", 10).unwrap();
+  /// map.insert(0, "hello", "world", 10).unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(0, height, b"hello", 10).unwrap();
+  /// map.get_or_remove_at_height(0, height, "hello", 10).unwrap();
   /// ```
   #[inline]
   fn get_or_remove_at_height<'a, 'b: 'a>(
@@ -852,7 +852,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -912,7 +912,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   ///
   /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();

@@ -554,10 +554,10 @@ impl Options {
   /// use skl::{full::sync, trailed::unsync, Options};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
-  /// let map = Options::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// // Create a unsync skipmap which supports trailer.
-  /// let arena = Options::new().with_capacity(1024).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Options::new().with_capacity(1024).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[inline]
   pub fn alloc<K, V, T>(self) -> Result<T, Error>

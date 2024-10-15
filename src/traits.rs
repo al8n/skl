@@ -255,10 +255,10 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// ```rust
   /// use skl::{trailed::sync::SkipMap, Arena, Options};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
+  /// let needed = SkipMap::<[u8], [u8], u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
   /// ```
   #[inline]
   fn random_height(&self) -> Height {

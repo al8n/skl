@@ -30,10 +30,10 @@ impl Options {
   /// use skl::{full::sync, trailed::unsync, Options};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
-  /// let map = Options::new().with_capacity(1024).map_anon::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).map_anon::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// // Create a unsync skipmap which supports trailer.
-  /// let arena = Options::new().with_capacity(1024).map_anon::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Options::new().with_capacity(1024).map_anon::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   ///
   /// [`Options::alloc`]: #method.alloc

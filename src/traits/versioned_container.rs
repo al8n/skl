@@ -40,14 +40,14 @@ where
   /// ```rust
   /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Options, VersionedContainer};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<str, str, SkipMap<_, _>>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0, "hello", "world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1, "hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1, b"hello"));
-  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// assert!(!map.contains_key(1, "hello"));
+  /// assert!(map.contains_key_versioned(1, "hello"));
   /// ```
   #[inline]
   fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
@@ -67,14 +67,14 @@ where
   /// ```rust
   /// use skl::{versioned::{sync::SkipMap, VersionedMap}, VersionedContainer, Options};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<str, str, SkipMap<_, _>>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0, "hello", "world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1, "hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1, b"hello"));
-  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// assert!(!map.contains_key(1, "hello"));
+  /// assert!(map.contains_key_versioned(1, "hello"));
   /// ```
   #[inline]
   fn contains_key_versioned<'a, Q>(&'a self, version: Version, key: &Q) -> bool
@@ -119,16 +119,16 @@ where
   /// ```rust
   /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Options, VersionedContainer};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<str, str, SkipMap<_, _>>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0, "hello", "world").unwrap();
   ///
-  /// let ent = map.get(0, b"hello").unwrap();
-  /// assert_eq!(ent.value(), b"world");
+  /// let ent = map.get(0, "hello").unwrap();
+  /// assert_eq!(ent.value(), "world");
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1, "hello").unwrap();
   ///
-  /// assert!(map.get(1, b"hello").is_none());
+  /// assert!(map.get(1, "hello").is_none());
   /// ```
   #[inline]
   fn get<'a, Q>(&'a self, version: Version, key: &Q) -> Option<EntryRef<'a, K, V, Self::Allocator>>
@@ -150,15 +150,15 @@ where
   /// ```rust
   /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Options, VersionedContainer};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<str, str, SkipMap<_, _>>().unwrap();
   ///
-  /// map.insert(0, b"hello", b"world").unwrap();
+  /// map.insert(0, "hello", "world").unwrap();
   ///
-  /// map.get_or_remove(1, b"hello").unwrap();
+  /// map.get_or_remove(1, "hello").unwrap();
   ///
-  /// assert!(map.get(1, b"hello").is_none());
+  /// assert!(map.get(1, "hello").is_none());
   ///
-  /// let ent = map.get_versioned(1, b"hello").unwrap();
+  /// let ent = map.get_versioned(1, "hello").unwrap();
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```

@@ -48,7 +48,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         trailer,
         height.into(),
         Key::Occupied(key),
-        Some(ValueBuilder::new(val_len, copy)),
+        Some(ValueOptions::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -82,7 +82,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     version: Version,
     height: Height,
     key: &'a [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
@@ -138,7 +138,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         trailer,
         height.into(),
         Key::Occupied(key),
-        Some(ValueBuilder::new(val_len, copy)),
+        Some(ValueOptions::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -173,7 +173,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     version: Version,
     height: Height,
     key: &'a [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
@@ -216,8 +216,8 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Among<KE, VE, Error>> {
     self.check_height_and_ro(height).map_err(Among::Right)?;
@@ -271,8 +271,8 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Among<KE, VE, Error>> {
     if self.arena.read_only() {
@@ -340,7 +340,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         trailer,
         height.into(),
         Key::Remove(key),
-        Option::<RemoveValueBuilder<Infallible>>::None,
+        Option::<RemoveValueOptions<Infallible>>::None,
         success,
         failure,
         Inserter::default(),
@@ -388,7 +388,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         trailer,
         height.into(),
         Key::Remove(key),
-        Option::<RemoveValueBuilder<Infallible>>::None,
+        Option::<RemoveValueOptions<Infallible>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -425,7 +425,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, A>>, Either<E, Error>> {
     self.check_height_and_ro(height).map_err(Either::Right)?;
@@ -439,7 +439,7 @@ impl<A: Allocator, C: Comparator> SkipList<A, C> {
         trailer,
         height.into(),
         key,
-        Option::<RemoveValueBuilder<Infallible>>::None,
+        Option::<RemoveValueOptions<Infallible>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),

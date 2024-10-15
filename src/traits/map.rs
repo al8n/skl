@@ -18,8 +18,8 @@ pub mod unsync {
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait Map<K, V>
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
   Self: Container<K, V>,
   <Self::Allocator as AllocatorSealed>::Trailer: Default,
 {
@@ -51,9 +51,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, Options, Arena};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(height, b"hello", b"world").unwrap();
@@ -90,7 +90,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Builder};
+  /// use skl::{map::{sync::SkipMap, Map}, ValueOptions, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -111,9 +111,9 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -127,7 +127,7 @@ where
   fn insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
   where
     K: Type + 'b,
@@ -152,7 +152,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, ValueOptions, Options, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -173,9 +173,9 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -191,7 +191,7 @@ where
     &'a self,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
   where
     K: Type + 'b,
@@ -266,7 +266,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Builder};
+  /// use skl::{map::{sync::SkipMap, Map}, ValueOptions, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -287,9 +287,9 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -302,7 +302,7 @@ where
   fn get_or_insert_with_value_builder<'a, 'b: 'a, E>(
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
   where
     K: Type + 'b,
@@ -328,7 +328,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, ValueOptions, Options, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -349,9 +349,9 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -367,7 +367,7 @@ where
     &'a self,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, E, Error>>
   where
     K: Type + 'b,
@@ -398,7 +398,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Builder};
+  /// use skl::{map::{sync::SkipMap, Map}, KeyOptions, ValueOptions, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -419,14 +419,14 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
+  /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -438,8 +438,8 @@ where
   #[inline]
   fn insert_with_builders<'a, KE, VE>(
     &'a self,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
   where
     K: Type,
@@ -465,7 +465,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, KeyOptions, ValueOptions, Options, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -486,14 +486,14 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
+  /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -507,8 +507,8 @@ where
   fn insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
   where
     K: Type,
@@ -537,7 +537,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Builder};
+  /// use skl::{map::{sync::SkipMap, Map}, KeyOptions, ValueOptions, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -558,14 +558,14 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
+  /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -577,8 +577,8 @@ where
   #[inline]
   fn get_or_insert_with_builders<'a, KE, VE>(
     &'a self,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
   where
     K: Type,
@@ -601,7 +601,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, KeyOptions, ValueOptions, Options, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -622,14 +622,14 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
+  /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
   ///
-  /// let vb = ValueBuilder::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
+  /// let vb = ValueOptions::new(encoded_size as u32, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
@@ -643,8 +643,8 @@ where
   fn get_or_insert_at_height_with_builders<'a, KE, VE>(
     &'a self,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<KE, VE, Error>>
   where
     K: Type,
@@ -740,9 +740,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, Options, Arena};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///
@@ -780,7 +780,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, Builder};
+  /// use skl::{map::{sync::SkipMap, Map}, KeyOptions, Options};
   ///
   /// struct Person {
   ///   id: u32,
@@ -801,9 +801,9 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
+  /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -813,7 +813,7 @@ where
   #[inline]
   fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Either<E, Error>>
   where
     K: Type,
@@ -837,7 +837,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, Builder, Arena};
+  /// use skl::{map::{sync::SkipMap, Map}, KeyOptions, Options, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -858,9 +858,9 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let l = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
+  /// let kb = KeyOptions::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
   ///   Ok(())
   /// });
@@ -872,7 +872,7 @@ where
   fn get_or_remove_at_height_with_builder<'a, 'b: 'a, E>(
     &'a self,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Either<E, Error>>
   where
     K: Type,
@@ -890,8 +890,8 @@ where
 
 impl<K, V, T> Map<K, V> for T
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
   T: Container<K, V>,
   <T::Allocator as AllocatorSealed>::Trailer: Default,
 {

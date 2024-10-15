@@ -37,6 +37,7 @@ mod concurrent_tests_with_pessimistic_freelist {
 
   __full_map_tests!(go "sync_full_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
+
 type Allocator<T> = GenericAllocator<VersionedMeta, FullNode<T>, Arena>;
 type SkipList<K, V, T> = generic::SkipList<K, V, Allocator<T>>;
 
@@ -102,7 +103,7 @@ impl<K: ?Sized, V: ?Sized, T: Trailer> From<SkipList<K, V, T>> for SkipMap<K, V,
   }
 }
 
-impl<K: ?Sized, V: ?Sized, T: Trailer> crate::traits::List<K, V> for SkipMap<K, V, T> {
+impl<K: ?Sized + 'static, V: ?Sized + 'static, T: Trailer> crate::traits::List<K, V> for SkipMap<K, V, T> {
   type Allocator = Allocator<T>;
 
   #[inline]

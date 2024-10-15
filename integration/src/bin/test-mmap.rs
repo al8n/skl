@@ -11,7 +11,7 @@ fn main() {
     const N: usize = 10;
 
     let l = unsafe {
-      Builder::new()
+      Options::new()
         .with_capacity(1 << 20)
         .with_create_new(true)
         .with_read(true)
@@ -47,7 +47,7 @@ fn main() {
     const N2: usize = 10;
 
     let l = unsafe {
-      Builder::new()
+      Options::new()
         .with_capacity(120 << 20)
         .with_read(true)
         .with_write(true)

@@ -138,12 +138,12 @@
 //     version: Version,
 //     height: u32,
 //     key: &Key<'a, '_, A>,
-//     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+//     value_builder: Option<ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
 //     trailer: A::Trailer,
 //   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
 //     let (nd, deallocator) = match key {
 //       Key::Occupied(key) => {
-//         let kb = KeyBuilder::new(
+//         let kb = KeyOptions::new(
 //           KeySize::from_u32_unchecked(key.len() as u32),
 //           |buf: &mut VacantBuffer<'_>| {
 //             buf.put_slice_unchecked(key);
@@ -864,7 +864,7 @@
 //     trailer: A::Trailer,
 //     height: u32,
 //     key: Key<'a, 'b, A>,
-//     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+//     value_builder: Option<ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
 //     success: Ordering,
 //     failure: Ordering,
 //     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
@@ -1171,7 +1171,7 @@
 //     old_node: <A::Node as Node>::Pointer,
 //     key: &Key<'a, 'b, A>,
 //     trailer: A::Trailer,
-//     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+//     value_builder: Option<ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
 //     success: Ordering,
 //     failure: Ordering,
 //   ) -> Result<UpdateOk<'a, 'b, A>, Either<E, Error>> {

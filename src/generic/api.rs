@@ -7,8 +7,8 @@ use super::{
 
 mod update;
 
-type RemoveValueBuilder<E> =
-  ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<(), E>>>;
+type RemoveValueOptions<E> =
+  ValueOptions<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<(), E>>>;
 
 impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
   /// Sets remove on drop, only works on mmap with a file backend.

@@ -1,6 +1,6 @@
 use skl::{
   map::{sync::SkipMap, Map},
-  Arena, Builder, Container,
+  Arena, Options, Container,
 };
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -14,7 +14,7 @@ fn main() {
   const N: usize = 1000;
 
   let l = unsafe {
-    Builder::new()
+    Options::new()
       .with_capacity(1 << 20)
       .with_read(true)
       .with_write(true)

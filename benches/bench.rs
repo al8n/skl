@@ -45,7 +45,7 @@ fn random_key(rng: &mut ThreadRng) -> Vec<u8> {
 fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
   let frac = *frac;
   let value = b"00123".to_vec();
-  let list = Builder::new()
+  let list = Options::new()
     .with_capacity(512 << 20)
     .alloc::<SkipMap>()
     .unwrap();
@@ -170,7 +170,7 @@ fn bench_write_fixed_map(c: &mut Criterion) {
 }
 
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
-  let list = Builder::new()
+  let list = Options::new()
     .with_capacity(512 << 20)
     .alloc::<SkipMap>()
     .unwrap();

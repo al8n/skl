@@ -150,7 +150,7 @@ macro_rules! __unit_test_expand {
       $(#[cfg($cfg)])?
       fn [< test_ $name >]() {
         $fn::$name(
-          $crate::Builder::new()
+          $crate::Options::new()
             .with_options($opts)
             .alloc::<$ty>()
             .unwrap(),
@@ -161,7 +161,7 @@ macro_rules! __unit_test_expand {
       $(#[cfg($cfg)])?
       fn [< test_ $name _unify >]() {
         $fn::$name(
-          $crate::Builder::new()
+          $crate::Options::new()
             .with_options($opts)
             .with_unify(true)
             .alloc::<$ty>()
@@ -181,7 +181,7 @@ macro_rules! __unit_test_expand {
             .path()
             .join(::std::format!("test_{}_skipmap_{}_map_mut", $prefix, stringify!($name)));
           $fn::$name(
-            $crate::Builder::new()
+            $crate::Options::new()
               .with_options($opts)
               .with_create_new(true)
               .with_read(true)
@@ -197,7 +197,7 @@ macro_rules! __unit_test_expand {
       #[cfg(feature = "memmap")]
       fn [< test_ $name _map_anon >] () {
         $fn::$name(
-          $crate::Builder::new()
+          $crate::Options::new()
             .with_options($opts)
             .map_anon::<$ty>()
             .unwrap(),
@@ -209,7 +209,7 @@ macro_rules! __unit_test_expand {
       #[cfg(feature = "memmap")]
       fn [< test_ $name _map_anon_unify >]() {
         $fn::$name(
-          $crate::Builder::new()
+          $crate::Options::new()
             .with_options($opts)
             .with_unify(true)
             .map_anon::<$ty>()
@@ -227,7 +227,7 @@ macro_rules! __container_tests {
     #[test]
     fn test_empty() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .alloc::<$ty>()
           .unwrap(),
@@ -237,7 +237,7 @@ macro_rules! __container_tests {
     #[test]
     fn test_empty_unify() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
           .alloc::<$ty>()
@@ -256,7 +256,7 @@ macro_rules! __container_tests {
           .path()
           .join(::std::format!("test_{}_skipmap_empty_map_mut", $prefix));
 
-        let map = $crate::Builder::new()
+        let map = $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_create_new(true)
           .with_read(true)
@@ -271,7 +271,7 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_empty_map_anon() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .map_anon::<$ty>()
           .unwrap(),
@@ -282,7 +282,7 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_empty_map_anon_unify() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
           .map_anon::<$ty>()
@@ -293,7 +293,7 @@ macro_rules! __container_tests {
     #[test]
     fn test_full() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .alloc::<$ty>()
           .unwrap(),
@@ -303,7 +303,7 @@ macro_rules! __container_tests {
     #[test]
     fn test_full_unify() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
           .alloc::<$ty>()
@@ -322,7 +322,7 @@ macro_rules! __container_tests {
           .path()
           .join(::std::format!("test_{}_skipmap_full_map_mut", $prefix));
 
-        let map = $crate::Builder::new()
+        let map = $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_create_new(true)
           .with_read(true)
@@ -337,7 +337,7 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_full_map_anon() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .map_anon::<$ty>()
           .unwrap(),
@@ -348,7 +348,7 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_full_map_anon_unify() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
           .map_anon::<$ty>()

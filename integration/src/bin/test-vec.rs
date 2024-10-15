@@ -7,7 +7,7 @@ use skl::{
 fn main() {
   {
     const N: usize = 10;
-    let l = Builder::new()
+    let l = Options::new()
       .with_capacity(1 << 20)
       .alloc::<SkipMap>()
       .unwrap();
@@ -36,7 +36,7 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = Builder::new()
+    let l = Options::new()
       .with_capacity(120 << 20)
       .alloc::<SkipMap>()
       .unwrap();

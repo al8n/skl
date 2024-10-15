@@ -5,8 +5,8 @@ use super::*;
 /// The `Container` trait provides a set of read methods for interacting with the map.
 pub trait Container<K, V>
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
   Self: Arena<K, V>,
 {
   /// Returns `true` if the key exists in the map.
@@ -14,9 +14,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Container, Builder};
+  /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Container, Options};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap::<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap::<u64>>().unwrap();
   ///
   /// map.insert(b"hello", b"world", 10).unwrap();
   ///
@@ -61,9 +61,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{trailed::{sync::SkipMap, TrailedMap}, Container, Builder};
+  /// use skl::{trailed::{sync::SkipMap, TrailedMap}, Container, Options};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   ///
   /// map.insert(b"hello", b"world", 10).unwrap();
   ///
@@ -130,7 +130,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
   {
     self.as_ref().range(MIN_VERSION, range)
   }
@@ -138,8 +138,8 @@ where
 
 impl<K, V, T> Container<K, V> for T
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
   T: Arena<K, V>,
 {
 }

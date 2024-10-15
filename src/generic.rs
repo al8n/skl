@@ -23,8 +23,8 @@ use crate::{
   allocator::{
     Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePartPointer, ValuePointer,
   },
-  encode_key_size_and_height, CompressionPolicy, Error, Height, KeyBuilder, KeySize, Trailer,
-  ValueBuilder, Version,
+  encode_key_size_and_height, CompressionPolicy, Error, Height, KeyOptions, KeySize, Trailer,
+  ValueOptions, Version,
 };
 
 mod container;
@@ -205,12 +205,12 @@ where
     version: Version,
     height: u32,
     key: &Key<'a, '_, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     trailer: A::Trailer,
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Among<K::Error, E, Error>> {
     let (nd, deallocator) = match key {
       Key::Structured(key) => {
-        let kb = KeyBuilder::new(
+        let kb = KeyOptions::new(
           KeySize::from_u32_unchecked(key.encoded_len() as u32),
           |buf: &mut VacantBuffer<'_>| key.encode_to_buffer(buf).map(|_| ()),
         );
@@ -220,7 +220,7 @@ where
           .allocate_entry_node::<K::Error, E>(version, height, trailer, kb, vb)?
       }
       Key::Occupied(key) => {
-        let kb = KeyBuilder::new(
+        let kb = KeyOptions::new(
           KeySize::from_u32_unchecked(key.len() as u32),
           |buf: &mut VacantBuffer<'_>| {
             buf.put_slice_unchecked(key);
@@ -1011,7 +1011,7 @@ where
     trailer: A::Trailer,
     height: u32,
     key: Key<'a, 'b, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
@@ -1328,7 +1328,7 @@ where
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     trailer: A::Trailer,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, K, V, A>, Either<E, Error>> {

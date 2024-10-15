@@ -433,7 +433,7 @@ ux_wrapper! {
 
 dbutils::builder!(
   /// A value builder for the `SkipMap`s, which requires the value size for accurate allocation and a closure to build the value.
-  pub ValueBuilder(u32);
+  pub ValueOptions(u32);
   /// A key builder for the `SkipMap`s, which requires the key size for accurate allocation and a closure to build the key.
-  pub KeyBuilder(KeySize)
+  pub KeyOptions(KeySize)
 );

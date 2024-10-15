@@ -8,8 +8,8 @@ use crate::{allocator::WithVersion, iter::AllVersionsIter, Version, generic::ent
 /// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer<K, V>
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
   Self: Arena<K, V>,
   <Self::Allocator as AllocatorSealed>::Node: WithVersion,
 {
@@ -33,9 +33,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, VersionedContainer};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Options, VersionedContainer};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -60,9 +60,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, VersionedContainer, Builder};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, VersionedContainer, Options};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -112,9 +112,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, VersionedContainer};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Options, VersionedContainer};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -143,9 +143,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Builder, VersionedContainer};
+  /// use skl::{versioned::{sync::SkipMap, VersionedMap}, Options, VersionedContainer};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, b"hello", b"world").unwrap();
   ///
@@ -243,7 +243,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
   {
     self.as_ref().range(version, range)
   }
@@ -260,7 +260,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q>,
+    R: RangeBounds<Q> + 'a,
   {
     self.as_ref().range_all_versions(version, range)
   }
@@ -268,8 +268,8 @@ where
 
 impl<K, V, T> VersionedContainer<K, V> for T
 where
-  K: ?Sized,
-  V: ?Sized,
+  K: ?Sized + 'static,
+  V: ?Sized + 'static,
   T: Arena<K, V>,
   <T::Allocator as AllocatorSealed>::Node: WithVersion,
 {

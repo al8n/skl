@@ -4,7 +4,7 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{map::Map, KeyBuilder, ValueBuilder};
+use crate::{map::Map, KeyOptions, ValueOptions};
 
 use super::*;
 
@@ -378,14 +378,14 @@ where
   for i in 0..N {
     let l1 = l.clone();
     let l2 = l.clone();
-    std::thread::Builder::new()
+    std::thread::Options::new()
       .name(format!("map-concurrent-basic2-writer-{i}-1"))
       .spawn(move || {
         let _ = l1.insert(&int_key(i), &new_value(i));
       })
       .unwrap();
 
-    std::thread::Builder::new()
+    std::thread::Options::new()
       .name(format!("map-concurrent-basic2-writer{i}-2"))
       .spawn(move || {
         let _ = l2.insert(&int_key(i), &new_value(i));
@@ -960,13 +960,13 @@ where
 
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  use crate::Builder;
+  use crate::Options;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(std::format!("{prefix}_reopen_skipmap"));
     {
-      let l = Builder::new()
+      let l = Options::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
@@ -979,7 +979,7 @@ where
       l.flush().unwrap();
     }
 
-    let l = Builder::new()
+    let l = Options::new()
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
@@ -1003,7 +1003,7 @@ where
 
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  use crate::Builder;
+  use crate::Options;
 
   unsafe {
     use rand::seq::SliceRandom;
@@ -1011,7 +1011,7 @@ where
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(::std::format!("{prefix}_reopen2_skipmap"));
     {
-      let l = Builder::new()
+      let l = Options::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
@@ -1034,7 +1034,7 @@ where
       }
     }
 
-    let l = Builder::new()
+    let l = Options::new()
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
@@ -1059,13 +1059,13 @@ where
   M::Comparator: Comparator,
   <M::Allocator as Sealed>::Trailer: Default,
 {
-  use crate::Builder;
+  use crate::Options;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(std::format!("{prefix}_reopen3_skipmap"));
     {
-      let l = Builder::new()
+      let l = Options::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
@@ -1078,7 +1078,7 @@ where
       l.flush().unwrap();
     }
 
-    let l = Builder::new()
+    let l = Options::new()
       .with_read(true)
       .with_write(true)
       .with_capacity((ARENA_SIZE * 2) as u32)
@@ -1119,7 +1119,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1156,12 +1156,12 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
+  let kb = KeyOptions::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
     Ok(())
   });
 
-  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1219,7 +1219,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1245,7 +1245,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();
@@ -1291,12 +1291,12 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
+  let kb = KeyOptions::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
     Ok(())
   });
 
-  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1322,7 +1322,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();

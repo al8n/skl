@@ -8,7 +8,7 @@ fn main() {
   {
     const N: usize = 10;
 
-    let l = Builder::new()
+    let l = Options::new()
       .with_capacity(1 << 20)
       .map_anon::<SkipMap>()
       .unwrap();
@@ -38,7 +38,7 @@ fn main() {
   {
     const N2: usize = 100;
 
-    let l = Builder::new()
+    let l = Options::new()
       .with_capacity(120 << 20)
       .map_anon::<SkipMap>()
       .unwrap();

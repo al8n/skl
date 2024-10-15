@@ -4,7 +4,7 @@ use core::{
   ptr::NonNull,
   sync::atomic::Ordering,
 };
-use dbutils::{buffer::VacantBuffer, Comparator};
+use dbutils::buffer::VacantBuffer;
 use either::Either;
 use rarena_allocator::Allocator as ArenaAllocator;
 
@@ -14,7 +14,7 @@ use super::{
   },
   generic::{SkipList, entry::EntryRef},
   iter::Iter,
-  Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
+  Error, Height, KeyOptions, Options, ValueOptions, MIN_VERSION,
 };
 
 mod container;
@@ -39,7 +39,7 @@ pub mod versioned;
 pub mod full;
 
 /// The underlying skip list for skip maps
-pub trait List<K: ?Sized, V: ?Sized>:
+pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
   Sized + From<SkipList<K, V, <Self as List<K, V>>::Allocator>>
 {
   type Allocator: Allocator;
@@ -123,7 +123,7 @@ pub trait List<K: ?Sized, V: ?Sized>:
 }
 
 /// The wrapper trait over a underlying [`Allocator`](rarena_allocator::Allocator).
-pub trait Arena<K: ?Sized, V: ?Sized>: List<K, V> {
+pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// Returns how many bytes are reserved by the ARENA.
   #[inline]
   fn reserved_bytes(&self) -> usize {
@@ -253,9 +253,9 @@ pub trait Arena<K: ?Sized, V: ?Sized>: List<K, V> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{trailed::sync::SkipMap, Arena, Builder};
+  /// use skl::{trailed::sync::SkipMap, Arena, Options};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
@@ -284,7 +284,7 @@ pub trait Arena<K: ?Sized, V: ?Sized>: List<K, V> {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
+  /// let map = Options::new().with_capacity(100).alloc().unwrap();
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///
@@ -324,4 +324,4 @@ pub trait Arena<K: ?Sized, V: ?Sized>: List<K, V> {
   }
 }
 
-impl<K: ?Sized, V: ?Sized, T> Arena<K, V> for T where T: List<K, V> {}
+impl<K: ?Sized + 'static, V: ?Sized + 'static, T> Arena<K, V> for T where T: List<K, V> {}

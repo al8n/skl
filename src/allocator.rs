@@ -830,8 +830,8 @@ mod sealed {
       version: Version,
       height: u32,
       trailer: <Self::Node as Node>::Trailer,
-      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+      key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+      value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Among<KE, VE, Error>> {
       let (key_size, kf) = key_builder.into_components();
       let (value_size, vf) = value_builder.into_components();
@@ -1029,7 +1029,7 @@ mod sealed {
       trailer: <Self::Node as Node>::Trailer,
       key_size: u32,
       key_offset: u32,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+      value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let (value_size, vf) = value_builder.into_components();
       self
@@ -1127,7 +1127,7 @@ mod sealed {
       &'a self,
       node: &<Self::Node as Node>::Pointer,
       trailer: <Self::Node as Node>::Trailer,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+      value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     ) -> Result<(), Either<E, Error>> {
       let (value_size, f) = value_builder.into_components();
       let mut bytes = self

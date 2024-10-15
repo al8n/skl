@@ -9,8 +9,8 @@ use either::Either;
 use rarena_allocator::Allocator as _;
 
 use super::{
-  entry::EntryRef, Allocator, Error, Height, Inserter, Key, KeyBuilder, RemoveValueBuilder,
-  SkipList, ValueBuilder, Version,
+  entry::EntryRef, Allocator, Error, Height, Inserter, Key, KeyOptions, RemoveValueOptions,
+  SkipList, ValueOptions, Version,
 };
 
 impl<K, V, A> SkipList<K, V, A>
@@ -68,7 +68,7 @@ where
         trailer,
         height.into(),
         Key::from((false, key)),
-        Some(ValueBuilder::new(val_len, copy)),
+        Some(ValueOptions::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -102,7 +102,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
@@ -165,7 +165,7 @@ where
         trailer,
         height.into(),
         Key::from((false, key)),
-        Some(ValueBuilder::new(val_len, copy)),
+        Some(ValueOptions::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -200,7 +200,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
@@ -247,8 +247,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
@@ -305,8 +305,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+    value_builder: ValueOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
@@ -383,7 +383,7 @@ where
         trailer,
         height.into(),
         Key::from((true, key)),
-        Option::<RemoveValueBuilder<V::Error>>::None,
+        Option::<RemoveValueOptions<V::Error>>::None,
         success,
         failure,
         Inserter::default(),
@@ -436,7 +436,7 @@ where
         trailer,
         height.into(),
         Key::from((true, key)),
-        Option::<RemoveValueBuilder<V::Error>>::None,
+        Option::<RemoveValueOptions<V::Error>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -473,7 +473,7 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyOptions<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>>
   where
@@ -490,7 +490,7 @@ where
         trailer,
         height.into(),
         key,
-        Option::<RemoveValueBuilder<V::Error>>::None,
+        Option::<RemoveValueOptions<V::Error>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),

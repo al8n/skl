@@ -18,9 +18,9 @@
 //   /// ## Example
 //   ///
 //   /// ```rust
-//   /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Container, Builder};
+//   /// use skl::{trailed::{unsync::SkipMap, TrailedMap}, Container, Options};
 //   ///
-//   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap::<u64>>().unwrap();
+//   /// let map = Options::new().with_capacity(1024).alloc::<SkipMap::<u64>>().unwrap();
 //   ///
 //   /// map.insert(b"hello", b"world", 10).unwrap();
 //   ///
@@ -63,9 +63,9 @@
 //   // /// ## Example
 //   // ///
 //   // /// ```rust
-//   // /// use skl::{trailed::{sync::SkipMap, TrailedMap}, Container, Builder};
+//   // /// use skl::{trailed::{sync::SkipMap, TrailedMap}, Container, Options};
 //   // ///
-//   // /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+//   // /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
 //   // ///
 //   // /// map.insert(b"hello", b"world", 10).unwrap();
 //   // ///

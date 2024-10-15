@@ -36,8 +36,8 @@ pub use generic::{EntryRef, VersionedEntryRef};
 mod error;
 pub use error::Error;
 
-mod builder;
-pub use builder::*;
+mod options;
+pub use options::*;
 
 mod traits;
 pub use traits::{

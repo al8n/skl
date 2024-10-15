@@ -39,7 +39,7 @@ mod concurrent_tests_with_pessimistic_freelist {
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
-type SkipList<K, V> = generic::SkipList<K, V, Allocator>;
+type SkipList<K, V> = base::SkipList<K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
 pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;

@@ -4,7 +4,7 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{allocator::WithTrailer, trailed::TrailedMap, KeyOptions, ValueOptions};
+use crate::{allocator::WithTrailer, trailed::TrailedMap, KeyBuilder, ValueBuilder};
 
 use super::*;
 
@@ -1295,7 +1295,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1332,12 +1332,12 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let kb = KeyOptions::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
+  let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
     Ok(())
   });
 
-  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1398,7 +1398,7 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1425,7 +1425,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();
@@ -1471,12 +1471,12 @@ where
 
   let encoded_size = alice.encoded_size() as u32;
 
-  let kb = KeyOptions::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
+  let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
     Ok(())
   });
 
-  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
@@ -1503,7 +1503,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let vb = ValueOptions::new(encoded_size, |val: &mut VacantBuffer<'_>| {
+  let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
     assert_eq!(val.capacity(), encoded_size as usize);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();

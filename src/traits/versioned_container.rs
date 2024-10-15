@@ -6,9 +6,7 @@ use dbutils::{
 };
 
 use super::{AllocatorSealed, Arena, EntryRef, Iter};
-use crate::{
-  allocator::WithVersion, generic::entry::VersionedEntryRef, iter::AllVersionsIter, Version,
-};
+use crate::{allocator::WithVersion, entry::VersionedEntryRef, iter::AllVersionsIter, Version};
 
 /// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer<K, V>

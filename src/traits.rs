@@ -12,9 +12,10 @@ use super::{
   allocator::{
     Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed, WithTrailer,
   },
-  generic::{entry::EntryRef, SkipList},
+  base::SkipList,
+  entry::EntryRef,
   iter::Iter,
-  Error, Height, KeyOptions, Options, ValueOptions, MIN_VERSION,
+  Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
 };
 
 mod container;

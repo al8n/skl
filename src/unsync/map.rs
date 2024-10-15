@@ -10,7 +10,7 @@ mod tests {
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
-type SkipList<K, V> = generic::SkipList<K, V, Allocator>;
+type SkipList<K, V> = base::SkipList<K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
 pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;

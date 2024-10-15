@@ -10,12 +10,13 @@ fn main() {
 
     let l = Options::new()
       .with_capacity(1 << 20)
-      .map_anon::<SkipMap>()
+      .map_anon::<[u8], [u8], SkipMap<[u8], [u8]>>()
       .unwrap();
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(&key(i), &new_value(i)).unwrap();
+        l.insert(key(i).as_slice(), new_value(i).as_slice())
+          .unwrap();
         drop(l);
       });
     }
@@ -26,7 +27,11 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
+        assert_eq!(
+          l.get(k.as_slice()).unwrap().value(),
+          new_value(i).as_slice(),
+          "broken: {i}"
+        );
         drop(l);
       });
     }
@@ -40,12 +45,13 @@ fn main() {
 
     let l = Options::new()
       .with_capacity(120 << 20)
-      .map_anon::<SkipMap>()
+      .map_anon::<[u8], [u8], SkipMap<[u8], [u8]>>()
       .unwrap();
     for i in 0..N2 {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(&key(i), &big_value(i)).unwrap();
+        l.insert(key(i).as_slice(), big_value(i).as_slice())
+          .unwrap();
       });
     }
     while l.refs() > 1 {
@@ -56,7 +62,11 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(&k).unwrap().value(), big_value(i), "broken: {i}");
+        assert_eq!(
+          l.get(k.as_slice()).unwrap().value(),
+          big_value(i).as_slice(),
+          "broken: {i}"
+        );
       });
     }
     while l.refs() > 1 {

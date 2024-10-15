@@ -4,16 +4,16 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("sync_map": SkipMap);
+  __container_tests!("sync_map": SkipMap<[u8], [u8]>);
 
-  __map_tests!("sync_map": SkipMap);
+  __map_tests!("sync_map": SkipMap<[u8], [u8]>);
 }
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_map_concurrent,))]
 mod concurrent_tests {
   use super::*;
 
-  __map_tests!(go "sync_map_map": SkipMap => crate::tests::TEST_OPTIONS);
+  __map_tests!(go "sync_map_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
 }
 
 #[cfg(any(
@@ -24,7 +24,7 @@ mod concurrent_tests {
 mod concurrent_tests_with_optimistic_freelist {
   use super::*;
 
-  __map_tests!(go "sync_map_map": SkipMap => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  __map_tests!(go "sync_map_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
 }
 
 #[cfg(any(
@@ -35,7 +35,7 @@ mod concurrent_tests_with_optimistic_freelist {
 mod concurrent_tests_with_pessimistic_freelist {
   use super::*;
 
-  __map_tests!(go "sync_map_map": SkipMap => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  __map_tests!(go "sync_map_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;

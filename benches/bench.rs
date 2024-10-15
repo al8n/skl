@@ -26,13 +26,13 @@ fn fixed_map_round(
   }
 }
 
-fn fixed_skiplist_round(l: &SkipMap, case: &(Vec<u8>, bool), exp: &Vec<u8>) {
+fn fixed_skiplist_round(l: &SkipMap<[u8], [u8]>, case: &(Vec<u8>, bool), exp: &Vec<u8>) {
   if case.1 {
-    if let Some(v) = l.get(&case.0) {
-      assert_eq!(v.value(), exp);
+    if let Some(v) = l.get(case.0.as_slice()) {
+      assert_eq!(v.value(), exp.as_slice());
     }
   } else {
-    l.insert(&case.0, exp).unwrap();
+    l.insert(case.0.as_slice(), exp.as_slice()).unwrap();
   }
 }
 
@@ -47,7 +47,7 @@ fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
   let value = b"00123".to_vec();
   let list = Options::new()
     .with_capacity(512 << 20)
-    .alloc::<SkipMap>()
+    .alloc::<_, _, SkipMap<[u8], [u8]>>()
     .unwrap();
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));
@@ -172,7 +172,7 @@ fn bench_write_fixed_map(c: &mut Criterion) {
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
   let list = Options::new()
     .with_capacity(512 << 20)
-    .alloc::<SkipMap>()
+    .alloc::<_, _, SkipMap<[u8], [u8]>>()
     .unwrap();
   let l = list.clone();
   let value = b"00123".to_vec();
@@ -191,7 +191,7 @@ fn bench_write_fixed_skiplist(c: &mut Criterion) {
     b.iter_batched(
       || random_key(&mut rng),
       |key| {
-        list.insert(&key, &value).unwrap();
+        list.insert(key.as_slice(), value.as_slice()).unwrap();
       },
       BatchSize::SmallInput,
     )

@@ -75,11 +75,11 @@ where
   A: Allocator,
   Q: ?Sized,
 {
-  // /// Returns the entry at the current position of the iterator.
-  // #[inline]
-  // pub fn entry(&self) -> Option<EntryRef<'a, K, V, A>> {
-  //   self.0.last.map(EntryRef::<K, V, A>)
-  // }
+  /// Returns the entry at the current position of the iterator.
+  #[inline]
+  pub fn entry(&self) -> Option<EntryRef<'a, K, V, A>> {
+    self.0.entry().map(|e| EntryRef::<K, V, A>(e.clone()))
+  }
 }
 
 impl<'a, K, V, A, Q, R> Iter<'a, K, V, A, Q, R>

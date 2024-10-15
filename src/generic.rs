@@ -14,7 +14,6 @@ use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
   traits::{KeyRef, MaybeStructured, Type, TypeRef},
-  CheapClone, Comparator,
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -33,46 +32,6 @@ mod api;
 pub(super) mod entry;
 pub use entry::{EntryRef, VersionedEntryRef};
 pub(super) mod iterator;
-
-struct GenericComparator<K: ?Sized> {
-  _k: PhantomData<K>,
-}
-
-impl<K: ?Sized> CheapClone for GenericComparator<K> {}
-
-impl<K: ?Sized> Clone for GenericComparator<K> {
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-
-impl<K: ?Sized> Copy for GenericComparator<K> {}
-
-impl<K: ?Sized> core::fmt::Debug for GenericComparator<K> {
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("GenericComparator").finish()
-  }
-}
-
-impl<K> Comparator for GenericComparator<K>
-where
-  K: ?Sized + Type,
-  for<'a> K::Ref<'a>: KeyRef<'a, K>,
-{
-  fn compare(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
-    unsafe { <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(a, b) }
-  }
-
-  fn contains(&self, start_bound: Bound<&[u8]>, end_bound: Bound<&[u8]>, key: &[u8]) -> bool {
-    unsafe {
-      let start = start_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
-      let end = end_bound.map(|b| <K::Ref<'_> as TypeRef<'_>>::from_slice(b));
-      let key = <K::Ref<'_> as TypeRef<'_>>::from_slice(key);
-
-      (start, end).contains(&key)
-    }
-  }
-}
 
 type UpdateOk<'a, 'b, K, V, A> = Either<
   Option<VersionedEntryRef<'a, K, V, A>>,
@@ -1490,11 +1449,9 @@ impl<'a, 'b: 'a, K: ?Sized + Type, A: Allocator> Key<'a, 'b, K, A> {
   #[inline]
   fn as_slice(&self) -> Among<&'a [u8], &'b [u8], &'b K> {
     match self {
-      Self::Structured(k) | Self::RemoveStructured(k) => {
-        return k
-          .as_encoded()
-          .map_or_else(|| Among::Right(*k), Among::Middle)
-      }
+      Self::Structured(k) | Self::RemoveStructured(k) => k
+        .as_encoded()
+        .map_or_else(|| Among::Right(*k), Among::Middle),
       Self::Occupied(key) | Self::Remove(key) => Among::Middle(key),
       Self::Vacant { buf, .. } | Self::RemoveVacant { buf, .. } => Among::Left(buf.as_slice()),
       Self::Pointer { arena, offset, len } | Self::RemovePointer { arena, offset, len } => unsafe {
@@ -1574,4 +1531,3 @@ struct FindResult<P> {
 fn ty_ref<'a, T: Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
   unsafe { <T::Ref<'a> as TypeRef<'a>>::from_slice(src) }
 }
-

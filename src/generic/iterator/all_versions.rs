@@ -117,11 +117,11 @@ where
     &self.range
   }
 
-  // /// Returns the entry at the current position of the iterator.
-  // #[inline]
-  // pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, K, V, A>> {
-  //   self.last.as_ref().map(|last| VersionedEntryRef::from)
-  // }
+  /// Returns the entry at the current position of the iterator.
+  #[inline]
+  pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, K, V, A>> {
+    self.last.as_ref()
+  }
 }
 
 impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
@@ -266,7 +266,6 @@ where
       Bound::Unbounded => self.first(),
     }
   }
-
 
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is

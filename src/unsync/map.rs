@@ -4,9 +4,9 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("unsync_map": SkipMap);
+  __container_tests!("unsync_map": SkipMap<[u8], [u8]>);
 
-  __map_tests!("unsync_map": SkipMap);
+  __map_tests!("unsync_map": SkipMap<[u8], [u8]>);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
@@ -72,4 +72,3 @@ impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List<K, V> for Ski
     &mut self.0
   }
 }
-

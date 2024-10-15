@@ -1,16 +1,14 @@
 use core::mem;
 
-use rarena_allocator::Options as ArenaOptions;
 pub use rarena_allocator::Freelist;
+use rarena_allocator::Options as ArenaOptions;
 
 use super::{Height, KeySize};
 
 use crate::{allocator::Sealed, Arena, Error};
 
-
 /// The memory format version.
 pub(crate) const CURRENT_VERSION: u16 = 0;
-
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]

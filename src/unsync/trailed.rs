@@ -4,9 +4,9 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("unsync_trailed_map": SkipMap);
+  __container_tests!("unsync_trailed_map": SkipMap<[u8], [u8]>);
 
-  __trailed_map_tests!("unsync_trailed_map": SkipMap<u64>);
+  __trailed_map_tests!("unsync_trailed_map": SkipMap<[u8], [u8], u64>);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;
@@ -67,7 +67,9 @@ impl<K: ?Sized, V: ?Sized, T: Trailer> From<SkipList<K, V, T>> for SkipMap<K, V,
   }
 }
 
-impl<K: ?Sized + 'static, V: ?Sized + 'static, T: Trailer> crate::traits::List<K, V> for SkipMap<K, V, T> {
+impl<K: ?Sized + 'static, V: ?Sized + 'static, T: Trailer> crate::traits::List<K, V>
+  for SkipMap<K, V, T>
+{
   type Allocator = Allocator<T>;
 
   #[inline]
@@ -80,4 +82,3 @@ impl<K: ?Sized + 'static, V: ?Sized + 'static, T: Trailer> crate::traits::List<K
     &mut self.0
   }
 }
-

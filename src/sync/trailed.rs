@@ -4,16 +4,16 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("sync_trailed_map": SkipMap);
+  __container_tests!("sync_trailed_map": SkipMap<[u8], [u8]>);
 
-  __trailed_map_tests!("sync_trailed_map": SkipMap<u64>);
+  __trailed_map_tests!("sync_trailed_map": SkipMap<[u8], [u8], u64>);
 }
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_trailed_concurrent,))]
 mod concurrent_tests {
   use super::*;
 
-  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64> => crate::tests::TEST_OPTIONS);
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<[u8], [u8], u64> => crate::tests::TEST_OPTIONS);
 }
 
 #[cfg(any(
@@ -24,7 +24,7 @@ mod concurrent_tests {
 mod concurrent_tests_with_optimistic_freelist {
   use super::*;
 
-  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<[u8], [u8], u64> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
 }
 
 #[cfg(any(
@@ -35,7 +35,7 @@ mod concurrent_tests_with_optimistic_freelist {
 mod concurrent_tests_with_pessimistic_freelist {
   use super::*;
 
-  __trailed_map_tests!(go "sync_trailed_map": SkipMap<u64> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  __trailed_map_tests!(go "sync_trailed_map": SkipMap<[u8], [u8], u64> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator<T> = GenericAllocator<Meta, TrailedNode<T>, Arena>;
@@ -94,7 +94,9 @@ impl<K: ?Sized, V: ?Sized, T: Trailer> From<SkipList<K, V, T>> for SkipMap<K, V,
   }
 }
 
-impl<K: ?Sized + 'static, V: ?Sized + 'static, T: Trailer> crate::traits::List<K, V> for SkipMap<K, V, T> {
+impl<K: ?Sized + 'static, V: ?Sized + 'static, T: Trailer> crate::traits::List<K, V>
+  for SkipMap<K, V, T>
+{
   type Allocator = Allocator<T>;
 
   #[inline]

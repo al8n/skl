@@ -12,7 +12,7 @@ use super::{
   allocator::{
     Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed, WithTrailer,
   },
-  generic::{SkipList, entry::EntryRef},
+  generic::{entry::EntryRef, SkipList},
   iter::Iter,
   Error, Height, KeyOptions, Options, ValueOptions, MIN_VERSION,
 };
@@ -65,7 +65,7 @@ pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
 
   fn construct(
     arena: <Self::Allocator as AllocatorSealed>::Allocator,
-    opts: Options, 
+    opts: Options,
     exist: bool,
   ) -> Result<Self, Error> {
     use std::boxed::Box;

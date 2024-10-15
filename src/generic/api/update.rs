@@ -283,12 +283,10 @@ where
           }
         })
       })
-      .map_err(|e| {
-        match e {
-          Among::Left(_) => unreachable!(),
-          Among::Right(e) => Among::Right(e),
-          Among::Middle(e) => Among::Middle(e),
-        }
+      .map_err(|e| match e {
+        Among::Left(_) => unreachable!(),
+        Among::Right(e) => Among::Right(e),
+        Among::Middle(e) => Among::Middle(e),
       })
   }
 
@@ -343,12 +341,10 @@ where
           }
         })
       })
-      .map_err(|e| {
-        match e {
-          Among::Left(_) => unreachable!(),
-          Among::Right(e) => Among::Right(e),
-          Among::Middle(e) => Among::Middle(e),
-        }
+      .map_err(|e| match e {
+        Among::Left(_) => unreachable!(),
+        Among::Right(e) => Among::Right(e),
+        Among::Middle(e) => Among::Middle(e),
       })
   }
 
@@ -509,11 +505,9 @@ where
         },
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
-      .map_err(|e| {
-        match e {
-          Among::Right(e) => Either::Right(e),
-          _ => unreachable!()
-        }
+      .map_err(|e| match e {
+        Among::Right(e) => Either::Right(e),
+        _ => unreachable!(),
       })
   }
 }

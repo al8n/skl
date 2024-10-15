@@ -1,9 +1,14 @@
 use core::ops::{Bound, RangeBounds};
 
-use dbutils::{equivalent::Comparable, traits::{KeyRef, Type}};
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
 
 use super::{AllocatorSealed, Arena, EntryRef, Iter};
-use crate::{allocator::WithVersion, iter::AllVersionsIter, Version, generic::entry::VersionedEntryRef};
+use crate::{
+  allocator::WithVersion, generic::entry::VersionedEntryRef, iter::AllVersionsIter, Version,
+};
 
 /// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer<K, V>
@@ -219,10 +224,7 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  fn iter_all_versions<'a>(
-    &'a self,
-    version: Version,
-  ) -> AllVersionsIter<'a, K, V, Self::Allocator>
+  fn iter_all_versions<'a>(&'a self, version: Version) -> AllVersionsIter<'a, K, V, Self::Allocator>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -233,11 +235,7 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  fn range<'a, Q, R>(
-    &'a self,
-    version: Version,
-    range: R,
-  ) -> Iter<'a, K, V, Self::Allocator, Q, R>
+  fn range<'a, Q, R>(&'a self, version: Version, range: R) -> Iter<'a, K, V, Self::Allocator, Q, R>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,

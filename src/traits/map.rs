@@ -64,7 +64,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among::<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator>>, Among<K::Error, V::Error, Error>>
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -119,7 +119,7 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice", vb)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice".as_slice(), vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -182,7 +182,7 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb)
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice".as_slice(), vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -294,7 +294,7 @@ where
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice", vb)
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice".as_slice(), vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -358,7 +358,7 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice", vb)
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(height, b"alice".as_slice(), vb)
   /// .unwrap();
   /// ```
   #[inline]
@@ -716,7 +716,7 @@ where
   /// Unlike [`remove`](Map::remove), this method will not remove the value if the key with the given version already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists. 
+  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
   #[inline]
   fn get_or_remove<'a, 'b: 'a>(
     &'a self,

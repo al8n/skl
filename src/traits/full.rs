@@ -124,7 +124,7 @@ where
   ///   Ok(())
   /// });
   ///
-  /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb, 10)
+  /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
@@ -194,7 +194,7 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb, 10)
+  /// l.insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice".as_slice(), vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
@@ -307,7 +307,7 @@ where
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
   ///   Ok(())
   /// });
-  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice", vb, 10)
+  /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb, 10)
   /// .unwrap();
   /// ```
   #[inline]
@@ -322,7 +322,6 @@ where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
-  
   {
     self.get_or_insert_at_height_with_value_builder(
       version,
@@ -379,7 +378,7 @@ where
   /// });
   ///
   /// let height = l.random_height();
-  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice", vb, 10)
+  /// l.get_or_insert_at_height_with_value_builder::<core::convert::Infallible>(1, height, b"alice".as_slice(), vb, 10)
   /// .unwrap();
   /// ```
   #[inline]

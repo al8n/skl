@@ -1,6 +1,6 @@
 use skl::{
   map::{sync::SkipMap, Map},
-  Arena, Options, Container,
+  Arena, Container, Options,
 };
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -16,13 +16,14 @@ fn main() {
 
   let l = Options::new()
     .with_capacity(1 << 20)
-    .alloc::<SkipMap>()
+    .alloc::<_, _, SkipMap<[u8], [u8]>>()
     .unwrap();
 
   for i in 0..N {
     let l = l.clone();
     std::thread::spawn(move || {
-      l.insert(&key(i), &new_value(i)).unwrap();
+      l.insert(key(i).as_slice(), new_value(i).as_slice())
+        .unwrap();
     });
   }
 
@@ -32,7 +33,11 @@ fn main() {
     let l = l.clone();
     std::thread::spawn(move || {
       let k = key(i);
-      assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
+      assert_eq!(
+        l.get(k.as_slice()).unwrap().value(),
+        new_value(i).as_slice(),
+        "broken: {i}"
+      );
     });
   }
 }

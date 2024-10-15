@@ -86,10 +86,7 @@ impl Options {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map<K, V, T, P>(
-    self,
-    path: P,
-  ) -> std::io::Result<T>
+  pub unsafe fn map<K, V, T, P>(self, path: P) -> std::io::Result<T>
   where
     K: ?Sized + 'static,
     V: ?Sized + 'static,
@@ -212,7 +209,7 @@ impl Options {
     V: ?Sized + 'static,
     T: Arena<K, V>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
-  { 
+  {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
     let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
     let magic_version = self.magic_version();

@@ -1,4 +1,7 @@
-use dbutils::{equivalent::Comparable, traits::{KeyRef, Type}};
+use dbutils::{
+  equivalent::Comparable,
+  traits::{KeyRef, Type},
+};
 
 use super::*;
 

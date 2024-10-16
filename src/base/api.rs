@@ -1,5 +1,5 @@
 use core::{
-  cmp, mem,
+  mem,
   ops::{Bound, RangeBounds},
   ptr::NonNull,
   sync::atomic::Ordering,
@@ -8,7 +8,7 @@ use std::boxed::Box;
 
 use dbutils::{
   buffer::VacantBuffer,
-  equivalent::Comparable,
+  equivalent::{Comparable, Equivalent},
   traits::{KeyRef, Type},
 };
 use rarena_allocator::Allocator as _;
@@ -246,9 +246,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self
-      .iter(version)
-      .seek_lower_bound::<K::Ref<'a>>(Bound::Unbounded)
+    self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
@@ -258,6 +256,24 @@ where
   {
     self
       .iter(version)
+      .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
+  }
+
+  /// Returns the first entry in the map.
+  pub fn first_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    self.iter_all_versions(version).next()
+  }
+
+  /// Returns the last entry in the map.
+  pub fn last_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    self
+      .iter_all_versions(version)
       .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
   }
 
@@ -283,10 +299,7 @@ where
         });
       }
 
-      if !matches!(
-        Comparable::compare(key, &ty_ref::<K>(node_key)),
-        cmp::Ordering::Equal
-      ) {
+      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
         return None;
       }
 
@@ -325,10 +338,7 @@ where
         ));
       }
 
-      if !matches!(
-        Comparable::compare(key, &ty_ref::<K>(node_key)),
-        cmp::Ordering::Equal
-      ) {
+      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
         return None;
       }
 

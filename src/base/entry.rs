@@ -1,17 +1,16 @@
-use core::cell::OnceCell;
+use core::{cell::OnceCell, cmp};
 
 use dbutils::traits::{KeyRef, Type};
 
 use crate::{
   allocator::{Allocator, Node, NodePointer, ValuePartPointer, WithTrailer, WithVersion},
   base::SkipList,
-  ty_ref, Version,
+  ty_ref, Trailer as _, Version,
 };
 
 /// A versioned entry reference of the skipmap.
 ///
 /// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
-#[derive(Debug)]
 pub struct VersionedEntryRef<'a, K, V, A>
 where
   K: ?Sized + Type,
@@ -28,6 +27,21 @@ where
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
+}
+
+impl<K, V, A> core::fmt::Debug for VersionedEntryRef<'_, K, V, A>
+where
+  K: ?Sized + Type,
+  V: ?Sized + Type,
+  A: Allocator,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("VersionedEntryRef")
+      .field("key", &self.key())
+      .field("value", &self.value())
+      .field("version", &self.version)
+      .finish()
+  }
 }
 
 impl<'a, K, V, A: Allocator> Clone for VersionedEntryRef<'a, K, V, A>
@@ -121,39 +135,109 @@ where
   }
 
   fn next_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
-    loop {
-      unsafe {
-        let nd = self.list.get_next(self.ptr, 0, ignore_invalid_trailer);
+    let mut nd = self.ptr;
+    if all_versions {
+      loop {
+        unsafe {
+          nd = self.list.get_next(nd, 0, ignore_invalid_trailer);
 
-        if nd.is_null() || nd.offset() == self.list.tail.offset() {
-          return None;
+          if nd.is_null() || nd.offset() == self.list.tail.offset() {
+            return None;
+          }
+
+          let (value, pointer) = nd.get_value_and_trailer_with_pointer(&self.list.arena);
+          if nd.version() > self.query_version {
+            continue;
+          }
+
+          if !all_versions && value.is_none() {
+            continue;
+          }
+
+          let nk = ty_ref::<K>(nd.get_key(&self.list.arena));
+          if !all_versions && self.key().eq(&nk) {
+            continue;
+          }
+
+          let ent =
+            VersionedEntryRef::from_node_with_pointer(self.query_version, nd, self.list, pointer);
+          return Some(ent);
         }
+      }
+    } else {
+      loop {
+        unsafe {
+          nd = self.list.get_next(nd, 0, ignore_invalid_trailer);
+          if nd.is_null() || nd.offset() == self.list.tail.offset() {
+            return None;
+          }
 
-        let (value, pointer) = nd.get_value_and_trailer_with_pointer(&self.list.arena);
-        if nd.version() > self.query_version {
-          continue;
+          if let Some(nd) = self.find_next_max_version(&mut nd, true) {
+            let pointer = nd.get_value_pointer::<A>();
+            let ent =
+              VersionedEntryRef::from_node_with_pointer(self.version, nd, self.list, pointer);
+            return Some(ent);
+          }
         }
-
-        if !all_versions && value.is_none() {
-          continue;
-        }
-
-        let nk = ty_ref::<K>(nd.get_key(&self.list.arena));
-        if !all_versions && self.key().eq(&nk) {
-          continue;
-        }
-
-        let ent =
-          VersionedEntryRef::from_node_with_pointer(self.query_version, nd, self.list, pointer);
-        return Some(ent);
       }
     }
   }
 
+  unsafe fn find_next_max_version(
+    &self,
+    nd: &mut <A::Node as Node>::Pointer,
+    ignore_invalid_trailer: bool,
+  ) -> Option<<A::Node as Node>::Pointer>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    let mut next = self.list.get_next(*nd, 0, ignore_invalid_trailer);
+
+    loop {
+      let curr_key = nd.get_key(&self.list.arena);
+
+      // next is null, we should check if the current node is a valid node.
+      if next.is_null() {
+        if !nd.is_removed()
+          && nd.version() <= self.version
+          && nd.get_trailer(&self.list.arena).is_valid()
+        {
+          return Some(*nd);
+        }
+
+        return None;
+      }
+
+      // if the next version is larger than the query version, we should return the current value.
+      let version_cmp = next.version().cmp(&self.version);
+      if let cmp::Ordering::Greater = version_cmp {
+        if !nd.is_removed() && nd.get_trailer(&self.list.arena).is_valid() {
+          return Some(*nd);
+        }
+
+        return None;
+      }
+
+      let next_key = next.get_key(&self.list.arena);
+      // if the next key is not the same as the current key, we should return the current value.
+      if next_key != curr_key {
+        if !nd.is_removed() && nd.get_trailer(&self.list.arena).is_valid() {
+          return Some(*nd);
+        }
+
+        return None;
+      }
+
+      *nd = next;
+      next = self.list.get_next(*nd, 0, ignore_invalid_trailer);
+    }
+  }
+
   fn prev_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
+    let mut nd = self.ptr;
     loop {
       unsafe {
-        let nd = self.list.get_prev(self.ptr, 0, !ignore_invalid_trailer);
+        nd = self.list.get_prev(nd, 0, ignore_invalid_trailer);
 
         if nd.is_null() || nd.offset() == self.list.head.offset() {
           return None;
@@ -258,12 +342,25 @@ where
 /// An entry reference to the skipmap's entry.
 ///
 /// Compared to the [`VersionedEntryRef`], this one's value cannot be `None`.
-#[derive(Debug)]
 pub struct EntryRef<'a, K, V, A>(pub(crate) VersionedEntryRef<'a, K, V, A>)
 where
   K: Type + ?Sized,
   V: Type + ?Sized,
   A: Allocator;
+
+impl<K, V, A> core::fmt::Debug for EntryRef<'_, K, V, A>
+where
+  K: ?Sized + Type,
+  V: ?Sized + Type,
+  A: Allocator,
+{
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("EntryRef")
+      .field("key", &self.key())
+      .field("value", &self.value())
+      .finish()
+  }
+}
 
 impl<'a, K, V, A: Allocator> Clone for EntryRef<'a, K, V, A>
 where

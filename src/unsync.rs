@@ -230,7 +230,7 @@ impl ValuePointer for UnsyncValuePointer {
       let old = *ptr;
 
       let (offset, size) = decode_value_pointer(old);
-      *ptr = encode_value_pointer(offset, REMOVE);
+      *ptr = encode_value_pointer(offset, Self::REMOVE);
 
       Ok((offset, size))
     }

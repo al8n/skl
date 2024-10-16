@@ -69,7 +69,6 @@ pub mod iter {
   test_sync_versioned_concurrent_with_pessimistic_freelist,
   test_sync_trailed_concurrent_with_pessimistic_freelist,
 ))]
-#[cfg(test)]
 mod tests;
 
 pub use among;

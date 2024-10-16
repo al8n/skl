@@ -679,7 +679,7 @@ where
 
       // let next_node = next.as_ref(&self.arena);
       let next_key = ty_ref::<K>(next.get_key(&self.arena));
-      let cmp = Comparable::compare(key, &next_key).then_with(|| next.version().cmp(&version));
+      let cmp = Comparable::compare(key, &next_key).then_with(|| version.cmp(&next.version()));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -860,7 +860,7 @@ where
         _ => {}
       }
 
-      match cmp.then_with(|| next.version().cmp(&version)) {
+      match cmp.then_with(|| version.cmp(&next.version())) {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
           return FindResult {

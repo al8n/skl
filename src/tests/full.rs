@@ -1021,7 +1021,6 @@ where
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1050,10 +1049,88 @@ where
   assert!(it.next().is_none());
 }
 
+pub(crate) fn iter_all_versions_next_by_entry<M>(l: M)
+where
+  M: FullMap<[u8], [u8]> + Clone,
+  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    l.get_or_insert(
+      MIN_VERSION,
+      make_int_key(i).as_slice(),
+      make_value(i).as_slice(),
+      Default::default(),
+    )
+    .unwrap();
+  }
+
+  let mut ent = l.first(MIN_VERSION);
+
+  let mut i = 0;
+  while let Some(ref entry) = ent {
+    assert_eq!(entry.key(), make_int_key(i).as_slice());
+    assert_eq!(entry.value(), make_value(i).as_slice());
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N);
+}
+
+pub(crate) fn iter_all_versions_next_by_versioned_entry<M>(l: M)
+where
+  M: FullMap<[u8], [u8]> + Clone,
+  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  const N: usize = 100;
+
+  for i in (0..N).rev() {
+    let k = make_int_key(i);
+    let v = make_value(i);
+    l.insert(MIN_VERSION, k.as_slice(), v.as_slice(), Default::default())
+      .unwrap();
+
+    l.get_or_remove(MIN_VERSION + 1, k.as_slice(), Default::default())
+      .unwrap();
+  }
+
+  let mut ent = l.first(MIN_VERSION);
+  let mut i = 0;
+  while let Some(ref entry) = ent {
+    assert_eq!(entry.key(), make_int_key(i).as_slice());
+    assert_eq!(entry.value(), make_value(i).as_slice());
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, N);
+
+  let mut ent = l.first_versioned(MIN_VERSION + 1);
+  let mut i = 0;
+  while let Some(ref entry) = ent {
+    if i % 2 == 0 {
+      assert_eq!(entry.version(), MIN_VERSION);
+      assert_eq!(entry.key(), make_int_key(i / 2).as_slice());
+      assert_eq!(entry.value().unwrap(), make_value(i / 2).as_slice());
+    } else {
+      assert_eq!(entry.version(), MIN_VERSION + 1);
+      assert_eq!(entry.key(), make_int_key(i / 2).as_slice());
+      assert!(entry.value().is_none());
+    }
+
+    ent = entry.next();
+    i += 1;
+  }
+  assert_eq!(i, 2 * N);
+  let ent = l.first(MIN_VERSION + 1);
+  assert!(ent.is_none(), "{:?}", ent);
+}
+
 pub(crate) fn range_next<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1119,6 +1196,90 @@ where
   }
 
   assert!(it.next_back().is_none());
+}
+
+pub(crate) fn iter_all_versions_prev_by_entry<M>(l: M)
+where
+  M: FullMap<[u8], [u8]> + Clone,
+  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    l.get_or_insert(
+      MIN_VERSION,
+      make_int_key(i).as_slice(),
+      make_value(i).as_slice(),
+      Default::default(),
+    )
+    .unwrap();
+  }
+
+  let mut ent = l.last(MIN_VERSION);
+
+  let mut i = 0;
+  while let Some(ref entry) = ent {
+    i += 1;
+    assert_eq!(entry.key(), make_int_key(N - i).as_slice());
+    assert_eq!(entry.value(), make_value(N - i).as_slice());
+    ent = entry.prev();
+  }
+  assert_eq!(i, N);
+}
+
+pub(crate) fn iter_all_versions_prev_by_versioned_entry<M>(l: M)
+where
+  M: FullMap<[u8], [u8]> + Clone,
+  <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
+  <M::Allocator as Sealed>::Trailer: Default,
+{
+  const N: usize = 100;
+
+  for i in 0..N {
+    let k = make_int_key(i);
+    let v = make_value(i);
+    l.insert(MIN_VERSION, k.as_slice(), v.as_slice(), Default::default())
+      .unwrap();
+
+    l.get_or_remove(MIN_VERSION + 1, k.as_slice(), Default::default())
+      .unwrap();
+  }
+
+  let mut ent = l.last(MIN_VERSION);
+
+  let mut i = 0;
+  while let Some(ref entry) = ent {
+    i += 1;
+    assert_eq!(entry.key(), make_int_key(N - i).as_slice());
+    assert_eq!(entry.value(), make_value(N - i).as_slice());
+    ent = entry.prev();
+  }
+  assert_eq!(i, N);
+
+  let mut ent = l.last_versioned(MIN_VERSION + 1);
+
+  let mut i = 0;
+  while let Some(ref entry) = ent {
+    println!("{:?}", entry);
+    if i % 2 == 0 {
+      i += 1;
+      assert_eq!(entry.version(), MIN_VERSION);
+      assert_eq!(entry.key(), make_int_key(N - i).as_slice());
+      assert_eq!(entry.value().unwrap(), make_value(N - i).as_slice());
+    } else {
+      i += 1;
+      assert_eq!(entry.version(), MIN_VERSION + 1);
+      assert_eq!(entry.key(), make_int_key(N - i).as_slice());
+      assert!(entry.value().is_none());
+    }
+
+    ent = entry.prev();
+  }
+  assert_eq!(i, 2 * N);
+
+  let ent = l.last(MIN_VERSION + 1);
+  assert!(ent.is_none(), "{:?}", ent);
 }
 
 pub(crate) fn range_prev<M>(l: M)
@@ -2115,8 +2276,12 @@ macro_rules! __full_map_tests {
       basic_large,
       iter_all_versions_mvcc,
       iter_all_versions_next,
+      iter_all_versions_next_by_entry,
+      iter_all_versions_next_by_versioned_entry,
       range_next,
       iter_all_versions_prev,
+      iter_all_versions_prev_by_entry,
+      iter_all_versions_prev_by_versioned_entry,
       range_prev,
       iter_all_versions_seek_ge,
       iter_all_versions_seek_lt,

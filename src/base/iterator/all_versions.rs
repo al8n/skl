@@ -9,6 +9,8 @@ use dbutils::{
   traits::{ComparableRangeBounds, KeyRef, Type},
 };
 
+use crate::Trailer;
+
 use super::super::{ty_ref, Allocator, Node, NodePointer, SkipList, Version, VersionedEntryRef};
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
@@ -137,7 +139,7 @@ where
 impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
-  K::Ref<'a>: Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -146,39 +148,106 @@ where
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   fn next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    loop {
-      unsafe {
-        self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
+    if self.all_versions {
+      loop {
+        unsafe {
+          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
 
-        if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
-          return None;
+          if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
+            return None;
+          }
+
+          let pointer = self.nd.get_value_pointer::<A>();
+          if self.nd.version() > self.version {
+            continue;
+          }
+
+          let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+          if !self.all_versions {
+            if let Some(ref last) = self.last {
+              if last.key().eq(&nk) {
+                continue;
+              }
+            }
+          }
+
+          if self.range.compare_contains(&nk) {
+            let ent =
+              VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
+            self.last = Some(ent.clone());
+            return Some(ent);
+          }
         }
+      }
+    } else {
+      loop {
+        unsafe {
+          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
+          if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
+            return None;
+          }
 
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-        if self.nd.version() > self.version {
-          continue;
-        }
-
-        if !self.all_versions && value.is_none() {
-          continue;
-        }
-
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if !self.all_versions {
-          if let Some(ref last) = self.last {
-            if Comparable::compare(last.key(), &nk) == cmp::Ordering::Equal {
-              continue;
+          if let Some(nd) = self.find_next_max_version(true) {
+            let nk = ty_ref::<K>(nd.get_key(&self.map.arena));
+            let pointer = self.nd.get_value_pointer::<A>();
+            if self.range.compare_contains(&nk) {
+              let ent =
+                VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
+              self.last = Some(ent.clone());
+              return Some(ent);
             }
           }
         }
-
-        if self.range.compare_contains(&nk) {
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
-          self.last = Some(ent.clone());
-          return Some(ent);
-        }
       }
+    }
+  }
+
+  unsafe fn find_next_max_version(
+    &mut self,
+    ignore_invalid_trailer: bool,
+  ) -> Option<<A::Node as Node>::Pointer>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    let mut next = self.map.get_next(self.nd, 0, ignore_invalid_trailer);
+
+    loop {
+      let curr_key = self.nd.get_key(&self.map.arena);
+
+      // next is null, we should check if the current node is a valid node.
+      if next.is_null() {
+        if !self.nd.is_removed()
+          && self.nd.version() <= self.version
+          && self.nd.get_trailer(&self.map.arena).is_valid()
+        {
+          return Some(self.nd);
+        }
+
+        return None;
+      }
+
+      // if the next version is larger than the query version, we should return the current value.
+      let version_cmp = next.version().cmp(&self.version);
+      if let cmp::Ordering::Greater = version_cmp {
+        if !self.nd.is_removed() && self.nd.get_trailer(&self.map.arena).is_valid() {
+          return Some(self.nd);
+        }
+
+        return None;
+      }
+
+      let next_key = next.get_key(&self.map.arena);
+      // if the next key is not the same as the current key, we should return the current value.
+      if next_key != curr_key {
+        if !self.nd.is_removed() && self.nd.get_trailer(&self.map.arena).is_valid() {
+          return Some(self.nd);
+        }
+
+        return None;
+      }
+
+      self.nd = next;
+      next = self.map.get_next(self.nd, 0, ignore_invalid_trailer);
     }
   }
 
@@ -205,7 +274,7 @@ where
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
         if !self.all_versions {
           if let Some(ref last) = self.last {
-            if Comparable::compare(last.key(), &nk) == cmp::Ordering::Equal {
+            if last.key().eq(&nk) {
               continue;
             }
           }
@@ -328,7 +397,7 @@ where
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
-    self.nd = self.map.gt(self.version, key, self.all_versions)?;
+    self.nd = self.map.gt(self.version, key, !self.all_versions)?;
 
     if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
       return None;
@@ -371,7 +440,7 @@ where
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
-    self.nd = self.map.le(self.version, key, self.all_versions)?;
+    self.nd = self.map.le(self.version, key, !self.all_versions)?;
 
     loop {
       unsafe {
@@ -411,7 +480,7 @@ where
   {
     // NB: the top-level AllVersionsIter has already adjusted key based on
     // the upper-bound.
-    self.nd = self.map.lt(self.version, key, self.all_versions)?;
+    self.nd = self.map.lt(self.version, key, !self.all_versions)?;
 
     loop {
       unsafe {
@@ -445,7 +514,7 @@ where
   /// Seeks position at the first entry in map. Returns the key and value
   /// if the iterator is pointing at a valid entry, and `None` otherwise.
   fn first(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    self.nd = self.map.first_in(self.version, self.all_versions)?;
+    self.nd = self.map.first_in(self.version, !self.all_versions)?;
 
     loop {
       if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
@@ -481,7 +550,7 @@ where
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
   fn last(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    self.nd = self.map.last_in(self.version, self.all_versions)?;
+    self.nd = self.map.last_in(self.version, !self.all_versions)?;
 
     loop {
       unsafe {
@@ -527,10 +596,7 @@ where
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.next_in().map(|v| {
-      // Safety: the EntryRef holds a reference to the map, so it is always valid.
-      unsafe { core::mem::transmute(v) }
-    })
+    self.next_in()
   }
 
   #[inline]
@@ -538,12 +604,7 @@ where
   where
     Self: Sized,
   {
-    self
-      .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
-      .map(|e| {
-        // Safety: the EntryRef holds a reference to the map, so it is always valid.
-        unsafe { core::mem::transmute(e) }
-      })
+    self.seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
   }
 
   #[inline]
@@ -561,10 +622,7 @@ where
     Self: Sized,
     Self::Item: Ord,
   {
-    self.first().map(|e| {
-      // Safety: the EntryRef holds a reference to the map, so it is always valid.
-      unsafe { core::mem::transmute(e) }
-    })
+    self.first()
   }
 }
 
@@ -578,9 +636,6 @@ where
   R: RangeBounds<Q>,
 {
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.prev().map(|v| {
-      // Safety: the EntryRef holds a reference to the map, so it is always valid.
-      unsafe { core::mem::transmute(v) }
-    })
+    self.prev()
   }
 }

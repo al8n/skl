@@ -2,7 +2,6 @@ use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 use arbitrary_int::{u27, u5, Number, TryNewError};
 pub use dbutils::buffer::*;
-use derive_more::Display;
 
 const MAX_U5: u8 = (1 << 5) - 1;
 const MAX_U27: u32 = (1 << 27) - 1;
@@ -235,7 +234,7 @@ macro_rules! ux_wrapper {
     $(
       $(#[$meta])*
       #[derive(
-        Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+        Debug, derive_more::Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
       )]
       pub struct $name($inner);
 

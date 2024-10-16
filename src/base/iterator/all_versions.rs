@@ -173,7 +173,8 @@ where
         }
 
         if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
+          let ent =
+            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
         }
@@ -211,7 +212,8 @@ where
         }
 
         if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
+          let ent =
+            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
         }
@@ -240,12 +242,12 @@ where
   {
     match upper {
       Bound::Included(key) => self.seek_le(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
+        let ent = VersionedEntryRef::from_node(self.version, n, self.map);
         self.last = Some(ent.clone());
         ent
       }),
       Bound::Excluded(key) => self.seek_lt(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
+        let ent = VersionedEntryRef::from_node(self.version, n, self.map);
         self.last = Some(ent.clone());
         ent
       }),
@@ -264,12 +266,12 @@ where
   {
     match lower {
       Bound::Included(key) => self.seek_ge(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
+        let ent = VersionedEntryRef::from_node(self.version, n, self.map);
         self.last = Some(ent.clone());
         ent
       }),
       Bound::Excluded(key) => self.seek_gt(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
+        let ent = VersionedEntryRef::from_node(self.version, n, self.map);
         self.last = Some(ent.clone());
         ent
       }),
@@ -465,7 +467,8 @@ where
         }
 
         if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
+          let ent =
+            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
           self.last = Some(ent.clone());
           return Some(ent);
         }
@@ -500,7 +503,8 @@ where
 
         let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
         if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
+          let ent =
+            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
           return Some(ent);
         }
 

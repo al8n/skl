@@ -15,10 +15,12 @@ use crate::{
   allocator::{
     Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePartPointer, ValuePointer,
   },
-  encode_key_size_and_height,
-  entry::{EntryRef, VersionedEntryRef},
-  ty_ref, CompressionPolicy, Error, Height, KeyBuilder, KeySize, Trailer, ValueBuilder, Version,
+  encode_key_size_and_height, ty_ref, CompressionPolicy, Error, Height, KeyBuilder, KeySize,
+  Trailer, ValueBuilder, Version,
 };
+
+mod entry;
+pub use entry::{EntryRef, VersionedEntryRef};
 
 mod api;
 pub(super) mod iterator;
@@ -981,11 +983,12 @@ where
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let k = found_key.expect("the key cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
+        let old = VersionedEntryRef::from_node(version, node_ptr, self);
 
         if upsert {
           return self
             .upsert(
+              version,
               old,
               node_ptr,
               &if is_remove {
@@ -1157,7 +1160,7 @@ where
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = VersionedEntryRef::from_node(node_ptr, &self.arena);
+                let old = VersionedEntryRef::from_node(version, node_ptr, self);
 
                 if upsert {
                   // let curr = nd.as_ref(&self.arena);
@@ -1166,6 +1169,7 @@ where
 
                   return self
                     .upsert_value(
+                      version,
                       old,
                       node_ptr,
                       &if is_removed {
@@ -1232,6 +1236,7 @@ where
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
+    version: Version,
     old: VersionedEntryRef<'a, K, V, A>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
@@ -1257,8 +1262,9 @@ where
         Ok(_) => Ok(Either::Left(None)),
         Err((offset, len)) => Ok(Either::Right(Err(
           VersionedEntryRef::from_node_with_pointer(
+            version,
             old_node,
-            &self.arena,
+            self,
             ValuePartPointer::new(
               offset,
               A::align_offset::<A::Trailer>(offset) + mem::size_of::<A::Trailer>() as u32,
@@ -1273,6 +1279,7 @@ where
   #[allow(clippy::too_many_arguments)]
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
+    version: Version,
     old: VersionedEntryRef<'a, K, V, A>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
@@ -1293,8 +1300,9 @@ where
         Ok(_) => Ok(Either::Left(None)),
         Err((offset, len)) => Ok(Either::Right(Err(
           VersionedEntryRef::from_node_with_pointer(
+            version,
             old_node,
-            &self.arena,
+            self,
             ValuePartPointer::new(
               offset,
               A::align_offset::<A::Trailer>(offset) + mem::size_of::<A::Trailer>() as u32,

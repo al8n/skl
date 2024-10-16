@@ -5,8 +5,8 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 
-use super::{AllocatorSealed, Arena, EntryRef, Iter};
-use crate::{allocator::WithVersion, entry::VersionedEntryRef, iter::AllVersionsIter, Version};
+use super::{AllocatorSealed, Arena, EntryRef, Iter, VersionedEntryRef};
+use crate::{allocator::WithVersion, iter::AllVersionsIter, Version};
 
 /// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer<K, V>
@@ -239,7 +239,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     self.as_ref().range(version, range)
   }
@@ -256,7 +256,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     self.as_ref().range_all_versions(version, range)
   }

@@ -40,9 +40,6 @@ pub use traits::{
 mod types;
 pub use types::*;
 
-mod entry;
-pub use entry::{EntryRef, VersionedEntryRef};
-
 /// Iterators for the skipmaps.
 pub mod iter {
   pub use super::base::iterator::{AllVersionsIter, Iter};

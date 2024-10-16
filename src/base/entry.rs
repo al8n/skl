@@ -1,9 +1,10 @@
 use core::cell::OnceCell;
 
-use dbutils::traits::Type;
+use dbutils::traits::{KeyRef, Type};
 
 use crate::{
   allocator::{Allocator, Node, NodePointer, ValuePartPointer, WithTrailer, WithVersion},
+  base::SkipList,
   ty_ref, Version,
 };
 
@@ -17,7 +18,7 @@ where
   V: ?Sized + Type,
   A: Allocator,
 {
-  pub(super) arena: &'a A,
+  pub(super) list: &'a SkipList<K, V, A>,
   pub(super) raw_key: &'a [u8],
   pub(super) key: OnceCell<K::Ref<'a>>,
   pub(super) raw_value: Option<&'a [u8]>,
@@ -25,6 +26,7 @@ where
   pub(super) value_part_pointer: ValuePartPointer<A::Trailer>,
   pub(super) trailer: OnceCell<&'a A::Trailer>,
   pub(super) version: Version,
+  pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
@@ -38,7 +40,7 @@ where
 {
   fn clone(&self) -> Self {
     Self {
-      arena: self.arena,
+      list: self.list,
       raw_key: self.raw_key,
       key: self.key.clone(),
       raw_value: self.raw_value,
@@ -46,6 +48,7 @@ where
       value_part_pointer: self.value_part_pointer,
       trailer: self.trailer.clone(),
       version: self.version,
+      query_version: self.query_version,
       ptr: self.ptr,
     }
   }
@@ -65,7 +68,7 @@ where
       self.trailer.get_or_init(|| {
         self
           .ptr
-          .get_trailer_by_offset(self.arena, self.value_part_pointer.trailer_offset)
+          .get_trailer_by_offset(&self.list.arena, self.value_part_pointer.trailer_offset)
       })
     }
   }
@@ -98,6 +101,86 @@ where
   }
 }
 
+impl<'a, K, V, A: Allocator> VersionedEntryRef<'a, K, V, A>
+where
+  K: ?Sized + Type,
+  K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + Type,
+  A: Allocator,
+{
+  /// Returns the next entry in the map.
+  #[inline]
+  pub fn next(&self) -> Option<Self> {
+    self.next_in(true, false)
+  }
+
+  /// Returns the previous entry in the map.
+  #[inline]
+  pub fn prev(&self) -> Option<Self> {
+    self.prev_in(true, false)
+  }
+
+  fn next_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
+    loop {
+      unsafe {
+        let nd = self.list.get_next(self.ptr, 0, ignore_invalid_trailer);
+
+        if nd.is_null() || nd.offset() == self.list.tail.offset() {
+          return None;
+        }
+
+        let (value, pointer) = nd.get_value_and_trailer_with_pointer(&self.list.arena);
+        if nd.version() > self.query_version {
+          continue;
+        }
+
+        if !all_versions && value.is_none() {
+          continue;
+        }
+
+        let nk = ty_ref::<K>(nd.get_key(&self.list.arena));
+        if !all_versions && self.key().eq(&nk) {
+          continue;
+        }
+
+        let ent =
+          VersionedEntryRef::from_node_with_pointer(self.query_version, nd, self.list, pointer);
+        return Some(ent);
+      }
+    }
+  }
+
+  fn prev_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
+    loop {
+      unsafe {
+        let nd = self.list.get_prev(self.ptr, 0, !ignore_invalid_trailer);
+
+        if nd.is_null() || nd.offset() == self.list.head.offset() {
+          return None;
+        }
+
+        let (value, pointer) = nd.get_value_and_trailer_with_pointer(&self.list.arena);
+        if nd.version() > self.query_version {
+          continue;
+        }
+
+        if !all_versions && value.is_none() {
+          continue;
+        }
+
+        let nk = ty_ref::<K>(nd.get_key(&self.list.arena));
+        if !all_versions && self.key().eq(&nk) {
+          continue;
+        }
+
+        let ent =
+          VersionedEntryRef::from_node_with_pointer(self.query_version, nd, self.list, pointer);
+        return Some(ent);
+      }
+    }
+  }
+}
+
 impl<K, V, A> VersionedEntryRef<'_, K, V, A>
 where
   K: ?Sized + Type,
@@ -120,16 +203,17 @@ where
 {
   #[inline]
   pub(crate) fn from_node(
+    query_version: Version,
     node: <A::Node as Node>::Pointer,
-    arena: &'a A,
+    list: &'a SkipList<K, V, A>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
       let vp = node.trailer_offset_and_value_size();
-      let raw_value = node.get_value_by_value_offset(arena, vp.value_offset, vp.value_len);
+      let raw_value = node.get_value_by_value_offset(&list.arena, vp.value_offset, vp.value_len);
 
-      let raw_key = node.get_key(arena);
+      let raw_key = node.get_key(&list.arena);
       VersionedEntryRef {
-        arena,
+        list,
         raw_key,
         key: OnceCell::new(),
         raw_value,
@@ -137,6 +221,7 @@ where
         value_part_pointer: vp,
         trailer: OnceCell::new(),
         version: node.version(),
+        query_version,
         ptr: node,
       }
     }
@@ -144,17 +229,18 @@ where
 
   #[inline]
   pub(crate) fn from_node_with_pointer(
+    query_version: Version,
     node: <A::Node as Node>::Pointer,
-    arena: &'a A,
+    list: &'a SkipList<K, V, A>,
     pointer: ValuePartPointer<A::Trailer>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
       let raw_value =
-        node.get_value_by_value_offset(arena, pointer.value_offset, pointer.value_len);
+        node.get_value_by_value_offset(&list.arena, pointer.value_offset, pointer.value_len);
 
-      let raw_key = node.get_key(arena);
+      let raw_key = node.get_key(&list.arena);
       VersionedEntryRef {
-        arena,
+        list,
         raw_key,
         key: OnceCell::new(),
         raw_value,
@@ -162,6 +248,7 @@ where
         value_part_pointer: pointer,
         trailer: OnceCell::new(),
         version: node.version(),
+        query_version,
         ptr: node,
       }
     }
@@ -202,6 +289,26 @@ where
   #[inline]
   pub fn trailer(&'a self) -> &'a A::Trailer {
     self.0.trailer()
+  }
+}
+
+impl<'a, K, V, A: Allocator> EntryRef<'a, K, V, A>
+where
+  K: ?Sized + Type,
+  K::Ref<'a>: KeyRef<'a, K>,
+  V: ?Sized + Type,
+  A: Allocator,
+{
+  /// Returns the next entry in the map.
+  #[inline]
+  pub fn next(&self) -> Option<Self> {
+    self.0.next_in(false, true).map(Self)
+  }
+
+  /// Returns the previous entry in the map.
+  #[inline]
+  pub fn prev(&self) -> Option<Self> {
+    self.0.prev_in(false, true).map(Self)
   }
 }
 

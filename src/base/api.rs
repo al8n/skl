@@ -15,11 +15,10 @@ use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Header, Link, Node, NodePointer},
-  entry::{EntryRef, VersionedEntryRef},
   random_height, ty_ref, Error, Height, ValueBuilder, Version,
 };
 
-use super::{iterator, SkipList};
+use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
 
 mod update;
 
@@ -279,9 +278,7 @@ where
       if eq {
         return value.map(|_| {
           EntryRef(VersionedEntryRef::from_node_with_pointer(
-            node,
-            &self.arena,
-            pointer,
+            version, node, self, pointer,
           ))
         });
       }
@@ -299,9 +296,7 @@ where
 
       value.map(|_| {
         EntryRef(VersionedEntryRef::from_node_with_pointer(
-          node,
-          &self.arena,
-          pointer,
+          version, node, self, pointer,
         ))
       })
     }
@@ -326,9 +321,7 @@ where
       let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
-          node,
-          &self.arena,
-          pointer,
+          version, node, self, pointer,
         ));
       }
 
@@ -344,9 +337,7 @@ where
       }
 
       Some(VersionedEntryRef::from_node_with_pointer(
-        node,
-        &self.arena,
-        pointer,
+        version, node, self, pointer,
       ))
     }
   }
@@ -403,7 +394,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     iterator::Iter::range(version, self, range)
   }
@@ -418,7 +409,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     iterator::AllVersionsIter::range(version, self, range, true)
   }

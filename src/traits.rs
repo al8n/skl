@@ -12,8 +12,7 @@ use super::{
   allocator::{
     Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed, WithTrailer,
   },
-  base::SkipList,
-  entry::EntryRef,
+  base::{EntryRef, SkipList, VersionedEntryRef},
   iter::Iter,
   Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
 };

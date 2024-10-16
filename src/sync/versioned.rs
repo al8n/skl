@@ -4,16 +4,16 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("sync_versioned_map": SkipMap);
+  __container_tests!("sync_versioned_map": SkipMap<[u8], [u8]>);
 
-  __versioned_map_tests!("sync_versioned_map": SkipMap<Ascend>);
+  __versioned_map_tests!("sync_versioned_map": SkipMap<[u8], [u8]>);
 }
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned_concurrent,))]
 mod concurrent_tests {
   use super::*;
 
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<Ascend> => crate::tests::TEST_OPTIONS);
+  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
 }
 
 #[cfg(any(
@@ -24,7 +24,7 @@ mod concurrent_tests {
 mod concurrent_tests_with_optimistic_freelist {
   use super::*;
 
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<Ascend> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
 }
 
 #[cfg(any(
@@ -35,11 +35,23 @@ mod concurrent_tests_with_optimistic_freelist {
 mod concurrent_tests_with_pessimistic_freelist {
   use super::*;
 
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<Ascend> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
-type SkipList<C> = base::SkipList<Allocator, C>;
+type SkipList<K, V> = base::SkipList<K, V, Allocator>;
+
+/// Iterator over the [`SkipMap`].
+pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
+
+/// Iterator over a subset of the [`SkipMap`].
+pub type Range<'a, K, V, Q, R> = crate::iter::Iter<'a, K, V, Allocator, Q, R>;
+
+/// The entry reference of the [`SkipMap`].
+pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
+
+/// The versioned entry reference of the [`SkipMap`].
+pub type VersionedEntry<'a, K, V> = crate::VersionedEntryRef<'a, K, V, Allocator>;
 
 node!(
   /// A node that supports version.
@@ -75,33 +87,32 @@ node!(
 ///
 /// If you want to use in non-concurrent environment, you can use [`unsync::versioned::SkipMap`].
 #[repr(transparent)]
-pub struct SkipMap<C = Ascend>(SkipList<C>);
+pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 
-impl<C: Clone> Clone for SkipMap<C> {
+impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
   #[inline]
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<C> From<SkipList<C>> for SkipMap<C> {
+impl<K: ?Sized, V: ?Sized> From<SkipList<K, V>> for SkipMap<K, V> {
   #[inline]
-  fn from(list: SkipList<C>) -> Self {
+  fn from(list: SkipList<K, V>) -> Self {
     Self(list)
   }
 }
 
-impl<C> crate::traits::List for SkipMap<C> {
+impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List<K, V> for SkipMap<K, V> {
   type Allocator = Allocator;
-  type Comparator = C;
 
   #[inline]
-  fn as_ref(&self) -> &SkipList<Self::Comparator> {
+  fn as_ref(&self) -> &SkipList<K, V> {
     &self.0
   }
 
   #[inline]
-  fn as_mut(&mut self) -> &mut SkipList<Self::Comparator> {
+  fn as_mut(&mut self) -> &mut SkipList<K, V> {
     &mut self.0
   }
 }

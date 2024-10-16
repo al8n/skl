@@ -14,6 +14,8 @@ pub(crate) use sealed::*;
 mod sealed {
   use core::{ops::Deref, ptr};
 
+  use among::Among;
+
   use super::*;
 
   pub struct Pointer {
@@ -823,36 +825,36 @@ mod sealed {
     }
 
     /// Allocates a `Node`, key, trailer and value
-    fn allocate_entry_node<'a, 'b: 'a, E>(
+    fn allocate_entry_node<'a, 'b: 'a, KE, VE>(
       &'a self,
       version: Version,
       height: u32,
       trailer: <Self::Node as Node>::Trailer,
-      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
+      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Among<KE, VE, Error>> {
       let (key_size, kf) = key_builder.into_components();
       let (value_size, vf) = value_builder.into_components();
 
       self
         .check_node_size(height, key_size.to_u32(), value_size)
-        .map_err(Either::Right)?;
+        .map_err(Among::Right)?;
 
       unsafe {
         let mut node = self
           .allocate_pure_node(height)
-          .map_err(|e| Either::Right(e.into()))?;
+          .map_err(|e| Among::Right(e.into()))?;
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
 
         let mut key = self
           .alloc_bytes(key_size.to_u32())
-          .map_err(|e| Either::Right(e.into()))?;
+          .map_err(|e| Among::Right(e.into()))?;
         let key_offset = key.offset();
         let key_cap = key.capacity();
         let mut trailer_and_value = self
           .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size)
-          .map_err(|e| Either::Right(e.into()))?;
+          .map_err(|e| Among::Right(e.into()))?;
         let trailer_offset = trailer_and_value.offset();
         let trailer_ptr = trailer_and_value
           .as_mut_ptr()
@@ -872,7 +874,7 @@ mod sealed {
         key.detach();
         let (_, key_deallocate_info) = self
           .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
-          .map_err(Either::Left)?;
+          .map_err(Among::Left)?;
         trailer_and_value.detach();
         let (_, value_deallocate_info) = self
           .fill_vacant_value(
@@ -882,7 +884,7 @@ mod sealed {
             value_offset,
             vf,
           )
-          .map_err(Either::Left)?;
+          .map_err(Among::Middle)?;
         node.detach();
 
         let deallocator = Deallocator {

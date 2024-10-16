@@ -1,11 +1,10 @@
 use among::Among;
 use core::{
-  borrow::Borrow,
   ops::{Bound, RangeBounds},
   ptr::NonNull,
   sync::atomic::Ordering,
 };
-use dbutils::{buffer::VacantBuffer, Comparator};
+use dbutils::buffer::VacantBuffer;
 use either::Either;
 use rarena_allocator::Allocator as ArenaAllocator;
 
@@ -14,8 +13,9 @@ use super::{
     Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed, WithTrailer,
   },
   base::SkipList,
+  entry::EntryRef,
   iter::Iter,
-  EntryRef, Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
+  Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
 };
 
 mod container;
@@ -40,15 +40,14 @@ pub mod versioned;
 pub mod full;
 
 /// The underlying skip list for skip maps
-pub trait List:
-  Sized + From<SkipList<<Self as List>::Allocator, <Self as List>::Comparator>>
+pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
+  Sized + From<SkipList<K, V, <Self as List<K, V>>::Allocator>>
 {
   type Allocator: Allocator;
-  type Comparator;
 
-  fn as_ref(&self) -> &SkipList<Self::Allocator, Self::Comparator>;
+  fn as_ref(&self) -> &SkipList<K, V, Self::Allocator>;
 
-  fn as_mut(&mut self) -> &mut SkipList<Self::Allocator, Self::Comparator>;
+  fn as_mut(&mut self) -> &mut SkipList<K, V, Self::Allocator>;
 
   #[inline]
   fn allocator(&self) -> &Self::Allocator {
@@ -68,7 +67,6 @@ pub trait List:
   fn construct(
     arena: <Self::Allocator as AllocatorSealed>::Allocator,
     opts: Options,
-    cmp: Self::Comparator,
     exist: bool,
   ) -> Result<Self, Error> {
     use std::boxed::Box;
@@ -87,11 +85,10 @@ pub trait List:
         head,
         tail,
         data_offset,
-        cmp,
       )));
     }
 
-    let meta = if arena.unify() {
+    let meta = if AllocatorSealed::unify(&arena) {
       arena.allocate_header(opts.magic_version())?
     } else {
       unsafe {
@@ -122,13 +119,12 @@ pub trait List:
       head,
       tail,
       data_offset,
-      cmp,
     )))
   }
 }
 
 /// The wrapper trait over a underlying [`Allocator`](rarena_allocator::Allocator).
-pub trait Arena: List {
+pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// Returns how many bytes are reserved by the ARENA.
   #[inline]
   fn reserved_bytes(&self) -> usize {
@@ -245,12 +241,6 @@ pub trait Arena: List {
     self.as_ref().discarded()
   }
 
-  /// Returns the comparator used to compare keys.
-  #[inline]
-  fn comparator(&self) -> &Self::Comparator {
-    self.as_ref().comparator()
-  }
-
   /// Returns `true` if the Arena is using unify memory layout.
   #[inline]
   fn unify(&self) -> bool {
@@ -264,12 +254,12 @@ pub trait Arena: List {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{trailed::sync::SkipMap, Arena, Builder};
+  /// use skl::{trailed::sync::SkipMap, Arena, Options};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::<u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
+  /// let needed = SkipMap::<[u8], [u8], u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
   /// ```
   #[inline]
   fn random_height(&self) -> Height {
@@ -281,7 +271,7 @@ pub trait Arena: List {
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
   fn estimated_node_size(height: Height, key_size: usize, value_size: usize) -> usize {
-    SkipList::<Self::Allocator, Self::Comparator>::estimated_node_size(height, key_size, value_size)
+    SkipList::<K, V, Self::Allocator>::estimated_node_size(height, key_size, value_size)
   }
 
   /// Clear the skiplist to empty and re-initialize.
@@ -295,7 +285,7 @@ pub trait Arena: List {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
+  /// let map = Options::new().with_capacity(100).alloc().unwrap();
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///
@@ -335,4 +325,4 @@ pub trait Arena: List {
   }
 }
 
-impl<T> Arena for T where T: List {}
+impl<K: ?Sized + 'static, V: ?Sized + 'static, T> Arena<K, V> for T where T: List<K, V> {}

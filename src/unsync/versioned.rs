@@ -4,13 +4,25 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("unsync_versioned_map": SkipMap);
+  __container_tests!("unsync_versioned_map": SkipMap<[u8], [u8]>);
 
-  __versioned_map_tests!("unsync_versioned_map": SkipMap<Ascend>);
+  __versioned_map_tests!("unsync_versioned_map": SkipMap<[u8], [u8]>);
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
-type SkipList<C> = base::SkipList<Allocator, C>;
+type SkipList<K, V> = base::SkipList<K, V, Allocator>;
+
+/// Iterator over the [`SkipMap`].
+pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
+
+/// Iterator over a subset of the [`SkipMap`].
+pub type Range<'a, K, V, Q, R> = crate::iter::Iter<'a, K, V, Allocator, Q, R>;
+
+/// The entry reference of the [`SkipMap`].
+pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
+
+/// The versioned entry reference of the [`SkipMap`].
+pub type VersionedEntry<'a, K, V> = crate::VersionedEntryRef<'a, K, V, Allocator>;
 
 node!(
   /// A node that only supports version.
@@ -46,33 +58,32 @@ node!(
 ///
 /// If you want to use in concurrent environment, you can use [`sync::versioned::SkipMap`].
 #[repr(transparent)]
-pub struct SkipMap<C = Ascend>(SkipList<C>);
+pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 
-impl<C: Clone> Clone for SkipMap<C> {
+impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
   #[inline]
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<C> From<SkipList<C>> for SkipMap<C> {
+impl<K: ?Sized, V: ?Sized> From<SkipList<K, V>> for SkipMap<K, V> {
   #[inline]
-  fn from(list: SkipList<C>) -> Self {
+  fn from(list: SkipList<K, V>) -> Self {
     Self(list)
   }
 }
 
-impl<C> crate::traits::List for SkipMap<C> {
+impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List<K, V> for SkipMap<K, V> {
   type Allocator = Allocator;
-  type Comparator = C;
 
   #[inline]
-  fn as_ref(&self) -> &SkipList<Self::Comparator> {
+  fn as_ref(&self) -> &SkipList<K, V> {
     &self.0
   }
 
   #[inline]
-  fn as_mut(&mut self) -> &mut SkipList<Self::Comparator> {
+  fn as_mut(&mut self) -> &mut SkipList<K, V> {
     &mut self.0
   }
 }

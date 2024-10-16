@@ -16,24 +16,19 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::{
-  cmp,
-  ops::{Bound, RangeBounds},
-  ptr::NonNull,
-};
-
-/// Skiplist implementation. See [`SkipList`](base::SkipList) for more information.
-mod base;
-pub use base::{Entry, EntryRef, VersionedEntry, VersionedEntryRef};
+use core::ptr::NonNull;
 
 mod allocator;
 pub use allocator::GenericAllocator;
 
+/// Skiplist implementation
+mod base;
+
 mod error;
 pub use error::Error;
 
-mod builder;
-pub use builder::*;
+mod options;
+pub use options::*;
 
 mod traits;
 pub use traits::{
@@ -45,9 +40,12 @@ pub use traits::{
 mod types;
 pub use types::*;
 
+mod entry;
+pub use entry::{EntryRef, VersionedEntryRef};
+
 /// Iterators for the skipmaps.
 pub mod iter {
-  pub use super::base::{AllVersionsIter, Iter};
+  pub use super::base::iterator::{AllVersionsIter, Iter};
 }
 
 #[cfg(any(
@@ -74,6 +72,7 @@ pub mod iter {
   test_sync_versioned_concurrent_with_pessimistic_freelist,
   test_sync_trailed_concurrent_with_pessimistic_freelist,
 ))]
+#[cfg(test)]
 mod tests;
 
 pub use among;
@@ -304,3 +303,8 @@ mod sync;
 
 /// Implementations for single-threaded environments.
 mod unsync;
+
+#[inline]
+fn ty_ref<'a, T: dbutils::traits::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
+  unsafe { <T::Ref<'a> as dbutils::traits::TypeRef<'a>>::from_slice(src) }
+}

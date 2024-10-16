@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.16.2"
+version = "0.17.0"
 edition = "2021"
 rust-version = "1.81.0"
 repository = "https://github.com/al8n/skl"
@@ -43,7 +43,7 @@ experimental = ["memchr"]
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies]
-among = { version = "0.1", default-features = false }
+among = { version = "0.1", default-features = false, features = ["either"] }
 arbitrary-int = { version = "1.2", default-features = false }
 derive_more = { version = "1", features = ["display"] }
 dbutils = { version = "0.7", default-features = false }

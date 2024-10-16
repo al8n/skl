@@ -2,10 +2,9 @@
 
 use core::ops::Bound;
 
-use dbutils::Comparator;
 use rarena_allocator::Error as ArenaError;
 
-use crate::{allocator::Sealed, Error};
+use crate::{allocator::Sealed, Arena, Error};
 
 use super::{Container, Options};
 
@@ -150,9 +149,8 @@ macro_rules! __unit_test_expand {
       $(#[cfg($cfg)])?
       fn [< test_ $name >]() {
         $fn::$name(
-          $crate::Builder::new()
-            .with_options($opts)
-            .alloc::<$ty>()
+          $opts
+            .alloc::<[u8], [u8], $ty>()
             .unwrap(),
         );
       }
@@ -161,10 +159,9 @@ macro_rules! __unit_test_expand {
       $(#[cfg($cfg)])?
       fn [< test_ $name _unify >]() {
         $fn::$name(
-          $crate::Builder::new()
-            .with_options($opts)
+          $opts
             .with_unify(true)
-            .alloc::<$ty>()
+            .alloc::<[u8], [u8], $ty>()
             .unwrap(),
         );
       }
@@ -181,12 +178,11 @@ macro_rules! __unit_test_expand {
             .path()
             .join(::std::format!("test_{}_skipmap_{}_map_mut", $prefix, stringify!($name)));
           $fn::$name(
-            $crate::Builder::new()
-              .with_options($opts)
+            $opts
               .with_create_new(true)
               .with_read(true)
               .with_write(true)
-              .map_mut::<$ty, _>(p)
+              .map_mut::<[u8], [u8], $ty, _>(p)
               .unwrap(),
           );
         }
@@ -197,9 +193,8 @@ macro_rules! __unit_test_expand {
       #[cfg(feature = "memmap")]
       fn [< test_ $name _map_anon >] () {
         $fn::$name(
-          $crate::Builder::new()
-            .with_options($opts)
-            .map_anon::<$ty>()
+          $opts
+            .map_anon::<[u8], [u8], $ty>()
             .unwrap(),
         );
       }
@@ -209,10 +204,9 @@ macro_rules! __unit_test_expand {
       #[cfg(feature = "memmap")]
       fn [< test_ $name _map_anon_unify >]() {
         $fn::$name(
-          $crate::Builder::new()
-            .with_options($opts)
+          $opts
             .with_unify(true)
-            .map_anon::<$ty>()
+            .map_anon::<[u8], [u8], $ty>()
             .unwrap(),
         );
       }
@@ -227,9 +221,9 @@ macro_rules! __container_tests {
     #[test]
     fn test_empty() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
-          .alloc::<$ty>()
+          .alloc::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -237,10 +231,10 @@ macro_rules! __container_tests {
     #[test]
     fn test_empty_unify() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
-          .alloc::<$ty>()
+          .alloc::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -256,12 +250,12 @@ macro_rules! __container_tests {
           .path()
           .join(::std::format!("test_{}_skipmap_empty_map_mut", $prefix));
 
-        let map = $crate::Builder::new()
+        let map = $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_create_new(true)
           .with_read(true)
           .with_write(true)
-          .map_mut::<$ty, _>(p)
+          .map_mut::<[u8], [u8], $ty, _>(p)
           .unwrap();
         $crate::tests::empty(map);
       }
@@ -271,9 +265,9 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_empty_map_anon() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
-          .map_anon::<$ty>()
+          .map_anon::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -282,10 +276,10 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_empty_map_anon_unify() {
       $crate::tests::empty(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
-          .map_anon::<$ty>()
+          .map_anon::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -293,9 +287,9 @@ macro_rules! __container_tests {
     #[test]
     fn test_full() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
-          .alloc::<$ty>()
+          .alloc::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -303,10 +297,10 @@ macro_rules! __container_tests {
     #[test]
     fn test_full_unify() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
-          .alloc::<$ty>()
+          .alloc::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -322,12 +316,12 @@ macro_rules! __container_tests {
           .path()
           .join(::std::format!("test_{}_skipmap_full_map_mut", $prefix));
 
-        let map = $crate::Builder::new()
+        let map = $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_create_new(true)
           .with_read(true)
           .with_write(true)
-          .map_mut::<$ty, _>(p)
+          .map_mut::<[u8], [u8], $ty, _>(p)
           .unwrap();
         $crate::tests::full(map);
       }
@@ -337,9 +331,9 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_full_map_anon() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
-          .map_anon::<$ty>()
+          .map_anon::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
@@ -348,32 +342,33 @@ macro_rules! __container_tests {
     #[cfg(feature = "memmap")]
     fn test_full_map_anon_unify() {
       $crate::tests::full(
-        $crate::Builder::new()
+        $crate::Options::new()
           .with_capacity($crate::tests::KB as u32)
           .with_unify(true)
-          .map_anon::<$ty>()
+          .map_anon::<[u8], [u8], $ty>()
           .unwrap(),
       );
     }
   };
 }
 
-pub(crate) fn empty<M: Container>(l: M)
+pub(crate) fn empty<M>(l: M)
 where
-  M::Comparator: Comparator,
+  M: Arena<[u8], [u8]>,
 {
   let mut it = l.iter();
 
-  assert!(it.seek_lower_bound(Bound::Unbounded).is_none());
-  assert!(it.seek_upper_bound(Bound::Unbounded).is_none());
+  assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
   assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
   assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
   assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
   assert!(l.first().is_none());
   assert!(l.last().is_none());
-  assert!(l.get(b"aaa").is_none());
-  assert!(!l.contains_key(b"aaa"));
+
+  assert!(l.get(b"aaa".as_slice()).is_none());
+  assert!(!l.contains_key(b"aaa".as_slice()));
   assert!(l.allocated() > 0);
   assert!(l.capacity() > 0);
   assert_eq!(l.remaining(), l.capacity() - l.allocated());
@@ -381,16 +376,15 @@ where
 
 pub(crate) fn full<M>(l: M)
 where
-  M: super::map::Map,
-  M::Comparator: Comparator,
+  M: super::map::Map<[u8], [u8]>,
   <M::Allocator as Sealed>::Trailer: Default,
 {
   let mut found_arena_full = false;
 
   for i in 0..100 {
-    if let Err(e) = l.get_or_insert(&make_int_key(i), &make_value(i)) {
+    if let Err(e) = l.get_or_insert(make_int_key(i).as_slice(), make_value(i).as_slice()) {
       assert!(matches!(
-        e,
+        e.unwrap_right(),
         Error::Arena(ArenaError::InsufficientSpace { .. })
       ));
       found_arena_full = true;

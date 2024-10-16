@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.17.0
+
+- Refactor to support generic key-value types
+
 ## 0.15.0
 
 - Extract different kinds of `SkipMap` to traits to improve flexibility

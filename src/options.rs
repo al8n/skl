@@ -1,4 +1,14 @@
-use super::{ArenaOptions, Freelist, Height, KeySize, CURRENT_VERSION};
+use core::mem;
+
+pub use rarena_allocator::Freelist;
+use rarena_allocator::Options as ArenaOptions;
+
+use super::{Height, KeySize};
+
+use crate::{allocator::Sealed, Arena, Error};
+
+/// The memory format version.
+pub(crate) const CURRENT_VERSION: u16 = 0;
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
@@ -517,5 +527,53 @@ impl Options {
 
     #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
     opts
+  }
+}
+
+impl Options {
+  /// Create a new map which is backed by a `AlignedVec`.
+  ///
+  /// **Note:** The capacity stands for how many memory allocated,
+  /// it does not mean the skiplist can store `cap` entries.
+  ///
+  /// **What the difference between this method and [`Options::map_anon`]?**
+  ///
+  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  ///    Even if we are working with raw pointers with `Box::into_raw`,
+  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
+  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
+  ///    especially if you're frequently accessing or modifying it.
+  ///
+  /// 2. Where as [`Options::map_anon`] will use mmap anonymous to require memory from the OS.
+  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
+  ///    it's more direct in requesting large chunks of memory from the OS.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{full::sync, trailed::unsync, Options};
+  ///
+  /// // Create a sync skipmap which supports both trailer and version.
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  ///
+  /// // Create a unsync skipmap which supports trailer.
+  /// let arena = Options::new().with_capacity(1024).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// ```
+  #[inline]
+  pub fn alloc<K, V, T>(self) -> Result<T, Error>
+  where
+    K: ?Sized + 'static,
+    V: ?Sized + 'static,
+    T: Arena<K, V>,
+  {
+    let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
+    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
+
+    self
+      .to_arena_options()
+      .with_maximum_alignment(node_align.max(trailer_align))
+      .alloc::<<T::Allocator as Sealed>::Allocator>()
+      .map_err(Into::into)
+      .and_then(|arena| T::construct(arena, self, false))
   }
 }

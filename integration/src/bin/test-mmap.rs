@@ -11,19 +11,20 @@ fn main() {
     const N: usize = 10;
 
     let l = unsafe {
-      Builder::new()
+      Options::new()
         .with_capacity(1 << 20)
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
-        .map_mut::<SkipMap, _>(&p)
+        .map_mut::<[u8], [u8], SkipMap<[u8], [u8]>, _>(&p)
         .unwrap()
     };
 
     for i in 0..N {
       let l = l.clone();
       std::thread::spawn(move || {
-        l.insert(&key(i), &new_value(i)).unwrap();
+        l.insert(key(i).as_slice(), new_value(i).as_slice())
+          .unwrap();
         drop(l);
       });
     }
@@ -34,7 +35,11 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
+        assert_eq!(
+          l.get(k.as_slice()).unwrap().value(),
+          new_value(i).as_slice(),
+          "broken: {i}"
+        );
         drop(l);
       });
     }
@@ -47,11 +52,11 @@ fn main() {
     const N2: usize = 10;
 
     let l = unsafe {
-      Builder::new()
+      Options::new()
         .with_capacity(120 << 20)
         .with_read(true)
         .with_write(true)
-        .map_mut::<SkipMap, _>(&p)
+        .map_mut::<[u8], [u8], SkipMap<[u8], [u8]>, _>(&p)
         .unwrap()
     };
 
@@ -60,7 +65,11 @@ fn main() {
       let l = l.clone();
       std::thread::spawn(move || {
         let k = key(i);
-        assert_eq!(l.get(&k).unwrap().value(), new_value(i), "broken: {i}");
+        assert_eq!(
+          l.get(k.as_slice()).unwrap().value(),
+          new_value(i).as_slice(),
+          "broken: {i}"
+        );
       });
     }
     while l.refs() > 1 {

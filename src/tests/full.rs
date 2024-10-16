@@ -1087,7 +1087,7 @@ where
 {
   const N: usize = 100;
 
-  for i in (0..N).rev() {
+  for i in 0..N {
     let k = make_int_key(i);
     let v = make_value(i);
     l.insert(MIN_VERSION, k.as_slice(), v.as_slice(), Default::default())
@@ -1236,7 +1236,7 @@ where
 {
   const N: usize = 100;
 
-  for i in 0..N {
+  for i in (0..N).rev() {
     let k = make_int_key(i);
     let v = make_value(i);
     l.insert(MIN_VERSION, k.as_slice(), v.as_slice(), Default::default())
@@ -1246,38 +1246,46 @@ where
       .unwrap();
   }
 
-  let mut ent = l.last(MIN_VERSION);
+  let mut iter = l.iter_all_versions(MIN_VERSION + 1);
+  let ent = iter.seek_upper_bound::<[u8]>(Bound::Unbounded).unwrap();
+  println!("{:?} {}", core::str::from_utf8(ent.key()).unwrap(), ent.version());
+  for ent in iter {
+    println!("{:?} {}", core::str::from_utf8(ent.key()).unwrap(), ent.version());
+  }
 
+  let mut ent = l.last(MIN_VERSION);
   let mut i = 0;
   while let Some(ref entry) = ent {
     i += 1;
-    assert_eq!(entry.key(), make_int_key(N - i).as_slice());
-    assert_eq!(entry.value(), make_value(N - i).as_slice());
+    assert_eq!(entry.key(), make_int_key(N-i).as_slice());
+    assert_eq!(entry.value(), make_value(N-i).as_slice());
     ent = entry.prev();
   }
   assert_eq!(i, N);
 
   let mut ent = l.last_versioned(MIN_VERSION + 1);
-
+  println!(
+    "{:?} {}",
+    core::str::from_utf8(ent.as_ref().unwrap().key()).unwrap(),
+    ent.as_ref().unwrap().version()
+  );
   let mut i = 0;
   while let Some(ref entry) = ent {
-    println!("{:?}", entry);
     if i % 2 == 0 {
       i += 1;
       assert_eq!(entry.version(), MIN_VERSION);
-      assert_eq!(entry.key(), make_int_key(N - i).as_slice());
-      assert_eq!(entry.value().unwrap(), make_value(N - i).as_slice());
+      assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_slice(), "{}", core::str::from_utf8(entry.key()).unwrap());
+      assert_eq!(entry.value().unwrap(), make_value(N - 1 - i / 2).as_slice());
     } else {
       i += 1;
       assert_eq!(entry.version(), MIN_VERSION + 1);
-      assert_eq!(entry.key(), make_int_key(N - i).as_slice());
+      assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_slice());
       assert!(entry.value().is_none());
     }
 
     ent = entry.prev();
   }
   assert_eq!(i, 2 * N);
-
   let ent = l.last(MIN_VERSION + 1);
   assert!(ent.is_none(), "{:?}", ent);
 }

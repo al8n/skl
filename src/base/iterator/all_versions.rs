@@ -254,37 +254,79 @@ where
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   fn prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    loop {
-      unsafe {
-        self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
+    self.nd = unsafe { self.map.get_prev(self.nd, 0, !self.all_versions) };
+    if self.all_versions {
+      loop {
+        unsafe {
+          if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
+            return None;
+          }
 
-        if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
-          return None;
-        }
+          let pointer = self.nd.get_value_pointer::<A>();
+          if self.nd.version() > self.version {
+            continue;
+          }
 
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-        if self.nd.version() > self.version {
-          continue;
-        }
-
-        if !self.all_versions && value.is_none() {
-          continue;
-        }
-
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if !self.all_versions {
-          if let Some(ref last) = self.last {
-            if last.key().eq(&nk) {
-              continue;
+          let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+          if !self.all_versions {
+            if let Some(ref last) = self.last {
+              if last.key().eq(&nk) {
+                continue;
+              }
             }
           }
-        }
 
-        if self.range.compare_contains(&nk) {
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
-          self.last = Some(ent.clone());
-          return Some(ent);
+          if self.range.compare_contains(&nk) {
+            let ent =
+              VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
+            self.last = Some(ent.clone());
+            return Some(ent);
+          }
+        }
+      }
+    } else {
+      loop {
+        unsafe {
+          if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
+            return None;
+          }
+
+          // if the entry with largest version is removed or the trailer is invalid, we should skip this key.
+          if self.nd.is_removed() || !self.nd.get_trailer(&self.map.arena).is_valid() {
+            let mut prev = self.map.get_prev(self.nd, 0, true);
+            let curr_key = self.nd.get_key(&self.map.arena);
+            loop {
+              if prev.is_null() || prev.offset() == self.map.head.offset() {
+                return None;
+              }
+
+              // if prev's key is different from the current key, we should break the loop.
+              if prev.get_key(&self.map.arena) != curr_key {
+                self.nd = prev;
+                break;
+              }
+
+              prev = self.map.get_prev(prev, 0, true);
+            }
+
+            continue;
+          }
+
+          if self.nd.version() > self.version {
+            self.nd = self.map.get_prev(self.nd, 0, true);
+            continue;
+          }
+
+          let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+          if self.range.compare_contains(&nk) {
+            let pointer = self.nd.get_value_pointer::<A>();
+            let ent =
+              VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
+            self.last = Some(ent.clone());
+            return Some(ent);
+          }
+
+          self.nd = self.map.get_prev(self.nd, 0, true);
         }
       }
     }
@@ -344,7 +386,10 @@ where
         self.last = Some(ent.clone());
         ent
       }),
-      Bound::Unbounded => self.first(),
+      Bound::Unbounded => {
+        self.nd = self.map.head;
+        self.next()
+      },
     }
   }
 
@@ -511,73 +556,71 @@ where
     }
   }
 
-  /// Seeks position at the first entry in map. Returns the key and value
-  /// if the iterator is pointing at a valid entry, and `None` otherwise.
-  fn first(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    self.nd = self.map.first_in(self.version, !self.all_versions)?;
-
-    loop {
-      if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
-        return None;
-      }
-
-      unsafe {
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-
-        if self.nd.version() > self.version {
-          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        if !self.all_versions && value.is_none() {
-          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        if self.range.compare_contains(&nk) {
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
-          self.last = Some(ent.clone());
-          return Some(ent);
-        }
-
-        self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-      }
-    }
-  }
-
   /// Seeks position at the last entry in the iterator. Returns the key and value if
   /// the iterator is pointing at a valid entry, and `None` otherwise.
   fn last(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    self.nd = self.map.last_in(self.version, !self.all_versions)?;
+    self.nd = unsafe { self.map.get_prev(self.map.tail, 0, !self.all_versions) };
 
-    loop {
-      unsafe {
-        if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
-          return None;
+    if self.all_versions {
+      if self.nd.is_null() {
+        None
+      } else {
+        unsafe {
+          let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+          let pointer = self.nd.get_value_pointer::<A>();
+          if self.range.compare_contains(&nk) {
+            let ent =
+              VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
+            self.last = Some(ent.clone());
+            return Some(ent);
+          }
+
+          None
         }
+      }
+    } else {
+      loop {
+        unsafe {
+          if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
+            return None;
+          }
 
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
+          if self.nd.version() > self.version {
+            self.nd = self.map.get_prev(self.nd, 0, true);
+            continue;
+          }
 
-        if self.nd.version() > self.version {
-          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-          continue;
+          // if the entry with largest version is removed or the trailer is invalid, we should skip this key.
+          if self.nd.is_removed() || !self.nd.get_trailer(&self.map.arena).is_valid() {
+            let mut prev = self.map.get_prev(self.nd, 0, true);
+            let curr_key = self.nd.get_key(&self.map.arena);
+            loop {
+              if prev.is_null() || prev.offset() == self.map.head.offset() {
+                return None;
+              }
+
+              // if prev's key is different from the current key, we should break the loop.
+              if prev.get_key(&self.map.arena) != curr_key {
+                self.nd = prev;
+                break;
+              }
+
+              prev = self.map.get_prev(prev, 0, true);
+            }
+            continue;
+          }
+
+          let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+          if self.range.compare_contains(&nk) {
+            let pointer = self.nd.get_value_pointer::<A>();
+            let ent =
+              VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
+            self.last = Some(ent.clone());
+            return Some(ent);
+          }
+
+          self.nd = self.map.get_prev(self.nd, 0, true);
         }
-
-        if !self.all_versions && value.is_none() {
-          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if self.range.compare_contains(&nk) {
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(self.version, self.nd, self.map, pointer);
-          return Some(ent);
-        }
-
-        self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
       }
     }
   }
@@ -622,7 +665,8 @@ where
     Self: Sized,
     Self::Item: Ord,
   {
-    self.first()
+    self.nd = self.map.head;
+    self.next()
   }
 }
 

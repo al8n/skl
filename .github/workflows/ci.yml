@@ -409,7 +409,6 @@ jobs:
       - test
       - sanitizer
       - valgrind
-      - docs
     steps:
       - uses: actions/checkout@v4
       - name: Install latest nightly

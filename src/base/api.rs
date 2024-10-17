@@ -254,9 +254,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self
-      .iter(version)
-      .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
+    self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
@@ -272,9 +270,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self
-      .iter_all_versions(version)
-      .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
+    self.iter_all_versions(version).last()
   }
 
   /// Returns the value associated with the given key, if it exists.

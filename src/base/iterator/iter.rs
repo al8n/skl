@@ -67,11 +67,18 @@ where
   V: ?Sized + Type,
   A: Allocator,
   Q: ?Sized,
+  R: RangeBounds<Q>,
 {
-  /// Returns the bounds of the iterator.
+  /// Returns the start bound of the iterator.
   #[inline]
-  pub const fn bounds(&self) -> &R {
-    &self.0.range
+  pub fn start_bound(&self) -> Bound<&Q> {
+    self.0.start_bound()
+  }
+
+  /// Returns the end bound of the iterator.
+  #[inline]
+  pub fn end_bound(&self) -> Bound<&Q> {
+    self.0.end_bound()
   }
 }
 
@@ -82,11 +89,18 @@ where
   V: ?Sized + Type,
   A: Allocator,
   Q: ?Sized,
+  R: RangeBounds<Q>,
 {
-  /// Returns the entry at the current position of the iterator.
+  /// Returns the entry at the current head position of the iterator.
   #[inline]
-  pub fn entry(&self) -> Option<EntryRef<'a, K, V, A>> {
-    self.0.entry().map(|e| EntryRef::<K, V, A>(e.clone()))
+  pub fn head(&self) -> Option<EntryRef<'a, K, V, A>> {
+    self.0.head().map(|e| EntryRef::<K, V, A>(e.clone()))
+  }
+
+  /// Returns the entry at the current tail position of the iterator.
+  #[inline]
+  pub fn tail(&self) -> Option<EntryRef<'a, K, V, A>> {
+    self.0.tail().map(|e| EntryRef::<K, V, A>(e.clone()))
   }
 }
 
@@ -101,6 +115,8 @@ where
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
+  ///
+  /// **Note**: This method will clear the current state of the iterator.
   pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, K, V, A>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
@@ -110,7 +126,9 @@ where
 
   /// Moves the iterator to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, K, V, A>>
+  ///
+  /// **Note**: This method will clear the current state of the iterator.
+  pub(crate) fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, K, V, A>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {

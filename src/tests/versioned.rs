@@ -74,7 +74,7 @@ where
     assert_eq!(ent.value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
 
-    let ent = it.entry().unwrap();
+    let ent = it.head().unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
@@ -984,7 +984,6 @@ where
 pub(crate) fn range_next<M>(l: M)
 where
   M: VersionedMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1000,23 +999,15 @@ where
   }
 
   let upper = make_int_key(50);
+  let mut i = 0;
   let mut it = l.range(MIN_VERSION, ..=upper.as_slice());
-  let mut ent = it.seek_lower_bound::<[u8]>(Bound::Unbounded);
-  for i in 0..N {
-    if i <= 50 {
-      {
-        let ent = ent.unwrap();
-        assert_eq!(ent.key(), make_int_key(i).as_slice());
-        assert_eq!(ent.value(), make_value(i).as_slice());
-      }
-      ent = it.next();
-    } else {
-      assert!(ent.is_none());
-      ent = it.next();
-    }
+  for ent in &mut it {
+    assert_eq!(ent.key(), make_int_key(i).as_slice());
+    assert_eq!(ent.value(), make_value(i).as_slice());
+    i += 1;
   }
 
-  assert!(it.next().is_none());
+  assert_eq!(i, 51);
 }
 
 pub(crate) fn iter_all_versions_prev<M>(l: M)
@@ -1053,7 +1044,6 @@ where
 pub(crate) fn range_prev<M>(l: M)
 where
   M: VersionedMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1069,23 +1059,13 @@ where
   }
 
   let lower = make_int_key(50);
-  let mut it = l.range(MIN_VERSION, lower.as_slice()..);
-  let mut ent = it.seek_upper_bound::<[u8]>(Bound::Unbounded);
-  for i in (0..N).rev() {
-    if i >= 50 {
-      {
-        let ent = ent.unwrap();
-        assert_eq!(ent.key(), make_int_key(i).as_slice());
-        assert_eq!(ent.value(), make_value(i).as_slice());
-      }
-      ent = it.next_back();
-    } else {
-      assert!(ent.is_none());
-      ent = it.next_back();
-    }
+  let it = l.range(MIN_VERSION, lower.as_slice()..);
+  let mut i = 99;
+  for ent in it.rev() {
+    assert_eq!(ent.key(), make_int_key(i).as_slice());
+    assert_eq!(ent.value(), make_value(i).as_slice());
+    i -= 1;
   }
-
-  assert!(it.next_back().is_none());
 }
 
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
@@ -1221,7 +1201,8 @@ where
   let k3 = make_int_key(3);
   let k7 = make_int_key(7);
   let mut it = l.range(MIN_VERSION, k3.as_slice()..k7.as_slice()).clone();
-  assert_eq!(it.bounds(), &(k3.as_slice()..k7.as_slice()));
+  assert_eq!(it.start_bound(), Bound::Included(&k3.as_slice()));
+  assert_eq!(it.end_bound(), Bound::Excluded(&k7.as_slice()));
 
   for i in 3..=6 {
     let k = make_int_key(i);
@@ -1297,7 +1278,9 @@ where
   assert_eq!(ent.key(), make_int_key(3).as_slice());
   assert_eq!(ent.value(), make_value(3).as_slice());
 
-  assert!(it.next_back().is_none());
+  let ent = it.next_back().unwrap();
+  assert_eq!(ent.key(), make_int_key(6).as_slice());
+  assert_eq!(ent.value(), make_value(6).as_slice());
 }
 
 pub(crate) fn iter_latest<M>(l: M)

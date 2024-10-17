@@ -181,23 +181,37 @@ where
   let mut it = l.iter_all_versions(3);
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"a");
-  assert_eq!(ent.value().unwrap(), b"a2");
+  assert_eq!(ent.key(), b"a".as_slice());
+  assert_eq!(ent.value().unwrap(), b"a1".as_slice(),);
+  assert_eq!(ent.version(), 1);
+
+  let ent = ent.prev().unwrap();
+  assert_eq!(ent.key(), b"a".as_slice());
+  assert_eq!(ent.value().unwrap(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = it.seek_upper_bound(Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c2");
+  let ent = it
+    .seek_upper_bound(Bound::Included(b"c".as_slice()))
+    .unwrap();
+  assert_eq!(ent.key(), b"c".as_slice());
+  assert_eq!(ent.value().unwrap(), b"c1".as_slice());
+  assert_eq!(ent.version(), 1);
+
+  let ent = ent.prev().unwrap();
+  assert_eq!(ent.key(), b"c".as_slice());
+  assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
   let ent = it.seek_lower_bound(Bound::Excluded(b"b")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c2");
+  assert_eq!(ent.key(), b"c".as_slice());
+  assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = it.seek_lower_bound(Bound::Included(b"c")).unwrap();
-  assert_eq!(ent.key(), b"c");
-  assert_eq!(ent.value().unwrap(), b"c2");
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"c".as_slice()))
+    .unwrap();
+  assert_eq!(ent.key(), b"c".as_slice());
+  assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 }
 
@@ -1175,7 +1189,10 @@ where
 
   l.get_or_insert(MIN_VERSION, [].as_slice(), [].as_slice())
     .unwrap();
-  assert!(l.as_ref().lt(MIN_VERSION, &[], false).is_none());
+  assert!(l
+    .as_ref()
+    .upper_bound::<[u8]>(MIN_VERSION, Bound::Excluded(&[]))
+    .is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());

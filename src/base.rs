@@ -374,260 +374,178 @@ where
   V: ?Sized + Type,
   A: Allocator,
 {
-  /// Returns the first entry in the map.
-  fn first_in<'a>(
+  unsafe fn move_to_prev<'a>(
     &'a self,
+    nd: &mut <A::Node as Node>::Pointer,
     version: Version,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
+    contains_key: impl Fn(&K::Ref<'a>) -> bool,
+  ) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    // Safety: head node was definitely allocated by self.arena
-    let nd = unsafe { self.get_next(self.head, 0, ignore_invalid_trailer) };
-
-    if nd.is_null() || nd.offset() == self.tail.offset() {
-      return None;
-    }
-
-    unsafe {
-      let curr_key = nd.get_key(&self.arena);
-      self.ge(version, &ty_ref::<K>(curr_key), ignore_invalid_trailer)
-    }
-  }
-
-  /// Returns the last entry in the map.
-  fn last_in<'a>(
-    &'a self,
-    version: Version,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    // Safety: tail node was definitely allocated by self.arena
-    let nd = unsafe { self.get_prev(self.tail, 0, ignore_invalid_trailer) };
-
-    if nd.is_null() || nd.offset() == self.head.offset() {
-      return None;
-    }
-
-    unsafe {
-      let curr_key = nd.get_key(&self.arena);
-      self.le(version, &ty_ref::<K>(curr_key), ignore_invalid_trailer)
-    }
-  }
-
-  /// Returns the entry greater or equal to the given key, if it exists.
-  ///
-  /// e.g.
-  ///
-  /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k2 will be returned.
-  /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub(crate) fn gt<'a, Q>(
-    &'a self,
-    version: Version,
-    key: &Q,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
-    unsafe {
-      let (n, _) = self.find_near(Version::MIN, key, false, false, ignore_invalid_trailer); // find the key with the max version.
-
-      let n = n?;
-
-      if n.is_null() || n.offset() == self.tail.offset() {
-        return None;
-      }
-
-      self.find_next_max_version(n, version, ignore_invalid_trailer)
-    }
-  }
-
-  /// Returns the entry less than the given key, if it exists.
-  ///
-  /// e.g.
-  ///
-  /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k2 will be returned.
-  /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub(crate) fn lt<'a, Q>(
-    &'a self,
-    version: Version,
-    key: &Q,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
-    unsafe {
-      let (n, _) = self.find_near(Version::MAX, key, true, false, ignore_invalid_trailer); // find less or equal.
-
-      let n = n?;
-      if n.is_null() || n.offset() == self.head.offset() {
-        return None;
-      }
-
-      self.find_prev_max_version(n, version, ignore_invalid_trailer)
-    }
-  }
-
-  /// Returns the entry greater than or equal to the given key, if it exists.
-  ///
-  /// e.g.
-  ///
-  /// - If k1 < k2 < k3, key is equal to k1, then the entry contains k1 will be returned.
-  /// - If k1 < k2 < k3, and k1 < key < k2, then the entry contains k2 will be returned.
-  pub(crate) fn ge<'a, Q>(
-    &'a self,
-    version: Version,
-    key: &Q,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
-    unsafe {
-      let (n, _) = self.find_near(Version::MAX, key, false, true, ignore_invalid_trailer); // find the key with the max version.
-
-      let n = n?;
-
-      if n.is_null() || n.offset() == self.tail.offset() {
-        return None;
-      }
-
-      self.find_next_max_version(n, version, ignore_invalid_trailer)
-    }
-  }
-
-  /// Returns the entry less than or equal to the given key, if it exists.
-  ///
-  /// e.g.
-  ///
-  /// - If k1 < k2 < k3, and key is equal to k3, then the entry contains k3 will be returned.
-  /// - If k1 < k2 < k3, and k2 < key < k3, then the entry contains k2 will be returned.
-  pub(crate) fn le<'a, Q>(
-    &'a self,
-    version: Version,
-    key: &Q,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
-    unsafe {
-      let (n, _) = self.find_near(Version::MIN, key, true, true, ignore_invalid_trailer); // find less or equal.
-
-      let n = n?;
-      if n.is_null() || n.offset() == self.head.offset() {
-        return None;
-      }
-
-      self.find_prev_max_version(n, version, ignore_invalid_trailer)
-    }
-  }
-
-  unsafe fn find_prev_max_version<'a>(
-    &'a self,
-    mut curr: <A::Node as Node>::Pointer,
-    version: Version,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let mut prev = self.get_prev(curr, 0, ignore_invalid_trailer);
-
     loop {
-      // let curr_node = curr.as_ref(&self.arena);
-      let curr_key = curr.get_key(&self.arena);
-      // if the current version is greater than the given version, we should return.
-      let version_cmp = curr.version().cmp(&version);
-      if version_cmp == cmp::Ordering::Greater {
-        return None;
-      }
-
-      if prev.is_null() || prev.offset() == self.head.offset() {
-        if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-          return Some(curr);
-        }
-
-        return None;
-      }
-
-      let prev_key = prev.get_key(&self.arena);
-      if <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(prev_key, curr_key) == cmp::Ordering::Less {
-        return Some(curr);
-      }
-
-      let version_cmp = prev.version().cmp(&version);
-
-      if version_cmp == cmp::Ordering::Equal {
-        return Some(prev);
-      }
-
-      if version_cmp == cmp::Ordering::Greater {
-        return Some(curr);
-      }
-
-      curr = prev;
-      prev = self.get_prev(curr, 0, ignore_invalid_trailer);
-    }
-  }
-
-  unsafe fn find_next_max_version<'a>(
-    &'a self,
-    mut curr: <A::Node as Node>::Pointer,
-    version: Version,
-    ignore_invalid_trailer: bool,
-  ) -> Option<<A::Node as Node>::Pointer>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let mut next = self.get_next(curr, 0, ignore_invalid_trailer);
-
-    loop {
-      let curr_key = curr.get_key(&self.arena);
-      // if the current version is less or equal to the given version, we should return.
-      let version_cmp = curr.version().cmp(&version);
-      if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        return Some(curr);
-      }
-
-      if next.is_null() || next.offset() == self.head.offset() {
-        if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-          return Some(curr);
-        }
-
-        return None;
-      }
-
-      let next_key = next.get_key(&self.arena);
-      let version_cmp = next.version().cmp(&version);
-      if <K::Ref<'_> as KeyRef<'_, K>>::compare_binary(next_key, curr_key) == cmp::Ordering::Greater
-      {
-        if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-          return Some(curr);
-        }
-
-        return None;
-      }
-
-      if let cmp::Ordering::Less | cmp::Ordering::Equal = version_cmp {
-        if next.offset() == self.tail.offset() {
+      unsafe {
+        if nd.is_null() || nd.offset() == self.head.offset() {
           return None;
         }
 
-        return Some(next);
-      }
+        if nd.version() > version {
+          *nd = self.get_prev(*nd, 0, false);
+          continue;
+        }
 
-      curr = next;
-      next = self.get_next(curr, 0, ignore_invalid_trailer);
+        let nk = ty_ref::<K>(nd.get_key(&self.arena));
+        if contains_key(&nk) {
+          let pointer = nd.get_value_pointer::<A>();
+          let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+          return Some(ent);
+        }
+
+        *nd = self.get_prev(*nd, 0, false);
+      }
+    }
+  }
+
+  unsafe fn move_to_prev_max_version<'a>(
+    &'a self,
+    nd: &mut <A::Node as Node>::Pointer,
+    version: Version,
+    contains_key: impl Fn(&K::Ref<'a>) -> bool,
+  ) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    loop {
+      unsafe {
+        if nd.is_null() || nd.offset() == self.head.offset() {
+          return None;
+        }
+
+        if nd.version() > version {
+          *nd = self.get_prev(*nd, 0, true);
+          continue;
+        }
+
+        let prev = self.get_prev(*nd, 0, true);
+
+        if prev.is_null() || prev.offset() == self.head.offset() {
+          // prev is null or the head, we should try to see if we can return the current node.
+          if !nd.is_removed() && nd.get_trailer(&self.arena).is_valid() {
+            // the current node is valid, we should return it.
+            let nk = ty_ref::<K>(nd.get_key(&self.arena));
+
+            if contains_key(&nk) {
+              let pointer = nd.get_value_pointer::<A>();
+              let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+              return Some(ent);
+            }
+          }
+
+          return None;
+        }
+
+        // At this point, prev is not null and not the head.
+        // if the prev's version is greater than the query version or the prev's key is different from the current key,
+        // we should try to return the current node.
+        if prev.version() > version || nd.get_key(&self.arena).ne(prev.get_key(&self.arena)) {
+          let nk = ty_ref::<K>(nd.get_key(&self.arena));
+
+          if !nd.is_removed() && contains_key(&nk) && nd.get_trailer(&self.arena).is_valid() {
+            let pointer = nd.get_value_pointer::<A>();
+            let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+            return Some(ent);
+          }
+        }
+
+        *nd = prev;
+      }
+    }
+  }
+
+  unsafe fn move_to_next<'a>(
+    &'a self,
+    nd: &mut <A::Node as Node>::Pointer,
+    version: Version,
+    contains_key: impl Fn(&K::Ref<'a>) -> bool,
+  ) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    loop {
+      unsafe {
+        if nd.is_null() || nd.offset() == self.tail.offset() {
+          return None;
+        }
+
+        if nd.version() > version {
+          *nd = self.get_next(*nd, 0, false);
+          continue;
+        }
+
+        let nk = ty_ref::<K>(nd.get_key(&self.arena));
+        if contains_key(&nk) {
+          let pointer = nd.get_value_pointer::<A>();
+          let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+          return Some(ent);
+        }
+
+        *nd = self.get_next(*nd, 0, false);
+      }
+    }
+  }
+
+  unsafe fn move_to_next_max_version<'a>(
+    &'a self,
+    nd: &mut <A::Node as Node>::Pointer,
+    version: Version,
+    contains_key: impl Fn(&K::Ref<'a>) -> bool,
+  ) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    loop {
+      unsafe {
+        if nd.is_null() || nd.offset() == self.tail.offset() {
+          return None;
+        }
+
+        // if the current version is larger than the query version, we should move next to find a smaller version.
+        let curr_version = nd.version();
+        if curr_version > version {
+          *nd = self.get_next(*nd, 0, true);
+          continue;
+        }
+
+        // if the entry with largest version is removed or the trailer is invalid, we should skip this key.
+        if nd.is_removed() || !nd.get_trailer(&self.arena).is_valid() {
+          let mut next = self.get_next(*nd, 0, true);
+          let curr_key = nd.get_key(&self.arena);
+          loop {
+            if next.is_null() || next.offset() == self.tail.offset() {
+              return None;
+            }
+
+            // if next's key is different from the current key, we should break the loop.
+            if next.get_key(&self.arena) != curr_key {
+              *nd = next;
+              break;
+            }
+
+            next = self.get_next(next, 0, true);
+          }
+
+          continue;
+        }
+
+        let nk = ty_ref::<K>(nd.get_key(&self.arena));
+        if contains_key(&nk) {
+          let pointer = nd.get_value_pointer::<A>();
+          let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+          return Some(ent);
+        }
+
+        *nd = self.get_next(*nd, 0, true);
+      }
     }
   }
 
@@ -679,7 +597,7 @@ where
 
       // let next_node = next.as_ref(&self.arena);
       let next_key = ty_ref::<K>(next.get_key(&self.arena));
-      let cmp = Comparable::compare(key, &next_key).then_with(|| version.cmp(&next.version()));
+      let cmp = Comparable::compare(key, &next_key).then_with(|| next.version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -860,7 +778,7 @@ where
         _ => {}
       }
 
-      match cmp.then_with(|| version.cmp(&next.version())) {
+      match cmp.then_with(|| next.version().cmp(&version)) {
         // We are done for this level, since prev.key < key < next.key.
         cmp::Ordering::Less => {
           return FindResult {

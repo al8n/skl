@@ -209,12 +209,22 @@ where
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
+  assert_eq!(ent.value().unwrap(), b"a1".as_slice(),);
+  assert_eq!(ent.version(), 1);
+
+  let ent = ent.prev().unwrap();
+  assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value().unwrap(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
   let ent = it
     .seek_upper_bound(Bound::Included(b"c".as_slice()))
     .unwrap();
+  assert_eq!(ent.key(), b"c".as_slice());
+  assert_eq!(ent.value().unwrap(), b"c1".as_slice());
+  assert_eq!(ent.version(), 1);
+
+  let ent = ent.prev().unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -1110,7 +1120,7 @@ where
   let mut ent = l.first_versioned(MIN_VERSION + 1);
   let mut i = 0;
   while let Some(ref entry) = ent {
-    if i % 2 == 0 {
+    if i % 2 == 1 {
       assert_eq!(entry.version(), MIN_VERSION);
       assert_eq!(entry.key(), make_int_key(i / 2).as_slice());
       assert_eq!(entry.value().unwrap(), make_value(i / 2).as_slice());
@@ -1246,43 +1256,35 @@ where
       .unwrap();
   }
 
-  let mut iter = l.iter_all_versions(MIN_VERSION + 1);
-  let ent = iter.seek_upper_bound::<[u8]>(Bound::Unbounded).unwrap();
-  println!("{:?} {}", core::str::from_utf8(ent.key()).unwrap(), ent.version());
-  for ent in iter {
-    println!("{:?} {}", core::str::from_utf8(ent.key()).unwrap(), ent.version());
-  }
-
   let mut ent = l.last(MIN_VERSION);
   let mut i = 0;
   while let Some(ref entry) = ent {
     i += 1;
-    assert_eq!(entry.key(), make_int_key(N-i).as_slice());
-    assert_eq!(entry.value(), make_value(N-i).as_slice());
+    assert_eq!(entry.key(), make_int_key(N - i).as_slice());
+    assert_eq!(entry.value(), make_value(N - i).as_slice());
     ent = entry.prev();
   }
   assert_eq!(i, N);
 
   let mut ent = l.last_versioned(MIN_VERSION + 1);
-  println!(
-    "{:?} {}",
-    core::str::from_utf8(ent.as_ref().unwrap().key()).unwrap(),
-    ent.as_ref().unwrap().version()
-  );
   let mut i = 0;
   while let Some(ref entry) = ent {
     if i % 2 == 0 {
-      i += 1;
       assert_eq!(entry.version(), MIN_VERSION);
-      assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_slice(), "{}", core::str::from_utf8(entry.key()).unwrap());
+      assert_eq!(
+        entry.key(),
+        make_int_key(N - 1 - i / 2).as_slice(),
+        "{}",
+        core::str::from_utf8(entry.key()).unwrap()
+      );
       assert_eq!(entry.value().unwrap(), make_value(N - 1 - i / 2).as_slice());
-    } else {
       i += 1;
+    } else {
       assert_eq!(entry.version(), MIN_VERSION + 1);
       assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_slice());
       assert!(entry.value().is_none());
+      i += 1;
     }
-
     ent = entry.prev();
   }
   assert_eq!(i, 2 * N);
@@ -1442,7 +1444,10 @@ where
     Default::default(),
   )
   .unwrap();
-  assert!(l.as_ref().lt(MIN_VERSION, &[], false).is_none());
+  assert!(l
+    .as_ref()
+    .upper_bound::<[u8]>(MIN_VERSION, Bound::Excluded(&[]))
+    .is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
   assert!(ent.is_none());
@@ -1484,7 +1489,7 @@ where
   for i in 1..3 {
     let k = make_int_key(i);
     let ent = it.seek_lower_bound(Bound::Included(k.as_slice())).unwrap();
-    assert_eq!(ent.key(), make_int_key(3).as_slice());
+    assert_eq!(ent.key(), make_int_key(3).as_slice(),);
     assert_eq!(ent.value(), make_value(3).as_slice());
   }
 
@@ -1554,7 +1559,6 @@ where
 pub(crate) fn iter_latest<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1591,11 +1595,25 @@ where
   }
 
   let mut it = l.iter(4);
+
   let mut num = 0;
   for i in 0..N {
     let ent = it.next().unwrap();
-    assert_eq!(ent.key(), make_int_key(i).as_slice());
-    assert_eq!(ent.value(), make_value(i + 1000).as_slice());
+
+    assert_eq!(
+      ent.key(),
+      make_int_key(i).as_slice(),
+      "{} != {}",
+      core::str::from_utf8(ent.key()).unwrap(),
+      core::str::from_utf8(make_int_key(i).as_slice()).unwrap()
+    );
+    assert_eq!(
+      ent.value(),
+      make_value(i + 1000).as_slice(),
+      "{} != {}",
+      core::str::from_utf8(ent.value()).unwrap(),
+      core::str::from_utf8(make_value(i + 1000).as_slice()).unwrap()
+    );
 
     num += 1;
   }

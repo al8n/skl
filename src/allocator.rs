@@ -124,6 +124,11 @@ mod sealed {
       success: Ordering,
       failure: Ordering,
     ) -> Result<(u32, u32), (u32, u32)>;
+
+    #[inline]
+    fn is_removed(&self) -> bool {
+      self.load().1 == Self::REMOVE
+    }
   }
 
   pub trait Link {
@@ -409,6 +414,11 @@ mod sealed {
         })
     }
 
+    #[inline]
+    fn is_removed(&self) -> bool {
+      self.value_pointer().is_removed()
+    }
+
     #[allow(dead_code)]
     fn set_key_size_and_height(&self, key_size_and_height: u32);
 
@@ -544,6 +554,29 @@ mod sealed {
         Some(arena.get_bytes(value_offset as usize, len as usize)),
         ValuePartPointer::new(offset, value_offset, len),
       )
+    }
+
+    /// ## Safety
+    ///
+    /// - The caller must ensure that the node is allocated by the arena.
+    #[inline]
+    unsafe fn get_value_pointer<A: Allocator>(
+      &self,
+    ) -> ValuePartPointer<<Self::Node as Node>::Trailer> {
+      let (offset, len) = self.value_pointer().load();
+
+      let align_offset = A::align_offset::<<Self::Node as Node>::Trailer>(offset);
+
+      if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
+        return ValuePartPointer::new(
+          offset,
+          align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
+          len,
+        );
+      }
+
+      let value_offset = align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32;
+      ValuePartPointer::new(offset, value_offset, len)
     }
 
     #[inline]

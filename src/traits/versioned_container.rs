@@ -5,8 +5,8 @@ use dbutils::{
   traits::{KeyRef, Type},
 };
 
-use super::{AllocatorSealed, Arena, EntryRef, Iter};
-use crate::{allocator::WithVersion, entry::VersionedEntryRef, iter::AllVersionsIter, Version};
+use super::{AllocatorSealed, Arena, EntryRef, Iter, VersionedEntryRef};
+use crate::{allocator::WithVersion, iter::AllVersionsIter, Version};
 
 /// A trait that provides versioned operations comparing to [`Container`](super::Container).
 pub trait VersionedContainer<K, V>
@@ -105,6 +105,40 @@ where
     V: Type,
   {
     self.as_ref().last(version)
+  }
+
+  /// Returns the first entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
+  ///
+  /// The difference between [`first`](VersionedContainer::first) and `first_versioned` is that `first_versioned` will return the value even if
+  /// the entry is removed or not in a valid state.
+  #[inline]
+  fn first_versioned<'a>(
+    &'a self,
+    version: Version,
+  ) -> Option<VersionedEntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
+    self.as_ref().first_versioned(version)
+  }
+
+  /// Returns the last entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
+  ///
+  /// The difference between [`last`](VersionedContainer::last) and `last_versioned` is that `last_versioned` will return the value even if
+  /// the entry is removed or not in a valid state.
+  #[inline]
+  fn last_versioned<'a>(
+    &'a self,
+    version: Version,
+  ) -> Option<VersionedEntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
+    self.as_ref().last_versioned(version)
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -209,6 +243,50 @@ where
     self.as_ref().iter(version).seek_lower_bound(lower)
   }
 
+  /// Returns an `VersionedEntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// The difference between [`upper_bound`](VersionedContainer::upper_bound) and `upper_bound_versioned` is that `upper_bound_versioned` will return the value even if the entry is removed.
+  #[inline]
+  fn upper_bound_versioned<'a, Q>(
+    &'a self,
+    version: Version,
+    upper: Bound<&Q>,
+  ) -> Option<VersionedEntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self
+      .as_ref()
+      .iter_all_versions(version)
+      .seek_upper_bound(upper)
+  }
+
+  /// Returns an `VersionedEntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// The difference between [`lower_bound`](VersionedContainer::lower_bound) and `lower_bound_versioned` is that `lower_bound_versioned` will return the value even if the entry is removed.
+  #[inline]
+  fn lower_bound_versioned<'a, Q>(
+    &'a self,
+    version: Version,
+    lower: Bound<&Q>,
+  ) -> Option<VersionedEntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self
+      .as_ref()
+      .iter_all_versions(version)
+      .seek_lower_bound(lower)
+  }
+
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
   fn iter<'a>(&'a self, version: Version) -> Iter<'a, K, V, Self::Allocator>
@@ -239,7 +317,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     self.as_ref().range(version, range)
   }
@@ -256,7 +334,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     self.as_ref().range_all_versions(version, range)
   }

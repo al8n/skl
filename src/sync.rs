@@ -228,7 +228,7 @@ impl ValuePointer for AtomicValuePointer {
   fn compare_remove(&self, success: Ordering, failure: Ordering) -> Result<(u32, u32), (u32, u32)> {
     let old = self.0.load(Ordering::Acquire);
     let (offset, _) = decode_value_pointer(old);
-    let new = encode_value_pointer(offset, REMOVE);
+    let new = encode_value_pointer(offset, Self::REMOVE);
     self
       .0
       .compare_exchange(old, new, success, failure)

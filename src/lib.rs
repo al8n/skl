@@ -40,9 +40,6 @@ pub use traits::{
 mod types;
 pub use types::*;
 
-mod entry;
-pub use entry::{EntryRef, VersionedEntryRef};
-
 /// Iterators for the skipmaps.
 pub mod iter {
   pub use super::base::iterator::{AllVersionsIter, Iter};
@@ -72,7 +69,6 @@ pub mod iter {
   test_sync_versioned_concurrent_with_pessimistic_freelist,
   test_sync_trailed_concurrent_with_pessimistic_freelist,
 ))]
-#[cfg(test)]
 mod tests;
 
 pub use among;

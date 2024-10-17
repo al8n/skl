@@ -133,7 +133,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     self.as_ref().range(MIN_VERSION, range)
   }

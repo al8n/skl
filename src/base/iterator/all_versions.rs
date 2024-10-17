@@ -1,15 +1,13 @@
-use core::{
-  borrow::Borrow,
-  cmp,
-  ops::{Bound, RangeBounds, RangeFull},
-};
+use core::ops::{Bound, RangeBounds};
 
 use dbutils::{
   equivalent::Comparable,
   traits::{ComparableRangeBounds, KeyRef, Type},
 };
 
-use super::super::{ty_ref, Allocator, Node, NodePointer, SkipList, Version, VersionedEntryRef};
+use crate::allocator::Node;
+
+use super::super::{Allocator, NodePointer, SkipList, Version, VersionedEntryRef};
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
@@ -21,11 +19,11 @@ where
   Q: ?Sized,
 {
   pub(super) map: &'a SkipList<K, V, A>,
-  pub(super) nd: <A::Node as Node>::Pointer,
   pub(super) version: Version,
-  pub(super) range: R,
+  pub(super) range: Option<R>,
   pub(super) all_versions: bool,
-  pub(super) last: Option<VersionedEntryRef<'a, K, V, A>>,
+  pub(super) head: Option<VersionedEntryRef<'a, K, V, A>>,
+  pub(super) tail: Option<VersionedEntryRef<'a, K, V, A>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
@@ -40,10 +38,10 @@ where
   fn clone(&self) -> Self {
     Self {
       map: self.map,
-      nd: self.nd,
+      head: self.head.clone(),
+      tail: self.tail.clone(),
       version: self.version,
       range: self.range.clone(),
-      last: self.last.clone(),
       all_versions: self.all_versions,
       _phantom: core::marker::PhantomData,
     }
@@ -76,10 +74,10 @@ where
   ) -> Self {
     Self {
       map,
-      nd: map.head,
+      head: None,
+      tail: None,
       version,
-      range: RangeFull,
-      last: None,
+      range: None,
       all_versions,
       _phantom: core::marker::PhantomData,
     }
@@ -103,10 +101,10 @@ where
   ) -> Self {
     Self {
       map,
-      nd: map.head,
+      head: None,
+      tail: None,
       version,
-      range: r,
-      last: None,
+      range: Some(r),
       all_versions,
       _phantom: core::marker::PhantomData,
     }
@@ -119,25 +117,46 @@ where
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
+  R: RangeBounds<Q>,
   Q: ?Sized,
 {
-  /// Returns the bounds of the iterator.
+  /// Returns the start bound of the iterator.
   #[inline]
-  pub const fn bounds(&self) -> &R {
-    &self.range
+  pub fn start_bound(&self) -> Bound<&Q> {
+    self
+      .range
+      .as_ref()
+      .map(|r| r.start_bound())
+      .unwrap_or(Bound::Unbounded)
   }
 
-  /// Returns the entry at the current position of the iterator.
+  /// Returns the end bound of the iterator.
   #[inline]
-  pub const fn entry(&self) -> Option<&VersionedEntryRef<'a, K, V, A>> {
-    self.last.as_ref()
+  pub fn end_bound(&self) -> Bound<&Q> {
+    self
+      .range
+      .as_ref()
+      .map(|r| r.end_bound())
+      .unwrap_or(Bound::Unbounded)
+  }
+
+  /// Returns the entry at the current head position of the iterator.
+  #[inline]
+  pub const fn head(&self) -> Option<&VersionedEntryRef<'a, K, V, A>> {
+    self.head.as_ref()
+  }
+
+  /// Returns the entry at the current tail position of the iterator.
+  #[inline]
+  pub const fn tail(&self) -> Option<&VersionedEntryRef<'a, K, V, A>> {
+    self.tail.as_ref()
   }
 }
 
 impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
-  K::Ref<'a>: Ord,
+  K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
   Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -146,36 +165,46 @@ where
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   fn next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    loop {
-      unsafe {
-        self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
+    unsafe {
+      let mut next_head = match self.head.as_ref() {
+        Some(head) => self.map.get_next(head.ptr, 0, !self.all_versions),
+        None => self.map.get_next(self.map.head, 0, !self.all_versions),
+      };
 
-        if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
-          return None;
-        }
-
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-        if self.nd.version() > self.version {
-          continue;
-        }
-
-        if !self.all_versions && value.is_none() {
-          continue;
-        }
-
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if !self.all_versions {
-          if let Some(ref last) = self.last {
-            if Comparable::compare(last.key(), &nk) == cmp::Ordering::Equal {
-              continue;
+      let next_head = if self.all_versions {
+        self
+          .map
+          .move_to_next(&mut next_head, self.version, |nk| self.check_bounds(nk))
+      } else {
+        self
+          .map
+          .move_to_next_max_version(&mut next_head, self.version, |nk| {
+            if let Some(ref head) = self.head {
+              head.key().ne(nk) && self.check_bounds(nk)
+            } else {
+              self.check_bounds(nk)
             }
-          }
-        }
+          })
+      };
 
-        if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          self.last = Some(ent.clone());
-          return Some(ent);
+      match (&next_head, &self.tail) {
+        (Some(next), Some(t))
+          if next
+            .key()
+            .cmp(t.key())
+            .then_with(|| t.version.cmp(&next.version))
+            .is_ge() =>
+        {
+          self.head = next_head;
+          None
+        }
+        (Some(_), _) => {
+          self.head = next_head.clone();
+          next_head
+        }
+        (None, _) => {
+          self.head = next_head;
+          None
         }
       }
     }
@@ -184,38 +213,165 @@ where
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
   fn prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    loop {
-      unsafe {
-        self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
+    unsafe {
+      let mut next_tail = match self.tail.as_ref() {
+        Some(tail) => self.map.get_prev(tail.ptr, 0, !self.all_versions),
+        None => self.map.get_prev(self.map.tail, 0, !self.all_versions),
+      };
 
-        if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
-          return None;
+      let next_tail = if self.all_versions {
+        self
+          .map
+          .move_to_prev(&mut next_tail, self.version, |nk| self.check_bounds(nk))
+      } else {
+        self
+          .map
+          .move_to_prev_max_version(&mut next_tail, self.version, |nk| {
+            if let Some(ref tail) = self.tail {
+              tail.key().ne(nk) && self.check_bounds(nk)
+            } else {
+              self.check_bounds(nk)
+            }
+          })
+      };
+
+      match (&self.head, &next_tail) {
+        // The prev key is smaller than the latest head key we observed with this iterator.
+        (Some(h), Some(next))
+          if h
+            .key()
+            .cmp(next.key())
+            .then_with(|| h.version.cmp(&next.version))
+            .is_ge() =>
+        {
+          self.tail = next_tail;
+          None
         }
-
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-        if self.nd.version() > self.version {
-          continue;
+        (_, Some(_)) => {
+          self.tail = next_tail.clone();
+          next_tail
         }
-
-        if !self.all_versions && value.is_none() {
-          continue;
+        (_, None) => {
+          self.tail = next_tail;
+          None
         }
+      }
+    }
+  }
 
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if !self.all_versions {
-          if let Some(ref last) = self.last {
-            if Comparable::compare(last.key(), &nk) == cmp::Ordering::Equal {
-              continue;
+  fn range_next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
+    unsafe {
+      let mut next_head = match self.head.as_ref() {
+        Some(head) => self.map.get_next(head.ptr, 0, !self.all_versions),
+        None => match self.range.as_ref().unwrap().start_bound() {
+          Bound::Included(key) => self
+            .map
+            .find_near(self.version, key, false, true, !self.all_versions)
+            .0
+            .unwrap_or(<A::Node as Node>::Pointer::NULL),
+          Bound::Excluded(key) => self
+            .map
+            .find_near(Version::MIN, key, false, false, !self.all_versions)
+            .0
+            .unwrap_or(<A::Node as Node>::Pointer::NULL),
+          Bound::Unbounded => self.map.get_next(self.map.head, 0, !self.all_versions),
+        },
+      };
+
+      self.head = if self.all_versions {
+        self
+          .map
+          .move_to_next(&mut next_head, self.version, |nk| self.check_bounds(nk))
+      } else {
+        self
+          .map
+          .move_to_next_max_version(&mut next_head, self.version, |nk| {
+            if let Some(ref head) = self.head {
+              head.key().ne(nk) && self.check_bounds(nk)
+            } else {
+              self.check_bounds(nk)
+            }
+          })
+      };
+
+      if let Some(ref h) = self.head {
+        match &self.tail {
+          Some(t) => {
+            let bound = Bound::Excluded(t.key());
+            if !below_upper_bound(&bound, h.key()) {
+              self.head = None;
+              self.tail = None;
+            }
+          }
+          None => {
+            let bound = self.range.as_ref().unwrap().end_bound();
+            if !below_upper_bound_compare(&bound, h.key()) {
+              self.head = None;
+              self.tail = None;
             }
           }
         }
+      }
 
-        if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          self.last = Some(ent.clone());
-          return Some(ent);
+      self.head.clone()
+    }
+  }
+
+  fn range_prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
+    unsafe {
+      let mut next_tail = match self.tail.as_ref() {
+        Some(tail) => self.map.get_prev(tail.ptr, 0, !self.all_versions),
+        None => match self.range.as_ref().unwrap().end_bound() {
+          Bound::Included(key) => self
+            .map
+            .find_near(Version::MIN, key, true, true, !self.all_versions)
+            .0
+            .unwrap_or(<A::Node as Node>::Pointer::NULL),
+          Bound::Excluded(key) => self
+            .map
+            .find_near(self.version, key, true, false, !self.all_versions)
+            .0
+            .unwrap_or(<A::Node as Node>::Pointer::NULL),
+          Bound::Unbounded => self.map.get_prev(self.map.tail, 0, !self.all_versions),
+        },
+      };
+
+      self.tail = if self.all_versions {
+        self
+          .map
+          .move_to_prev(&mut next_tail, self.version, |nk| self.check_bounds(nk))
+      } else {
+        self
+          .map
+          .move_to_prev_max_version(&mut next_tail, self.version, |nk| {
+            if let Some(ref tail) = self.tail {
+              tail.key().ne(nk) && self.check_bounds(nk)
+            } else {
+              self.check_bounds(nk)
+            }
+          })
+      };
+
+      if let Some(ref t) = self.tail {
+        match &self.head {
+          Some(h) => {
+            let bound = Bound::Excluded(h.key());
+            if !above_lower_bound(&bound, t.key()) {
+              self.head = None;
+              self.tail = None;
+            }
+          }
+          None => {
+            let bound = self.range.as_ref().unwrap().start_bound();
+            if !above_lower_bound_compare(&bound, t.key()) {
+              self.head = None;
+              self.tail = None;
+            }
+          }
         }
       }
+
+      self.tail.clone()
     }
   }
 }
@@ -231,6 +387,8 @@ where
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
+  ///
+  /// **Note:** This method will clear the current state of the iterator.
   pub fn seek_upper_bound<QR>(
     &mut self,
     upper: Bound<&QR>,
@@ -238,16 +396,15 @@ where
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
+    self.head = None;
+    self.tail = None;
+
     match upper {
-      Bound::Included(key) => self.seek_le(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.clone());
-        ent
+      Bound::Included(key) => self.seek_le(key).inspect(|ent| {
+        self.head = Some(ent.clone());
       }),
-      Bound::Excluded(key) => self.seek_lt(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.clone());
-        ent
+      Bound::Excluded(key) => self.seek_lt(key).inspect(|ent| {
+        self.head = Some(ent.clone());
       }),
       Bound::Unbounded => self.last(),
     }
@@ -255,6 +412,8 @@ where
 
   /// Moves the iterator to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
+  ///
+  /// **Note:** This method will clear the current state of the iterator.
   pub fn seek_lower_bound<QR>(
     &mut self,
     lower: Bound<&QR>,
@@ -262,16 +421,15 @@ where
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
+    self.head = None;
+    self.tail = None;
+
     match lower {
-      Bound::Included(key) => self.seek_ge(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.clone());
-        ent
+      Bound::Included(key) => self.seek_ge(key).inspect(|ent| {
+        self.head = Some(ent.clone());
       }),
-      Bound::Excluded(key) => self.seek_gt(key).map(|n| {
-        let ent = VersionedEntryRef::from_node(n, &self.map.arena);
-        self.last = Some(ent.clone());
-        ent
+      Bound::Excluded(key) => self.seek_gt(key).inspect(|ent| {
+        self.head = Some(ent.clone());
       }),
       Bound::Unbounded => self.first(),
     }
@@ -280,41 +438,38 @@ where
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_ge<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
+  fn seek_ge<QR>(&self, key: &QR) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
-    self.nd = self.map.ge(self.version, key, !self.all_versions)?;
-    if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
-      return None;
-    }
+    unsafe {
+      let (n, _) = self
+        .map
+        .find_near(self.version, key, false, true, !self.all_versions); // find the key with the max version.
 
-    loop {
-      unsafe {
-        // Safety: the nd is valid, we already check this
-        // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+      let mut n = n?;
+      if n.is_null() || n.offset() == self.map.tail.offset() {
+        return None;
+      }
 
-        if self.range.compare_contains(&nk) {
-          return Some(self.nd);
-        } else {
-          let upper = self.range.end_bound();
-          match upper {
-            Bound::Included(upper) => {
-              if Comparable::compare(upper.borrow(), &nk).is_lt() {
-                return None;
-              }
-            }
-            Bound::Excluded(upper) => {
-              if Comparable::compare(upper.borrow(), &nk).is_le() {
-                return None;
-              }
-            }
-            Bound::Unbounded => {}
+      if self.all_versions {
+        self.map.move_to_next(&mut n, self.version, |nk| {
+          if let Some(ref range) = self.range {
+            range.compare_contains(nk)
+          } else {
+            true
           }
-
-          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-        }
+        })
+      } else {
+        self
+          .map
+          .move_to_next_max_version(&mut n, self.version, |nk| {
+            if let Some(ref range) = self.range {
+              range.compare_contains(nk)
+            } else {
+              true
+            }
+          })
       }
     }
   }
@@ -322,42 +477,38 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_gt<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
+  fn seek_gt<QR>(&self, key: &QR) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
-    self.nd = self.map.gt(self.version, key, self.all_versions)?;
+    unsafe {
+      let (n, _) = self
+        .map
+        .find_near(Version::MIN, key, false, false, !self.all_versions); // find the key with the max version.
 
-    if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
-      return None;
-    }
+      let mut n = n?;
+      if n.is_null() || n.offset() == self.map.tail.offset() {
+        return None;
+      }
 
-    loop {
-      unsafe {
-        // Safety: the nd is valid, we already check this
-        // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-
-        if self.range.compare_contains(&nk) {
-          return Some(self.nd);
-        } else {
-          let upper = self.range.end_bound();
-          match upper {
-            Bound::Included(upper) => {
-              if Comparable::compare(upper.borrow(), &nk).is_lt() {
-                return None;
-              }
-            }
-            Bound::Excluded(upper) => {
-              if Comparable::compare(upper.borrow(), &nk).is_le() {
-                return None;
-              }
-            }
-            Bound::Unbounded => {}
+      if self.all_versions {
+        self.map.move_to_next(&mut n, self.version, |nk| {
+          if let Some(ref range) = self.range {
+            range.compare_contains(nk)
+          } else {
+            true
           }
-
-          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-        }
+        })
+      } else {
+        self
+          .map
+          .move_to_next_max_version(&mut n, self.version, |nk| {
+            if let Some(ref range) = self.range {
+              range.compare_contains(nk)
+            } else {
+              true
+            }
+          })
       }
     }
   }
@@ -365,37 +516,38 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_le<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
+  fn seek_le<QR>(&self, key: &QR) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
-    self.nd = self.map.le(self.version, key, self.all_versions)?;
+    unsafe {
+      let (n, _) = self
+        .map
+        .find_near(Version::MIN, key, true, true, !self.all_versions); // find less or equal.
 
-    loop {
-      unsafe {
-        // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
+      let mut n = n?;
+      if n.is_null() || n.offset() == self.map.head.offset() {
+        return None;
+      }
 
-        if self.range.compare_contains(&nk) {
-          return Some(self.nd);
-        } else {
-          let lower = self.range.start_bound();
-          match lower {
-            Bound::Included(lower) => {
-              if Comparable::compare(lower.borrow(), &nk).is_gt() {
-                return None;
-              }
-            }
-            Bound::Excluded(lower) => {
-              if Comparable::compare(lower.borrow(), &nk).is_ge() {
-                return None;
-              }
-            }
-            Bound::Unbounded => {}
+      if self.all_versions {
+        self.map.move_to_prev(&mut n, self.version, |nk| {
+          if let Some(ref range) = self.range {
+            range.compare_contains(nk)
+          } else {
+            true
           }
-
-          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-        }
+        })
+      } else {
+        self
+          .map
+          .move_to_prev_max_version(&mut n, self.version, |nk| {
+            if let Some(ref range) = self.range {
+              range.compare_contains(nk)
+            } else {
+              true
+            }
+          })
       }
     }
   }
@@ -403,109 +555,56 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  fn seek_lt<QR>(&mut self, key: &QR) -> Option<<A::Node as Node>::Pointer>
+  fn seek_lt<QR>(&self, key: &QR) -> Option<VersionedEntryRef<'a, K, V, A>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
-    // NB: the top-level AllVersionsIter has already adjusted key based on
-    // the upper-bound.
-    self.nd = self.map.lt(self.version, key, self.all_versions)?;
+    unsafe {
+      let (n, _) = self
+        .map
+        .find_near(self.version, key, true, false, !self.all_versions); // find less or equal.
 
-    loop {
-      unsafe {
-        // Safety: the node is allocated by the map's arena, so the key is valid
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-
-        if self.range.compare_contains(&nk) {
-          return Some(self.nd);
-        } else {
-          let lower = self.range.start_bound();
-          match lower {
-            Bound::Included(lower) => {
-              if Comparable::compare(lower.borrow(), &nk).is_gt() {
-                return None;
-              }
-            }
-            Bound::Excluded(lower) => {
-              if Comparable::compare(lower.borrow(), &nk).is_ge() {
-                return None;
-              }
-            }
-            Bound::Unbounded => {}
-          }
-
-          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-        }
-      }
-    }
-  }
-
-  /// Seeks position at the first entry in map. Returns the key and value
-  /// if the iterator is pointing at a valid entry, and `None` otherwise.
-  fn first(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    self.nd = self.map.first_in(self.version, self.all_versions)?;
-
-    loop {
-      if self.nd.is_null() || self.nd.offset() == self.map.tail.offset() {
+      let mut n = n?;
+      if n.is_null() || n.offset() == self.map.head.offset() {
         return None;
       }
 
-      unsafe {
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-
-        if self.nd.version() > self.version {
-          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        if !self.all_versions && value.is_none() {
-          self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          self.last = Some(ent.clone());
-          return Some(ent);
-        }
-
-        self.nd = self.map.get_next(self.nd, 0, !self.all_versions);
+      if self.all_versions {
+        self.map.move_to_prev(&mut n, self.version, |nk| {
+          if let Some(ref range) = self.range {
+            range.compare_contains(nk)
+          } else {
+            true
+          }
+        })
+      } else {
+        self
+          .map
+          .move_to_prev_max_version(&mut n, self.version, |nk| self.check_bounds(nk))
       }
     }
   }
 
-  /// Seeks position at the last entry in the iterator. Returns the key and value if
-  /// the iterator is pointing at a valid entry, and `None` otherwise.
+  #[inline]
+  fn first(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
+    self.head = None;
+    self.tail = None;
+    self.next()
+  }
+
+  #[inline]
   fn last(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
-    self.nd = self.map.last_in(self.version, self.all_versions)?;
+    self.tail = None;
+    self.head = None;
+    self.prev()
+  }
 
-    loop {
-      unsafe {
-        if self.nd.is_null() || self.nd.offset() == self.map.head.offset() {
-          return None;
-        }
-
-        let (value, pointer) = self.nd.get_value_and_trailer_with_pointer(&self.map.arena);
-
-        if self.nd.version() > self.version {
-          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        if !self.all_versions && value.is_none() {
-          self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-          continue;
-        }
-
-        let nk = ty_ref::<K>(self.nd.get_key(&self.map.arena));
-        if self.range.compare_contains(&nk) {
-          let ent = VersionedEntryRef::from_node_with_pointer(self.nd, &self.map.arena, pointer);
-          return Some(ent);
-        }
-
-        self.nd = self.map.get_prev(self.nd, 0, !self.all_versions);
-      }
+  #[inline]
+  fn check_bounds(&self, nk: &K::Ref<'a>) -> bool {
+    if let Some(ref range) = self.range {
+      range.compare_contains(nk)
+    } else {
+      true
     }
   }
 }
@@ -523,10 +622,11 @@ where
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
-    self.next_in().map(|v| {
-      // Safety: the EntryRef holds a reference to the map, so it is always valid.
-      unsafe { core::mem::transmute(v) }
-    })
+    if self.range.is_some() {
+      self.range_next_in()
+    } else {
+      self.next_in()
+    }
   }
 
   #[inline]
@@ -534,12 +634,7 @@ where
   where
     Self: Sized,
   {
-    self
-      .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
-      .map(|e| {
-        // Safety: the EntryRef holds a reference to the map, so it is always valid.
-        unsafe { core::mem::transmute(e) }
-      })
+    AllVersionsIter::last(&mut self)
   }
 
   #[inline]
@@ -557,10 +652,7 @@ where
     Self: Sized,
     Self::Item: Ord,
   {
-    self.first().map(|e| {
-      // Safety: the EntryRef holds a reference to the map, so it is always valid.
-      unsafe { core::mem::transmute(e) }
-    })
+    self.first()
   }
 }
 
@@ -573,10 +665,51 @@ where
   Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
 {
+  #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
-    self.prev().map(|v| {
-      // Safety: the EntryRef holds a reference to the map, so it is always valid.
-      unsafe { core::mem::transmute(v) }
-    })
+    if self.range.is_some() {
+      self.range_prev()
+    } else {
+      self.prev()
+    }
+  }
+}
+
+/// Helper function to check if a value is above a lower bound
+fn above_lower_bound_compare<V, T: ?Sized + Comparable<V>>(bound: &Bound<&T>, other: &V) -> bool {
+  match *bound {
+    Bound::Unbounded => true,
+    Bound::Included(key) => key.compare(other).is_le(),
+    Bound::Excluded(key) => key.compare(other).is_lt(),
+  }
+}
+
+/// Helper function to check if a value is above a lower bound
+fn above_lower_bound<K: ?Sized + Ord>(bound: &Bound<&K>, other: &K) -> bool {
+  match *bound {
+    Bound::Unbounded => true,
+    Bound::Included(key) => key.cmp(other).is_le(),
+    Bound::Excluded(key) => key.cmp(other).is_lt(),
+  }
+}
+
+/// Helper function to check if a value is below an upper bound
+fn below_upper_bound_compare<V: ?Sized, T: ?Sized + Comparable<V>>(
+  bound: &Bound<&T>,
+  other: &V,
+) -> bool {
+  match *bound {
+    Bound::Unbounded => true,
+    Bound::Included(key) => key.compare(other).is_ge(),
+    Bound::Excluded(key) => key.compare(other).is_gt(),
+  }
+}
+
+/// Helper function to check if a value is below an upper bound
+fn below_upper_bound<K: ?Sized + Ord>(bound: &Bound<&K>, other: &K) -> bool {
+  match *bound {
+    Bound::Unbounded => true,
+    Bound::Included(key) => key.cmp(other).is_ge(),
+    Bound::Excluded(key) => key.cmp(other).is_gt(),
   }
 }

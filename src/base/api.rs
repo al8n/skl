@@ -1,5 +1,5 @@
 use core::{
-  cmp, mem,
+  mem,
   ops::{Bound, RangeBounds},
   ptr::NonNull,
   sync::atomic::Ordering,
@@ -8,18 +8,17 @@ use std::boxed::Box;
 
 use dbutils::{
   buffer::VacantBuffer,
-  equivalent::Comparable,
+  equivalent::{Comparable, Equivalent},
   traits::{KeyRef, Type},
 };
 use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Header, Link, Node, NodePointer},
-  entry::{EntryRef, VersionedEntryRef},
   random_height, ty_ref, Error, Height, ValueBuilder, Version,
 };
 
-use super::{iterator, SkipList};
+use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
 
 mod update;
 
@@ -247,9 +246,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self
-      .iter(version)
-      .seek_lower_bound::<K::Ref<'a>>(Bound::Unbounded)
+    self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
@@ -257,9 +254,23 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self
-      .iter(version)
-      .seek_upper_bound::<K::Ref<'a>>(Bound::Unbounded)
+    self.iter(version).last()
+  }
+
+  /// Returns the first entry in the map.
+  pub fn first_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    self.iter_all_versions(version).next()
+  }
+
+  /// Returns the last entry in the map.
+  pub fn last_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
+  where
+    K::Ref<'a>: KeyRef<'a, K>,
+  {
+    self.iter_all_versions(version).last()
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -279,17 +290,17 @@ where
       if eq {
         return value.map(|_| {
           EntryRef(VersionedEntryRef::from_node_with_pointer(
+            version,
             node,
-            &self.arena,
+            self,
             pointer,
+            Some(node_key),
+            None,
           ))
         });
       }
 
-      if !matches!(
-        Comparable::compare(key, &ty_ref::<K>(node_key)),
-        cmp::Ordering::Equal
-      ) {
+      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
         return None;
       }
 
@@ -299,9 +310,12 @@ where
 
       value.map(|_| {
         EntryRef(VersionedEntryRef::from_node_with_pointer(
+          version,
           node,
-          &self.arena,
+          self,
           pointer,
+          Some(node_key),
+          None,
         ))
       })
     }
@@ -326,16 +340,16 @@ where
       let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
+          version,
           node,
-          &self.arena,
+          self,
           pointer,
+          Some(node_key),
+          None,
         ));
       }
 
-      if !matches!(
-        Comparable::compare(key, &ty_ref::<K>(node_key)),
-        cmp::Ordering::Equal
-      ) {
+      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
         return None;
       }
 
@@ -344,9 +358,12 @@ where
       }
 
       Some(VersionedEntryRef::from_node_with_pointer(
+        version,
         node,
-        &self.arena,
+        self,
         pointer,
+        Some(node_key),
+        None,
       ))
     }
   }
@@ -403,7 +420,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     iterator::Iter::range(version, self, range)
   }
@@ -418,7 +435,7 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
-    R: RangeBounds<Q> + 'a,
+    R: RangeBounds<Q>,
   {
     iterator::AllVersionsIter::range(version, self, range, true)
   }

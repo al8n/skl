@@ -290,7 +290,12 @@ where
       if eq {
         return value.map(|_| {
           EntryRef(VersionedEntryRef::from_node_with_pointer(
-            version, node, self, pointer,
+            version,
+            node,
+            self,
+            pointer,
+            Some(node_key),
+            None,
           ))
         });
       }
@@ -305,7 +310,12 @@ where
 
       value.map(|_| {
         EntryRef(VersionedEntryRef::from_node_with_pointer(
-          version, node, self, pointer,
+          version,
+          node,
+          self,
+          pointer,
+          Some(node_key),
+          None,
         ))
       })
     }
@@ -330,7 +340,12 @@ where
       let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
-          version, node, self, pointer,
+          version,
+          node,
+          self,
+          pointer,
+          Some(node_key),
+          None,
         ));
       }
 
@@ -343,7 +358,12 @@ where
       }
 
       Some(VersionedEntryRef::from_node_with_pointer(
-        version, node, self, pointer,
+        version,
+        node,
+        self,
+        pointer,
+        Some(node_key),
+        None,
       ))
     }
   }

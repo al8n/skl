@@ -198,16 +198,31 @@ where
     query_version: Version,
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<K, V, A>,
+    raw_key: Option<&'a [u8]>,
+    key: Option<K::Ref<'a>>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
       let vp = node.trailer_offset_and_value_size();
       let raw_value = node.get_value_by_value_offset(&list.arena, vp.value_offset, vp.value_len);
 
-      let raw_key = node.get_key(&list.arena);
+      let key = match key {
+        Some(key) => {
+          let cell = OnceCell::new();
+          let _ = cell.set(key);
+          cell
+        }
+        None => OnceCell::new(),
+      };
+
+      let raw_key = match raw_key {
+        Some(raw_key) => raw_key,
+        None => node.get_key(&list.arena),
+      };
+
       VersionedEntryRef {
         list,
         raw_key,
-        key: OnceCell::new(),
+        key,
         raw_value,
         value: OnceCell::new(),
         value_part_pointer: vp,
@@ -225,16 +240,31 @@ where
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<K, V, A>,
     pointer: ValuePartPointer<A::Trailer>,
+    raw_key: Option<&'a [u8]>,
+    key: Option<K::Ref<'a>>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
       let raw_value =
         node.get_value_by_value_offset(&list.arena, pointer.value_offset, pointer.value_len);
 
-      let raw_key = node.get_key(&list.arena);
+      let key = match key {
+        Some(key) => {
+          let cell = OnceCell::new();
+          let _ = cell.set(key);
+          cell
+        }
+        None => OnceCell::new(),
+      };
+
+      let raw_key = match raw_key {
+        Some(raw_key) => raw_key,
+        None => node.get_key(&list.arena),
+      };
+
       VersionedEntryRef {
         list,
         raw_key,
-        key: OnceCell::new(),
+        key,
         raw_value,
         value: OnceCell::new(),
         value_part_pointer: pointer,

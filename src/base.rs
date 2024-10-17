@@ -394,10 +394,18 @@ where
           continue;
         }
 
-        let nk = ty_ref::<K>(nd.get_key(&self.arena));
+        let raw_key = nd.get_key(&self.arena);
+        let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+          let ent = VersionedEntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            pointer,
+            Some(raw_key),
+            Some(nk),
+          );
           return Some(ent);
         }
 
@@ -432,11 +440,19 @@ where
           // prev is null or the head, we should try to see if we can return the current node.
           if !nd.is_removed() && nd.get_trailer(&self.arena).is_valid() {
             // the current node is valid, we should return it.
-            let nk = ty_ref::<K>(nd.get_key(&self.arena));
+            let raw_key = nd.get_key(&self.arena);
+            let nk = ty_ref::<K>(raw_key);
 
             if contains_key(&nk) {
               let pointer = nd.get_value_pointer::<A>();
-              let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+              let ent = VersionedEntryRef::from_node_with_pointer(
+                version,
+                *nd,
+                self,
+                pointer,
+                Some(raw_key),
+                Some(nk),
+              );
               return Some(ent);
             }
           }
@@ -448,11 +464,19 @@ where
         // if the prev's version is greater than the query version or the prev's key is different from the current key,
         // we should try to return the current node.
         if prev.version() > version || nd.get_key(&self.arena).ne(prev.get_key(&self.arena)) {
-          let nk = ty_ref::<K>(nd.get_key(&self.arena));
+          let raw_key = nd.get_key(&self.arena);
+          let nk = ty_ref::<K>(raw_key);
 
           if !nd.is_removed() && contains_key(&nk) && nd.get_trailer(&self.arena).is_valid() {
             let pointer = nd.get_value_pointer::<A>();
-            let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+            let ent = VersionedEntryRef::from_node_with_pointer(
+              version,
+              *nd,
+              self,
+              pointer,
+              Some(raw_key),
+              Some(nk),
+            );
             return Some(ent);
           }
         }
@@ -482,10 +506,18 @@ where
           continue;
         }
 
-        let nk = ty_ref::<K>(nd.get_key(&self.arena));
+        let raw_key = nd.get_key(&self.arena);
+        let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+          let ent = VersionedEntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            pointer,
+            Some(raw_key),
+            Some(nk),
+          );
           return Some(ent);
         }
 
@@ -537,10 +569,18 @@ where
           continue;
         }
 
-        let nk = ty_ref::<K>(nd.get_key(&self.arena));
+        let raw_key = nd.get_key(&self.arena);
+        let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent = VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer);
+          let ent = VersionedEntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            pointer,
+            Some(raw_key),
+            Some(nk),
+          );
           return Some(ent);
         }
 
@@ -901,7 +941,7 @@ where
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let k = found_key.expect("the key cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(version, node_ptr, self);
+        let old = VersionedEntryRef::from_node(version, node_ptr, self, None, None);
 
         if upsert {
           return self
@@ -1078,7 +1118,7 @@ where
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = VersionedEntryRef::from_node(version, node_ptr, self);
+                let old = VersionedEntryRef::from_node(version, node_ptr, self, None, None);
 
                 if upsert {
                   // let curr = nd.as_ref(&self.arena);
@@ -1188,6 +1228,8 @@ where
               A::align_offset::<A::Trailer>(offset) + mem::size_of::<A::Trailer>() as u32,
               len,
             ),
+            None,
+            None,
           ),
         ))),
       },
@@ -1226,6 +1268,8 @@ where
               A::align_offset::<A::Trailer>(offset) + mem::size_of::<A::Trailer>() as u32,
               len,
             ),
+            None,
+            None,
           ),
         ))),
       },

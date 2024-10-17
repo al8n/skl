@@ -3,6 +3,8 @@
 ## 0.17.0
 
 - Refactor to support generic key-value types
+- Fix `DoubleEndIterator` implementation
+- Lazy init the `V::Ref<'a>` and `K::Ref<'a>` in `EntryRef`
 
 ## 0.15.0
 

@@ -6,12 +6,16 @@ use super::*;
 
 /// [`VersionedMap`] implementation for concurrent environment.
 pub mod sync {
-  pub use crate::sync::versioned::{Entry, Iter, Range, SkipMap, VersionedEntry};
+  pub use crate::sync::versioned::{
+    AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+  };
 }
 
 /// [`VersionedMap`] implementation for non-concurrent environment.
 pub mod unsync {
-  pub use crate::unsync::versioned::{Entry, Iter, Range, SkipMap, VersionedEntry};
+  pub use crate::unsync::versioned::{
+    AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+  };
 }
 
 /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.

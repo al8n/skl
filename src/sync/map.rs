@@ -47,6 +47,12 @@ pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
 /// Iterator over a subset of the [`SkipMap`].
 pub type Range<'a, K, V, Q, R> = crate::iter::Iter<'a, K, V, Allocator, Q, R>;
 
+/// Iterator over the [`SkipMap`].
+pub type AllVersionsIter<'a, K, V> = crate::iter::AllVersionsIter<'a, K, V, Allocator>;
+
+/// Iterator over a subset of the [`SkipMap`].
+pub type AllVersionsRange<'a, K, V, Q, R> = crate::iter::AllVersionsIter<'a, K, V, Allocator, Q, R>;
+
 /// The entry reference of the [`SkipMap`].
 pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
 

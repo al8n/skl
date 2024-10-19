@@ -6,12 +6,16 @@ use super::*;
 
 /// [`FullMap`] implementation for concurrent environment.
 pub mod sync {
-  pub use crate::sync::full::{Entry, Iter, Range, SkipMap, VersionedEntry};
+  pub use crate::sync::full::{
+    AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+  };
 }
 
 /// [`FullMap`] implementation for non-concurrent environment.
 pub mod unsync {
-  pub use crate::unsync::full::{Entry, Iter, Range, SkipMap, VersionedEntry};
+  pub use crate::unsync::full::{
+    AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+  };
 }
 
 /// A fast, ARENA based `SkipMap` that supports trailed structure, multiple versions, forward and backward iteration.

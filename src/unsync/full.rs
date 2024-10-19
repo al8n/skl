@@ -24,6 +24,13 @@ pub type Entry<'a, K, V, T> = crate::EntryRef<'a, K, V, Allocator<T>>;
 /// The versioned entry reference of the [`SkipMap`].
 pub type VersionedEntry<'a, K, V, T> = crate::VersionedEntryRef<'a, K, V, Allocator<T>>;
 
+/// Iterator over the [`SkipMap`].
+pub type AllVersionsIter<'a, K, V, T> = crate::iter::AllVersionsIter<'a, K, V, Allocator<T>>;
+
+/// Iterator over a subset of the [`SkipMap`].
+pub type AllVersionsRange<'a, K, V, T, Q, R> =
+  crate::iter::AllVersionsIter<'a, K, V, Allocator<T>, Q, R>;
+
 node!(
   /// A node that supports both version and trailer.
   struct FullNode<T> {

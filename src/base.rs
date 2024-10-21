@@ -557,7 +557,7 @@ where
               return None;
             }
 
-            // if next's key is different from the current key, we should break the loop.
+            // if next's key is different from the current key, we should break the loop
             if next.get_key(&self.arena) != curr_key {
               *nd = next;
               break;

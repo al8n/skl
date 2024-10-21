@@ -15,7 +15,6 @@ use super::*;
 pub(crate) fn basic<M>(mut l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -138,7 +137,6 @@ where
 pub(crate) fn iter_all_versions_mvcc<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -245,7 +243,6 @@ where
 pub(crate) fn get_mvcc<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -310,7 +307,6 @@ where
 pub(crate) fn gt<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -400,7 +396,6 @@ where
 pub(crate) fn ge<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -596,7 +591,6 @@ where
 pub(crate) fn lt<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1263,12 +1257,7 @@ where
   while let Some(ref entry) = ent {
     if i % 2 == 0 {
       assert_eq!(entry.version(), MIN_VERSION);
-      assert_eq!(
-        entry.key(),
-        make_int_key(N - 1 - i / 2).as_slice(),
-        "{}",
-        core::str::from_utf8(entry.key()).unwrap()
-      );
+      assert_eq!(entry.key(), make_int_key(N - 1 - i / 2).as_slice(),);
       assert_eq!(entry.value().unwrap(), make_value(N - 1 - i / 2).as_slice());
       i += 1;
     } else {

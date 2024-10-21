@@ -128,6 +128,12 @@ where
     self.next_in(true, false)
   }
 
+  /// Returns the previous entry in the map.
+  #[inline]
+  pub fn prev(&self) -> Option<Self> {
+    self.prev_in(true, false)
+  }
+
   fn next_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
     let mut nd = self.ptr;
     if all_versions {
@@ -145,12 +151,6 @@ where
           .move_to_next_max_version(&mut nd, self.query_version, |_| true)
       }
     }
-  }
-
-  /// Returns the previous entry in the map.
-  #[inline]
-  pub fn prev(&self) -> Option<Self> {
-    self.prev_in(true, false)
   }
 
   fn prev_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {

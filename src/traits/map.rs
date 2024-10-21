@@ -662,12 +662,12 @@ where
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove`](Map::get_or_remove), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove`](Map::get_or_remove), this method will remove the value if the key already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
-  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
+  /// - Returns `Ok(Some(current))` if the key exists and not in remove status
+  ///   or the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
   fn remove<'a, 'b: 'a>(
     &'a self,
@@ -683,12 +683,12 @@ where
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
   ///
-  /// Unlike [`get_or_remove_at_height`](Map::get_or_remove_at_height), this method will remove the value if the key with the given version already exists.
+  /// Unlike [`get_or_remove_at_height`](Map::get_or_remove_at_height), this method will remove the value if the key already exists.
   ///
   /// - Returns `Ok(None)`:
   ///   - if the remove operation is successful or the key is marked in remove status by other threads.
-  /// - Returns `Ok(Either::Right(current))` if the key with the given version already exists
-  ///   and the entry is not successfully removed because of an update on this entry happens in another thread.
+  /// - Returns `Ok(Some(current))` if the key exists and not in remove status
+  ///   or the entry is not successfully removed because of an update on this entry happens in another thread.
   #[inline]
   #[allow(single_use_lifetimes)]
   fn remove_at_height<'a, 'b: 'a>(
@@ -713,10 +713,10 @@ where
 
   /// Gets or removes the key-value pair if it exists.
   ///
-  /// Unlike [`remove`](Map::remove), this method will not remove the value if the key with the given version already exists.
+  /// Unlike [`remove`](Map::remove), this method will not remove the value if the key already exists.
   ///
   /// - Returns `Ok(None)` if the key does not exist.
-  /// - Returns `Ok(Some(old))` if the key with the given version already exists.
+  /// - Returns `Ok(Some(old))` if the key already exists.
   #[inline]
   fn get_or_remove<'a, 'b: 'a>(
     &'a self,

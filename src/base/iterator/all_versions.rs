@@ -445,7 +445,7 @@ where
     unsafe {
       let (n, _) = self
         .map
-        .find_near(self.version, key, false, true, !self.all_versions); // find the key with the max version.
+        .find_near(self.version, key, false, true, !self.all_versions);
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.tail.offset() {
@@ -484,7 +484,7 @@ where
     unsafe {
       let (n, _) = self
         .map
-        .find_near(Version::MIN, key, false, false, !self.all_versions); // find the key with the max version.
+        .find_near(Version::MIN, key, false, false, !self.all_versions);
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.tail.offset() {

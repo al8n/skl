@@ -71,7 +71,6 @@ pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
     use std::boxed::Box;
 
     let arena = <Self::Allocator as AllocatorSealed>::new(arena, opts);
-
     let opts = arena.options();
     let max_height: u8 = opts.max_height().into();
     let data_offset = arena.check_capacity(max_height)?;

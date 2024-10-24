@@ -7,13 +7,28 @@ pub enum Error {
   Arena(rarena_allocator::Error),
 
   /// Indicates that the value is too large to be stored in the `SkipMap`.
-  ValueTooLarge(u64),
+  ValueTooLarge {
+    /// The size of the value.
+    size: usize,
+    /// The max size of the value.
+    maximum_size: usize,
+  },
 
   /// Indicates that the key is too large to be stored in the `SkipMap`.
-  KeyTooLarge(u64),
+  KeyTooLarge {
+    /// The size of the key.
+    size: usize,
+    /// The max size of the key.
+    maximum_size: usize,
+  },
 
   /// Indicates that the entry is too large to be stored in the `SkipMap`.
-  EntryTooLarge(u64),
+  EntryTooLarge {
+    /// The size of the entry.
+    size: u64,
+    /// The max size of the entry.
+    maximum_size: u64,
+  },
 
   /// Indicates that the height of the `SkipMap` is too large.
   InvalidHeight {
@@ -37,22 +52,36 @@ impl core::fmt::Display for Error {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     match self {
       Self::Arena(e) => write!(f, "{e}"),
-      Self::ValueTooLarge(size) => write!(f, "value size {} is too large", size),
-      Self::KeyTooLarge(size) => write!(f, "key size {} is too large", size),
-      Self::EntryTooLarge(size) => write!(f, "entry size {size} is too large",),
-      Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
-      Self::InvalidHeight { height, max_height } => write!(
+      Self::ValueTooLarge { size, maximum_size } => write!(
         f,
-        "given height {height} is larger than the max height {max_height} or less than 1"
+        "value size {size} larger than the maximum size {maximum_size}"
       ),
+      Self::KeyTooLarge { size, maximum_size } => write!(
+        f,
+        "key size {size} larger than the maximum size {maximum_size}"
+      ),
+      Self::EntryTooLarge { size, maximum_size } => write!(
+        f,
+        "entry size {size} larger than the maximum size {maximum_size}",
+      ),
+      Self::ArenaTooSmall => write!(f, "ARENA capacity is too small"),
+      Self::InvalidHeight { height, max_height } => {
+        if height.to_u8() == 0 {
+          write!(f, "height must be greater than 0")
+        } else {
+          write!(
+            f,
+            "height {height} is larger than the max height {max_height}"
+          )
+        }
+      }
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       Self::IO(e) => write!(f, "{e}"),
     }
   }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 impl From<rarena_allocator::Error> for Error {
   fn from(e: rarena_allocator::Error) -> Self {
@@ -70,6 +99,30 @@ impl Error {
   #[inline]
   pub(crate) const fn invalid_height(height: Height, max_height: Height) -> Self {
     Self::InvalidHeight { height, max_height }
+  }
+
+  #[inline]
+  pub(crate) const fn invalid_key_size(key_size: usize, max_size: usize) -> Self {
+    Self::KeyTooLarge {
+      size: key_size,
+      maximum_size: max_size,
+    }
+  }
+
+  #[inline]
+  pub(crate) const fn invalid_value_size(value_size: usize, max_size: usize) -> Self {
+    Self::ValueTooLarge {
+      size: value_size,
+      maximum_size: max_size,
+    }
+  }
+
+  #[inline]
+  pub(crate) const fn invalid_entry_size(entry_size: u64, max_size: u64) -> Self {
+    Self::EntryTooLarge {
+      size: entry_size,
+      maximum_size: max_size,
+    }
   }
 }
 
@@ -93,35 +146,4 @@ pub(super) fn bad_magic_version() -> std::io::Error {
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 pub(super) fn bad_version() -> std::io::Error {
   std::io::Error::new(std::io::ErrorKind::InvalidData, "bad version")
-}
-
-#[cfg(test)]
-#[test]
-fn test_fmt() {
-  assert_eq!(
-    std::format!("{}", Error::KeyTooLarge(10)),
-    "key size 10 is too large"
-  );
-  assert_eq!(
-    std::format!("{}", Error::ValueTooLarge(10)),
-    "value size 10 is too large"
-  );
-  assert_eq!(
-    std::format!("{}", Error::EntryTooLarge(10)),
-    "entry size 10 is too large"
-  );
-  assert_eq!(
-    std::format!(
-      "{}",
-      Error::Arena(rarena_allocator::Error::InsufficientSpace {
-        requested: 10,
-        available: 10
-      })
-    ),
-    "Allocation failed: requested size is 10, but only 10 is available",
-  );
-  assert_eq!(
-    std::format!("{}", Error::Arena(rarena_allocator::Error::ReadOnly)),
-    "Arena is read-only"
-  );
 }

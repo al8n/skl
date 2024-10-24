@@ -6,7 +6,6 @@ use dbutils::{
   traits::{KeyRef, MaybeStructured, Type},
 };
 use either::Either;
-use rarena_allocator::Allocator as _;
 
 use crate::KeyBuilder;
 
@@ -56,13 +55,15 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Among::Right)?;
-
     let key: MaybeStructured<'_, K> = key.into();
     let value: MaybeStructured<'_, V> = value.into();
 
+    self
+      .validate(height, key.encoded_len(), value.encoded_len())
+      .map_err(Among::Right)?;
+
     let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf).map(|_| ());
-    let val_len = value.encoded_len() as u32;
+    let val_len = value.encoded_len();
 
     self
       .update(
@@ -110,9 +111,10 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
-
     let key: MaybeStructured<'_, K> = key.into();
+    self
+      .validate(height, key.encoded_len(), value_builder.size())
+      .map_err(Either::Right)?;
 
     self
       .update(
@@ -154,12 +156,14 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Among::Right)?;
-
     let key: MaybeStructured<'_, K> = key.into();
     let value: MaybeStructured<'_, V> = value.into();
+    self
+      .validate(height, key.encoded_len(), value.encoded_len())
+      .map_err(Among::Right)?;
+
     let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf).map(|_| ());
-    let val_len = value.encoded_len() as u32;
+    let val_len = value.encoded_len();
 
     self
       .update(
@@ -208,9 +212,11 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
-
     let key: MaybeStructured<'_, K> = key.into();
+    self
+      .validate(height, key.encoded_len(), value_builder.size())
+      .map_err(Either::Right)?;
+
     self
       .update(
         version,
@@ -256,12 +262,14 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Among::Right)?;
+    self
+      .validate(height, key_builder.size(), value_builder.size())
+      .map_err(Among::Right)?;
 
     let (key_size, key) = key_builder.into_components();
     let (offset, vk) = self
       .arena
-      .fetch_vacant_key(u32::from(key_size), key)
+      .fetch_vacant_key(key_size as u32, key)
       .map_err(Among::from_either_to_left_right)?;
 
     self
@@ -312,14 +320,14 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    if self.arena.read_only() {
-      return Err(Among::Right(Error::read_only()));
-    }
+    self
+      .validate(height, key_builder.size(), value_builder.size())
+      .map_err(Among::Right)?;
 
     let (key_size, key) = key_builder.into_components();
     let (offset, vk) = self
       .arena
-      .fetch_vacant_key(u32::from(key_size), key)
+      .fetch_vacant_key(key_size as u32, key)
       .map_err(Among::from_either_to_left_right)?;
 
     self
@@ -371,9 +379,10 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
-
     let key: MaybeStructured<'_, K> = key.into();
+    self
+      .validate(height, key.encoded_len(), 0)
+      .map_err(Either::Right)?;
 
     self
       .update(
@@ -425,8 +434,10 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
     let key: MaybeStructured<'_, K> = key.into();
+    self
+      .validate(height, key.encoded_len(), 0)
+      .map_err(Either::Right)?;
 
     self
       .update(
@@ -477,10 +488,12 @@ where
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.check_height_and_ro(height).map_err(Either::Right)?;
+    self
+      .validate(height, key_builder.size(), 0)
+      .map_err(Either::Right)?;
 
     let (key_size, key) = key_builder.into_components();
-    let (offset, vk) = self.arena.fetch_vacant_key(u32::from(key_size), key)?;
+    let (offset, vk) = self.arena.fetch_vacant_key(key_size as u32, key)?;
     let key = Key::RemoveVacant { offset, buf: vk };
     self
       .update(

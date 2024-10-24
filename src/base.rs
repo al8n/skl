@@ -15,8 +15,8 @@ use crate::{
   allocator::{
     Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePartPointer, ValuePointer,
   },
-  encode_key_size_and_height, ty_ref, CompressionPolicy, Error, Height, KeyBuilder, KeySize,
-  Trailer, ValueBuilder, Version,
+  encode_key_size_and_height, ty_ref, CompressionPolicy, Error, Height, KeyBuilder, Trailer,
+  ValueBuilder, Version,
 };
 
 mod entry;
@@ -161,23 +161,19 @@ where
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Among<K::Error, E, Error>> {
     let (nd, deallocator) = match key {
       Key::Structured(key) => {
-        let kb = KeyBuilder::new(
-          KeySize::from_u32_unchecked(key.encoded_len() as u32),
-          |buf: &mut VacantBuffer<'_>| key.encode_to_buffer(buf).map(|_| ()),
-        );
+        let kb = KeyBuilder::new(key.encoded_len(), |buf: &mut VacantBuffer<'_>| {
+          key.encode_to_buffer(buf).map(|_| ())
+        });
         let vb = value_builder.unwrap();
         self
           .arena
           .allocate_entry_node::<K::Error, E>(version, height, trailer, kb, vb)?
       }
       Key::Occupied(key) => {
-        let kb = KeyBuilder::new(
-          KeySize::from_u32_unchecked(key.len() as u32),
-          |buf: &mut VacantBuffer<'_>| {
-            buf.put_slice_unchecked(key);
-            Ok(())
-          },
-        );
+        let kb = KeyBuilder::new(key.len(), |buf: &mut VacantBuffer<'_>| {
+          buf.put_slice_unchecked(key);
+          Ok(())
+        });
         let vb = value_builder.unwrap();
         self
           .arena
@@ -189,7 +185,7 @@ where
           version,
           height,
           trailer,
-          key.len() as u32,
+          key.len(),
           *offset,
           value_builder.unwrap(),
         )
@@ -200,7 +196,7 @@ where
           version,
           height,
           trailer,
-          *len,
+          *len as usize,
           *offset,
           value_builder.unwrap(),
         )
@@ -211,9 +207,9 @@ where
           version,
           height,
           trailer,
-          key.encoded_len() as u32,
+          key.encoded_len(),
           |buf| key.encode_to_buffer(buf).map(|_| ()),
-          <A::Node as Node>::ValuePointer::REMOVE,
+          <A::Node as Node>::ValuePointer::REMOVE as usize,
         )
         .map_err(Among::from_either_to_left_right)?,
       Key::Remove(key) => self
@@ -222,14 +218,14 @@ where
           version,
           height,
           trailer,
-          key.len() as u32,
+          key.len(),
           |buf| {
             buf
               .put_slice(key)
               .expect("buffer must be large enough for key");
             Ok(())
           },
-          <A::Node as Node>::ValuePointer::REMOVE,
+          <A::Node as Node>::ValuePointer::REMOVE as usize,
         )
         .map_err(Among::from_either_to_left_right)?,
       Key::RemoveVacant { buf: key, offset } => self
@@ -239,8 +235,8 @@ where
           height,
           trailer,
           *offset,
-          key.len() as u32,
-          <A::Node as Node>::ValuePointer::REMOVE,
+          key.len(),
+          <A::Node as Node>::ValuePointer::REMOVE as usize,
         )
         .map_err(Among::from_either_to_left_right)?,
       Key::RemovePointer { offset, len, .. } => self
@@ -250,8 +246,8 @@ where
           height,
           trailer,
           *offset,
-          *len,
-          <A::Node as Node>::ValuePointer::REMOVE,
+          *len as usize,
+          <A::Node as Node>::ValuePointer::REMOVE as usize,
         )
         .map_err(Among::from_either_to_left_right)?,
     };
@@ -900,16 +896,37 @@ where
   }
 
   #[inline]
-  fn check_height_and_ro(&self, height: Height) -> Result<(), Error> {
+  fn validate(&self, height: Height, klen: usize, vlen: usize) -> Result<(), Error> {
     if self.arena.read_only() {
       return Err(Error::read_only());
     }
 
-    let max_height = self.arena.options().max_height();
-
-    if height > max_height {
+    let max_height = self.arena.max_height();
+    if height < 1 || height > max_height {
       return Err(Error::invalid_height(height, max_height));
     }
+
+    let max_key_size = self.arena.max_key_size();
+    if klen > max_key_size {
+      return Err(Error::invalid_key_size(klen, max_key_size));
+    }
+
+    let vlen = if vlen == <<A::Node as Node>::ValuePointer as ValuePointer>::REMOVE as usize {
+      mem::size_of::<<A::Node as Node>::Trailer>()
+    } else {
+      vlen + mem::size_of::<<A::Node as Node>::Trailer>()
+    };
+
+    let max_value_size = self.arena.max_value_size();
+    if vlen > max_value_size {
+      return Err(Error::invalid_value_size(vlen, max_value_size));
+    }
+
+    let entry_size = (vlen as u64 + klen as u64) + <A::Node as Node>::size(height.to_u8()) as u64;
+    if entry_size > u32::MAX as u64 {
+      return Err(Error::invalid_entry_size(entry_size, u32::MAX as u64));
+    }
+
     Ok(())
   }
 

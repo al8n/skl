@@ -1836,19 +1836,19 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let encoded_size = alice.encoded_size() as u32;
+  let encoded_size = alice.encoded_size();
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
-    assert_eq!(val.capacity(), encoded_size as usize);
+    assert_eq!(val.capacity(), encoded_size);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
-    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
     assert_eq!(&*val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(&*val, alice.id.to_be_bytes());
     val.put_slice(alice.name.as_bytes()).unwrap();
-    assert_eq!(val.len(), encoded_size as usize);
+    assert_eq!(val.len(), encoded_size);
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
@@ -1873,7 +1873,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let encoded_size = alice.encoded_size() as u32;
+  let encoded_size = alice.encoded_size();
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
@@ -1881,16 +1881,16 @@ where
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
-    assert_eq!(val.capacity(), encoded_size as usize);
+    assert_eq!(val.capacity(), encoded_size);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
-    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
     assert_eq!(&*val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(&*val, alice.id.to_be_bytes());
     val.put_slice(alice.name.as_bytes()).unwrap();
-    assert_eq!(val.len(), encoded_size as usize);
+    assert_eq!(val.len(), encoded_size);
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
@@ -1939,19 +1939,19 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let encoded_size = alice.encoded_size() as u32;
+  let encoded_size = alice.encoded_size();
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
-    assert_eq!(val.capacity(), encoded_size as usize);
+    assert_eq!(val.capacity(), encoded_size);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
-    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
     assert_eq!(val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(val, alice.id.to_be_bytes());
     val.put_slice(alice.name.as_bytes()).unwrap();
-    assert_eq!(val.len(), encoded_size as usize);
+    assert_eq!(val.len(), encoded_size);
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
@@ -1969,16 +1969,16 @@ where
   };
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
-    assert_eq!(val.capacity(), encoded_size as usize);
+    assert_eq!(val.capacity(), encoded_size);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();
     assert_eq!(val.len(), 4);
-    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
     assert_eq!(&*val, alice2.id.to_le_bytes());
     val[..4].copy_from_slice(&alice2.id.to_be_bytes());
     assert_eq!(&*val, alice2.id.to_be_bytes());
     val.put_slice(alice2.name.as_bytes()).unwrap();
-    assert_eq!(val.len(), encoded_size as usize);
+    assert_eq!(val.len(), encoded_size);
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
@@ -2012,7 +2012,7 @@ where
     name: std::string::String::from("Alice"),
   };
 
-  let encoded_size = alice.encoded_size() as u32;
+  let encoded_size = alice.encoded_size();
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
@@ -2020,16 +2020,16 @@ where
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
-    assert_eq!(val.capacity(), encoded_size as usize);
+    assert_eq!(val.capacity(), encoded_size);
     assert!(val.is_empty());
     val.put_u32_le(alice.id).unwrap();
     assert_eq!(val.len(), 4);
-    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
     assert_eq!(val, alice.id.to_le_bytes());
     val[..4].copy_from_slice(&alice.id.to_be_bytes());
     assert_eq!(val, alice.id.to_be_bytes());
     val.put_slice(alice.name.as_bytes()).unwrap();
-    assert_eq!(val.len(), encoded_size as usize);
+    assert_eq!(val.len(), encoded_size);
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
@@ -2047,16 +2047,16 @@ where
   };
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
-    assert_eq!(val.capacity(), encoded_size as usize);
+    assert_eq!(val.capacity(), encoded_size);
     assert!(val.is_empty());
     val.put_u32_le(alice2.id).unwrap();
     assert_eq!(val.len(), 4);
-    assert_eq!(val.remaining(), encoded_size as usize - 4);
+    assert_eq!(val.remaining(), encoded_size - 4);
     assert_eq!(&*val, alice2.id.to_le_bytes());
     val[..4].copy_from_slice(&alice2.id.to_be_bytes());
     assert_eq!(&*val, alice2.id.to_be_bytes());
     val.put_slice(alice2.name.as_bytes()).unwrap();
-    assert_eq!(val.len(), encoded_size as usize);
+    assert_eq!(val.len(), encoded_size);
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),

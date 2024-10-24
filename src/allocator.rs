@@ -869,10 +869,6 @@ mod sealed {
       let (key_size, kf) = key_builder.into_components();
       let (value_size, vf) = value_builder.into_components();
 
-      self
-        .check_node_size(height, key_size.to_u32(), value_size)
-        .map_err(Among::Right)?;
-
       unsafe {
         let mut node = self
           .allocate_pure_node(height)
@@ -881,12 +877,12 @@ mod sealed {
         let node_offset = node.offset();
 
         let mut key = self
-          .alloc_bytes(key_size.to_u32())
+          .alloc_bytes(key_size as u32)
           .map_err(|e| Among::Right(e.into()))?;
         let key_offset = key.offset();
         let key_cap = key.capacity();
         let mut trailer_and_value = self
-          .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size)
+          .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size as u32)
           .map_err(|e| Among::Right(e.into()))?;
         let trailer_offset = trailer_and_value.offset();
         let trailer_ptr = trailer_and_value
@@ -899,7 +895,7 @@ mod sealed {
 
         // Safety: the node is well aligned
         let node_ref = &mut *node_ptr;
-        node_ref.set_value_pointer(trailer_offset as u32, value_size);
+        node_ref.set_value_pointer(trailer_offset as u32, value_size as u32);
         node_ref.set_key_offset(key_offset as u32);
         node_ref.set_key_size_and_height(encode_key_size_and_height(key_cap as u32, height as u8));
         node_ref.set_version(version);
@@ -913,7 +909,7 @@ mod sealed {
           .fill_vacant_value(
             trailer_offset as u32,
             trailer_and_value.capacity() as u32,
-            value_size,
+            value_size as u32,
             value_offset,
             vf,
           )
@@ -940,12 +936,11 @@ mod sealed {
       height: u32,
       trailer: <Self::Node as Node>::Trailer,
       key_offset: u32,
-      key_size: u32,
-      value_size: u32,
+      key_size: usize,
+      value_size: usize,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
-      self
-        .check_node_size(height, key_size, value_size)
-        .map_err(Either::Right)?;
+      let key_size = key_size as u32;
+      let value_size = value_size as u32;
 
       unsafe {
         let mut node = self
@@ -994,13 +989,12 @@ mod sealed {
       version: Version,
       height: u32,
       trailer: <Self::Node as Node>::Trailer,
-      key_size: u32,
+      key_size: usize,
       kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-      value_size: u32,
+      value_size: usize,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
-      self
-        .check_node_size(height, key_size, value_size)
-        .map_err(Either::Right)?;
+      let key_size = key_size as u32;
+      let value_size = value_size as u32;
 
       unsafe {
         let mut node = self
@@ -1060,14 +1054,13 @@ mod sealed {
       version: Version,
       height: u32,
       trailer: <Self::Node as Node>::Trailer,
-      key_size: u32,
+      key_size: usize,
       key_offset: u32,
       value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let (value_size, vf) = value_builder.into_components();
-      self
-        .check_node_size(height, key_size, value_size)
-        .map_err(Either::Right)?;
+
+      let value_size = value_size as u32;
 
       unsafe {
         let mut node = self
@@ -1093,7 +1086,7 @@ mod sealed {
         let node_ref = &mut *node_ptr;
         node_ref.set_value_pointer(trailer_offset as u32, value_size);
         node_ref.set_key_offset(key_offset);
-        node_ref.set_key_size_and_height(encode_key_size_and_height(key_size, height as u8));
+        node_ref.set_key_size_and_height(encode_key_size_and_height(key_size as u32, height as u8));
         node_ref.set_version(version);
 
         trailer_and_value.detach();
@@ -1163,6 +1156,7 @@ mod sealed {
       value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     ) -> Result<(), Either<E, Error>> {
       let (value_size, f) = value_builder.into_components();
+      let value_size = value_size as u32;
       let mut bytes = self
         .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size)
         .map_err(|e| Either::Right(e.into()))?;
@@ -1203,45 +1197,11 @@ mod sealed {
       Ok(())
     }
 
-    fn max_key_size(&self) -> u32;
+    fn max_key_size(&self) -> usize;
 
-    fn max_value_size(&self) -> u32;
+    fn max_value_size(&self) -> usize;
 
-    fn max_height(&self) -> u32;
-
-    #[inline]
-    fn check_node_size(
-      &self,
-      height: u32,
-      key_size: u32,
-      mut value_size: u32,
-    ) -> Result<(), Error> {
-      if height < 1 || height > self.max_height() {
-        panic!("height cannot be less than one or greater than the max height");
-      }
-
-      if key_size > self.max_key_size() {
-        return Err(Error::KeyTooLarge(key_size as u64));
-      }
-
-      value_size = if value_size == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
-        mem::size_of::<Self::Trailer>() as u32
-      } else {
-        value_size
-      };
-
-      if value_size > self.max_value_size() {
-        return Err(Error::ValueTooLarge(value_size as u64));
-      }
-
-      let entry_size =
-        (value_size as u64 + key_size as u64) + <Self::Node as Node>::size(height as u8) as u64;
-      if entry_size > u32::MAX as u64 {
-        return Err(Error::EntryTooLarge(entry_size));
-      }
-
-      Ok(())
-    }
+    fn max_height(&self) -> Height;
   }
 }
 
@@ -1297,17 +1257,17 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   }
 
   #[inline]
-  fn max_key_size(&self) -> u32 {
+  fn max_key_size(&self) -> usize {
     self.opts.max_key_size().into()
   }
 
   #[inline]
-  fn max_value_size(&self) -> u32 {
-    self.opts.max_value_size()
+  fn max_value_size(&self) -> usize {
+    self.opts.max_value_size() as usize
   }
 
   #[inline]
-  fn max_height(&self) -> u32 {
-    self.opts.max_height().into()
+  fn max_height(&self) -> Height {
+    self.opts.max_height()
   }
 }

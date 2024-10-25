@@ -236,9 +236,15 @@ macro_rules! ux_wrapper {
     $(
       $(#[$meta])*
       #[derive(
-        Debug, derive_more::Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+        Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
       )]
       pub struct $name($inner);
+
+      impl core::fmt::Display for $name {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+          write!(f, "{}", self.0)
+        }
+      }
 
       paste::paste! {
         impl $name {

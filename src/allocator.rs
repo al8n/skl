@@ -623,9 +623,13 @@ mod sealed {
     fn check_capacity(&self, max_height: u8) -> Result<u32, Error> {
       let offset = self.data_offset();
 
-      let alignment = mem::align_of::<Self::Header>();
-      let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-      let meta_end = meta_offset + mem::size_of::<Self::Header>();
+      let meta_end = if self.options().unify() {
+        let alignment = mem::align_of::<Self::Header>();
+        let meta_offset = (offset + alignment - 1) & !(alignment - 1);
+        meta_offset + mem::size_of::<Self::Header>()
+      } else {
+        offset
+      };
 
       let alignment = mem::align_of::<Self::Node>();
       let head_offset = (meta_end + alignment - 1) & !(alignment - 1);

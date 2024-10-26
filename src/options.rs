@@ -3,7 +3,10 @@ use core::mem;
 pub use rarena_allocator::Freelist;
 use rarena_allocator::Options as ArenaOptions;
 
-use super::{Height, KeySize};
+use super::{
+  allocator::{Node, Sealed as AllocatorSealed},
+  Height, KeySize,
+};
 
 use crate::{allocator::Sealed, Arena, Error};
 
@@ -496,6 +499,90 @@ impl Options {
   pub const fn compression_policy(&self) -> CompressionPolicy {
     self.policy
   }
+
+  /// Returns the data offset of the `SkipMap` if the `SkipMap` is in unified memory layout.
+  ///
+  /// See also [`Options::data_offset`].
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{full::sync, trailed::unsync, Options, Arena};
+  ///
+  /// // Create a sync skipmap which supports both trailer and version.
+  /// let opts = Options::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// // Create a unsync ARENA.
+  /// let opts = Options::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<_, _, unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  /// ```
+  pub fn data_offset_unify<K, V, A>(&self) -> usize
+  where
+    K: ?Sized + 'static,
+    V: ?Sized + 'static,
+    A: Arena<K, V>,
+  {
+    let arena_opts = self.to_arena_options();
+    let arena_data_offset =
+      arena_opts.data_offset_unify::<<A::Allocator as AllocatorSealed>::Allocator>();
+
+    data_offset_in::<A::Allocator>(arena_data_offset, self.max_height(), true)
+  }
+
+  /// Returns the data offset of the `SkipMap` if the `SkipMap` is not in unified memory layout.
+  ///
+  /// As the file backed `SkipMap` will only use the unified memory layout and ignore the unify configuration of `Options`,
+  /// so see also [`Options::data_offset_unify`], if you want to get the data offset of the `SkipMap` in unified memory layout.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{full::sync, trailed::unsync, Options, Arena};
+  ///
+  /// // Create a sync skipmap which supports both trailer and version.
+  /// let opts = Options::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// // Create a unsync ARENA.
+  /// let opts = Options::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<_, _, unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  /// ```
+  pub fn data_offset<K, V, A>(&self) -> usize
+  where
+    K: ?Sized + 'static,
+    V: ?Sized + 'static,
+    A: Arena<K, V>,
+  {
+    let arena_opts = self.to_arena_options();
+    let arena_data_offset =
+      arena_opts.data_offset::<<A::Allocator as crate::allocator::Sealed>::Allocator>();
+    data_offset_in::<A::Allocator>(arena_data_offset, self.max_height(), false)
+  }
 }
 
 impl Options {
@@ -575,5 +662,42 @@ impl Options {
       .alloc::<<T::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| T::construct(arena, self, false))
+  }
+}
+
+#[inline]
+fn data_offset_in<A: AllocatorSealed>(offset: usize, max_height: Height, unify: bool) -> usize {
+  let meta_end = if unify {
+    let alignment = mem::align_of::<A::Header>();
+    let meta_offset = (offset + alignment - 1) & !(alignment - 1);
+    meta_offset + mem::size_of::<A::Header>()
+  } else {
+    offset
+  };
+
+  let alignment = mem::align_of::<A::Node>();
+  let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
+  let head_end = head_offset
+    + mem::size_of::<A::Node>()
+    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize();
+
+  let trailer_alignment = mem::align_of::<A::Trailer>();
+  let trailer_size = mem::size_of::<A::Trailer>();
+  let trailer_end = if trailer_size != 0 {
+    let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+    trailer_offset + trailer_size
+  } else {
+    head_end
+  };
+
+  let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
+  let tail_end = tail_offset
+    + mem::size_of::<A::Node>()
+    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize();
+  if trailer_size != 0 {
+    let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
+    trailer_offset + trailer_size
+  } else {
+    tail_end
   }
 }

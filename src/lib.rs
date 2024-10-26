@@ -95,8 +95,9 @@ const unsafe fn dangling_zst_ref<'a, T>() -> &'a T {
   unsafe { &*(DANGLING_ZST.as_ptr() as *const T) }
 }
 
+/// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]
-fn random_height(max_height: Height) -> Height {
+pub fn random_height(max_height: Height) -> Height {
   use rand::{thread_rng, Rng};
   let mut rng = thread_rng();
   let rnd: u32 = rng.gen();
@@ -109,8 +110,9 @@ fn random_height(max_height: Height) -> Height {
   Height::from_u8_unchecked(h as u8)
 }
 
+/// Utility function to generate a random height for a new node.
 #[cfg(not(feature = "std"))]
-fn random_height(max_height: Height) -> Height {
+pub fn random_height(max_height: Height) -> Height {
   use rand::{rngs::OsRng, Rng};
 
   let max_height = max_height.to_usize();

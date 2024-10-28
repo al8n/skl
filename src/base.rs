@@ -1470,7 +1470,10 @@ impl<K: ?Sized, A> Key<'_, '_, K, A> {
   pub(crate) fn is_remove(&self) -> bool {
     matches!(
       self,
-      Self::Remove(_) | Self::RemoveVacant { .. } | Self::RemovePointer { .. }
+      Self::RemoveStructured(_)
+        | Self::Remove(_)
+        | Self::RemoveVacant { .. }
+        | Self::RemovePointer { .. }
     )
   }
 }

@@ -486,7 +486,6 @@ where
 pub(crate) fn le<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -678,7 +677,6 @@ where
 pub(crate) fn basic_large<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -718,7 +716,6 @@ where
 pub(crate) fn concurrent_basic<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone + Send + 'static,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -771,7 +768,6 @@ where
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone + Send + 'static,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -839,7 +835,6 @@ where
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone + Send + 'static,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -893,7 +888,6 @@ where
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone + Send + 'static,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -964,7 +958,6 @@ where
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone + Send + 'static,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1276,7 +1269,6 @@ where
 pub(crate) fn range_prev<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {
@@ -1431,7 +1423,6 @@ where
 pub(crate) fn range<M>(l: M)
 where
   M: FullMap<[u8], [u8]> + Clone,
-
   <M::Allocator as Sealed>::Node: WithVersion + WithTrailer,
   <M::Allocator as Sealed>::Trailer: Default,
 {

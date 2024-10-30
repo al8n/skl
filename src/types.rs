@@ -260,6 +260,15 @@ macro_rules! ux_wrapper {
             Self($inner::new($default))
           }
 
+          #[doc = "Creates a new " $name " with the given value."]
+          #[doc = ""]
+          #[doc = "## Panics"]
+          #[doc = "If the given value is greater than `" $inner "::MAX`."]
+          #[inline]
+          pub const fn with(val: $upper) -> Self {
+            Self($inner::new(val))
+          }
+
           /// Checked integer addition. Computes `self + rhs`, returning `None` if overflow occurred.
           #[inline]
           pub fn checked_add(self, rhs: Self) -> Option<Self> {

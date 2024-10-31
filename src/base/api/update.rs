@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
-  traits::{KeyRef, MaybeStructured, Type},
+  types::{KeyRef, MaybeStructured, Type},
 };
 use either::Either;
 

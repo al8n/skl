@@ -2,7 +2,7 @@ use core::ops::{Bound, RangeBounds};
 
 use dbutils::{
   equivalent::Comparable,
-  traits::{KeyRef, Type},
+  types::{KeyRef, Type},
 };
 
 use super::{AllocatorSealed, Arena, EntryRef, Iter, VersionedEntryRef};

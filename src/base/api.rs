@@ -9,7 +9,7 @@ use std::boxed::Box;
 use dbutils::{
   buffer::VacantBuffer,
   equivalent::{Comparable, Equivalent},
-  traits::{KeyRef, Type},
+  types::{KeyRef, Type},
 };
 use rarena_allocator::Allocator as _;
 

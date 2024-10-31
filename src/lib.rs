@@ -40,6 +40,8 @@ pub use traits::{
 mod types;
 pub use types::*;
 
+pub use dbutils::equivalent::*;
+
 /// Iterators for the skipmaps.
 pub mod iter {
   pub use super::base::iterator::{AllVersionsIter, Iter};
@@ -72,7 +74,6 @@ pub mod iter {
 mod tests;
 
 pub use among;
-pub use dbutils::{Ascend, Comparator, Descend};
 pub use either;
 pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
 
@@ -303,6 +304,6 @@ mod sync;
 mod unsync;
 
 #[inline]
-fn ty_ref<'a, T: dbutils::traits::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
-  unsafe { <T::Ref<'a> as dbutils::traits::TypeRef<'a>>::from_slice(src) }
+fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
+  unsafe { <T::Ref<'a> as dbutils::types::TypeRef<'a>>::from_slice(src) }
 }

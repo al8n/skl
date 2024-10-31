@@ -1,6 +1,6 @@
 use dbutils::{
   equivalent::Comparable,
-  traits::{KeyRef, Type},
+  types::{KeyRef, Type},
 };
 
 use super::*;

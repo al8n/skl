@@ -1,8 +1,8 @@
 use core::ops::{Bound, RangeBounds};
 
 use dbutils::{
-  equivalent::Comparable,
-  traits::{ComparableRangeBounds, KeyRef, Type},
+  equivalent::{Comparable, ComparableRangeBounds},
+  types::{KeyRef, Type},
 };
 
 use crate::allocator::Node;

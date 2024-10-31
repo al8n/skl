@@ -1,4 +1,4 @@
-use dbutils::traits::{KeyRef, MaybeStructured, Type};
+use dbutils::types::{KeyRef, MaybeStructured, Type};
 
 use crate::{allocator::WithVersion, Version};
 

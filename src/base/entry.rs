@@ -1,11 +1,11 @@
 use core::cell::OnceCell;
 
-use dbutils::traits::{KeyRef, Type};
+use dbutils::types::{KeyRef, LazyRef, Type};
 
 use crate::{
   allocator::{Allocator, Node, NodePointer, ValuePartPointer, WithTrailer, WithVersion},
   base::SkipList,
-  ty_ref, Version,
+  Version,
 };
 
 /// A versioned entry reference of the skipmap.
@@ -18,10 +18,8 @@ where
   A: Allocator,
 {
   pub(super) list: &'a SkipList<K, V, A>,
-  pub(super) raw_key: &'a [u8],
-  pub(super) key: OnceCell<K::Ref<'a>>,
-  pub(super) raw_value: Option<&'a [u8]>,
-  pub(super) value: OnceCell<V::Ref<'a>>,
+  pub(super) key: LazyRef<'a, K>,
+  pub(super) value: Option<LazyRef<'a, V>>,
   pub(super) value_part_pointer: ValuePartPointer<A::Trailer>,
   pub(super) trailer: OnceCell<&'a A::Trailer>,
   pub(super) version: Version,
@@ -55,9 +53,7 @@ where
   fn clone(&self) -> Self {
     Self {
       list: self.list,
-      raw_key: self.raw_key,
       key: self.key.clone(),
-      raw_value: self.raw_value,
       value: self.value.clone(),
       value_part_pointer: self.value_part_pointer,
       trailer: self.trailer.clone(),
@@ -97,15 +93,28 @@ where
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &K::Ref<'a> {
-    self.key.get_or_init(|| ty_ref::<K>(self.raw_key))
+    self.key.get()
+  }
+
+  /// Returns the key in raw bytes
+  #[inline]
+  pub fn raw_key(&self) -> &'a [u8] {
+    self.key.raw().expect("raw key must be available")
   }
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
   pub fn value(&self) -> Option<&V::Ref<'a>> {
+    self.value.as_deref()
+  }
+
+  /// Returns the value in raw bytes
+  #[inline]
+  pub fn raw_value(&self) -> Option<&'a [u8]> {
     self
-      .raw_value
-      .map(|raw_value| self.value.get_or_init(|| ty_ref::<V>(raw_value)))
+      .value
+      .as_ref()
+      .map(|value| value.raw().expect("raw value must be available"))
   }
 
   /// Returns if the entry is marked as removed
@@ -206,25 +215,24 @@ where
       let raw_value = node.get_value_by_value_offset(&list.arena, vp.value_offset, vp.value_len);
 
       let key = match key {
-        Some(key) => {
-          let cell = OnceCell::new();
-          let _ = cell.set(key);
-          cell
-        }
-        None => OnceCell::new(),
-      };
-
-      let raw_key = match raw_key {
-        Some(raw_key) => raw_key,
-        None => node.get_key(&list.arena),
+        Some(key) => LazyRef::with_raw(
+          key,
+          match raw_key {
+            Some(raw_key) => raw_key,
+            None => node.get_key(&list.arena),
+          },
+        ),
+        None => LazyRef::from_raw(match raw_key {
+          Some(raw_key) => raw_key,
+          None => node.get_key(&list.arena),
+        }),
       };
 
       VersionedEntryRef {
         list,
-        raw_key,
         key,
-        raw_value,
-        value: OnceCell::new(),
+        // raw_value,
+        value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
         value_part_pointer: vp,
         trailer: OnceCell::new(),
         version: node.version(),
@@ -248,25 +256,23 @@ where
         node.get_value_by_value_offset(&list.arena, pointer.value_offset, pointer.value_len);
 
       let key = match key {
-        Some(key) => {
-          let cell = OnceCell::new();
-          let _ = cell.set(key);
-          cell
-        }
-        None => OnceCell::new(),
-      };
-
-      let raw_key = match raw_key {
-        Some(raw_key) => raw_key,
-        None => node.get_key(&list.arena),
+        Some(key) => LazyRef::with_raw(
+          key,
+          match raw_key {
+            Some(raw_key) => raw_key,
+            None => node.get_key(&list.arena),
+          },
+        ),
+        None => LazyRef::from_raw(match raw_key {
+          Some(raw_key) => raw_key,
+          None => node.get_key(&list.arena),
+        }),
       };
 
       VersionedEntryRef {
         list,
-        raw_key,
         key,
-        raw_value,
-        value: OnceCell::new(),
+        value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
         value_part_pointer: pointer,
         trailer: OnceCell::new(),
         version: node.version(),
@@ -373,12 +379,24 @@ where
     self.0.key()
   }
 
+  /// Returns the key in raw bytes
+  #[inline]
+  pub fn raw_key(&self) -> &'a [u8] {
+    self.0.raw_key()
+  }
+
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
   pub fn value(&self) -> &V::Ref<'a> {
-    match self.0.value() {
-      Some(value) => value,
-      None => panic!("EntryRef's value cannot be `None`"),
-    }
+    self.0.value().expect("EntryRef's value cannot be `None`")
+  }
+
+  /// Returns the value in raw bytes
+  #[inline]
+  pub fn raw_value(&self) -> &'a [u8] {
+    self
+      .0
+      .raw_value()
+      .expect("EntryRef's raw value cannot be `None`")
   }
 }

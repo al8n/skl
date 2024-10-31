@@ -1,7 +1,7 @@
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 use arbitrary_int::{u27, u5, Number, TryNewError};
-pub use dbutils::buffer::*;
+pub use dbutils::{buffer::*, types::*};
 
 pub use super::base::{EntryRef, VersionedEntryRef};
 

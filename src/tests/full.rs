@@ -45,21 +45,27 @@ where
     let mut it = l.iter_all_versions(0);
     let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
     assert_eq!(ent.key(), b"key1".as_slice());
+    assert_eq!(ent.raw_key(), b"key1".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(1).as_slice());
+    assert_eq!(ent.raw_value().unwrap(), make_value(1).as_slice());
     assert_eq!(ent.version(), 0);
 
     let ent = it
       .seek_lower_bound(Bound::Included(b"key2".as_slice()))
       .unwrap();
     assert_eq!(ent.key(), b"key2".as_slice());
+    assert_eq!(ent.raw_key(), b"key2".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(2).as_slice());
+    assert_eq!(ent.raw_value().unwrap(), make_value(2).as_slice());
     assert_eq!(ent.version(), 0);
 
     let ent = it
       .seek_lower_bound(Bound::Included(b"key3".as_slice()))
       .unwrap();
     assert_eq!(ent.key(), b"key3".as_slice());
+    assert_eq!(ent.raw_key(), b"key3".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(3).as_slice());
+    assert_eq!(ent.raw_value().unwrap(), make_value(3).as_slice());
     assert_eq!(ent.version(), 0);
   }
 
@@ -74,12 +80,16 @@ where
       .seek_lower_bound(Bound::Included(b"a".as_slice()))
       .unwrap();
     assert_eq!(ent.key(), b"a".as_slice());
+    assert_eq!(ent.raw_key(), b"a".as_slice());
     assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
     assert_eq!(ent.key(), b"a".as_slice());
+    assert_eq!(ent.raw_key(), b"a".as_slice());
     assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
   }
 
@@ -92,17 +102,23 @@ where
     let mut it = l.iter_all_versions(2);
     let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
     assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.raw_key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
     assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.raw_key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
 
     let ent = it.head().unwrap();
     assert_eq!(ent.key(), b"b");
+    assert_eq!(ent.raw_key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
+    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
   }
 

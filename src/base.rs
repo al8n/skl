@@ -6,7 +6,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
-  traits::{KeyRef, MaybeStructured, Type},
+  types::{KeyRef, MaybeStructured, Type},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;

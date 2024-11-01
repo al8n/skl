@@ -4,8 +4,6 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("sync_map": SkipMap<[u8], [u8]>);
-
   __map_tests!("sync_map": SkipMap<[u8], [u8]>);
 }
 
@@ -60,11 +58,13 @@ node!(
   /// A raw node that does not support version and trailer.
   struct RawNode {{
     type Link = Link;
-    type Trailer = ();
+
     type ValuePointer = AtomicValuePointer;
     type Pointer = NodePointer;
 
     fn set_version(&mut self, version: Version) {}
+
+    impl WithoutVersion for RawNode {}
 
     node_pointer!(RawNode {{
       fn version(&self) -> Version {

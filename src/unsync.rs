@@ -478,14 +478,8 @@ macro_rules! node_pointer {
   };
 }
 
-/// A lock free ARENA based skiplist. See [`SkipList`](base::SkipList) for more information.
-pub mod full;
-
-/// A skipmap implementation with version support. See [`SkipMap`](versioned::SkipMap) for more information.
-pub mod versioned;
-
-/// A skipmap implementation with trailer support. See [`SkipMap`](trailed::SkipMap) for more information.
-pub mod trailed;
+/// A skipmap implementation with version support. See [`SkipMap`](multiple_version::SkipMap) for more information.
+pub mod multiple_version;
 
 /// A skipmap implementation without trailer and version support. See [`SkipMap`](map::SkipMap) for more information.
 pub mod map;

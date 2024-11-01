@@ -4,8 +4,6 @@ use super::*;
 mod tests {
   use super::*;
 
-  __container_tests!("unsync_versioned_map": SkipMap<[u8], [u8]>);
-
   __versioned_map_tests!("unsync_versioned_map": SkipMap<[u8], [u8]>);
 }
 
@@ -37,7 +35,7 @@ node!(
 
     {
       type Link = Link;
-      type Trailer = ();
+
       type ValuePointer = UnsyncValuePointer;
       type Pointer = NodePointer;
 
@@ -62,7 +60,7 @@ node!(
 
 /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
 ///
-/// If you want to use in concurrent environment, you can use [`sync::versioned::SkipMap`].
+/// If you want to use in concurrent environment, you can use [`sync::multiple_version::SkipMap`].
 #[repr(transparent)]
 pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 

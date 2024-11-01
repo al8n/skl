@@ -167,8 +167,8 @@ where
   fn next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
-        Some(head) => self.map.get_next(head.ptr, 0, !self.all_versions),
-        None => self.map.get_next(self.map.head, 0, !self.all_versions),
+        Some(head) => self.map.get_next(head.ptr, 0),
+        None => self.map.get_next(self.map.head, 0),
       };
 
       let next_head = if self.all_versions {
@@ -215,8 +215,8 @@ where
   fn prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
-        Some(tail) => self.map.get_prev(tail.ptr, 0, !self.all_versions),
-        None => self.map.get_prev(self.map.tail, 0, !self.all_versions),
+        Some(tail) => self.map.get_prev(tail.ptr, 0),
+        None => self.map.get_prev(self.map.tail, 0),
       };
 
       let next_tail = if self.all_versions {
@@ -262,19 +262,19 @@ where
   fn range_next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
-        Some(head) => self.map.get_next(head.ptr, 0, !self.all_versions),
+        Some(head) => self.map.get_next(head.ptr, 0),
         None => match self.range.as_ref().unwrap().start_bound() {
           Bound::Included(key) => self
             .map
-            .find_near(self.version, key, false, true, !self.all_versions)
+            .find_near(self.version, key, false, true)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
           Bound::Excluded(key) => self
             .map
-            .find_near(Version::MIN, key, false, false, !self.all_versions)
+            .find_near(Version::MIN, key, false, false)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
-          Bound::Unbounded => self.map.get_next(self.map.head, 0, !self.all_versions),
+          Bound::Unbounded => self.map.get_next(self.map.head, 0),
         },
       };
 
@@ -320,19 +320,19 @@ where
   fn range_prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
-        Some(tail) => self.map.get_prev(tail.ptr, 0, !self.all_versions),
+        Some(tail) => self.map.get_prev(tail.ptr, 0),
         None => match self.range.as_ref().unwrap().end_bound() {
           Bound::Included(key) => self
             .map
-            .find_near(Version::MIN, key, true, true, !self.all_versions)
+            .find_near(Version::MIN, key, true, true)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
           Bound::Excluded(key) => self
             .map
-            .find_near(self.version, key, true, false, !self.all_versions)
+            .find_near(self.version, key, true, false)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
-          Bound::Unbounded => self.map.get_prev(self.map.tail, 0, !self.all_versions),
+          Bound::Unbounded => self.map.get_prev(self.map.tail, 0),
         },
       };
 
@@ -443,9 +443,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(self.version, key, false, true, !self.all_versions);
+      let (n, _) = self.map.find_near(self.version, key, false, true);
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.tail.offset() {
@@ -482,9 +480,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(Version::MIN, key, false, false, !self.all_versions);
+      let (n, _) = self.map.find_near(Version::MIN, key, false, false);
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.tail.offset() {
@@ -521,9 +517,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(Version::MIN, key, true, true, !self.all_versions); // find less or equal.
+      let (n, _) = self.map.find_near(Version::MIN, key, true, true); // find less or equal.
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.head.offset() {
@@ -560,9 +554,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(self.version, key, true, false, !self.all_versions); // find less or equal.
+      let (n, _) = self.map.find_near(self.version, key, true, false); // find less or equal.
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.head.offset() {

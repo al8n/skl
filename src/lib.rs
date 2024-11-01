@@ -31,11 +31,7 @@ mod options;
 pub use options::*;
 
 mod traits;
-pub use traits::{
-  full, map, trailed,
-  trailer::{self, Trailer},
-  versioned, Arena, Container, VersionedContainer,
-};
+pub use traits::{map, multiple_version, Arena};
 
 mod types;
 pub use types::*;
@@ -81,20 +77,6 @@ const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
-const DANGLING_ZST: NonNull<()> = NonNull::dangling();
-
-/// ## Safety
-/// - `T` must be a ZST.
-#[inline]
-const unsafe fn dangling_zst_ref<'a, T>() -> &'a T {
-  #[cfg(debug_assertions)]
-  if core::mem::size_of::<T>() != 0 {
-    panic!("`T` must be a ZST");
-  }
-
-  // Safety: T is ZST, so it's safe to cast and deref.
-  unsafe { &*(DANGLING_ZST.as_ptr() as *const T) }
-}
 
 /// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]
@@ -187,8 +169,6 @@ macro_rules! node {
       {
         type Link = $link:ty;
 
-        type Trailer = $trailer:ty;
-
         type ValuePointer = $value_pointer:ty;
 
         type Pointer = $pointer:ty;
@@ -251,8 +231,6 @@ macro_rules! node {
 
     impl $(<$generic: $crate::Trailer>)? $crate::allocator::Node for $name $(<$generic>)? {
       type Link = $link;
-
-      type Trailer = $trailer;
 
       type ValuePointer = $value_pointer;
 

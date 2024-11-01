@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.18.6"
+version = "0.19.0"
 edition = "2021"
 rust-version = "1.81.0"
 repository = "https://github.com/al8n/skl"
@@ -53,9 +53,7 @@ rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 rarena-allocator = { version = "0.4", default-features = false }
 viewit = "0.1.5"
 paste = "1"
-zerocopy = { version = "0.8", features = ["derive"] }
 
-time = { version = "0.3", optional = true, features = ["std"] }
 tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]
@@ -86,24 +84,14 @@ rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(all_tests)',
-  'cfg(test_unsync_full)',
   'cfg(test_unsync_versioned)',
-  'cfg(test_unsync_trailed)',
   'cfg(test_unsync_map)',
-  'cfg(test_sync_full)',
   'cfg(test_sync_versioned)',
-  'cfg(test_sync_trailed)',
   'cfg(test_sync_map)',
-  'cfg(test_sync_full_concurrent)',
   'cfg(test_sync_versioned_concurrent)',
-  'cfg(test_sync_trailed_concurrent)',
   'cfg(test_sync_map_concurrent)',
-  'cfg(test_sync_full_concurrent_with_optimistic_freelist)',
   'cfg(test_sync_versioned_concurrent_with_optimistic_freelist)',
-  'cfg(test_sync_trailed_concurrent_with_optimistic_freelist)',
   'cfg(test_sync_map_concurrent_with_optimistic_freelist)',
-  'cfg(test_sync_full_concurrent_with_pessimistic_freelist)',
   'cfg(test_sync_versioned_concurrent_with_pessimistic_freelist)',
-  'cfg(test_sync_trailed_concurrent_with_pessimistic_freelist)',
   'cfg(test_sync_map_concurrent_with_pessimistic_freelist)', 
 ] }

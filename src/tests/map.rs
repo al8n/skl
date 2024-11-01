@@ -4,15 +4,58 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{map::Map, KeyBuilder, ValueBuilder};
+use crate::{allocator::WithoutVersion, map::Map, KeyBuilder, ValueBuilder};
 
 use super::*;
+
+pub(crate) fn empty<M>(l: M)
+where
+  M: Map<[u8], [u8]>,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
+{
+  let mut it = l.iter();
+
+  assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
+  assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
+  assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
+  assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
+  assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
+  assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
+  assert!(l.first().is_none());
+  assert!(l.last().is_none());
+
+  assert!(l.get(b"aaa".as_slice()).is_none());
+  assert!(!l.contains_key(b"aaa".as_slice()));
+  assert!(l.allocated() > 0);
+  assert!(l.capacity() > 0);
+  assert_eq!(l.remaining(), l.capacity() - l.allocated());
+}
+
+pub(crate) fn full<M>(l: M)
+where
+  M: Map<[u8], [u8]>,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
+{
+  let mut found_arena_full = false;
+
+  for i in 0..100 {
+    if let Err(e) = l.get_or_insert(make_int_key(i).as_slice(), make_value(i).as_slice()) {
+      assert!(matches!(
+        e.unwrap_right(),
+        Error::Arena(ArenaError::InsufficientSpace { .. })
+      ));
+      found_arena_full = true;
+      break;
+    }
+  }
+
+  assert!(found_arena_full);
+}
 
 pub(crate) fn basic<M>(mut l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   // Try adding values.
   l.get_or_insert(b"key1".as_slice(), make_value(1).as_slice())
@@ -100,8 +143,7 @@ where
 pub(crate) fn get<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
   l.get_or_insert(b"a".as_slice(), b"a2".as_slice()).unwrap();
@@ -146,8 +188,7 @@ where
 pub(crate) fn gt<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
   l.get_or_insert(b"a".as_slice(), b"a2".as_slice()).unwrap();
@@ -185,8 +226,7 @@ where
 pub(crate) fn ge<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
   l.get_or_insert(b"a".as_slice(), b"a2".as_slice()).unwrap();
@@ -233,8 +273,7 @@ where
 pub(crate) fn le<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
   l.get_or_insert(b"a".as_slice(), b"a2".as_slice()).unwrap();
@@ -265,8 +304,7 @@ where
 pub(crate) fn lt<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
   l.get_or_insert(b"a".as_slice(), b"a2".as_slice()).unwrap();
@@ -294,8 +332,7 @@ where
 pub(crate) fn basic_large<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let n = 1000;
 
@@ -328,8 +365,7 @@ where
 pub(crate) fn concurrent_basic<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone + Send + 'static,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
   const N: usize = 1000;
@@ -375,8 +411,7 @@ where
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone + Send + 'static,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
   const N: usize = 1000;
@@ -432,8 +467,7 @@ where
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone + Send + 'static,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
   const N: usize = 1000;
@@ -480,8 +514,7 @@ where
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone + Send + 'static,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use std::sync::Arc;
 
@@ -542,8 +575,7 @@ where
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone + Send + 'static,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use std::sync::Arc;
 
@@ -594,8 +626,7 @@ where
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -620,7 +651,7 @@ where
 pub(crate) fn range_next<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -644,8 +675,7 @@ where
 pub(crate) fn iter_all_versions_prev<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -670,8 +700,7 @@ where
 pub(crate) fn range_prev<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -693,8 +722,7 @@ where
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -749,8 +777,7 @@ where
 pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -791,8 +818,7 @@ where
 pub(crate) fn range<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 1..10 {
     l.get_or_insert(make_int_key(i).as_slice(), make_value(i).as_slice())
@@ -887,8 +913,7 @@ where
 pub(crate) fn iter_latest<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -922,8 +947,7 @@ where
 pub(crate) fn range_latest<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
 
@@ -958,8 +982,7 @@ where
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::Options;
 
@@ -1001,8 +1024,7 @@ where
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::Options;
 
@@ -1058,8 +1080,7 @@ where
 pub(crate) fn reopen_mmap3<M>(prefix: &str)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::Options;
 
@@ -1111,8 +1132,7 @@ impl Person {
 pub(crate) fn get_or_insert_with_value<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
     id: 1,
@@ -1147,8 +1167,7 @@ where
 pub(crate) fn get_or_insert_with<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
     id: 1,
@@ -1187,8 +1206,7 @@ where
 pub(crate) fn insert<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let k = 0u64.to_le_bytes();
   for i in 0..100 {
@@ -1208,8 +1226,7 @@ where
 pub(crate) fn insert_with_value<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
     id: 1,
@@ -1280,8 +1297,7 @@ where
 pub(crate) fn insert_with<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
     id: 1,
@@ -1352,8 +1368,7 @@ where
 pub(crate) fn get_or_remove<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 0..100 {
     let v = new_value(i);
@@ -1382,8 +1397,7 @@ where
 pub(crate) fn remove<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 0..100 {
     let v = new_value(i);
@@ -1411,8 +1425,7 @@ where
 pub(crate) fn remove2<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
-
-  <M::Allocator as Sealed>::Trailer: Default,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 0..100 {
     let v = new_value(i);
@@ -1442,6 +1455,7 @@ where
 macro_rules! __map_tests {
   ($prefix:literal: $ty:ty) => {
     __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+      empty,
       basic,
       #[cfg(not(miri))]
       basic_large,
@@ -1467,6 +1481,10 @@ macro_rules! __map_tests {
       ge,
       lt,
       le,
+    });
+
+    __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
+      full,
     });
 
     #[test]

@@ -1,9 +1,7 @@
-use core::cell::OnceCell;
-
 use dbutils::types::{KeyRef, LazyRef, Type};
 
 use crate::{
-  allocator::{Allocator, Node, NodePointer, ValuePartPointer, WithTrailer, WithVersion},
+  allocator::{Allocator, Node, NodePointer, ValuePartPointer, WithVersion},
   base::SkipList,
   Version,
 };
@@ -20,8 +18,7 @@ where
   pub(super) list: &'a SkipList<K, V, A>,
   pub(super) key: LazyRef<'a, K>,
   pub(super) value: Option<LazyRef<'a, V>>,
-  pub(super) value_part_pointer: ValuePartPointer<A::Trailer>,
-  pub(super) trailer: OnceCell<&'a A::Trailer>,
+  pub(super) value_part_pointer: ValuePartPointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
@@ -56,30 +53,9 @@ where
       key: self.key.clone(),
       value: self.value.clone(),
       value_part_pointer: self.value_part_pointer,
-      trailer: self.trailer.clone(),
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
-    }
-  }
-}
-
-impl<'a, K, V, A> VersionedEntryRef<'a, K, V, A>
-where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  A: Allocator,
-  A::Node: WithTrailer,
-{
-  /// Returns the trailer of the entry
-  #[inline]
-  pub fn trailer(&self) -> &'a A::Trailer {
-    unsafe {
-      self.trailer.get_or_init(|| {
-        self
-          .ptr
-          .get_trailer_by_offset(&self.list.arena, self.value_part_pointer.trailer_offset)
-      })
     }
   }
 }
@@ -134,27 +110,27 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(true, false)
+    self.next_in(true)
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(true, false)
+    self.prev_in(true)
   }
 
-  fn next_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
+  fn next_in(&self, all_versions: bool) -> Option<Self> {
     let mut nd = self.ptr;
     if all_versions {
       unsafe {
-        nd = self.list.get_next(nd, 0, ignore_invalid_trailer);
+        nd = self.list.get_next(nd, 0);
         self
           .list
           .move_to_next(&mut nd, self.query_version, |_| true)
       }
     } else {
       unsafe {
-        nd = self.list.get_next(nd, 0, ignore_invalid_trailer);
+        nd = self.list.get_next(nd, 0);
         self
           .list
           .move_to_next_maximum_version(&mut nd, self.query_version, |_| true)
@@ -162,18 +138,18 @@ where
     }
   }
 
-  fn prev_in(&self, all_versions: bool, ignore_invalid_trailer: bool) -> Option<Self> {
+  fn prev_in(&self, all_versions: bool) -> Option<Self> {
     let mut nd = self.ptr;
     if all_versions {
       unsafe {
-        nd = self.list.get_prev(nd, 0, ignore_invalid_trailer);
+        nd = self.list.get_prev(nd, 0);
         self
           .list
           .move_to_prev(&mut nd, self.query_version, |_| true)
       }
     } else {
       unsafe {
-        nd = self.list.get_prev(nd, 0, ignore_invalid_trailer);
+        nd = self.list.get_prev(nd, 0);
         self
           .list
           .move_to_prev_maximum_version(&mut nd, self.query_version, |_| true)
@@ -211,8 +187,7 @@ where
     key: Option<K::Ref<'a>>,
   ) -> VersionedEntryRef<'a, K, V, A> {
     unsafe {
-      let vp = node.trailer_offset_and_value_size();
-      let raw_value = node.get_value_by_value_offset(&list.arena, vp.value_offset, vp.value_len);
+      let (raw_value, vp) = node.get_value_with_pointer(&list.arena);
 
       let key = match key {
         Some(key) => LazyRef::with_raw(
@@ -231,10 +206,8 @@ where
       VersionedEntryRef {
         list,
         key,
-        // raw_value,
         value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
         value_part_pointer: vp,
-        trailer: OnceCell::new(),
         version: node.version(),
         query_version,
         ptr: node,
@@ -247,7 +220,7 @@ where
     query_version: Version,
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<K, V, A>,
-    pointer: ValuePartPointer<A::Trailer>,
+    pointer: ValuePartPointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
   ) -> VersionedEntryRef<'a, K, V, A> {
@@ -274,7 +247,6 @@ where
         key,
         value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
         value_part_pointer: pointer,
-        trailer: OnceCell::new(),
         version: node.version(),
         query_version,
         ptr: node,
@@ -319,20 +291,6 @@ where
   }
 }
 
-impl<'a, K, V, A> EntryRef<'a, K, V, A>
-where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  A: Allocator,
-  A::Node: WithTrailer,
-{
-  /// Returns the trailer of the entry
-  #[inline]
-  pub fn trailer(&'a self) -> &'a A::Trailer {
-    self.0.trailer()
-  }
-}
-
 impl<'a, K, V, A: Allocator> EntryRef<'a, K, V, A>
 where
   K: ?Sized + Type,
@@ -343,13 +301,13 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.0.next_in(false, true).map(Self)
+    self.0.next_in(false).map(Self)
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.0.prev_in(false, true).map(Self)
+    self.0.prev_in(false).map(Self)
   }
 }
 

@@ -149,8 +149,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
       + mem::size_of::<A::Node>()
       + mem::size_of::<<A::Node as Node>::Link>() * height
       + key_size
-      + mem::align_of::<A::Trailer>() - 1 // max trailer padding
-      + mem::size_of::<A::Trailer>()
       + value_size
   }
 
@@ -288,11 +286,11 @@ where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
       let node_key = node.get_key(&self.arena);
-      let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
+      let (value, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return value.map(|_| {
           EntryRef(VersionedEntryRef::from_node_with_pointer(
@@ -339,11 +337,11 @@ where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
       let node_key = node.get_key(&self.arena);
-      let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
+      let (_, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
           version,

@@ -13,14 +13,14 @@ use super::*;
 /// [`Map`] implementation for concurrent environment.
 pub mod sync {
   pub use crate::sync::multiple_version::{
-    IterAll, RangeAll, Entry, Iter, Range, SkipMap, VersionedEntry,
+    Entry, Iter, IterAll, Range, RangeAll, SkipMap, VersionedEntry,
   };
 }
 
 /// [`Map`] implementation for non-concurrent environment.
 pub mod unsync {
   pub use crate::unsync::multiple_version::{
-    IterAll, RangeAll, Entry, Iter, Range, SkipMap, VersionedEntry,
+    Entry, Iter, IterAll, Range, RangeAll, SkipMap, VersionedEntry,
   };
 }
 

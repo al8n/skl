@@ -7,7 +7,7 @@ mod tests {
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_map_concurrent,))]
 mod concurrent_tests {
-  crate::__map_tests!(go "sync_map_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
+  crate::__map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
 }
 
 #[cfg(any(
@@ -16,7 +16,7 @@ mod concurrent_tests {
   test_sync_map_concurrent_with_optimistic_freelist,
 ))]
 mod concurrent_tests_with_optimistic_freelist {
-  crate::__map_tests!(go "sync_map_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  crate::__map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
 }
 
 #[cfg(any(
@@ -25,7 +25,7 @@ mod concurrent_tests_with_optimistic_freelist {
   test_sync_map_concurrent_with_pessimistic_freelist,
 ))]
 mod concurrent_tests_with_pessimistic_freelist {
-  crate::__map_tests!(go "sync_map_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  crate::__map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
@@ -38,10 +38,10 @@ pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
 pub type Range<'a, K, V, Q, R> = crate::iter::Iter<'a, K, V, Allocator, Q, R>;
 
 /// Iterator over the [`SkipMap`].
-pub type AllVersionsIter<'a, K, V> = crate::iter::AllVersionsIter<'a, K, V, Allocator>;
+pub type IterAll<'a, K, V> = crate::iter::IterAll<'a, K, V, Allocator>;
 
 /// Iterator over a subset of the [`SkipMap`].
-pub type AllVersionsRange<'a, K, V, Q, R> = crate::iter::AllVersionsIter<'a, K, V, Allocator, Q, R>;
+pub type RangeAll<'a, K, V, Q, R> = crate::iter::IterAll<'a, K, V, Allocator, Q, R>;
 
 /// The entry reference of the [`SkipMap`].
 pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;

@@ -9,12 +9,12 @@ use super::*;
 
 /// [`Map`] implementation for concurrent environment.
 pub mod sync {
-  pub use crate::sync::map::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap};
+  pub use crate::sync::map::{IterAll, RangeAll, Entry, Iter, Range, SkipMap};
 }
 
 /// [`Map`] implementation for non-concurrent environment.
 pub mod unsync {
-  pub use crate::unsync::map::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap};
+  pub use crate::unsync::map::{IterAll, RangeAll, Entry, Iter, Range, SkipMap};
 }
 
 /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.

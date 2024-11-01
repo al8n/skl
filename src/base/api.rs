@@ -414,11 +414,11 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::AllVersionsIter<'a, K, V, A>
+  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::IterAll<'a, K, V, A>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    iterator::AllVersionsIter::new(version, self, true)
+    iterator::IterAll::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
@@ -438,12 +438,12 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> iterator::AllVersionsIter<'a, K, V, A, Q, R>
+  ) -> iterator::IterAll<'a, K, V, A, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     R: RangeBounds<Q>,
   {
-    iterator::AllVersionsIter::range(version, self, range, true)
+    iterator::IterAll::range(version, self, range, true)
   }
 }

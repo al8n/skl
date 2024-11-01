@@ -6,21 +6,21 @@ use dbutils::{
 };
 
 use super::{AllocatorSealed, Arena, EntryRef, Iter, VersionedEntryRef};
-use crate::{allocator::WithVersion, iter::AllVersionsIter, Version};
+use crate::{allocator::WithVersion, iter::IterAll, Version};
 
 use super::*;
 
 /// [`Map`] implementation for concurrent environment.
 pub mod sync {
   pub use crate::sync::multiple_version::{
-    AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+    IterAll, RangeAll, Entry, Iter, Range, SkipMap, VersionedEntry,
   };
 }
 
 /// [`Map`] implementation for non-concurrent environment.
 pub mod unsync {
   pub use crate::unsync::multiple_version::{
-    AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap, VersionedEntry,
+    IterAll, RangeAll, Entry, Iter, Range, SkipMap, VersionedEntry,
   };
 }
 
@@ -373,7 +373,7 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  fn iter_all_versions<'a>(&'a self, version: Version) -> AllVersionsIter<'a, K, V, Self::Allocator>
+  fn iter_all_versions<'a>(&'a self, version: Version) -> IterAll<'a, K, V, Self::Allocator>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -401,7 +401,7 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> AllVersionsIter<'a, K, V, Self::Allocator, Q, R>
+  ) -> IterAll<'a, K, V, Self::Allocator, Q, R>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,

@@ -38,7 +38,7 @@ pub use dbutils::equivalent::*;
 
 /// Iterators for the skipmaps.
 pub mod iter {
-  pub use super::base::iterator::{AllVersionsIter, Iter};
+  pub use super::base::iterator::{IterAll, Iter};
 }
 
 #[cfg(any(

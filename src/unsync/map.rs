@@ -18,10 +18,10 @@ pub type Range<'a, K, V, Q, R> = crate::iter::Iter<'a, K, V, Allocator, Q, R>;
 pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
-pub type AllVersionsIter<'a, K, V> = crate::iter::AllVersionsIter<'a, K, V, Allocator>;
+pub type IterAll<'a, K, V> = crate::iter::IterAll<'a, K, V, Allocator>;
 
 /// Iterator over a subset of the [`SkipMap`].
-pub type AllVersionsRange<'a, K, V, Q, R> = crate::iter::AllVersionsIter<'a, K, V, Allocator, Q, R>;
+pub type RangeAll<'a, K, V, Q, R> = crate::iter::IterAll<'a, K, V, Allocator, Q, R>;
 
 node!(
   /// A raw node that does not support version and trailer.

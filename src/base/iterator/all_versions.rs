@@ -9,9 +9,9 @@ use crate::allocator::Node;
 
 use super::super::{Allocator, NodePointer, SkipList, Version, VersionedEntryRef};
 
-/// An iterator over the skipmap. The current state of the iterator can be cloned by
+/// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct AllVersionsIter<'a, K, V, A, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
+pub struct IterAll<'a, K, V, A, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
 where
   A: Allocator,
   K: ?Sized + Type,
@@ -27,7 +27,7 @@ where
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, K, V, A, Q, R: Clone> Clone for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R: Clone> Clone for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
@@ -48,7 +48,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R: Copy> Copy for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R: Copy> Copy for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Copy,
@@ -59,7 +59,7 @@ where
 {
 }
 
-impl<'a, K, V, A> AllVersionsIter<'a, K, V, A>
+impl<'a, K, V, A> IterAll<'a, K, V, A>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -84,7 +84,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -111,7 +111,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -153,7 +153,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -376,7 +376,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -601,7 +601,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> Iterator for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> Iterator for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -626,7 +626,7 @@ where
   where
     Self: Sized,
   {
-    AllVersionsIter::last(&mut self)
+    IterAll::last(&mut self)
   }
 
   #[inline]
@@ -648,7 +648,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> DoubleEndedIterator for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> DoubleEndedIterator for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,

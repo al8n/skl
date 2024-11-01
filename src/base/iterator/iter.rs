@@ -7,13 +7,13 @@ use dbutils::{
 
 use super::{
   super::{Allocator, EntryRef, SkipList, Version},
-  AllVersionsIter,
+  IterAll,
 };
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
 pub struct Iter<'a, K, V, A: Allocator, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>(
-  AllVersionsIter<'a, K, V, A, Q, R>,
+  IterAll<'a, K, V, A, Q, R>,
 )
 where
   A: Allocator,
@@ -42,7 +42,7 @@ where
 {
   #[inline]
   pub(crate) const fn new(version: Version, map: &'a SkipList<K, V, A>) -> Self {
-    Self(AllVersionsIter::new(version, map, false))
+    Self(IterAll::new(version, map, false))
   }
 }
 
@@ -56,7 +56,7 @@ where
 {
   #[inline]
   pub(crate) fn range(version: Version, map: &'a SkipList<K, V, A>, r: R) -> Self {
-    Self(AllVersionsIter::range(version, map, r, false))
+    Self(IterAll::range(version, map, r, false))
   }
 }
 

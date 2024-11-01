@@ -591,9 +591,9 @@ mod sealed {
 
     fn magic_version(&self) -> u16;
 
-    fn max_version(&self) -> u64;
+    fn maximum_version(&self) -> u64;
 
-    fn min_version(&self) -> u64;
+    fn minimum_version(&self) -> u64;
 
     fn height(&self) -> u8;
 
@@ -601,9 +601,9 @@ mod sealed {
 
     fn increase_len(&self);
 
-    fn update_max_version(&self, version: u64);
+    fn update_maximum_version(&self, version: u64);
 
-    fn update_min_version(&self, version: u64);
+    fn update_minimum_version(&self, version: u64);
 
     fn compare_exchange_height_weak(
       &self,

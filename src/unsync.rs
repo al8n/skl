@@ -13,9 +13,9 @@ use super::{
 #[repr(C)]
 pub struct VersionedMeta {
   /// The maximum MVCC version of the skiplist.
-  max_version: UnsafeCell<u64>,
+  maximum_version: UnsafeCell<u64>,
   /// The minimum MVCC version of the skiplist.
-  min_version: UnsafeCell<u64>,
+  minimum_version: UnsafeCell<u64>,
   len: UnsafeCell<u32>,
   magic_version: u16,
   /// Current height. 1 <= height <= 31.
@@ -27,8 +27,8 @@ impl Header for VersionedMeta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
-      max_version: UnsafeCell::new(0),
-      min_version: UnsafeCell::new(0),
+      maximum_version: UnsafeCell::new(0),
+      minimum_version: UnsafeCell::new(0),
       magic_version: version,
       height: UnsafeCell::new(1),
       len: UnsafeCell::new(0),
@@ -42,13 +42,13 @@ impl Header for VersionedMeta {
   }
 
   #[inline]
-  fn max_version(&self) -> u64 {
-    unsafe { *self.max_version.get() }
+  fn maximum_version(&self) -> u64 {
+    unsafe { *self.maximum_version.get() }
   }
 
   #[inline]
-  fn min_version(&self) -> u64 {
-    unsafe { *self.min_version.get() }
+  fn minimum_version(&self) -> u64 {
+    unsafe { *self.minimum_version.get() }
   }
 
   #[inline]
@@ -68,20 +68,20 @@ impl Header for VersionedMeta {
     }
   }
 
-  fn update_max_version(&self, version: Version) {
+  fn update_maximum_version(&self, version: Version) {
     unsafe {
-      let current = *self.max_version.get();
+      let current = *self.maximum_version.get();
       if version > current {
-        *self.max_version.get() = version;
+        *self.maximum_version.get() = version;
       }
     }
   }
 
-  fn update_min_version(&self, version: Version) {
+  fn update_minimum_version(&self, version: Version) {
     unsafe {
-      let current = *self.min_version.get();
+      let current = *self.minimum_version.get();
       if version < current {
-        *self.min_version.get() = version;
+        *self.minimum_version.get() = version;
       }
     }
   }
@@ -134,12 +134,12 @@ impl Header for Meta {
   }
 
   #[inline]
-  fn max_version(&self) -> u64 {
+  fn maximum_version(&self) -> u64 {
     MIN_VERSION
   }
 
   #[inline]
-  fn min_version(&self) -> u64 {
+  fn minimum_version(&self) -> u64 {
     MIN_VERSION
   }
 
@@ -160,9 +160,9 @@ impl Header for Meta {
     }
   }
 
-  fn update_max_version(&self, _: Version) {}
+  fn update_maximum_version(&self, _: Version) {}
 
-  fn update_min_version(&self, _: Version) {}
+  fn update_minimum_version(&self, _: Version) {}
 
   #[inline]
   fn compare_exchange_height_weak(

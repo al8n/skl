@@ -1455,8 +1455,8 @@ where
           .unwrap();
       }
       l.flush_async().unwrap();
-      assert_eq!(l.max_version(), 999);
-      assert_eq!(l.min_version(), 0);
+      assert_eq!(l.maximum_version(), 999);
+      assert_eq!(l.minimum_version(), 0);
 
       for i in data {
         let k = key(i);
@@ -1483,8 +1483,8 @@ where
       assert_eq!(ent.version(), i as u64);
       assert_eq!(ent.key(), k.as_slice());
     }
-    assert_eq!(l.max_version(), 999);
-    assert_eq!(l.min_version(), 0);
+    assert_eq!(l.maximum_version(), 999);
+    assert_eq!(l.minimum_version(), 0);
   }
 }
 

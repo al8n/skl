@@ -178,7 +178,7 @@ where
       } else {
         self
           .map
-          .move_to_next_max_version(&mut next_head, self.version, |nk| {
+          .move_to_next_maximum_version(&mut next_head, self.version, |nk| {
             if let Some(ref head) = self.head {
               head.key().ne(nk) && self.check_bounds(nk)
             } else {
@@ -226,7 +226,7 @@ where
       } else {
         self
           .map
-          .move_to_prev_max_version(&mut next_tail, self.version, |nk| {
+          .move_to_prev_maximum_version(&mut next_tail, self.version, |nk| {
             if let Some(ref tail) = self.tail {
               tail.key().ne(nk) && self.check_bounds(nk)
             } else {
@@ -285,7 +285,7 @@ where
       } else {
         self
           .map
-          .move_to_next_max_version(&mut next_head, self.version, |nk| {
+          .move_to_next_maximum_version(&mut next_head, self.version, |nk| {
             if let Some(ref head) = self.head {
               head.key().ne(nk) && self.check_bounds(nk)
             } else {
@@ -343,7 +343,7 @@ where
       } else {
         self
           .map
-          .move_to_prev_max_version(&mut next_tail, self.version, |nk| {
+          .move_to_prev_maximum_version(&mut next_tail, self.version, |nk| {
             if let Some(ref tail) = self.tail {
               tail.key().ne(nk) && self.check_bounds(nk)
             } else {
@@ -463,7 +463,7 @@ where
       } else {
         self
           .map
-          .move_to_next_max_version(&mut n, self.version, |nk| {
+          .move_to_next_maximum_version(&mut n, self.version, |nk| {
             if let Some(ref range) = self.range {
               range.compare_contains(nk)
             } else {
@@ -502,7 +502,7 @@ where
       } else {
         self
           .map
-          .move_to_next_max_version(&mut n, self.version, |nk| {
+          .move_to_next_maximum_version(&mut n, self.version, |nk| {
             if let Some(ref range) = self.range {
               range.compare_contains(nk)
             } else {
@@ -541,7 +541,7 @@ where
       } else {
         self
           .map
-          .move_to_prev_max_version(&mut n, self.version, |nk| {
+          .move_to_prev_maximum_version(&mut n, self.version, |nk| {
             if let Some(ref range) = self.range {
               range.compare_contains(nk)
             } else {
@@ -580,7 +580,7 @@ where
       } else {
         self
           .map
-          .move_to_prev_max_version(&mut n, self.version, |nk| self.check_bounds(nk))
+          .move_to_prev_maximum_version(&mut n, self.version, |nk| self.check_bounds(nk))
       }
     }
   }

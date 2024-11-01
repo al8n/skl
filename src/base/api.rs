@@ -115,14 +115,20 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
 
   /// Returns the maximum version of all entries in the map.
   #[inline]
-  pub fn max_version(&self) -> u64 {
-    self.meta().max_version()
+  pub fn maximum_version(&self) -> u64 {
+    self.meta().maximum_version()
   }
 
   /// Returns the minimum version of all entries in the map.
   #[inline]
-  pub fn min_version(&self) -> u64 {
-    self.meta().min_version()
+  pub fn minimum_version(&self) -> u64 {
+    self.meta().minimum_version()
+  }
+
+  /// Returns `true` if the map may contain an entry whose version is less or equal to the given version.
+  #[inline]
+  pub fn may_contain_version(&self, version: Version) -> bool {
+    self.minimum_version() <= version
   }
 
   /// Returns a random generated height.

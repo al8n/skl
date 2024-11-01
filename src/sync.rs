@@ -11,9 +11,9 @@ use super::{
 #[repr(C)]
 pub struct VersionedMeta {
   /// The maximum MVCC version of the skiplist. CAS.
-  max_version: AtomicU64,
+  maximum_version: AtomicU64,
   /// The minimum MVCC version of the skiplist. CAS.
-  min_version: AtomicU64,
+  minimum_version: AtomicU64,
   len: AtomicU32,
   magic_version: u16,
   /// Current height. 1 <= height <= 31. CAS.
@@ -25,8 +25,8 @@ impl Header for VersionedMeta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
-      max_version: AtomicU64::new(0),
-      min_version: AtomicU64::new(0),
+      maximum_version: AtomicU64::new(0),
+      minimum_version: AtomicU64::new(0),
       magic_version: version,
       height: AtomicU8::new(1),
       len: AtomicU32::new(0),
@@ -40,13 +40,13 @@ impl Header for VersionedMeta {
   }
 
   #[inline]
-  fn max_version(&self) -> u64 {
-    self.max_version.load(Ordering::Acquire)
+  fn maximum_version(&self) -> u64 {
+    self.maximum_version.load(Ordering::Acquire)
   }
 
   #[inline]
-  fn min_version(&self) -> u64 {
-    self.min_version.load(Ordering::Acquire)
+  fn minimum_version(&self) -> u64 {
+    self.minimum_version.load(Ordering::Acquire)
   }
 
   #[inline]
@@ -64,14 +64,14 @@ impl Header for VersionedMeta {
     self.len.fetch_add(1, Ordering::Release);
   }
 
-  fn update_max_version(&self, version: Version) {
-    let mut current = self.max_version.load(Ordering::Acquire);
+  fn update_maximum_version(&self, version: Version) {
+    let mut current = self.maximum_version.load(Ordering::Acquire);
     loop {
       if version <= current {
         return;
       }
 
-      match self.max_version.compare_exchange_weak(
+      match self.maximum_version.compare_exchange_weak(
         current,
         version,
         Ordering::SeqCst,
@@ -83,14 +83,14 @@ impl Header for VersionedMeta {
     }
   }
 
-  fn update_min_version(&self, version: Version) {
-    let mut current = self.min_version.load(Ordering::Acquire);
+  fn update_minimum_version(&self, version: Version) {
+    let mut current = self.minimum_version.load(Ordering::Acquire);
     loop {
       if version >= current {
         return;
       }
 
-      match self.min_version.compare_exchange_weak(
+      match self.minimum_version.compare_exchange_weak(
         current,
         version,
         Ordering::SeqCst,
@@ -144,12 +144,12 @@ impl Header for Meta {
   }
 
   #[inline]
-  fn max_version(&self) -> u64 {
+  fn maximum_version(&self) -> u64 {
     MIN_VERSION
   }
 
   #[inline]
-  fn min_version(&self) -> u64 {
+  fn minimum_version(&self) -> u64 {
     MIN_VERSION
   }
 
@@ -168,9 +168,9 @@ impl Header for Meta {
     self.len.fetch_add(1, Ordering::Release);
   }
 
-  fn update_max_version(&self, _: Version) {}
+  fn update_maximum_version(&self, _: Version) {}
 
-  fn update_min_version(&self, _: Version) {}
+  fn update_minimum_version(&self, _: Version) {}
 
   #[inline]
   fn compare_exchange_height_weak(

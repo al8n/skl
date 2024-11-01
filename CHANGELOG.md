@@ -59,8 +59,8 @@
 
 ## 0.8.6
 
-- Add `SkipMap::min_version` and `SkipSet::min_version` to access the min version of the `SkipMap` or `SkipSet`.
-- Fix `max_version` is not be updated when using `SkipMap::insert_with`.
+- Add `SkipMap::minimum_version` and `SkipSet::minimum_version` to access the min version of the `SkipMap` or `SkipSet`.
+- Fix `maximum_version` is not be updated when using `SkipMap::insert_with`.
 
 ## 0.8.5
 
@@ -69,7 +69,7 @@
 ## 0.8.4
 
 - Relax `MapIterator` and `SetIterator` trait bound
-- Add `SkipMap::max_version` and `SkipSet::max_version` to access the max version of the `SkipMap` or `SkipSet`.
+- Add `SkipMap::maximum_version` and `SkipSet::maximum_version` to access the max version of the `SkipMap` or `SkipSet`.
 - Add checksum and max version in overhead for memmory mapped backend `SkipMap` or `SkipSet`.
 - Use CAS instead of `fetch_update` in `Arena::alloc`.
 

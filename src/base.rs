@@ -410,7 +410,7 @@ where
     }
   }
 
-  unsafe fn move_to_prev_max_version<'a>(
+  unsafe fn move_to_prev_maximum_version<'a>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
@@ -522,7 +522,7 @@ where
     }
   }
 
-  unsafe fn move_to_next_max_version<'a>(
+  unsafe fn move_to_next_maximum_version<'a>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
@@ -1202,8 +1202,8 @@ where
     }
     let meta = self.meta();
     meta.increase_len();
-    meta.update_max_version(version);
-    meta.update_min_version(version);
+    meta.update_maximum_version(version);
+    meta.update_minimum_version(version);
 
     Ok(Either::Left(None))
   }

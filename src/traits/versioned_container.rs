@@ -18,14 +18,20 @@ where
 {
   /// Returns the maximum version of all entries in the map.
   #[inline]
-  fn max_version(&self) -> Version {
-    self.as_ref().max_version()
+  fn maximum_version(&self) -> Version {
+    self.as_ref().maximum_version()
   }
 
   /// Returns the minimum version of all entries in the map.
   #[inline]
-  fn min_version(&self) -> Version {
-    self.as_ref().min_version()
+  fn minimum_version(&self) -> Version {
+    self.as_ref().minimum_version()
+  }
+
+  /// Returns `true` if the map may contains an entry whose version is less than or equal to the given version.
+  #[inline]
+  fn may_contain_version(&self, v: Version) -> bool {
+    self.as_ref().may_contain_version(v)
   }
 
   /// Returns `true` if the key exists in the map.
@@ -55,6 +61,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return false;
+    }
+
     self.as_ref().get(version, key).is_some()
   }
 
@@ -82,6 +92,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return false;
+    }
+
     self.as_ref().contains_key_versioned(version, key)
   }
 
@@ -93,6 +107,10 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().first(version)
   }
 
@@ -104,6 +122,10 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().last(version)
   }
 
@@ -121,6 +143,10 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().first_versioned(version)
   }
 
@@ -138,6 +164,10 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().last_versioned(version)
   }
 
@@ -170,6 +200,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().get(version, key)
   }
 
@@ -206,6 +240,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().get_versioned(version, key)
   }
 
@@ -223,6 +261,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().iter(version).seek_upper_bound(upper)
   }
 
@@ -240,6 +282,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self.as_ref().iter(version).seek_lower_bound(lower)
   }
 
@@ -259,6 +305,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self
       .as_ref()
       .iter_all_versions(version)
@@ -281,6 +331,10 @@ where
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
+    if !self.may_contain_version(version) {
+      return None;
+    }
+
     self
       .as_ref()
       .iter_all_versions(version)

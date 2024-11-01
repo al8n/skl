@@ -157,7 +157,7 @@ where
         nd = self.list.get_next(nd, 0, ignore_invalid_trailer);
         self
           .list
-          .move_to_next_max_version(&mut nd, self.query_version, |_| true)
+          .move_to_next_maximum_version(&mut nd, self.query_version, |_| true)
       }
     }
   }
@@ -176,7 +176,7 @@ where
         nd = self.list.get_prev(nd, 0, ignore_invalid_trailer);
         self
           .list
-          .move_to_prev_max_version(&mut nd, self.query_version, |_| true)
+          .move_to_prev_maximum_version(&mut nd, self.query_version, |_| true)
       }
     }
   }

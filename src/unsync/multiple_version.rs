@@ -58,7 +58,7 @@ node!(
 
 /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
 ///
-/// If you want to use in concurrent environment, you can use [`sync::multiple_version::SkipMap`].
+/// If you want to use in concurrent environment, you can use [`multiple_version::sync::SkipMap`](crate::multiple_version::sync::SkipMap).
 #[repr(transparent)]
 pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 

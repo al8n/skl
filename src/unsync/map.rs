@@ -45,7 +45,7 @@ node!(
 
 /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
 ///
-/// If you want to use in concurrent environment, you can use [`sync::map::SkipMap`].
+/// If you want to use in concurrent environment, you can use [`map::sync::SkipMap`](crate::map::sync::SkipMap).
 #[repr(transparent)]
 pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 

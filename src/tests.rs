@@ -40,28 +40,26 @@ const BIG_ARENA_SIZE: usize = 120 << 20;
 ))]
 pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
 
-// #[cfg(any(
-//   all(test, not(miri)),
-//   all_tests,
-//   test_unsync_map,
-//   test_sync_map,
-//   test_sync_map_concurrent,
-//   test_sync_map_concurrent_with_optimistic_freelist,
-//   test_sync_map_concurrent_with_pessimistic_freelist,
-// ))]
-#[cfg(test)]
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_map,
+  test_sync_map,
+  test_sync_map_concurrent,
+  test_sync_map_concurrent_with_optimistic_freelist,
+  test_sync_map_concurrent_with_pessimistic_freelist,
+))]
 pub(crate) mod map;
 
-// #[cfg(any(
-//   all(test, not(miri)),
-//   all_tests,
-//   test_unsync_versioned,
-//   test_sync_versioned,
-//   test_sync_multiple_version_concurrent,
-//   test_sync_multiple_version_concurrent_with_optimistic_freelist,
-//   test_sync_multiple_version_concurrent_with_pessimistic_freelist,
-// ))]
-#[cfg(test)]
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_versioned,
+  test_sync_versioned,
+  test_sync_multiple_version_concurrent,
+  test_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+))]
 pub(crate) mod multiple_version;
 
 /// Only used for testing

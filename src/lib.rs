@@ -41,20 +41,20 @@ pub mod iter {
   pub use super::base::iterator::{AllVersionsIter, Iter};
 }
 
-// #[cfg(any(
-//   all(test, not(miri)),
-//   all_tests,
-//   test_unsync_map,
-//   test_unsync_versioned,
-//   test_sync_map,
-//   test_sync_versioned,
-//   test_sync_map_concurrent,
-//   test_sync_multiple_version_concurrent,
-//   test_sync_map_concurrent_with_optimistic_freelist,
-//   test_sync_multiple_version_concurrent_with_optimistic_freelist,
-//   test_sync_map_concurrent_with_pessimistic_freelist,
-//   test_sync_multiple_version_concurrent_with_pessimistic_freelist,
-// ))]
+#[cfg(any(
+  all(test, not(miri)),
+  all_tests,
+  test_unsync_map,
+  test_unsync_versioned,
+  test_sync_map,
+  test_sync_versioned,
+  test_sync_map_concurrent,
+  test_sync_multiple_version_concurrent,
+  test_sync_map_concurrent_with_optimistic_freelist,
+  test_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_sync_map_concurrent_with_pessimistic_freelist,
+  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+))]
 mod tests;
 
 pub use among;

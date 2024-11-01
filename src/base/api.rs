@@ -15,7 +15,10 @@ use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Header, Link, Node, NodePointer},
-  random_height, ty_ref, Error, Height, ValueBuilder, Version,
+  error::Error,
+  random_height, ty_ref,
+  types::{Height, ValueBuilder},
+  Version,
 };
 
 use super::{iterator, EntryRef, SkipList, VersionedEntryRef};

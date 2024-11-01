@@ -2,42 +2,34 @@ use super::*;
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned,))]
 mod tests {
-  use super::*;
-
-  __versioned_map_tests!("sync_versioned_map": SkipMap<[u8], [u8]>);
+  crate::__multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
 }
 
-#[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned_concurrent,))]
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_multiple_version_concurrent,))]
 mod concurrent_tests {
-  use super::*;
-
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
+  crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
 }
 
 #[cfg(any(
   all(test, not(miri)),
   all_tests,
-  test_sync_versioned_concurrent_with_optimistic_freelist,
+  test_sync_multiple_version_concurrent_with_optimistic_freelist,
 ))]
 mod concurrent_tests_with_optimistic_freelist {
-  use super::*;
-
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
 }
 
 #[cfg(any(
   all(test, not(miri)),
   all_tests,
-  test_sync_versioned_concurrent_with_pessimistic_freelist,
+  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
 ))]
 mod concurrent_tests_with_pessimistic_freelist {
-  use super::*;
-
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
-type SkipList<K, V> = base::SkipList<K, V, Allocator>;
+type SkipList<K, V> = crate::base::SkipList<K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
 pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;

@@ -16,16 +16,14 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::ptr::NonNull;
-
 mod allocator;
 pub use allocator::GenericAllocator;
 
 /// Skiplist implementation
 mod base;
 
-mod error;
-pub use error::Error;
+/// Error types for the `SkipMap`s.
+pub mod error;
 
 mod options;
 pub use options::*;
@@ -43,35 +41,25 @@ pub mod iter {
   pub use super::base::iterator::{AllVersionsIter, Iter};
 }
 
-#[cfg(any(
-  all(test, not(miri)),
-  all_tests,
-  test_unsync_map,
-  test_unsync_versioned,
-  test_unsync_trailed,
-  test_unsync_full,
-  test_sync_full,
-  test_sync_map,
-  test_sync_versioned,
-  test_sync_trailed,
-  test_sync_full_concurrent,
-  test_sync_map_concurrent,
-  test_sync_versioned_concurrent,
-  test_sync_trailed_concurrent,
-  test_sync_full_concurrent_with_optimistic_freelist,
-  test_sync_map_concurrent_with_optimistic_freelist,
-  test_sync_versioned_concurrent_with_optimistic_freelist,
-  test_sync_trailed_concurrent_with_optimistic_freelist,
-  test_sync_full_concurrent_with_pessimistic_freelist,
-  test_sync_map_concurrent_with_pessimistic_freelist,
-  test_sync_versioned_concurrent_with_pessimistic_freelist,
-  test_sync_trailed_concurrent_with_pessimistic_freelist,
-))]
+// #[cfg(any(
+//   all(test, not(miri)),
+//   all_tests,
+//   test_unsync_map,
+//   test_unsync_versioned,
+//   test_sync_map,
+//   test_sync_versioned,
+//   test_sync_map_concurrent,
+//   test_sync_multiple_version_concurrent,
+//   test_sync_map_concurrent_with_optimistic_freelist,
+//   test_sync_multiple_version_concurrent_with_optimistic_freelist,
+//   test_sync_map_concurrent_with_pessimistic_freelist,
+//   test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+// ))]
 mod tests;
 
 pub use among;
 pub use either;
-pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
+pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition};
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;

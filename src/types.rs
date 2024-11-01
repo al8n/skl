@@ -11,6 +11,33 @@ const MAX_U27: u32 = (1 << 27) - 1;
 /// Version, used for MVCC purpose, it is a 56-bit unsigned integer.
 pub type Version = u64;
 
+pub(crate) mod internal {
+  /// A pointer to a value in the `SkipMap`.
+  #[derive(Debug)]
+  pub struct ValuePointer {
+    pub(crate) value_offset: u32,
+    pub(crate) value_len: u32,
+  }
+
+  impl Clone for ValuePointer {
+    fn clone(&self) -> Self {
+      *self
+    }
+  }
+
+  impl Copy for ValuePointer {}
+
+  impl ValuePointer {
+    #[inline]
+    pub(crate) const fn new(value_offset: u32, value_len: u32) -> Self {
+      Self {
+        value_offset,
+        value_len,
+      }
+    }
+  }
+}
+
 macro_rules! impl_eq_and_ord {
   ($name:ident($inner:ident < $upper:ident) -> [$($target:ident),+ $(,)?]) => {
     $(

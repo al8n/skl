@@ -1,10 +1,11 @@
 use super::Height;
+pub use rarena_allocator::Error as ArenaError;
 
 /// Error type for the `SkipMap`s.
 #[derive(Debug)]
 pub enum Error {
   /// Indicates that the arena is full
-  Arena(rarena_allocator::Error),
+  Arena(ArenaError),
 
   /// Indicates that the value is too large to be stored in the `SkipMap`.
   ValueTooLarge {
@@ -83,8 +84,8 @@ impl core::fmt::Display for Error {
 
 impl core::error::Error for Error {}
 
-impl From<rarena_allocator::Error> for Error {
-  fn from(e: rarena_allocator::Error) -> Self {
+impl From<ArenaError> for Error {
+  fn from(e: ArenaError) -> Self {
     Self::Arena(e)
   }
 }
@@ -93,7 +94,7 @@ impl Error {
   /// Returns a read only error.
   #[inline]
   pub const fn read_only() -> Self {
-    Self::Arena(rarena_allocator::Error::ReadOnly)
+    Self::Arena(ArenaError::ReadOnly)
   }
 
   #[inline]

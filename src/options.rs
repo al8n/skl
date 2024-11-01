@@ -5,10 +5,10 @@ use rarena_allocator::Options as ArenaOptions;
 
 use super::{
   allocator::{Node, Sealed as AllocatorSealed},
-  Height, KeySize,
+  error::Error,
+  types::{Height, KeySize},
+  Arena,
 };
-
-use crate::{allocator::Sealed, Arena, Error};
 
 /// The memory format version.
 pub(crate) const CURRENT_VERSION: u16 = 0;
@@ -653,12 +653,12 @@ impl Options {
     V: ?Sized + 'static,
     T: Arena<K, V>,
   {
-    let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
+    let node_align = mem::align_of::<<T::Allocator as AllocatorSealed>::Node>();
 
     self
       .to_arena_options()
       .with_maximum_alignment(node_align)
-      .alloc::<<T::Allocator as Sealed>::Allocator>()
+      .alloc::<<T::Allocator as AllocatorSealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| T::construct(arena, self, false))
   }

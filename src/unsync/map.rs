@@ -2,13 +2,11 @@ use super::*;
 
 #[cfg(any(all(test, not(miri)), all_tests, test_unsync_map,))]
 mod tests {
-  use super::*;
-
-  __map_tests!("unsync_map": SkipMap<[u8], [u8]>);
+  crate::__map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
 }
 
 type Allocator = GenericAllocator<Meta, RawNode, Arena>;
-type SkipList<K, V> = base::SkipList<K, V, Allocator>;
+type SkipList<K, V> = crate::base::SkipList<K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
 pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;

@@ -12,11 +12,12 @@ use either::Either;
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{
-    Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePartPointer, ValuePointer,
-  },
-  encode_key_size_and_height, ty_ref, CompressionPolicy, Error, Height, KeyBuilder, ValueBuilder,
-  Version,
+  allocator::{Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePointer},
+  encode_key_size_and_height,
+  error::Error,
+  ty_ref,
+  types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
+  CompressionPolicy, Version,
 };
 
 mod entry;
@@ -1165,7 +1166,7 @@ where
             version,
             old_node,
             self,
-            ValuePartPointer::new(offset, len),
+            ValuePointerType::new(offset, len),
             None,
             None,
           ),
@@ -1200,7 +1201,7 @@ where
             version,
             old_node,
             self,
-            ValuePartPointer::new(offset, len),
+            ValuePointerType::new(offset, len),
             None,
             None,
           ),

@@ -1,11 +1,4 @@
 #![allow(dead_code)]
-
-use core::ops::Bound;
-
-use rarena_allocator::Error as ArenaError;
-
-use crate::{allocator::Sealed, Error};
-
 use super::Options;
 
 pub(crate) const KB: usize = 1 << 10;
@@ -47,26 +40,28 @@ const BIG_ARENA_SIZE: usize = 120 << 20;
 ))]
 pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
 
-#[cfg(any(
-  all(test, not(miri)),
-  all_tests,
-  test_unsync_map,
-  test_sync_map,
-  test_sync_map_concurrent,
-  test_sync_map_concurrent_with_optimistic_freelist,
-  test_sync_map_concurrent_with_pessimistic_freelist,
-))]
+// #[cfg(any(
+//   all(test, not(miri)),
+//   all_tests,
+//   test_unsync_map,
+//   test_sync_map,
+//   test_sync_map_concurrent,
+//   test_sync_map_concurrent_with_optimistic_freelist,
+//   test_sync_map_concurrent_with_pessimistic_freelist,
+// ))]
+#[cfg(test)]
 pub(crate) mod map;
 
-#[cfg(any(
-  all(test, not(miri)),
-  all_tests,
-  test_unsync_versioned,
-  test_sync_versioned,
-  test_sync_versioned_concurrent,
-  test_sync_versioned_concurrent_with_optimistic_freelist,
-  test_sync_versioned_concurrent_with_pessimistic_freelist,
-))]
+// #[cfg(any(
+//   all(test, not(miri)),
+//   all_tests,
+//   test_unsync_versioned,
+//   test_sync_versioned,
+//   test_sync_multiple_version_concurrent,
+//   test_sync_multiple_version_concurrent_with_optimistic_freelist,
+//   test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+// ))]
+#[cfg(test)]
 pub(crate) mod multiple_version;
 
 /// Only used for testing
@@ -108,7 +103,7 @@ macro_rules! __unit_tests {
     )*
   }) => {
     $(
-      __unit_test_expand!(
+      $crate::__unit_test_expand!(
         $(#[cfg($cfg)])?
         $mod |$prefix, $name, $ty, $opts|
       );

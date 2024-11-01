@@ -1,8 +1,9 @@
 use dbutils::types::{KeyRef, LazyRef, Type};
 
 use crate::{
-  allocator::{Allocator, Node, NodePointer, ValuePartPointer, WithVersion},
+  allocator::{Allocator, Node, NodePointer, WithVersion},
   base::SkipList,
+  types::internal::ValuePointer,
   Version,
 };
 
@@ -18,7 +19,7 @@ where
   pub(super) list: &'a SkipList<K, V, A>,
   pub(super) key: LazyRef<'a, K>,
   pub(super) value: Option<LazyRef<'a, V>>,
-  pub(super) value_part_pointer: ValuePartPointer,
+  pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
@@ -220,7 +221,7 @@ where
     query_version: Version,
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<K, V, A>,
-    pointer: ValuePartPointer,
+    pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
   ) -> VersionedEntryRef<'a, K, V, A> {

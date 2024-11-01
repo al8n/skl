@@ -1,5 +1,12 @@
 #![allow(dead_code)]
 
+use core::ops::Bound;
+
+use crate::{
+  allocator::Sealed,
+  error::{ArenaError, Error},
+};
+
 use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
@@ -1454,7 +1461,7 @@ where
 #[doc(hidden)]
 macro_rules! __map_tests {
   ($prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       empty,
       basic,
       #[cfg(not(miri))]
@@ -1483,7 +1490,7 @@ macro_rules! __map_tests {
       le,
     });
 
-    __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
       full,
     });
 
@@ -1513,7 +1520,7 @@ macro_rules! __map_tests {
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty => $opts:path) => {
-    __unit_tests!($crate::tests::map |$prefix, $ty, $opts| {
+    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
@@ -1540,7 +1547,7 @@ macro_rules! __map_tests {
     //   });
     // }
 
-    __unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

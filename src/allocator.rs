@@ -1,7 +1,14 @@
+use dbutils::buffer::VacantBuffer;
 use either::Either;
 use rarena_allocator::{Allocator as ArenaAllocator, Buffer, BytesRefMut};
 
-use super::*;
+use super::{
+  decode_key_size_and_height, encode_key_size_and_height,
+  error::{ArenaError, Error},
+  options::Options,
+  types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
+  Version, REMOVE,
+};
 
 use core::{marker::PhantomData, mem, ptr::NonNull, sync::atomic::Ordering};
 
@@ -79,30 +86,6 @@ mod sealed {
         unsafe {
           arena.dealloc(ptr.offset, ptr.size);
         }
-      }
-    }
-  }
-
-  #[derive(Debug)]
-  pub struct ValuePartPointer {
-    pub(crate) value_offset: u32,
-    pub(crate) value_len: u32,
-  }
-
-  impl Clone for ValuePartPointer {
-    fn clone(&self) -> Self {
-      *self
-    }
-  }
-
-  impl Copy for ValuePartPointer {}
-
-  impl ValuePartPointer {
-    #[inline]
-    pub(crate) const fn new(value_offset: u32, value_len: u32) -> Self {
-      Self {
-        value_offset,
-        value_len,
       }
     }
   }
@@ -226,16 +209,16 @@ mod sealed {
     unsafe fn get_value_with_pointer<'a, 'b: 'a, A: Allocator>(
       &'a self,
       arena: &'b A,
-    ) -> (Option<&'b [u8]>, ValuePartPointer) {
+    ) -> (Option<&'b [u8]>, ValuePointerType) {
       let (offset, len) = self.value_pointer().load();
 
       if len == <Self::ValuePointer as ValuePointer>::REMOVE {
-        return (None, ValuePartPointer::new(offset, len));
+        return (None, ValuePointerType::new(offset, len));
       }
 
       (
         Some(arena.get_bytes(offset as usize, len as usize)),
-        ValuePartPointer::new(offset, len),
+        ValuePointerType::new(offset, len),
       )
     }
   }
@@ -426,15 +409,15 @@ mod sealed {
     unsafe fn get_value_with_pointer<'a, 'b: 'a, A: Allocator>(
       &'a self,
       arena: &'b A,
-    ) -> (Option<&'b [u8]>, ValuePartPointer) {
+    ) -> (Option<&'b [u8]>, ValuePointerType) {
       let (offset, len) = self.value_pointer().load();
       if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
-        return (None, ValuePartPointer::new(offset, len));
+        return (None, ValuePointerType::new(offset, len));
       }
 
       (
         Some(arena.get_bytes(offset as usize, len as usize)),
-        ValuePartPointer::new(offset, len),
+        ValuePointerType::new(offset, len),
       )
     }
 
@@ -442,14 +425,14 @@ mod sealed {
     ///
     /// - The caller must ensure that the node is allocated by the arena.
     #[inline]
-    unsafe fn get_value_pointer<A: Allocator>(&self) -> ValuePartPointer {
+    unsafe fn get_value_pointer<A: Allocator>(&self) -> ValuePointerType {
       let (offset, len) = self.value_pointer().load();
 
       if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
-        return ValuePartPointer::new(offset, len);
+        return ValuePointerType::new(offset, len);
       }
 
-      ValuePartPointer::new(offset, len)
+      ValuePointerType::new(offset, len)
     }
   }
 

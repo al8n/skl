@@ -11,8 +11,11 @@ use rarena_allocator::Allocator as ArenaAllocator;
 use super::{
   allocator::{Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed},
   base::{EntryRef, SkipList, VersionedEntryRef},
+  error::Error,
   iter::Iter,
-  Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
+  options::Options,
+  types::{Height, KeyBuilder, ValueBuilder},
+  MIN_VERSION,
 };
 
 /// [`Map`](map::Map) implementation

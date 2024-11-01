@@ -1,5 +1,12 @@
 #![allow(dead_code)]
 
+use core::ops::Bound;
+
+use crate::{
+  allocator::Sealed,
+  error::{ArenaError, Error},
+};
+
 use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
@@ -736,9 +743,9 @@ where
   any(
     all(test, not(miri)),
     all_tests,
-    test_sync_versioned_concurrent,
-    test_sync_versioned_concurrent_with_optimistic_freelist,
-    test_sync_versioned_concurrent_with_pessimistic_freelist
+    test_sync_multiple_version_concurrent,
+    test_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
@@ -782,9 +789,9 @@ where
   any(
     all(test, not(miri)),
     all_tests,
-    test_sync_versioned_concurrent,
-    test_sync_versioned_concurrent_with_optimistic_freelist,
-    test_sync_versioned_concurrent_with_pessimistic_freelist
+    test_sync_multiple_version_concurrent,
+    test_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
@@ -838,9 +845,9 @@ where
   any(
     all(test, not(miri)),
     all_tests,
-    test_sync_versioned_concurrent,
-    test_sync_versioned_concurrent_with_optimistic_freelist,
-    test_sync_versioned_concurrent_with_pessimistic_freelist
+    test_sync_multiple_version_concurrent,
+    test_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
@@ -885,9 +892,9 @@ where
   any(
     all(test, not(miri)),
     all_tests,
-    test_sync_versioned_concurrent,
-    test_sync_versioned_concurrent_with_optimistic_freelist,
-    test_sync_versioned_concurrent_with_pessimistic_freelist
+    test_sync_multiple_version_concurrent,
+    test_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
@@ -949,9 +956,9 @@ where
   any(
     all(test, not(miri)),
     all_tests,
-    test_sync_versioned_concurrent,
-    test_sync_versioned_concurrent_with_optimistic_freelist,
-    test_sync_versioned_concurrent_with_pessimistic_freelist
+    test_sync_multiple_version_concurrent,
+    test_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
@@ -1065,7 +1072,7 @@ where
   assert_eq!(i, N);
 }
 
-pub(crate) fn iter_all_versions_next_by_versioned_entry<M>(l: M)
+pub(crate) fn iter_all_versions_next_by_multiple_version_entry<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1196,7 +1203,7 @@ where
   assert_eq!(i, N);
 }
 
-pub(crate) fn iter_all_versions_prev_by_versioned_entry<M>(l: M)
+pub(crate) fn iter_all_versions_prev_by_multiple_version_entry<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -2134,9 +2141,9 @@ where
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __versioned_map_tests {
+macro_rules! __multiple_version_map_tests {
   ($prefix:literal: $ty:ty) => {
-    __unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
       empty,
       basic,
       #[cfg(not(miri))]
@@ -2144,11 +2151,11 @@ macro_rules! __versioned_map_tests {
       iter_all_versions_mvcc,
       iter_all_versions_next,
       iter_all_versions_next_by_entry,
-      iter_all_versions_next_by_versioned_entry,
+      iter_all_versions_next_by_multiple_version_entry,
       range_next,
       iter_all_versions_prev,
       iter_all_versions_prev_by_entry,
-      iter_all_versions_prev_by_versioned_entry,
+      iter_all_versions_prev_by_multiple_version_entry,
       range_prev,
       iter_all_versions_seek_ge,
       iter_all_versions_seek_lt,
@@ -2170,7 +2177,7 @@ macro_rules! __versioned_map_tests {
       le,
     });
 
-    __unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
       full,
     });
 
@@ -2200,7 +2207,7 @@ macro_rules! __versioned_map_tests {
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty => $opts:path) => {
-    __unit_tests!($crate::tests::multiple_version |$prefix, $ty, $opts| {
+    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
@@ -2227,7 +2234,7 @@ macro_rules! __versioned_map_tests {
     //   });
     // }
 
-    __unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

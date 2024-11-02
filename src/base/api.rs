@@ -292,7 +292,7 @@ where
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
-      let node_key = node.get_key(&self.arena);
+      let raw_node_key = node.get_key(&self.arena);
       let (value, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return value.map(|_| {
@@ -301,13 +301,14 @@ where
             node,
             self,
             pointer,
-            Some(node_key),
+            Some(raw_node_key),
             None,
           ))
         });
       }
 
-      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
+      let node_key = ty_ref::<K>(raw_node_key);
+      if !Equivalent::equivalent(key, &node_key) {
         return None;
       }
 
@@ -321,8 +322,8 @@ where
           node,
           self,
           pointer,
+          Some(raw_node_key),
           Some(node_key),
-          None,
         ))
       })
     }
@@ -343,7 +344,7 @@ where
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
-      let node_key = node.get_key(&self.arena);
+      let raw_node_key = node.get_key(&self.arena);
       let (_, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
@@ -351,12 +352,13 @@ where
           node,
           self,
           pointer,
-          Some(node_key),
+          Some(raw_node_key),
           None,
         ));
       }
 
-      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
+      let node_key = ty_ref::<K>(raw_node_key);
+      if !Equivalent::equivalent(key, &node_key) {
         return None;
       }
 
@@ -369,8 +371,8 @@ where
         node,
         self,
         pointer,
+        Some(raw_node_key),
         Some(node_key),
-        None,
       ))
     }
   }

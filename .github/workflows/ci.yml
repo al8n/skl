@@ -252,24 +252,13 @@ jobs:
         cfg:
           - unsync_map
           - unsync_versioned
-          - unsync_trailed
-          - unsync_full
           - sync_map
           - sync_versioned
-          - sync_trailed
-          - sync_full
           - sync_map_concurrent
-          - sync_versioned_concurrent
-          - sync_trailed_concurrent
-          - sync_full_concurrent
+          - sync_multiple_version_concurrent
           - sync_map_concurrent_with_optimistic_freelist
-          - sync_versioned_concurrent_with_optimistic_freelist
-          - sync_trailed_concurrent_with_optimistic_freelist
-          - sync_full_concurrent_with_optimistic_freelist
           - sync_map_concurrent_with_pessimistic_freelist
-          - sync_versioned_concurrent_with_pessimistic_freelist
-          - sync_trailed_concurrent_with_pessimistic_freelist
-          - sync_full_concurrent_with_pessimistic_freelist
+          - sync_multiple_version_concurrent_with_pessimistic_freelist
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -315,24 +304,13 @@ jobs:
         cfg:
           - unsync_map
           - unsync_versioned
-          - unsync_trailed
-          - unsync_full
           - sync_map
           - sync_versioned
-          - sync_trailed
-          - sync_full
           - sync_map_concurrent
-          - sync_versioned_concurrent
-          - sync_trailed_concurrent
-          - sync_full_concurrent
+          - sync_multiple_version_concurrent
           - sync_map_concurrent_with_optimistic_freelist
-          - sync_versioned_concurrent_with_optimistic_freelist
-          - sync_trailed_concurrent_with_optimistic_freelist
-          - sync_full_concurrent_with_optimistic_freelist
           - sync_map_concurrent_with_pessimistic_freelist
-          - sync_versioned_concurrent_with_pessimistic_freelist
-          - sync_trailed_concurrent_with_pessimistic_freelist
-          - sync_full_concurrent_with_pessimistic_freelist
+          - sync_multiple_version_concurrent_with_pessimistic_freelist
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest

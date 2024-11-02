@@ -31,12 +31,11 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    self.insert_at_height(version, self.random_height(), key, value, trailer)
+    self.insert_at_height(version, self.random_height(), key, value)
   }
 
   /// Upserts a new key-value pair at the given height if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -50,7 +49,6 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -68,7 +66,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::from((false, key)),
         Some(ValueBuilder::new(val_len, copy)),
@@ -106,7 +103,6 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -119,7 +115,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::from((false, key)),
         Some(value_builder),
@@ -151,7 +146,6 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -168,7 +162,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::from((false, key)),
         Some(ValueBuilder::new(val_len, copy)),
@@ -207,7 +200,6 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -220,7 +212,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::from((false, key)),
         Some(value_builder),
@@ -257,7 +248,6 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -275,7 +265,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::Vacant { offset, buf: vk },
         Some(value_builder),
@@ -315,7 +304,6 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -333,7 +321,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::Vacant { offset, buf: vk },
         Some(value_builder),
@@ -372,7 +359,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    trailer: A::Trailer,
+
     success: Ordering,
     failure: Ordering,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
@@ -387,7 +374,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::from((true, key)),
         Option::<RemoveValueBuilder<V::Error>>::None,
@@ -429,7 +415,6 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -442,7 +427,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         Key::from((true, key)),
         Option::<RemoveValueBuilder<V::Error>>::None,
@@ -483,7 +467,6 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-    trailer: A::Trailer,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -498,7 +481,6 @@ where
     self
       .update(
         version,
-        trailer,
         height.into(),
         key,
         Option::<RemoveValueBuilder<V::Error>>::None,

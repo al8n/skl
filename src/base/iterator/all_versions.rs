@@ -9,9 +9,9 @@ use crate::allocator::Node;
 
 use super::super::{Allocator, NodePointer, SkipList, Version, VersionedEntryRef};
 
-/// An iterator over the skipmap. The current state of the iterator can be cloned by
+/// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct AllVersionsIter<'a, K, V, A, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
+pub struct IterAll<'a, K, V, A, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
 where
   A: Allocator,
   K: ?Sized + Type,
@@ -27,7 +27,7 @@ where
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, K, V, A, Q, R: Clone> Clone for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R: Clone> Clone for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
@@ -48,7 +48,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R: Copy> Copy for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R: Copy> Copy for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Copy,
@@ -59,7 +59,7 @@ where
 {
 }
 
-impl<'a, K, V, A> AllVersionsIter<'a, K, V, A>
+impl<'a, K, V, A> IterAll<'a, K, V, A>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -84,7 +84,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -111,7 +111,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -153,7 +153,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -167,8 +167,8 @@ where
   fn next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
-        Some(head) => self.map.get_next(head.ptr, 0, !self.all_versions),
-        None => self.map.get_next(self.map.head, 0, !self.all_versions),
+        Some(head) => self.map.get_next(head.ptr, 0),
+        None => self.map.get_next(self.map.head, 0),
       };
 
       let next_head = if self.all_versions {
@@ -215,8 +215,8 @@ where
   fn prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
-        Some(tail) => self.map.get_prev(tail.ptr, 0, !self.all_versions),
-        None => self.map.get_prev(self.map.tail, 0, !self.all_versions),
+        Some(tail) => self.map.get_prev(tail.ptr, 0),
+        None => self.map.get_prev(self.map.tail, 0),
       };
 
       let next_tail = if self.all_versions {
@@ -262,19 +262,19 @@ where
   fn range_next_in(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
-        Some(head) => self.map.get_next(head.ptr, 0, !self.all_versions),
+        Some(head) => self.map.get_next(head.ptr, 0),
         None => match self.range.as_ref().unwrap().start_bound() {
           Bound::Included(key) => self
             .map
-            .find_near(self.version, key, false, true, !self.all_versions)
+            .find_near(self.version, key, false, true)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
           Bound::Excluded(key) => self
             .map
-            .find_near(Version::MIN, key, false, false, !self.all_versions)
+            .find_near(Version::MIN, key, false, false)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
-          Bound::Unbounded => self.map.get_next(self.map.head, 0, !self.all_versions),
+          Bound::Unbounded => self.map.get_next(self.map.head, 0),
         },
       };
 
@@ -320,19 +320,19 @@ where
   fn range_prev(&mut self) -> Option<VersionedEntryRef<'a, K, V, A>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
-        Some(tail) => self.map.get_prev(tail.ptr, 0, !self.all_versions),
+        Some(tail) => self.map.get_prev(tail.ptr, 0),
         None => match self.range.as_ref().unwrap().end_bound() {
           Bound::Included(key) => self
             .map
-            .find_near(Version::MIN, key, true, true, !self.all_versions)
+            .find_near(Version::MIN, key, true, true)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
           Bound::Excluded(key) => self
             .map
-            .find_near(self.version, key, true, false, !self.all_versions)
+            .find_near(self.version, key, true, false)
             .0
             .unwrap_or(<A::Node as Node>::Pointer::NULL),
-          Bound::Unbounded => self.map.get_prev(self.map.tail, 0, !self.all_versions),
+          Bound::Unbounded => self.map.get_prev(self.map.tail, 0),
         },
       };
 
@@ -376,7 +376,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -443,9 +443,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(self.version, key, false, true, !self.all_versions);
+      let (n, _) = self.map.find_near(self.version, key, false, true);
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.tail.offset() {
@@ -482,9 +480,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(Version::MIN, key, false, false, !self.all_versions);
+      let (n, _) = self.map.find_near(Version::MIN, key, false, false);
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.tail.offset() {
@@ -521,9 +517,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(Version::MIN, key, true, true, !self.all_versions); // find less or equal.
+      let (n, _) = self.map.find_near(Version::MIN, key, true, true); // find less or equal.
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.head.offset() {
@@ -560,9 +554,7 @@ where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, _) = self
-        .map
-        .find_near(self.version, key, true, false, !self.all_versions); // find less or equal.
+      let (n, _) = self.map.find_near(self.version, key, true, false); // find less or equal.
 
       let mut n = n?;
       if n.is_null() || n.offset() == self.map.head.offset() {
@@ -609,7 +601,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> Iterator for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> Iterator for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -634,7 +626,7 @@ where
   where
     Self: Sized,
   {
-    AllVersionsIter::last(&mut self)
+    IterAll::last(&mut self)
   }
 
   #[inline]
@@ -656,7 +648,7 @@ where
   }
 }
 
-impl<'a, K, V, A, Q, R> DoubleEndedIterator for AllVersionsIter<'a, K, V, A, Q, R>
+impl<'a, K, V, A, Q, R> DoubleEndedIterator for IterAll<'a, K, V, A, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,

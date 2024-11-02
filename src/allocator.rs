@@ -1,7 +1,14 @@
+use dbutils::buffer::VacantBuffer;
 use either::Either;
 use rarena_allocator::{Allocator as ArenaAllocator, Buffer, BytesRefMut};
 
-use super::*;
+use super::{
+  decode_key_size_and_height, encode_key_size_and_height,
+  error::{ArenaError, Error},
+  options::Options,
+  types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
+  Version, REMOVE,
+};
 
 use core::{marker::PhantomData, mem, ptr::NonNull, sync::atomic::Ordering};
 
@@ -83,34 +90,6 @@ mod sealed {
     }
   }
 
-  #[derive(Debug)]
-  pub struct ValuePartPointer<T> {
-    pub(crate) trailer_offset: u32,
-    pub(crate) value_offset: u32,
-    pub(crate) value_len: u32,
-    _m: core::marker::PhantomData<T>,
-  }
-
-  impl<T> Clone for ValuePartPointer<T> {
-    fn clone(&self) -> Self {
-      *self
-    }
-  }
-
-  impl<T> Copy for ValuePartPointer<T> {}
-
-  impl<T> ValuePartPointer<T> {
-    #[inline]
-    pub(crate) const fn new(trailer_offset: u32, value_offset: u32, value_len: u32) -> Self {
-      Self {
-        trailer_offset,
-        value_offset,
-        value_len,
-        _m: core::marker::PhantomData,
-      }
-    }
-  }
-
   pub trait ValuePointer {
     /// The tombstone value.
     const REMOVE: u32;
@@ -140,14 +119,13 @@ mod sealed {
   }
 
   #[doc(hidden)]
-  pub trait WithTrailer: Node {}
+  pub trait WithVersion: Node {}
 
   #[doc(hidden)]
-  pub trait WithVersion: Node {}
+  pub trait WithoutVersion: Node {}
 
   pub trait Node: Sized + core::fmt::Debug {
     type Link: Link;
-    type Trailer: Trailer;
     type ValuePointer: ValuePointer;
     type Pointer: NodePointer<Node = Self>;
 
@@ -203,11 +181,8 @@ mod sealed {
       if len == <Self::ValuePointer as ValuePointer>::REMOVE {
         return None;
       }
-      let align_offset = Self::align_offset(offset);
-      Some(arena.get_bytes(
-        align_offset as usize + mem::size_of::<Self::Trailer>(),
-        len as usize,
-      ))
+
+      Some(arena.get_bytes(offset as usize, len as usize))
     }
 
     /// ## Safety
@@ -227,77 +202,24 @@ mod sealed {
       Some(arena.get_bytes(offset as usize, len as usize))
     }
 
-    #[inline]
-    fn trailer_offset_and_value_size(&self) -> ValuePartPointer<Self::Trailer> {
-      let (offset, len) = self.value_pointer().load();
-      let align_offset = Self::align_offset(offset);
-      ValuePartPointer::new(
-        align_offset,
-        align_offset + mem::size_of::<Self::Trailer>() as u32,
-        len,
-      )
-    }
-
-    #[inline]
-    unsafe fn get_trailer<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b Self::Trailer {
-      if mem::size_of::<Self::Trailer>() == 0 {
-        return dangling_zst_ref();
-      }
-
-      let (offset, _) = self.value_pointer().load();
-      &*arena.get_aligned_pointer(offset as usize)
-    }
-
     /// ## Safety
     ///
     /// - The caller must ensure that the node is allocated by the arena.
     #[inline]
-    unsafe fn get_trailer_by_offset<'a, 'b: 'a, A: Allocator>(
+    unsafe fn get_value_with_pointer<'a, 'b: 'a, A: Allocator>(
       &'a self,
       arena: &'b A,
-      offset: u32,
-    ) -> &'b Self::Trailer {
-      if mem::size_of::<Self::Trailer>() == 0 {
-        return dangling_zst_ref();
-      }
-
-      &*arena.get_aligned_pointer(offset as usize)
-    }
-
-    /// ## Safety
-    ///
-    /// - The caller must ensure that the node is allocated by the arena.
-    #[inline]
-    unsafe fn get_value_and_trailer_with_pointer<'a, 'b: 'a, A: Allocator>(
-      &'a self,
-      arena: &'b A,
-    ) -> (Option<&'b [u8]>, ValuePartPointer<Self::Trailer>) {
+    ) -> (Option<&'b [u8]>, ValuePointerType) {
       let (offset, len) = self.value_pointer().load();
-
-      let align_offset = A::align_offset::<Self::Trailer>(offset);
 
       if len == <Self::ValuePointer as ValuePointer>::REMOVE {
-        return (
-          None,
-          ValuePartPointer::new(
-            offset,
-            align_offset + mem::size_of::<Self::Trailer>() as u32,
-            len,
-          ),
-        );
+        return (None, ValuePointerType::new(offset, len));
       }
 
-      let value_offset = align_offset + mem::size_of::<Self::Trailer>() as u32;
       (
-        Some(arena.get_bytes(value_offset as usize, len as usize)),
-        ValuePartPointer::new(offset, value_offset, len),
+        Some(arena.get_bytes(offset as usize, len as usize)),
+        ValuePointerType::new(offset, len),
       )
-    }
-
-    #[inline]
-    fn align_offset(current_offset: u32) -> u32 {
-      let alignment = mem::align_of::<Self::Trailer>() as u32;
-      (current_offset + alignment - 1) & !(alignment - 1)
     }
   }
 
@@ -459,11 +381,8 @@ mod sealed {
       if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
         return None;
       }
-      let align_offset = Self::align_offset(offset);
-      Some(arena.get_bytes(
-        align_offset as usize + mem::size_of::<<Self::Node as Node>::Trailer>(),
-        len as usize,
-      ))
+
+      Some(arena.get_bytes(offset as usize, len as usize))
     }
 
     /// ## Safety
@@ -483,76 +402,22 @@ mod sealed {
       Some(arena.get_bytes(offset as usize, len as usize))
     }
 
-    #[inline]
-    fn trailer_offset_and_value_size(&self) -> ValuePartPointer<<Self::Node as Node>::Trailer> {
-      let (offset, len) = self.value_pointer().load();
-      let align_offset = Self::align_offset(offset);
-      ValuePartPointer::new(
-        align_offset,
-        align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
-        len,
-      )
-    }
-
-    #[inline]
-    unsafe fn get_trailer<'a, 'b: 'a, A: Allocator>(
-      &'a self,
-      arena: &'b A,
-    ) -> &'b <Self::Node as Node>::Trailer {
-      if mem::size_of::<<Self::Node as Node>::Trailer>() == 0 {
-        return dangling_zst_ref();
-      }
-
-      let (offset, _) = self.value_pointer().load();
-      &*arena.get_aligned_pointer(offset as usize)
-    }
-
     /// ## Safety
     ///
     /// - The caller must ensure that the node is allocated by the arena.
     #[inline]
-    unsafe fn get_trailer_by_offset<'a, 'b: 'a, A: Allocator>(
+    unsafe fn get_value_with_pointer<'a, 'b: 'a, A: Allocator>(
       &'a self,
       arena: &'b A,
-      offset: u32,
-    ) -> &'b <Self::Node as Node>::Trailer {
-      if mem::size_of::<<Self::Node as Node>::Trailer>() == 0 {
-        return dangling_zst_ref();
-      }
-
-      &*arena.get_aligned_pointer(offset as usize)
-    }
-
-    /// ## Safety
-    ///
-    /// - The caller must ensure that the node is allocated by the arena.
-    #[inline]
-    unsafe fn get_value_and_trailer_with_pointer<'a, 'b: 'a, A: Allocator>(
-      &'a self,
-      arena: &'b A,
-    ) -> (
-      Option<&'b [u8]>,
-      ValuePartPointer<<Self::Node as Node>::Trailer>,
-    ) {
+    ) -> (Option<&'b [u8]>, ValuePointerType) {
       let (offset, len) = self.value_pointer().load();
-
-      let align_offset = A::align_offset::<<Self::Node as Node>::Trailer>(offset);
-
       if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
-        return (
-          None,
-          ValuePartPointer::new(
-            offset,
-            align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
-            len,
-          ),
-        );
+        return (None, ValuePointerType::new(offset, len));
       }
 
-      let value_offset = align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32;
       (
-        Some(arena.get_bytes(value_offset as usize, len as usize)),
-        ValuePartPointer::new(offset, value_offset, len),
+        Some(arena.get_bytes(offset as usize, len as usize)),
+        ValuePointerType::new(offset, len),
       )
     }
 
@@ -560,29 +425,14 @@ mod sealed {
     ///
     /// - The caller must ensure that the node is allocated by the arena.
     #[inline]
-    unsafe fn get_value_pointer<A: Allocator>(
-      &self,
-    ) -> ValuePartPointer<<Self::Node as Node>::Trailer> {
+    unsafe fn get_value_pointer<A: Allocator>(&self) -> ValuePointerType {
       let (offset, len) = self.value_pointer().load();
 
-      let align_offset = A::align_offset::<<Self::Node as Node>::Trailer>(offset);
-
       if len == <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
-        return ValuePartPointer::new(
-          offset,
-          align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
-          len,
-        );
+        return ValuePointerType::new(offset, len);
       }
 
-      let value_offset = align_offset + mem::size_of::<<Self::Node as Node>::Trailer>() as u32;
-      ValuePartPointer::new(offset, value_offset, len)
-    }
-
-    #[inline]
-    fn align_offset(current_offset: u32) -> u32 {
-      let alignment = mem::align_of::<<Self::Node as Node>::Trailer>() as u32;
-      (current_offset + alignment - 1) & !(alignment - 1)
+      ValuePointerType::new(offset, len)
     }
   }
 
@@ -637,30 +487,15 @@ mod sealed {
         + mem::size_of::<Self::Node>()
         + mem::size_of::<<Self::Node as Node>::Link>() * max_height as usize;
 
-      let trailer_alignment = mem::align_of::<Self::Trailer>();
-      let trailer_size = mem::size_of::<Self::Trailer>();
-      let trailer_end = if trailer_size != 0 {
-        let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-        trailer_offset + trailer_size
-      } else {
-        head_end
-      };
-
-      let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
+      let tail_offset = (head_end + alignment - 1) & !(alignment - 1);
       let tail_end = tail_offset
         + mem::size_of::<Self::Node>()
         + mem::size_of::<<Self::Node as Node>::Link>() * max_height as usize;
-      let trailer_end = if trailer_size != 0 {
-        let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-        trailer_offset + trailer_size
-      } else {
-        tail_end
-      };
-      if trailer_end > self.capacity() {
+      if tail_end > self.capacity() {
         return Err(Error::ArenaTooSmall);
       }
 
-      Ok(trailer_end as u32)
+      Ok(tail_end as u32)
     }
 
     #[inline]
@@ -683,9 +518,9 @@ mod sealed {
           NonNull::new_unchecked(head_ptr as _),
         );
 
-        let (trailer_offset, _) = head.value_pointer().load();
-        let offset = trailer_offset as usize + mem::size_of::<Self::Trailer>();
-        let tail_ptr = self.get_aligned_pointer::<Self::Node>(offset);
+        let (value_offset, _) = head.value_pointer().load();
+        let offset = value_offset;
+        let tail_ptr = self.get_aligned_pointer::<Self::Node>(offset as usize);
         let tail_offset = self.offset(tail_ptr as _);
         let tail = <<Self::Node as Node>::Pointer as NodePointer>::new(
           tail_offset as u32,
@@ -701,9 +536,7 @@ mod sealed {
   {
     type Header: Header;
 
-    type Node: Node<Trailer = Self::Trailer>;
-
-    type Trailer: Trailer;
+    type Node: Node;
 
     type Allocator: ArenaAllocator;
 
@@ -810,12 +643,10 @@ mod sealed {
       &'a self,
       offset: u32,
       size: u32,
-      value_size: u32,
-      value_offset: u32,
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
     ) -> Result<(u32, Pointer), E> {
-      let buf = self.get_pointer_mut(value_offset as usize);
-      let mut oval = VacantBuffer::new(value_size as usize, NonNull::new_unchecked(buf));
+      let buf = self.get_pointer_mut(offset as usize);
+      let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
       if let Err(e) = f(&mut oval) {
         self.dealloc(offset, size);
         return Err(e);
@@ -826,7 +657,7 @@ mod sealed {
       if remaining != 0 {
         #[cfg(feature = "tracing")]
         tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-        let deallocated = self.dealloc(value_offset + len as u32, remaining as u32);
+        let deallocated = self.dealloc(offset + len as u32, remaining as u32);
 
         if deallocated {
           return Ok((
@@ -861,12 +692,11 @@ mod sealed {
       )
     }
 
-    /// Allocates a `Node`, key, trailer and value
+    /// Allocates a `Node`, key and value
     fn allocate_entry_node<'a, 'b: 'a, KE, VE>(
       &'a self,
       version: Version,
       height: u32,
-      trailer: <Self::Node as Node>::Trailer,
       key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
       value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Among<KE, VE, Error>> {
@@ -885,21 +715,14 @@ mod sealed {
           .map_err(|e| Among::Right(e.into()))?;
         let key_offset = key.offset();
         let key_cap = key.capacity();
-        let mut trailer_and_value = self
-          .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size as u32)
+        let mut value = self
+          .alloc_bytes(value_size as u32)
           .map_err(|e| Among::Right(e.into()))?;
-        let trailer_offset = trailer_and_value.offset();
-        let trailer_ptr = trailer_and_value
-          .as_mut_ptr()
-          .cast::<<Self::Node as Node>::Trailer>();
-        trailer_ptr.write(trailer);
-
-        let value_offset =
-          (trailer_offset + mem::size_of::<<Self::Node as Node>::Trailer>()) as u32;
+        let value_offset = value.offset();
 
         // Safety: the node is well aligned
         let node_ref = &mut *node_ptr;
-        node_ref.set_value_pointer(trailer_offset as u32, value_size as u32);
+        node_ref.set_value_pointer(value_offset as u32, value_size as u32);
         node_ref.set_key_offset(key_offset as u32);
         node_ref.set_key_size_and_height(encode_key_size_and_height(key_cap as u32, height as u8));
         node_ref.set_version(version);
@@ -908,15 +731,9 @@ mod sealed {
         let (_, key_deallocate_info) = self
           .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
           .map_err(Among::Left)?;
-        trailer_and_value.detach();
+        value.detach();
         let (_, value_deallocate_info) = self
-          .fill_vacant_value(
-            trailer_offset as u32,
-            trailer_and_value.capacity() as u32,
-            value_size as u32,
-            value_offset,
-            vf,
-          )
+          .fill_vacant_value(value_offset as u32, value_size as u32, vf)
           .map_err(Among::Middle)?;
         node.detach();
 
@@ -933,18 +750,15 @@ mod sealed {
       }
     }
 
-    /// Allocates a `Node` and trailer
-    fn allocate_node_in<'a, 'b: 'a, E>(
+    /// Allocates a tombstone `Node`
+    fn allocate_tombstone_node<'a, 'b: 'a, E>(
       &'a self,
       version: Version,
       height: u32,
-      trailer: <Self::Node as Node>::Trailer,
       key_offset: u32,
       key_size: usize,
-      value_size: usize,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let key_size = key_size as u32;
-      let value_size = value_size as u32;
 
       unsafe {
         let mut node = self
@@ -955,29 +769,22 @@ mod sealed {
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
 
-        let mut trailer_ref = self
-          .alloc::<<Self::Node as Node>::Trailer>()
-          .map_err(|e| Either::Right(e.into()))?;
-        let trailer_offset = trailer_ref.offset();
-        trailer_ref.write(trailer);
-
         // Safety: the node is well aligned
         let node_ref = &mut *node_ptr;
-        node_ref.set_value_pointer(trailer_offset as u32, value_size);
+        node_ref.set_value_pointer(
+          node_offset as u32,
+          <<Self::Node as Node>::ValuePointer>::REMOVE,
+        );
         node_ref.set_key_offset(key_offset);
         node_ref.set_key_size_and_height(encode_key_size_and_height(key_size, height as u8));
         node_ref.set_version(version);
 
-        trailer_ref.detach();
         node.detach();
 
         let deallocator = Deallocator {
           node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
           key: None,
-          value: Some(Pointer::new(
-            trailer_offset as u32,
-            mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
-          )),
+          value: None,
         };
 
         Ok((
@@ -988,17 +795,14 @@ mod sealed {
     }
 
     /// Allocates a `Node`, key and trailer
-    fn allocate_key_node<'a, 'b: 'a, E>(
+    fn allocate_tombstone_node_with_key_builder<'a, 'b: 'a, E>(
       &'a self,
       version: Version,
       height: u32,
-      trailer: <Self::Node as Node>::Trailer,
       key_size: usize,
       kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
-      value_size: usize,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let key_size = key_size as u32;
-      let value_size = value_size as u32;
 
       unsafe {
         let mut node = self
@@ -1008,6 +812,7 @@ mod sealed {
           .map_err(|e| Either::Right(e.into()))?;
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
+        let value_offset = node_offset + node.capacity();
 
         let mut key = self
           .alloc_bytes(key_size)
@@ -1015,15 +820,12 @@ mod sealed {
         let key_offset = key.offset();
         let key_cap = key.capacity();
 
-        let mut trailer_ref = self
-          .alloc::<<Self::Node as Node>::Trailer>()
-          .map_err(|e| Either::Right(e.into()))?;
-        let trailer_offset = trailer_ref.offset();
-        trailer_ref.write(trailer);
-
         // Safety: the node is well aligned
         let node_ref = &mut *node_ptr;
-        node_ref.set_value_pointer(trailer_offset as u32, value_size);
+        node_ref.set_value_pointer(
+          value_offset as u32,
+          <Self::Node as Node>::ValuePointer::REMOVE,
+        );
         node_ref.set_key_offset(key_offset as u32);
         node_ref.set_key_size_and_height(encode_key_size_and_height(key_cap as u32, height as u8));
         node_ref.set_version(version);
@@ -1033,16 +835,12 @@ mod sealed {
           .fill_vacant_key(key_cap as u32, key_offset as u32, kf)
           .map_err(Either::Left)?;
 
-        trailer_ref.detach();
         node.detach();
 
         let deallocator = Deallocator {
           node: Some(Pointer::new(node_offset as u32, node.capacity() as u32)),
           key: Some(key_deallocate_info),
-          value: Some(Pointer::new(
-            trailer_offset as u32,
-            mem::size_of::<<Self::Node as Node>::Trailer>() as u32,
-          )),
+          value: None,
         };
 
         Ok((
@@ -1057,7 +855,6 @@ mod sealed {
       &'a self,
       version: Version,
       height: u32,
-      trailer: <Self::Node as Node>::Trailer,
       key_size: usize,
       key_offset: u32,
       value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
@@ -1075,33 +872,21 @@ mod sealed {
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
 
-        let mut trailer_and_value = self
-          .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size)
+        let mut value = self
+          .alloc_bytes(value_size)
           .map_err(|e| Either::Right(e.into()))?;
-        let trailer_offset = trailer_and_value.offset();
-        let trailer_ptr = trailer_and_value
-          .as_mut_ptr()
-          .cast::<<Self::Node as Node>::Trailer>();
-        trailer_ptr.write(trailer);
-        let value_offset =
-          (trailer_offset + mem::size_of::<<Self::Node as Node>::Trailer>()) as u32;
+        let value_offset = value.offset();
 
         // Safety: the node is well aligned
         let node_ref = &mut *node_ptr;
-        node_ref.set_value_pointer(trailer_offset as u32, value_size);
+        node_ref.set_value_pointer(value_offset as u32, value_size);
         node_ref.set_key_offset(key_offset);
         node_ref.set_key_size_and_height(encode_key_size_and_height(key_size as u32, height as u8));
         node_ref.set_version(version);
 
-        trailer_and_value.detach();
+        value.detach();
         let (_, value_deallocate_info) = self
-          .fill_vacant_value(
-            trailer_offset as u32,
-            trailer_and_value.capacity() as u32,
-            value_size,
-            value_offset,
-            vf,
-          )
+          .fill_vacant_value(value_offset as u32, value_size, vf)
           .map_err(Either::Left)?;
 
         node.detach();
@@ -1132,17 +917,10 @@ mod sealed {
         // Safety: node and trailer do not need to be dropped.
         node.detach();
         let node_offset = node.offset();
-
-        let trailer_offset = if mem::size_of::<<Self::Node as Node>::Trailer>() != 0 {
-          let mut trailer = self.alloc::<<Self::Node as Node>::Trailer>()?;
-          trailer.detach();
-          trailer.offset()
-        } else {
-          self.allocated()
-        };
+        let value_offset = self.allocated();
 
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
-        let full_node = <Self::Node as Node>::full(trailer_offset as u32, max_height);
+        let full_node = <Self::Node as Node>::full(value_offset as u32, max_height);
         ptr::write(node_ptr, full_node);
 
         Ok(NodePointer::new(
@@ -1156,17 +934,14 @@ mod sealed {
     fn allocate_and_update_value<'a, E>(
       &'a self,
       node: &<Self::Node as Node>::Pointer,
-      trailer: <Self::Node as Node>::Trailer,
       value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
     ) -> Result<(), Either<E, Error>> {
       let (value_size, f) = value_builder.into_components();
       let value_size = value_size as u32;
       let mut bytes = self
-        .alloc_aligned_bytes::<<Self::Node as Node>::Trailer>(value_size)
+        .alloc_bytes(value_size)
         .map_err(|e| Either::Right(e.into()))?;
-      let trailer_ptr = bytes.as_mut_ptr().cast::<<Self::Node as Node>::Trailer>();
-      let trailer_offset = bytes.offset();
-      let value_offset = trailer_offset + mem::size_of::<<Self::Node as Node>::Trailer>();
+      let value_offset = bytes.offset();
 
       let mut oval = unsafe {
         VacantBuffer::new(
@@ -1186,14 +961,13 @@ mod sealed {
 
       unsafe {
         bytes.detach();
-        trailer_ptr.write(trailer);
       }
 
       if discard != 0 {
         self.increase_discarded(discard as u32);
       }
 
-      let (_, old_len) = node.value_pointer().swap(trailer_offset as u32, value_size);
+      let (_, old_len) = node.value_pointer().swap(value_offset as u32, value_size);
       if old_len != <<Self::Node as Node>::ValuePointer as ValuePointer>::REMOVE {
         self.increase_discarded(old_len);
       }
@@ -1241,8 +1015,6 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
   type Header = H;
 
   type Node = N;
-
-  type Trailer = <N as Node>::Trailer;
 
   type Allocator = A;
 

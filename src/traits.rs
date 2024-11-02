@@ -9,34 +9,20 @@ use either::Either;
 use rarena_allocator::Allocator as ArenaAllocator;
 
 use super::{
-  allocator::{
-    Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed, WithTrailer,
-  },
+  allocator::{Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed},
   base::{EntryRef, SkipList, VersionedEntryRef},
+  error::Error,
   iter::Iter,
-  Error, Height, KeyBuilder, Options, ValueBuilder, MIN_VERSION,
+  options::Options,
+  types::{Height, KeyBuilder, ValueBuilder},
+  MIN_VERSION,
 };
-
-mod container;
-pub use container::*;
-
-mod versioned_container;
-pub use versioned_container::*;
-
-/// [`Trailer`](crate::traits::trailer::Trailer) and some built-in trailers
-pub mod trailer;
-
-/// [`TrailedMap`](trailed::TrailedMap) implementation
-pub mod trailed;
 
 /// [`Map`](map::Map) implementation
 pub mod map;
 
-/// [`VersionedMap`](versioned::VersionedMap) implementation
-pub mod versioned;
-
-/// [`FullMap`](full::FullMap) implementation
-pub mod full;
+/// [`Map`](multiple_version::Map) implementation
+pub mod multiple_version;
 
 /// The underlying skip list for skip maps
 pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
@@ -252,12 +238,12 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{trailed::sync::SkipMap, Arena, Options};
+  /// use skl::{map::sync::SkipMap, Arena, Options};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8], u64>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8]>>().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::<[u8], [u8], u64>::estimated_node_size(height, b"k1".len(), b"k2".len());
+  /// let needed = SkipMap::<[u8], [u8]>::estimated_node_size(height, b"k1".len(), b"k2".len());
   /// ```
   #[inline]
   fn random_height(&self) -> Height {

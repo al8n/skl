@@ -15,7 +15,10 @@ use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Header, Link, Node, NodePointer},
-  random_height, ty_ref, Error, Height, ValueBuilder, Version,
+  error::Error,
+  random_height, ty_ref,
+  types::{Height, ValueBuilder},
+  Version,
 };
 
 use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
@@ -149,8 +152,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
       + mem::size_of::<A::Node>()
       + mem::size_of::<<A::Node as Node>::Link>() * height
       + key_size
-      + mem::align_of::<A::Trailer>() - 1 // max trailer padding
-      + mem::size_of::<A::Trailer>()
       + value_size
   }
 
@@ -288,11 +289,11 @@ where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, eq) = self.find_near(version, key, false, true, true); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
-      let node_key = node.get_key(&self.arena);
-      let (value, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
+      let raw_node_key = node.get_key(&self.arena);
+      let (value, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return value.map(|_| {
           EntryRef(VersionedEntryRef::from_node_with_pointer(
@@ -300,13 +301,14 @@ where
             node,
             self,
             pointer,
-            Some(node_key),
+            Some(raw_node_key),
             None,
           ))
         });
       }
 
-      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
+      let node_key = ty_ref::<K>(raw_node_key);
+      if !Equivalent::equivalent(key, &node_key) {
         return None;
       }
 
@@ -320,8 +322,8 @@ where
           node,
           self,
           pointer,
+          Some(raw_node_key),
           Some(node_key),
-          None,
         ))
       })
     }
@@ -339,23 +341,24 @@ where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
     unsafe {
-      let (n, eq) = self.find_near(version, key, false, true, false); // findLessOrEqual.
+      let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
-      let node_key = node.get_key(&self.arena);
-      let (_, pointer) = node.get_value_and_trailer_with_pointer(&self.arena);
+      let raw_node_key = node.get_key(&self.arena);
+      let (_, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return Some(VersionedEntryRef::from_node_with_pointer(
           version,
           node,
           self,
           pointer,
-          Some(node_key),
+          Some(raw_node_key),
           None,
         ));
       }
 
-      if !Equivalent::equivalent(key, &ty_ref::<K>(node_key)) {
+      let node_key = ty_ref::<K>(raw_node_key);
+      if !Equivalent::equivalent(key, &node_key) {
         return None;
       }
 
@@ -368,8 +371,8 @@ where
         node,
         self,
         pointer,
+        Some(raw_node_key),
         Some(node_key),
-        None,
       ))
     }
   }
@@ -413,11 +416,11 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::AllVersionsIter<'a, K, V, A>
+  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::IterAll<'a, K, V, A>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    iterator::AllVersionsIter::new(version, self, true)
+    iterator::IterAll::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
@@ -437,12 +440,12 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> iterator::AllVersionsIter<'a, K, V, A, Q, R>
+  ) -> iterator::IterAll<'a, K, V, A, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     R: RangeBounds<Q>,
   {
-    iterator::AllVersionsIter::range(version, self, range, true)
+    iterator::IterAll::range(version, self, range, true)
   }
 }

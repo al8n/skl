@@ -2,15 +2,11 @@ use super::*;
 
 #[cfg(any(all(test, not(miri)), all_tests, test_unsync_versioned,))]
 mod tests {
-  use super::*;
-
-  __container_tests!("unsync_versioned_map": SkipMap<[u8], [u8]>);
-
-  __versioned_map_tests!("unsync_versioned_map": SkipMap<[u8], [u8]>);
+  crate::__multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
-type SkipList<K, V> = base::SkipList<K, V, Allocator>;
+type SkipList<K, V> = crate::base::SkipList<K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
 pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
@@ -25,10 +21,10 @@ pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
 pub type VersionedEntry<'a, K, V> = crate::VersionedEntryRef<'a, K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
-pub type AllVersionsIter<'a, K, V> = crate::iter::AllVersionsIter<'a, K, V, Allocator>;
+pub type IterAll<'a, K, V> = crate::iter::IterAll<'a, K, V, Allocator>;
 
 /// Iterator over a subset of the [`SkipMap`].
-pub type AllVersionsRange<'a, K, V, Q, R> = crate::iter::AllVersionsIter<'a, K, V, Allocator, Q, R>;
+pub type RangeAll<'a, K, V, Q, R> = crate::iter::IterAll<'a, K, V, Allocator, Q, R>;
 
 node!(
   /// A node that only supports version.
@@ -37,7 +33,7 @@ node!(
 
     {
       type Link = Link;
-      type Trailer = ();
+
       type ValuePointer = UnsyncValuePointer;
       type Pointer = NodePointer;
 
@@ -62,7 +58,7 @@ node!(
 
 /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
 ///
-/// If you want to use in concurrent environment, you can use [`sync::versioned::SkipMap`].
+/// If you want to use in concurrent environment, you can use [`multiple_version::sync::SkipMap`](crate::multiple_version::sync::SkipMap).
 #[repr(transparent)]
 pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 

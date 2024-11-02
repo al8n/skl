@@ -16,26 +16,20 @@ extern crate alloc as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::ptr::NonNull;
-
 mod allocator;
 pub use allocator::GenericAllocator;
 
 /// Skiplist implementation
 mod base;
 
-mod error;
-pub use error::Error;
+/// Error types for the `SkipMap`s.
+pub mod error;
 
 mod options;
 pub use options::*;
 
 mod traits;
-pub use traits::{
-  full, map, trailed,
-  trailer::{self, Trailer},
-  versioned, Arena, Container, VersionedContainer,
-};
+pub use traits::{map, multiple_version, Arena};
 
 mod types;
 pub use types::*;
@@ -44,7 +38,7 @@ pub use dbutils::equivalent::*;
 
 /// Iterators for the skipmaps.
 pub mod iter {
-  pub use super::base::iterator::{AllVersionsIter, Iter};
+  pub use super::base::iterator::{Iter, IterAll};
 }
 
 #[cfg(any(
@@ -52,49 +46,25 @@ pub mod iter {
   all_tests,
   test_unsync_map,
   test_unsync_versioned,
-  test_unsync_trailed,
-  test_unsync_full,
-  test_sync_full,
   test_sync_map,
   test_sync_versioned,
-  test_sync_trailed,
-  test_sync_full_concurrent,
   test_sync_map_concurrent,
-  test_sync_versioned_concurrent,
-  test_sync_trailed_concurrent,
-  test_sync_full_concurrent_with_optimistic_freelist,
+  test_sync_multiple_version_concurrent,
   test_sync_map_concurrent_with_optimistic_freelist,
-  test_sync_versioned_concurrent_with_optimistic_freelist,
-  test_sync_trailed_concurrent_with_optimistic_freelist,
-  test_sync_full_concurrent_with_pessimistic_freelist,
+  test_sync_multiple_version_concurrent_with_optimistic_freelist,
   test_sync_map_concurrent_with_pessimistic_freelist,
-  test_sync_versioned_concurrent_with_pessimistic_freelist,
-  test_sync_trailed_concurrent_with_pessimistic_freelist,
+  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
 ))]
 mod tests;
 
 pub use among;
 pub use either;
-pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition, Error as ArenaError};
+pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition};
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
-const DANGLING_ZST: NonNull<()> = NonNull::dangling();
-
-/// ## Safety
-/// - `T` must be a ZST.
-#[inline]
-const unsafe fn dangling_zst_ref<'a, T>() -> &'a T {
-  #[cfg(debug_assertions)]
-  if core::mem::size_of::<T>() != 0 {
-    panic!("`T` must be a ZST");
-  }
-
-  // Safety: T is ZST, so it's safe to cast and deref.
-  unsafe { &*(DANGLING_ZST.as_ptr() as *const T) }
-}
 
 /// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]
@@ -187,8 +157,6 @@ macro_rules! node {
       {
         type Link = $link:ty;
 
-        type Trailer = $trailer:ty;
-
         type ValuePointer = $value_pointer:ty;
 
         type Pointer = $pointer:ty;
@@ -251,8 +219,6 @@ macro_rules! node {
 
     impl $(<$generic: $crate::Trailer>)? $crate::allocator::Node for $name $(<$generic>)? {
       type Link = $link;
-
-      type Trailer = $trailer;
 
       type ValuePointer = $value_pointer;
 

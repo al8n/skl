@@ -1,15 +1,20 @@
-use dbutils::types::{KeyRef, MaybeStructured, Type};
+use dbutils::{
+  equivalent::Comparable,
+  types::{KeyRef, MaybeStructured, Type},
+};
+
+use crate::allocator::WithoutVersion;
 
 use super::*;
 
 /// [`Map`] implementation for concurrent environment.
 pub mod sync {
-  pub use crate::sync::map::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap};
+  pub use crate::sync::map::{Entry, Iter, IterAll, Range, RangeAll, SkipMap};
 }
 
 /// [`Map`] implementation for non-concurrent environment.
 pub mod unsync {
-  pub use crate::unsync::map::{AllVersionsIter, AllVersionsRange, Entry, Iter, Range, SkipMap};
+  pub use crate::unsync::map::{Entry, Iter, IterAll, Range, RangeAll, SkipMap};
 }
 
 /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
@@ -20,9 +25,135 @@ pub trait Map<K, V>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
-  Self: Container<K, V>,
-  <Self::Allocator as AllocatorSealed>::Trailer: Default,
+  Self: Arena<K, V>,
+  <Self::Allocator as AllocatorSealed>::Node: WithoutVersion,
 {
+  /// Returns `true` if the key exists in the map.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{map::{unsync::SkipMap, Map},  Options};
+  ///
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap::<str, str>>().unwrap();
+  ///
+  /// map.insert("hello", "world").unwrap();
+  ///
+  /// map.remove("hello").unwrap();
+  ///
+  /// assert!(!map.contains_key("hello"));
+  /// ```
+  #[inline]
+  fn contains_key<'a, Q>(&'a self, key: &Q) -> bool
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self.as_ref().contains_key(MIN_VERSION, key)
+  }
+
+  /// Returns the first entry in the map.
+  #[inline]
+  fn first<'a>(&'a self) -> Option<EntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
+    self.as_ref().first(MIN_VERSION)
+  }
+
+  /// Returns the last entry in the map.
+  #[inline]
+  fn last<'a>(&'a self) -> Option<EntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
+    self.as_ref().last(MIN_VERSION)
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{map::{sync::SkipMap, Map}, Options};
+  ///
+  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<str, str>>().unwrap();
+  ///
+  /// map.insert("hello", "world").unwrap();
+  ///
+  /// let ent = map.get("hello").unwrap();
+  /// assert_eq!(ent.value(), "world");
+  ///
+  /// map.remove("hello").unwrap();
+  ///
+  /// assert!(map.get("hello").is_none());
+  /// ```
+  #[inline]
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<EntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self.as_ref().get(MIN_VERSION, key)
+  }
+
+  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn upper_bound<'a, Q>(&'a self, upper: Bound<&Q>) -> Option<EntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self.as_ref().upper_bound(MIN_VERSION, upper)
+  }
+
+  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  #[inline]
+  fn lower_bound<'a, Q>(&'a self, lower: Bound<&Q>) -> Option<EntryRef<'a, K, V, Self::Allocator>>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+  {
+    self.as_ref().lower_bound(MIN_VERSION, lower)
+  }
+
+  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
+  #[inline]
+  fn iter<'a>(&'a self) -> Iter<'a, K, V, Self::Allocator>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+  {
+    self.as_ref().iter(MIN_VERSION)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
+  #[inline]
+  fn range<'a, Q, R>(&'a self, range: R) -> Iter<'a, K, V, Self::Allocator, Q, R>
+  where
+    K: Type,
+    K::Ref<'a>: KeyRef<'a, K>,
+    V: Type,
+    Q: ?Sized + Comparable<K::Ref<'a>>,
+    R: RangeBounds<Q>,
+  {
+    self.as_ref().range(MIN_VERSION, range)
+  }
+
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](Map::get_or_insert), this method will update the value if the key with the given version already exists.
   ///
@@ -72,7 +203,7 @@ where
   {
     self
       .as_ref()
-      .insert_at_height(MIN_VERSION, height, key, value, Default::default())
+      .insert_at_height(MIN_VERSION, height, key, value)
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -198,13 +329,9 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
   {
-    self.as_ref().insert_at_height_with_value_builder(
-      MIN_VERSION,
-      height,
-      key,
-      value_builder,
-      Default::default(),
-    )
+    self
+      .as_ref()
+      .insert_at_height_with_value_builder(MIN_VERSION, height, key, value_builder)
   }
 
   /// Inserts a new key-value pair if it does not yet exist.
@@ -247,7 +374,7 @@ where
   {
     self
       .as_ref()
-      .get_or_insert_at_height(MIN_VERSION, height, key, value, Default::default())
+      .get_or_insert_at_height(MIN_VERSION, height, key, value)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -379,7 +506,6 @@ where
       height,
       key,
       value_builder,
-      Default::default(),
     )
   }
 
@@ -515,13 +641,9 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
-    self.as_ref().insert_at_height_with_builders(
-      MIN_VERSION,
-      height,
-      key_builder,
-      value_builder,
-      Default::default(),
-    )
+    self
+      .as_ref()
+      .insert_at_height_with_builders(MIN_VERSION, height, key_builder, value_builder)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -656,7 +778,6 @@ where
       height,
       key_builder,
       value_builder,
-      Default::default(),
     )
   }
 
@@ -705,7 +826,6 @@ where
       MIN_VERSION,
       height,
       key,
-      Default::default(),
       Ordering::AcqRel,
       Ordering::Relaxed,
     )
@@ -763,7 +883,7 @@ where
   {
     self
       .as_ref()
-      .get_or_remove_at_height(MIN_VERSION, height, key, Default::default())
+      .get_or_remove_at_height(MIN_VERSION, height, key)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -879,12 +999,9 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
-    self.as_ref().get_or_remove_at_height_with_builder(
-      MIN_VERSION,
-      height,
-      key_builder,
-      Default::default(),
-    )
+    self
+      .as_ref()
+      .get_or_remove_at_height_with_builder(MIN_VERSION, height, key_builder)
   }
 }
 
@@ -892,7 +1009,7 @@ impl<K, V, T> Map<K, V> for T
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
-  T: Container<K, V>,
-  <T::Allocator as AllocatorSealed>::Trailer: Default,
+  T: Arena<K, V>,
+  <T::Allocator as AllocatorSealed>::Node: WithoutVersion,
 {
 }

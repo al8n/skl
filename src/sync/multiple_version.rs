@@ -2,44 +2,34 @@ use super::*;
 
 #[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned,))]
 mod tests {
-  use super::*;
-
-  __container_tests!("sync_versioned_map": SkipMap<[u8], [u8]>);
-
-  __versioned_map_tests!("sync_versioned_map": SkipMap<[u8], [u8]>);
+  crate::__multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
 }
 
-#[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned_concurrent,))]
+#[cfg(any(all(test, not(miri)), all_tests, test_sync_multiple_version_concurrent,))]
 mod concurrent_tests {
-  use super::*;
-
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
+  crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
 }
 
 #[cfg(any(
   all(test, not(miri)),
   all_tests,
-  test_sync_versioned_concurrent_with_optimistic_freelist,
+  test_sync_multiple_version_concurrent_with_optimistic_freelist,
 ))]
 mod concurrent_tests_with_optimistic_freelist {
-  use super::*;
-
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
 }
 
 #[cfg(any(
   all(test, not(miri)),
   all_tests,
-  test_sync_versioned_concurrent_with_pessimistic_freelist,
+  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
 ))]
 mod concurrent_tests_with_pessimistic_freelist {
-  use super::*;
-
-  __versioned_map_tests!(go "sync_versioned_map": SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
 }
 
 type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
-type SkipList<K, V> = base::SkipList<K, V, Allocator>;
+type SkipList<K, V> = crate::base::SkipList<K, V, Allocator>;
 
 /// Iterator over the [`SkipMap`].
 pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
@@ -48,10 +38,10 @@ pub type Iter<'a, K, V> = crate::iter::Iter<'a, K, V, Allocator>;
 pub type Range<'a, K, V, Q, R> = crate::iter::Iter<'a, K, V, Allocator, Q, R>;
 
 /// Iterator over the [`SkipMap`].
-pub type AllVersionsIter<'a, K, V> = crate::iter::AllVersionsIter<'a, K, V, Allocator>;
+pub type IterAll<'a, K, V> = crate::iter::IterAll<'a, K, V, Allocator>;
 
 /// Iterator over a subset of the [`SkipMap`].
-pub type AllVersionsRange<'a, K, V, Q, R> = crate::iter::AllVersionsIter<'a, K, V, Allocator, Q, R>;
+pub type RangeAll<'a, K, V, Q, R> = crate::iter::IterAll<'a, K, V, Allocator, Q, R>;
 
 /// The entry reference of the [`SkipMap`].
 pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
@@ -66,7 +56,7 @@ node!(
 
     {
       type Link = Link;
-      type Trailer = ();
+
       type ValuePointer = AtomicValuePointer;
       type Pointer = NodePointer;
 
@@ -91,7 +81,7 @@ node!(
 
 /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
 ///
-/// If you want to use in non-concurrent environment, you can use [`unsync::versioned::SkipMap`].
+/// If you want to use in non-concurrent environment, you can use [`multiple_version::unsync::SkipMap`](crate::multiple_version::unsync::SkipMap).
 #[repr(transparent)]
 pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.19.0
+
+- Cleanup structures and remove `Trailer`, `TrailedMap` and `FullMap`
+- Add `version` guard for query APIs
+- Add `Height::with` and `KeySize::with`
+- Fix wrong result returned from `Key::is_remove`
+- Add `data_offset` and `data_offset_unify` method for `Options`
+- Renaming types
+
 ## 0.17.0
 
 - Refactor to support generic key-value types

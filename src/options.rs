@@ -5,10 +5,10 @@ use rarena_allocator::Options as ArenaOptions;
 
 use super::{
   allocator::{Node, Sealed as AllocatorSealed},
-  Height, KeySize,
+  error::Error,
+  types::{Height, KeySize},
+  Arena,
 };
-
-use crate::{allocator::Sealed, Arena, Error};
 
 /// The memory format version.
 pub(crate) const CURRENT_VERSION: u16 = 0;
@@ -507,7 +507,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{full::sync, trailed::unsync, Options, Arena};
+  /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
   /// let opts = Options::new().with_capacity(1024);
@@ -550,7 +550,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{full::sync, trailed::unsync, Options, Arena};
+  /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
   /// let opts = Options::new().with_capacity(1024);
@@ -638,7 +638,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{full::sync, trailed::unsync, Options};
+  /// use skl::{map::sync, multiple_version::unsync, Options};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
   /// let map = Options::new().with_capacity(1024).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
@@ -653,13 +653,12 @@ impl Options {
     V: ?Sized + 'static,
     T: Arena<K, V>,
   {
-    let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
-    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
+    let node_align = mem::align_of::<<T::Allocator as AllocatorSealed>::Node>();
 
     self
       .to_arena_options()
-      .with_maximum_alignment(node_align.max(trailer_align))
-      .alloc::<<T::Allocator as Sealed>::Allocator>()
+      .with_maximum_alignment(node_align)
+      .alloc::<<T::Allocator as AllocatorSealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| T::construct(arena, self, false))
   }
@@ -681,23 +680,8 @@ fn data_offset_in<A: AllocatorSealed>(offset: usize, max_height: Height, unify: 
     + mem::size_of::<A::Node>()
     + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize();
 
-  let trailer_alignment = mem::align_of::<A::Trailer>();
-  let trailer_size = mem::size_of::<A::Trailer>();
-  let trailer_end = if trailer_size != 0 {
-    let trailer_offset = (head_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-    trailer_offset + trailer_size
-  } else {
-    head_end
-  };
-
-  let tail_offset = (trailer_end + alignment - 1) & !(alignment - 1);
-  let tail_end = tail_offset
+  let tail_offset = (head_end + alignment - 1) & !(alignment - 1);
+  tail_offset
     + mem::size_of::<A::Node>()
-    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize();
-  if trailer_size != 0 {
-    let trailer_offset = (tail_end + trailer_alignment - 1) & !(trailer_alignment - 1);
-    trailer_offset + trailer_size
-  } else {
-    tail_end
-  }
+    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize()
 }

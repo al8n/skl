@@ -1,6 +1,6 @@
 use skl::{
   map::{sync::SkipMap, Map},
-  Arena, Container, Options,
+  Arena, Options,
 };
 
 pub fn key(i: usize) -> Vec<u8> {

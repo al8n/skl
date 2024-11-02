@@ -27,7 +27,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{full::sync, trailed::unsync, Options};
+  /// use skl::{map::sync, multiple_version::unsync, Options};
   ///
   /// // Create a sync skipmap which supports both trailer and version.
   /// let map = Options::new().with_capacity(1024).map_anon::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
@@ -47,12 +47,11 @@ impl Options {
     T: Arena<K, V>,
   {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
-    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
 
     #[allow(clippy::bind_instead_of_map)]
     self
       .to_arena_options()
-      .with_maximum_alignment(node_align.max(trailer_align))
+      .with_maximum_alignment(node_align)
       .map_anon::<<T::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| {
@@ -122,7 +121,6 @@ impl Options {
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
-    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
     let magic_version = self.magic_version();
 
     #[allow(clippy::bind_instead_of_map)]
@@ -135,7 +133,7 @@ impl Options {
       .with_write(false)
       .with_truncate(false)
       .with_append(false)
-      .with_maximum_alignment(node_align.max(trailer_align))
+      .with_maximum_alignment(node_align)
       .map_with_path_builder::<<T::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
         T::construct(arena, self, true)
@@ -211,7 +209,6 @@ impl Options {
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     let node_align = mem::align_of::<<T::Allocator as Sealed>::Node>();
-    let trailer_align = mem::align_of::<<T::Allocator as Sealed>::Trailer>();
     let magic_version = self.magic_version();
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
@@ -219,7 +216,7 @@ impl Options {
     #[allow(clippy::bind_instead_of_map)]
     self
       .to_arena_options()
-      .with_maximum_alignment(node_align.max(trailer_align))
+      .with_maximum_alignment(node_align)
       .with_unify(true)
       .map_mut::<<T::Allocator as Sealed>::Allocator, _>(path)
       .map_err(Either::Right)

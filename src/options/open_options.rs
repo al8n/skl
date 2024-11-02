@@ -5,8 +5,8 @@ use rarena_allocator::Allocator;
 
 use super::{super::Options, Arena, CURRENT_VERSION};
 use crate::{
-  allocator::Sealed,
-  error::{bad_magic_version, bad_version, invalid_data},
+  allocator::{Header, Node, Sealed},
+  error::{bad_magic_version, bad_version, flags_mismtach, invalid_data},
 };
 
 impl Options {
@@ -29,10 +29,8 @@ impl Options {
   /// ```rust
   /// use skl::{map::sync, multiple_version::unsync, Options};
   ///
-  /// // Create a sync skipmap which supports both trailer and version.
   /// let map = Options::new().with_capacity(1024).map_anon::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// // Create a unsync skipmap which supports trailer.
   /// let arena = Options::new().with_capacity(1024).map_anon::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   ///
@@ -75,8 +73,6 @@ impl Options {
   /// Opens a read-only map which backed by file-backed memory map.
   ///
   /// ## Safety
-  /// - If `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
-  /// - The `C` must be the same as the one used to create the map.
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -100,8 +96,6 @@ impl Options {
   /// Opens a read-only map which backed by file-backed memory map with a path builder.
   ///
   /// ## Safety
-  /// - If `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
-  /// - The `C` must be the same as the one used to create the map.
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -139,6 +133,13 @@ impl Options {
         T::construct(arena, self, true)
           .map_err(invalid_data)
           .and_then(|map| {
+            let flags = map.as_ref().meta().flags();
+            let node_flags = <<T::Allocator as Sealed>::Node as Node>::flags();
+
+            if flags != node_flags {
+              return Err(flags_mismtach(flags, node_flags));
+            }
+
             if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
             } else if map.version() != CURRENT_VERSION {
@@ -164,8 +165,6 @@ impl Options {
   ///
   /// ## Safety
   ///
-  /// - If trying to reopen a map and `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
-  /// - If trying to reopen a map, the `C` must be the same as the one used to create the map.
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -189,8 +188,6 @@ impl Options {
   /// Creates a new map or reopens a map which backed by a file backed memory map with path builder.
   ///
   /// # Safety
-  /// - If trying to reopen a map and `T` is a `TrailedMap`, then trailer type must be the same as the one used to create the map.
-  /// - If trying to reopen a map, the `C` must be the same as the one used to create the map.
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -224,6 +221,13 @@ impl Options {
         T::construct(arena, self, exist)
           .map_err(invalid_data)
           .and_then(|map| {
+            let flags = map.as_ref().meta().flags();
+            let node_flags = <<T::Allocator as Sealed>::Node as Node>::flags();
+
+            if flags != node_flags {
+              return Err(flags_mismtach(flags, node_flags));
+            }
+
             if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
             } else if map.version() != CURRENT_VERSION {

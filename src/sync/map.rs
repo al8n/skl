@@ -47,23 +47,27 @@ pub type RangeAll<'a, K, V, Q, R> = crate::iter::IterAll<'a, K, V, Allocator, Q,
 pub type Entry<'a, K, V> = crate::EntryRef<'a, K, V, Allocator>;
 
 node!(
-  /// A raw node that does not support version and trailer.
-  struct RawNode {{
-    type Link = Link;
+  /// A raw node that does not support version.
+  struct RawNode {
+    flags = Flags::empty();
 
-    type ValuePointer = AtomicValuePointer;
-    type Pointer = NodePointer;
+    {
+      type Link = Link;
 
-    fn set_version(&mut self, version: Version) {}
+      type ValuePointer = AtomicValuePointer;
+      type Pointer = NodePointer;
 
-    impl WithoutVersion for RawNode {}
+      fn set_version(&mut self, version: Version) {}
 
-    node_pointer!(RawNode {{
-      fn version(&self) -> Version {
-        MIN_VERSION
-      }
-    }});
-  }}
+      impl WithoutVersion for RawNode {}
+
+      node_pointer!(RawNode {{
+        fn version(&self) -> Version {
+          MIN_VERSION
+        }
+      }});
+    }
+  }
 );
 
 /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.

@@ -7,7 +7,6 @@ ignore:
   - src/tests/
   - src/tests.rs
   - src/types.rs
-  - src/traits/trailer.rs
   - src/error.rs
 
 coverage:

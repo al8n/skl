@@ -2,6 +2,8 @@ pub use rarena_allocator::sync::Arena;
 
 use core::ptr::NonNull;
 
+use crate::internal::Flags;
+
 use super::{
   allocator::{Link as ContainerLink, *},
   common::*,
@@ -20,7 +22,7 @@ pub struct VersionedMeta {
   magic_version: u16,
   /// Current height. 1 <= height <= 31. CAS.
   height: AtomicU8,
-  reserved_byte: u8,
+  flags: Flags,
 }
 
 impl Header for VersionedMeta {
@@ -32,7 +34,7 @@ impl Header for VersionedMeta {
       magic_version: version,
       height: AtomicU8::new(1),
       len: AtomicU32::new(0),
-      reserved_byte: 0,
+      flags: Flags::MULTIPLE_VERSION,
     }
   }
 
@@ -54,6 +56,11 @@ impl Header for VersionedMeta {
   #[inline]
   fn height(&self) -> u8 {
     self.height.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn flags(&self) -> Flags {
+    self.flags
   }
 
   #[inline]
@@ -126,7 +133,7 @@ pub struct Meta {
   magic_version: u16,
   /// Current height. 1 <= height <= 31. CAS.
   height: AtomicU8,
-  reserved_byte: u8,
+  flags: Flags,
 }
 
 impl Header for Meta {
@@ -136,7 +143,7 @@ impl Header for Meta {
       magic_version: version,
       height: AtomicU8::new(1),
       len: AtomicU32::new(0),
-      reserved_byte: 0,
+      flags: Flags::empty(),
     }
   }
 
@@ -158,6 +165,11 @@ impl Header for Meta {
   #[inline]
   fn height(&self) -> u8 {
     self.height.load(Ordering::Acquire)
+  }
+
+  #[inline]
+  fn flags(&self) -> Flags {
+    self.flags
   }
 
   #[inline]
@@ -268,7 +280,7 @@ impl ContainerLink for Link {
 }
 
 macro_rules! node_pointer {
-  ($node: ident $(<$t:ident>)? {
+  ($node: ident {
     $($version_field:ident = $default_version:ident;)?
 
     {
@@ -280,34 +292,32 @@ macro_rules! node_pointer {
   }) => {
     #[doc(hidden)]
     #[derive(Debug)]
-    pub struct NodePointer $(<$t: $crate::Trailer>)? {
+    pub struct NodePointer {
       offset: u32,
       value_ptr: NonNull<<<Self as $crate::allocator::NodePointer>::Node as Node>::ValuePointer>,
       key_offset_ptr: NonNull<u32>,
       key_size_and_height_ptr: NonNull<u32>,
       $($version_field: Version,)?
-      _m: core::marker::PhantomData<$node $(<$t>)?>,
     }
 
-    impl $(<$t: $crate::Trailer>)? Clone for NodePointer $(<$t>)? {
+    impl Clone for NodePointer {
       fn clone(&self) -> Self {
         *self
       }
     }
 
-    impl $(<$t: $crate::Trailer>)? Copy for NodePointer $(<$t>)? {}
+    impl Copy for NodePointer {}
 
-    impl $(<$t: $crate::Trailer>)? $crate::allocator::NodePointer for NodePointer $(<$t>)? {
+    impl $crate::allocator::NodePointer for NodePointer {
       const NULL: Self = Self {
         offset: 0,
         value_ptr: NonNull::dangling(),
         key_offset_ptr: NonNull::dangling(),
         key_size_and_height_ptr: NonNull::dangling(),
         $($version_field: $default_version,)?
-        _m: core::marker::PhantomData,
       };
 
-      type Node = $node $(<$t>)?;
+      type Node = $node;
 
       #[inline]
       fn is_null(&self) -> bool {
@@ -318,11 +328,6 @@ macro_rules! node_pointer {
       fn offset(&self) -> u32 {
         self.offset
       }
-
-      // #[inline]
-      // fn pointer(&self) -> &NonNull<u8> {
-      //   &self.ptr
-      // }
 
       /// ## Safety
       ///
@@ -393,7 +398,6 @@ macro_rules! node_pointer {
               let ptr = ptr.add(core::mem::size_of::<<Self::Node as Node>::ValuePointer>() + 8).cast::<Version>();
               core::ptr::read(ptr.as_ptr())
             },)?
-            _m: core::marker::PhantomData,
           }
         }
       }
@@ -452,5 +456,5 @@ macro_rules! node_pointer {
 /// A skipmap implementation with version support. See [`SkipMap`](multiple_version::SkipMap) for more information.
 pub mod multiple_version;
 
-/// A skipmap implementation without trailer and version support. See [`SkipMap`](map::SkipMap) for more information.
+/// A skipmap implementation without version support. See [`SkipMap`](map::SkipMap) for more information.
 pub mod map;

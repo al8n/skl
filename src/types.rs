@@ -36,6 +36,14 @@ pub(crate) mod internal {
       }
     }
   }
+
+  bitflags::bitflags! {
+    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+    pub struct Flags: u8 {
+      /// Indicates that the wal is muliple version.
+      const MULTIPLE_VERSION = 0b0000_0001;
+    }
+  }
 }
 
 macro_rules! impl_eq_and_ord {

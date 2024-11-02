@@ -1,6 +1,9 @@
 use super::Height;
 pub use rarena_allocator::Error as ArenaError;
 
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+use crate::types::internal::Flags;
+
 /// Error type for the `SkipMap`s.
 #[derive(Debug)]
 pub enum Error {
@@ -147,4 +150,51 @@ pub(super) fn bad_magic_version() -> std::io::Error {
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
 pub(super) fn bad_version() -> std::io::Error {
   std::io::Error::new(std::io::ErrorKind::InvalidData, "bad version")
+}
+
+#[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+pub(super) fn flags_mismtach(create: Flags, open: Flags) -> std::io::Error {
+  #[derive(Debug)]
+  struct Mismatch {
+    /// The map was created with this flags.
+    create: Flags,
+    /// Trying to open the map with this flags.
+    open: Flags,
+  }
+
+  impl core::fmt::Display for Mismatch {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+      write!(
+        f,
+        "the wal was {}, cannot be {}",
+        self.create.display_created_err_msg(),
+        self.open.display_open_err_msg()
+      )
+    }
+  }
+
+  impl core::error::Error for Mismatch {}
+
+  #[allow(non_local_definitions)]
+  impl Flags {
+    #[inline]
+    const fn display_created_err_msg(&self) -> &'static str {
+      if self.contains(Flags::MULTIPLE_VERSION) {
+        "created with multiple versions support"
+      } else {
+        "created without multiple versions support"
+      }
+    }
+
+    #[inline]
+    const fn display_open_err_msg(&self) -> &'static str {
+      if self.contains(Flags::MULTIPLE_VERSION) {
+        "opened with multiple versions support"
+      } else {
+        "opened without multiple versions support"
+      }
+    }
+  }
+
+  std::io::Error::new(std::io::ErrorKind::InvalidData, Mismatch { create, open })
 }

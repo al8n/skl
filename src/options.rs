@@ -509,7 +509,6 @@ impl Options {
   /// ```rust
   /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
   ///
-  /// // Create a sync skipmap which supports both trailer and version.
   /// let opts = Options::new().with_capacity(1024);
   /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
   /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
@@ -552,7 +551,6 @@ impl Options {
   /// ```rust
   /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
   ///
-  /// // Create a sync skipmap which supports both trailer and version.
   /// let opts = Options::new().with_capacity(1024);
   /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
   /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
@@ -640,10 +638,8 @@ impl Options {
   /// ```rust
   /// use skl::{map::sync, multiple_version::unsync, Options};
   ///
-  /// // Create a sync skipmap which supports both trailer and version.
   /// let map = Options::new().with_capacity(1024).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// // Create a unsync skipmap which supports trailer.
   /// let arena = Options::new().with_capacity(1024).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[inline]

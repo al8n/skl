@@ -29,6 +29,7 @@ pub type RangeAll<'a, K, V, Q, R> = crate::iter::IterAll<'a, K, V, Allocator, Q,
 node!(
   /// A node that only supports version.
   struct VersionedNode {
+    flags = Flags::MULTIPLE_VERSION;
     version: u64 = MIN_VERSION;
 
     {

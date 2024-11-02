@@ -52,6 +52,7 @@ pub type VersionedEntry<'a, K, V> = crate::VersionedEntryRef<'a, K, V, Allocator
 node!(
   /// A node that supports version.
   struct VersionedNode {
+    flags = Flags::MULTIPLE_VERSION;
     version: u64 = MIN_VERSION;
 
     {

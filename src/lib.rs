@@ -151,7 +151,9 @@ mod common {
 macro_rules! node {
   (
     $(#[$meta:meta])*
-    struct $name:ident $(<$generic:ident>)? {
+    struct $name:ident {
+      flags = $flags:expr;
+
       $($field:ident:$field_ty:ty = $default:expr;)*
 
       {
@@ -173,7 +175,7 @@ macro_rules! node {
   ) => {
     $(#[$meta])*
     #[repr(C)]
-    pub struct $name $(<$generic>)? {
+    pub struct $name {
       // A byte slice is 24 bytes. We are trying to save space here.
       /// Multiple parts of the value are encoded as a single u64 so that it
       /// can be atomically loaded and stored:
@@ -202,7 +204,7 @@ macro_rules! node {
       // pub(super) tower: [Link; self.opts.max_height],
     }
 
-    impl$(<$generic>)? ::core::fmt::Debug for $name $(<$generic>)? {
+    impl ::core::fmt::Debug for $name {
       fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         let (key_size, height) = $crate::decode_key_size_and_height(self.key_size_and_height);
         let (value_offset, value_size) = self.value.load();
@@ -217,13 +219,14 @@ macro_rules! node {
       }
     }
 
-    impl $(<$generic: $crate::Trailer>)? $crate::allocator::Node for $name $(<$generic>)? {
+    impl $crate::allocator::Node for $name {
       type Link = $link;
 
       type ValuePointer = $value_pointer;
 
-      type Pointer = NodePointer $(<$generic>)?;
+      type Pointer = NodePointer;
 
+      #[inline]
       fn full(value_offset: u32, max_height: u8) -> Self {
         Self {
           value: <$value_pointer>::new(value_offset, 0),
@@ -231,6 +234,11 @@ macro_rules! node {
           key_size_and_height: $crate::encode_key_size_and_height(0, max_height),
           $($field: $default,)*
         }
+      }
+
+      #[inline]
+      fn flags() -> crate::types::internal::Flags {
+        $flags
       }
 
       #[inline]

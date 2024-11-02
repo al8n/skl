@@ -140,7 +140,7 @@ where
   }
 
   #[inline]
-  const fn meta(&self) -> &A::Header {
+  pub(crate) const fn meta(&self) -> &A::Header {
     // Safety: the pointer is well aligned and initialized.
     unsafe { self.meta.as_ref() }
   }

@@ -23,6 +23,8 @@ mod sealed {
 
   use among::Among;
 
+  use crate::internal::Flags;
+
   use super::*;
 
   pub struct Pointer {
@@ -130,6 +132,8 @@ mod sealed {
     type Pointer: NodePointer<Node = Self>;
 
     fn full(value_offset: u32, max_height: u8) -> Self;
+
+    fn flags() -> Flags;
 
     #[inline]
     fn size(max_height: u8) -> usize {
@@ -446,6 +450,8 @@ mod sealed {
     fn minimum_version(&self) -> u64;
 
     fn height(&self) -> u8;
+
+    fn flags(&self) -> Flags;
 
     fn len(&self) -> u32;
 
@@ -794,7 +800,7 @@ mod sealed {
       }
     }
 
-    /// Allocates a `Node`, key and trailer
+    /// Allocates a `Node`, key
     fn allocate_tombstone_node_with_key_builder<'a, 'b: 'a, E>(
       &'a self,
       version: Version,
@@ -850,7 +856,7 @@ mod sealed {
       }
     }
 
-    /// Allocates a `Node`, trailer and value
+    /// Allocates a `Node`, value
     fn allocate_value_node<'a, 'b: 'a, E>(
       &'a self,
       version: Version,
@@ -908,13 +914,13 @@ mod sealed {
       &self,
       max_height: u8,
     ) -> Result<<Self::Node as Node>::Pointer, ArenaError> {
-      // Safety: node, links and trailer do not need to be dropped, and they are recoverable.
+      // Safety: node and links do not need to be dropped, and they are recoverable.
       unsafe {
         let mut node = self.alloc_aligned_bytes::<Self::Node>(
           ((max_height as usize) * mem::size_of::<<Self::Node as Node>::Link>()) as u32,
         )?;
 
-        // Safety: node and trailer do not need to be dropped.
+        // Safety: node do not need to be dropped.
         node.detach();
         let node_offset = node.offset();
         let value_offset = self.allocated();

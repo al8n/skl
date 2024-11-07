@@ -22,6 +22,8 @@ pub use allocator::GenericAllocator;
 /// Skiplist implementation
 mod base;
 
+mod dynamic;
+
 /// Error types for the `SkipMap`s.
 pub mod error;
 

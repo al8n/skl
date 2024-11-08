@@ -1,14 +1,15 @@
 #![allow(dead_code)]
-use super::Options;
+
+use crate::generic::Builder;
 
 pub(crate) const KB: usize = 1 << 10;
 const ARENA_SIZE: usize = 1 << 20;
-pub(crate) const TEST_OPTIONS: Options = Options::new().with_capacity(ARENA_SIZE as u32);
-pub(crate) const TEST_FULL_OPTIONS: Options = Options::new().with_capacity(1024);
-pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Options = Options::new()
+pub(crate) const TEST_OPTIONS: Builder = Builder::new().with_capacity(ARENA_SIZE as u32);
+pub(crate) const TEST_FULL_OPTIONS: Builder = Builder::new().with_capacity(1024);
+pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Builder = Builder::new()
   .with_capacity(ARENA_SIZE as u32)
   .with_freelist(rarena_allocator::Freelist::Optimistic);
-pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Options = Options::new()
+pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Builder = Builder::new()
   .with_capacity(ARENA_SIZE as u32)
   .with_freelist(rarena_allocator::Freelist::Pessimistic);
 // pub(crate) const TEST_HIGH_COMPRESSION_OPTIONS: Options = Options::new()
@@ -38,7 +39,7 @@ const BIG_ARENA_SIZE: usize = 120 << 20;
     test_sync_versioned,
   )
 ))]
-pub(crate) const BIG_TEST_OPTIONS: Options = Options::new().with_capacity(BIG_ARENA_SIZE as u32);
+pub(crate) const BIG_TEST_OPTIONS: Builder = Builder::new().with_capacity(BIG_ARENA_SIZE as u32);
 
 #[cfg(any(
   all(test, not(miri)),
@@ -122,7 +123,7 @@ macro_rules! __unit_test_expand {
       fn [< test_ $name >]() {
         $fn::$name(
           $opts
-            .alloc::<[u8], [u8], $ty>()
+            .alloc::<$ty>()
             .unwrap(),
         );
       }
@@ -133,7 +134,7 @@ macro_rules! __unit_test_expand {
         $fn::$name(
           $opts
             .with_unify(true)
-            .alloc::<[u8], [u8], $ty>()
+            .alloc::<$ty>()
             .unwrap(),
         );
       }
@@ -154,7 +155,7 @@ macro_rules! __unit_test_expand {
               .with_create_new(true)
               .with_read(true)
               .with_write(true)
-              .map_mut::<[u8], [u8], $ty, _>(p)
+              .map_mut::<$ty, _>(p)
               .unwrap(),
           );
         }
@@ -166,7 +167,7 @@ macro_rules! __unit_test_expand {
       fn [< test_ $name _map_anon >] () {
         $fn::$name(
           $opts
-            .map_anon::<[u8], [u8], $ty>()
+            .map_anon::<$ty>()
             .unwrap(),
         );
       }
@@ -178,7 +179,7 @@ macro_rules! __unit_test_expand {
         $fn::$name(
           $opts
             .with_unify(true)
-            .map_anon::<[u8], [u8], $ty>()
+            .map_anon::<$ty>()
             .unwrap(),
         );
       }

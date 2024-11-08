@@ -195,16 +195,6 @@ pub mod sync {
   }
 }
 
-// /// [`Map`] implementation for concurrent environment.
-// pub mod sync {
-//   pub use crate::sync::map::{Entry, Iter, IterAll, Range, RangeAll, SkipMap};
-// }
-
-// /// [`Map`] implementation for non-concurrent environment.
-// pub mod unsync {
-//   pub use crate::unsync::map::{Entry, Iter, IterAll, Range, RangeAll, SkipMap};
-// }
-
 /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
@@ -224,9 +214,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{unsync::SkipMap, Map},  Options};
+  /// use skl::generic::{unique::{unsync::SkipMap, Map}, Builder};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap::<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap::<str, str>>().unwrap();
   ///
   /// map.insert("hello", "world").unwrap();
   ///
@@ -275,9 +265,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, Options};
+  /// use skl::generic::{unique::{sync::SkipMap, Map}, Builder};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
   ///
   /// map.insert("hello", "world").unwrap();
   ///
@@ -392,9 +382,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, Arena};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<str, str, SkipMap<_, _>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(height, "hello", "world").unwrap();
@@ -434,7 +424,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Options};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -455,7 +445,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -499,7 +489,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -520,7 +510,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -618,7 +608,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Options};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -639,7 +629,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -683,7 +673,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, ValueBuilder, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -704,7 +694,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -755,7 +745,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -776,17 +766,17 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.insert_with_builders::<(), ()>(kb, vb)
@@ -825,7 +815,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -846,17 +836,17 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -896,7 +886,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Options};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -917,17 +907,17 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.get_or_insert_with_builders::<(), ()>(kb, vb)
@@ -963,7 +953,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, ValueBuilder, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -984,17 +974,17 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -1112,9 +1102,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, Arena};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<str, str, SkipMap<_, _>>().unwrap();
+  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
   ///
   /// map.insert("hello", "world").unwrap();
   ///
@@ -1155,7 +1145,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, Options};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, KeyBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1176,11 +1166,11 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   /// l.get_or_remove_with_builder::<core::convert::Infallible>(kb)
   /// .unwrap();
@@ -1215,7 +1205,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::{sync::SkipMap, Map}, KeyBuilder, Options, Arena};
+  /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, KeyBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1236,11 +1226,11 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Options::new().with_capacity(1024).alloc::<[u8], [u8], SkipMap<_, _>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   /// let height = l.random_height();
   /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(height, kb)

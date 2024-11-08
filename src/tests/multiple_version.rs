@@ -1598,18 +1598,18 @@ where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::Options;
+  use crate::generic::Builder;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(std::format!("{prefix}_reopen_skipmap"));
     {
-      let l = Options::new()
+      let l = Builder::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .with_capacity(ARENA_SIZE as u32)
-        .map_mut::<[u8], [u8], M, _>(&p)
+        .map_mut::<M, _>(&p)
         .unwrap();
       for i in 0..1000 {
         l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
@@ -1618,11 +1618,11 @@ where
       l.flush().unwrap();
     }
 
-    let l = Options::new()
+    let l = Builder::new()
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
-      .map::<[u8], [u8], M, _>(&p)
+      .map::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
@@ -1641,7 +1641,7 @@ where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::Options;
+  use crate::generic::Builder;
 
   unsafe {
     use rand::seq::SliceRandom;
@@ -1649,12 +1649,12 @@ where
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(::std::format!("{prefix}_reopen2_skipmap"));
     {
-      let l = Options::new()
+      let l = Builder::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .with_capacity(ARENA_SIZE as u32)
-        .map_mut::<[u8], [u8], M, _>(&p)
+        .map_mut::<M, _>(&p)
         .unwrap();
       let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
@@ -1676,11 +1676,11 @@ where
       }
     }
 
-    let l = Options::new()
+    let l = Builder::new()
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
-      .map::<[u8], [u8], M, _>(&p)
+      .map::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
     let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
@@ -1703,18 +1703,18 @@ where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::Options;
+  use crate::generic::Builder;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(std::format!("{prefix}_reopen3_skipmap"));
     {
-      let l = Options::new()
+      let l = Builder::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .with_capacity(ARENA_SIZE as u32)
-        .map_mut::<[u8], [u8], M, _>(&p)
+        .map_mut::<M, _>(&p)
         .unwrap();
       for i in 0..1000 {
         l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
@@ -1723,11 +1723,11 @@ where
       l.flush().unwrap();
     }
 
-    let l = Options::new()
+    let l = Builder::new()
       .with_read(true)
       .with_write(true)
       .with_capacity((ARENA_SIZE * 2) as u32)
-      .map_mut::<[u8], [u8], M, _>(&p)
+      .map_mut::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
@@ -1779,7 +1779,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.get_or_insert_with_value_builder::<()>(1, b"alice".as_slice(), vb)
@@ -1800,7 +1800,7 @@ where
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
-    Ok(())
+    Ok(5)
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
@@ -1819,7 +1819,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.get_or_insert_with_builders::<(), ()>(1, kb, vb).unwrap();
@@ -1873,7 +1873,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.insert_with_value_builder::<()>(1, b"alice".as_slice(), vb)
@@ -1900,7 +1900,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   let old = l
@@ -1930,7 +1930,7 @@ where
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
-    Ok(())
+    Ok(5)
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
@@ -1949,7 +1949,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.insert_with_builders::<(), ()>(1, kb, vb).unwrap();
@@ -1975,7 +1975,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
   let old = l
     .insert_with_builders::<(), ()>(1, kb, vb)

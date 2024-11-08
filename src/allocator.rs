@@ -548,6 +548,8 @@ mod sealed {
 
     fn options(&self) -> &Options;
 
+    fn arena(&self) -> &Self::Allocator;
+
     #[inline]
     fn reserved_bytes(&self) -> usize {
       ArenaAllocator::reserved_bytes(Deref::deref(self))
@@ -1036,6 +1038,11 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
       opts,
       _m: PhantomData,
     }
+  }
+
+  #[inline]
+  fn arena(&self) -> &Self::Allocator {
+    &self.arena
   }
 
   #[inline]

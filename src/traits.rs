@@ -1,5 +1,6 @@
 use among::Among;
 use core::{
+  mem,
   ops::{Bound, RangeBounds},
   ptr::NonNull,
   sync::atomic::Ordering,
@@ -9,10 +10,10 @@ use either::Either;
 use rarena_allocator::Allocator as ArenaAllocator;
 
 use super::{
-  allocator::{Allocator, AllocatorExt, Header, Link, NodePointer, Sealed as AllocatorSealed},
-  base::{EntryRef, SkipList, VersionedEntryRef},
+  allocator::{
+    Allocator, AllocatorExt, Header, Link, Node, NodePointer, Sealed as AllocatorSealed,
+  },
   error::Error,
-  iter::Iter,
   options::Options,
   types::{Height, KeyBuilder, ValueBuilder},
   MIN_VERSION,
@@ -24,52 +25,71 @@ pub mod map;
 /// [`Map`](multiple_version::Map) implementation
 pub mod multiple_version;
 
-/// The underlying skip list for skip maps
-pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
-  Sized + From<SkipList<K, V, <Self as List<K, V>>::Allocator>>
-{
+pub trait Constructable: Sized {
   type Allocator: Allocator;
+  type Comparator;
 
-  fn as_ref(&self) -> &SkipList<K, V, Self::Allocator>;
+  fn allocator(&self) -> &Self::Allocator;
 
-  fn as_mut(&mut self) -> &mut SkipList<K, V, Self::Allocator>;
-
-  #[inline]
-  fn allocator(&self) -> &Self::Allocator {
-    &self.as_ref().arena
-  }
-
-  #[inline]
-  fn magic_version(&self) -> u16 {
-    self.as_ref().magic_version()
-  }
+  fn magic_version(&self) -> u16;
 
   #[inline]
   fn version(&self) -> u16 {
-    ArenaAllocator::magic_version(core::ops::Deref::deref(&self.as_ref().arena))
+    ArenaAllocator::magic_version(self.allocator().arena())
   }
 
+  fn len(&self) -> usize;
+
+  fn height(&self) -> u8;
+
+  fn random_height(&self) -> Height;
+
+  unsafe fn clear(&mut self) -> Result<(), Error>;
+
   fn construct(
-    arena: <Self::Allocator as AllocatorSealed>::Allocator,
+    arena: Self::Allocator,
+    meta: NonNull<<Self::Allocator as AllocatorSealed>::Header>,
+    head: <<Self::Allocator as AllocatorSealed>::Node as Node>::Pointer,
+    tail: <<Self::Allocator as AllocatorSealed>::Node as Node>::Pointer,
+    data_offset: u32,
+    cmp: Self::Comparator,
+  ) -> Self;
+}
+
+/// The underlying skip list for skip maps
+pub trait List: Sized + From<Self::Constructable> {
+  type Constructable: Constructable;
+
+  fn as_ref(&self) -> &Self::Constructable;
+
+  fn as_mut(&mut self) -> &mut Self::Constructable;
+
+  fn construct(
+    arena: <<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Allocator,
     opts: Options,
     exist: bool,
+    cmp: <Self::Constructable as Constructable>::Comparator,
   ) -> Result<Self, Error> {
     use std::boxed::Box;
 
-    let arena = <Self::Allocator as AllocatorSealed>::new(arena, opts);
+    let arena =
+      <<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::new(arena, opts);
     let opts = arena.options();
     let max_height: u8 = opts.max_height().into();
     let data_offset = arena.check_capacity(max_height)?;
     if arena.read_only() || exist {
       let (meta, head, tail) = arena.get_pointers();
 
-      return Ok(Self::from(SkipList::construct(
-        arena,
-        meta,
-        head,
-        tail,
-        data_offset,
-      )));
+      return Ok(Self::from(
+        <Self::Constructable as Constructable>::construct(
+          arena,
+          meta,
+          head,
+          tail,
+          data_offset,
+          cmp,
+        ),
+      ));
     }
 
     let meta = if AllocatorSealed::unify(&arena) {
@@ -77,7 +97,7 @@ pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
     } else {
       unsafe {
         NonNull::new_unchecked(Box::into_raw(Box::new(
-          <<Self::Allocator as AllocatorSealed>::Header as Header>::new(opts.magic_version()),
+          <<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Header as Header>::new(opts.magic_version()),
         )))
       }
     };
@@ -97,28 +117,24 @@ pub trait List<K: ?Sized + 'static, V: ?Sized + 'static>:
       }
     }
 
-    Ok(Self::from(SkipList::construct(
-      arena,
-      meta,
-      head,
-      tail,
-      data_offset,
-    )))
+    Ok(Self::from(
+      <Self::Constructable as Constructable>::construct(arena, meta, head, tail, data_offset, cmp),
+    ))
   }
 }
 
 /// The wrapper trait over a underlying [`Allocator`](rarena_allocator::Allocator).
-pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
+pub trait Arena: List {
   /// Returns how many bytes are reserved by the ARENA.
   #[inline]
   fn reserved_bytes(&self) -> usize {
-    self.as_ref().arena.reserved_bytes()
+    self.as_ref().allocator().reserved_bytes()
   }
 
   /// Returns the reserved bytes of the allocator specified in the [`Options::with_reserved`].
   #[inline]
   fn reserved_slice(&self) -> &[u8] {
-    self.as_ref().arena.reserved_slice()
+    self.as_ref().allocator().reserved_slice()
   }
 
   /// Returns the mutable reserved bytes of the allocator specified in the [`Options::with_reserved`].
@@ -131,7 +147,7 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   #[allow(clippy::mut_from_ref)]
   #[inline]
   unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
-    self.as_ref().arena.reserved_slice_mut()
+    self.as_ref().allocator().reserved_slice_mut()
   }
 
   /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.
@@ -140,8 +156,8 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   #[inline]
   fn path(
     &self,
-  ) -> Option<&<<Self::Allocator as AllocatorSealed>::Allocator as ArenaAllocator>::Path> {
-    self.as_ref().arena.path()
+  ) -> Option<&<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Allocator as ArenaAllocator>::Path>{
+    self.as_ref().allocator().path()
   }
 
   /// Sets remove on drop, only works on mmap with a file backend.
@@ -154,7 +170,7 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
   fn remove_on_drop(&self, val: bool) {
-    self.as_ref().arena.remove_on_drop(val)
+    self.as_ref().allocator().remove_on_drop(val)
   }
 
   /// Returns the offset of the data section in the `SkipMap`.
@@ -165,7 +181,7 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// This method will return the offset of the data section in the ARENA.
   #[inline]
   fn data_offset(&self) -> usize {
-    self.as_ref().data_offset()
+    self.as_ref().allocator().data_offset()
   }
 
   /// Returns the magic version number of the [`Arena`].
@@ -186,19 +202,19 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// Returns the number of remaining bytes can be allocated by the arena.
   #[inline]
   fn remaining(&self) -> usize {
-    self.as_ref().remaining()
+    self.as_ref().allocator().remaining()
   }
 
   /// Returns the number of bytes that have allocated from the arena.
   #[inline]
   fn allocated(&self) -> usize {
-    self.as_ref().allocated()
+    self.as_ref().allocator().allocated()
   }
 
   /// Returns the capacity of the arena.
   #[inline]
   fn capacity(&self) -> usize {
-    self.as_ref().capacity()
+    self.as_ref().allocator().capacity()
   }
 
   /// Returns the number of entries in the skipmap.
@@ -216,19 +232,19 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// Gets the number of pointers to this `SkipMap` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
   #[inline]
   fn refs(&self) -> usize {
-    self.as_ref().refs()
+    self.as_ref().allocator().refs()
   }
 
   /// Returns how many bytes are discarded by the ARENA.
   #[inline]
   fn discarded(&self) -> u32 {
-    self.as_ref().discarded()
+    self.as_ref().allocator().discarded()
   }
 
   /// Returns `true` if the Arena is using unify memory layout.
   #[inline]
   fn unify(&self) -> bool {
-    self.as_ref().arena.unify()
+    self.as_ref().allocator().unify()
   }
 
   /// Returns a random generated height.
@@ -255,7 +271,12 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   /// **Note**: The returned size is only an estimate and may not be accurate, which means that the actual size is less than or equal to the returned size.
   #[inline]
   fn estimated_node_size(height: Height, key_size: usize, value_size: usize) -> usize {
-    SkipList::<K, V, Self::Allocator>::estimated_node_size(height, key_size, value_size)
+    let height: usize = height.into();
+    7 // max padding
+      + mem::size_of::<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Node>()
+      + mem::size_of::<<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Node as Node>::Link>() * height
+      + key_size
+      + value_size
   }
 
   /// Clear the skiplist to empty and re-initialize.
@@ -293,7 +314,7 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
   fn flush(&self) -> std::io::Result<()> {
-    self.as_ref().arena.flush()
+    self.as_ref().allocator().flush()
   }
 
   /// Asynchronously flushes outstanding memory map modifications to disk.
@@ -305,8 +326,8 @@ pub trait Arena<K: ?Sized + 'static, V: ?Sized + 'static>: List<K, V> {
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
   fn flush_async(&self) -> std::io::Result<()> {
-    self.as_ref().arena.flush_async()
+    self.as_ref().allocator().flush_async()
   }
 }
 
-impl<K: ?Sized + 'static, V: ?Sized + 'static, T> Arena<K, V> for T where T: List<K, V> {}
+impl<T> Arena for T where T: List {}

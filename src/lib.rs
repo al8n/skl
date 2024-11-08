@@ -19,10 +19,11 @@ extern crate std;
 mod allocator;
 pub use allocator::GenericAllocator;
 
-/// Skiplist implementation
-mod base;
+/// The dynamic key-value type `SkipMap`s.
+pub mod dynamic;
 
-mod dynamic;
+/// The generic key-value type `SkipMap`s.
+pub mod generic;
 
 /// Error types for the `SkipMap`s.
 pub mod error;
@@ -37,11 +38,6 @@ mod types;
 pub use types::*;
 
 pub use dbutils::equivalent::*;
-
-/// Iterators for the skipmaps.
-pub mod iter {
-  pub use super::base::iterator::{Iter, IterAll};
-}
 
 #[cfg(any(
   all(test, not(miri)),
@@ -67,6 +63,73 @@ const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
+
+/// A helper struct for caching splice information
+pub struct Inserter<'a, P> {
+  spl: [Splice<P>; crate::MAX_HEIGHT],
+  height: u32,
+  _m: core::marker::PhantomData<&'a ()>,
+}
+
+impl<P: allocator::NodePointer> Default for Inserter<'_, P> {
+  #[inline]
+  fn default() -> Self {
+    Self {
+      spl: [
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+      ],
+      height: 0,
+      _m: core::marker::PhantomData,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Splice<P> {
+  prev: P,
+  next: P,
+}
+
+impl<P: allocator::NodePointer> Default for Splice<P> {
+  #[inline]
+  fn default() -> Self {
+    Self {
+      prev: P::NULL,
+      next: P::NULL,
+    }
+  }
+}
 
 /// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]

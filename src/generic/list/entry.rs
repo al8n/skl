@@ -1,8 +1,8 @@
 use dbutils::types::{KeyRef, LazyRef, Type};
 
+use super::SkipList;
 use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
-  base::SkipList,
   types::internal::ValuePointer,
   Version,
 };

@@ -90,16 +90,16 @@ impl<K: ?Sized, V: ?Sized> From<SkipList<K, V>> for SkipMap<K, V> {
   }
 }
 
-impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List<K, V> for SkipMap<K, V> {
-  type Allocator = Allocator;
+impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List for SkipMap<K, V> {
+  type Constructable = SkipList<K, V>;
 
   #[inline]
-  fn as_ref(&self) -> &SkipList<K, V> {
+  fn as_ref(&self) -> &Self::Constructable {
     &self.0
   }
 
   #[inline]
-  fn as_mut(&mut self) -> &mut SkipList<K, V> {
+  fn as_mut(&mut self) -> &mut Self::Constructable {
     &mut self.0
   }
 }

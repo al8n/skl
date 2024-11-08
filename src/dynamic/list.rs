@@ -11,11 +11,13 @@ use either::Either;
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePointer},
+  allocator::{Allocator, Deallocator, Header, Link, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
+  random_height,
+  traits::Constructable,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  CompressionPolicy, Version,
+  CompressionPolicy, Inserter, Splice, Version,
 };
 
 mod entry;
@@ -109,13 +111,91 @@ where
   A: Allocator,
 {
   #[inline]
-  pub(crate) fn construct(
-    arena: A,
-    meta: NonNull<A::Header>,
-    head: <A::Node as Node>::Pointer,
-    tail: <A::Node as Node>::Pointer,
+  pub(crate) const fn meta(&self) -> &A::Header {
+    // Safety: the pointer is well aligned and initialized.
+    unsafe { self.meta.as_ref() }
+  }
+}
+
+impl<A, C> Constructable for SkipList<A, C>
+where
+  A: Allocator,
+{
+  type Allocator = A;
+  type Comparator = C;
+
+  #[inline]
+  fn allocator(&self) -> &Self::Allocator {
+    &self.arena
+  }
+
+  #[inline]
+  fn magic_version(&self) -> u16 {
+    self.meta().magic_version()
+  }
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.meta().len() as usize
+  }
+
+  #[inline]
+  fn height(&self) -> u8 {
+    self.meta().height()
+  }
+
+  #[inline]
+  fn random_height(&self) -> crate::Height {
+    random_height(self.arena.max_height())
+  }
+
+  #[inline]
+  unsafe fn clear(&mut self) -> Result<(), crate::error::Error> {
+    self.arena.clear()?;
+
+    let options = self.arena.options();
+
+    if self.arena.unify() {
+      self.meta = self
+        .arena
+        .allocate_header(self.meta.as_ref().magic_version())?;
+    } else {
+      let magic_version = self.meta.as_ref().magic_version();
+      let _ = Box::from_raw(self.meta.as_ptr());
+      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
+        magic_version,
+      ))));
+    }
+
+    let max_height: u8 = options.max_height().into();
+    let head = self.arena.allocate_full_node(max_height)?;
+    let tail = self.arena.allocate_full_node(max_height)?;
+
+    // Safety:
+    // We will always allocate enough space for the head node and the tail node.
+    unsafe {
+      // Link all head/tail levels together.
+      for i in 0..(max_height as usize) {
+        let head_link = head.tower(&self.arena, i);
+        let tail_link = tail.tower(&self.arena, i);
+        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
+        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
+      }
+    }
+
+    self.head = head;
+    self.tail = tail;
+    Ok(())
+  }
+
+  #[inline]
+  fn construct(
+    arena: Self::Allocator,
+    meta: core::ptr::NonNull<<Self::Allocator as crate::allocator::Sealed>::Header>,
+    head: <<Self::Allocator as crate::allocator::Sealed>::Node as crate::allocator::Node>::Pointer,
+    tail: <<Self::Allocator as crate::allocator::Sealed>::Node as crate::allocator::Node>::Pointer,
     data_offset: u32,
-    cmp: C,
+    cmp: Self::Comparator,
   ) -> Self {
     Self {
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -129,12 +209,6 @@ where
       yield_now: false,
       cmp,
     }
-  }
-
-  #[inline]
-  pub(crate) const fn meta(&self) -> &A::Header {
-    // Safety: the pointer is well aligned and initialized.
-    unsafe { self.meta.as_ref() }
   }
 }
 
@@ -1112,73 +1186,6 @@ where
           ))),
         }
       }
-    }
-  }
-}
-
-/// A helper struct for caching splice information
-pub struct Inserter<'a, P> {
-  spl: [Splice<P>; crate::MAX_HEIGHT],
-  height: u32,
-  _m: core::marker::PhantomData<&'a ()>,
-}
-
-impl<P: NodePointer> Default for Inserter<'_, P> {
-  #[inline]
-  fn default() -> Self {
-    Self {
-      spl: [
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-        Splice::default(),
-      ],
-      height: 0,
-      _m: core::marker::PhantomData,
-    }
-  }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Splice<P> {
-  prev: P,
-  next: P,
-}
-
-impl<P: NodePointer> Default for Splice<P> {
-  #[inline]
-  fn default() -> Self {
-    Self {
-      prev: P::NULL,
-      next: P::NULL,
     }
   }
 }

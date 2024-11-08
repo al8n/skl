@@ -7,7 +7,7 @@ use core::{
 };
 use std::boxed::Box;
 
-use dbutils::{buffer::VacantBuffer, equivalent::Equivalent, equivalentor::Comparator};
+use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
 use rarena_allocator::Allocator as _;
 
 use crate::{

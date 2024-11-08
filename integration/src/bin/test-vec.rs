@@ -1,15 +1,18 @@
 use integration::{big_value, key, new_value};
 use skl::{
-  map::{sync::SkipMap, Map},
-  *,
+  generic::{
+    unique::{sync::SkipMap, Map},
+    Builder,
+  },
+  Arena,
 };
 
 fn main() {
   {
     const N: usize = 10;
-    let l = Options::new()
+    let l = Builder::new()
       .with_capacity(1 << 20)
-      .alloc::<_, _, SkipMap<[u8], [u8]>>()
+      .alloc::<SkipMap<[u8], [u8]>>()
       .unwrap();
     for i in 0..N {
       let l = l.clone();
@@ -41,9 +44,9 @@ fn main() {
 
   {
     const N2: usize = 10;
-    let l = Options::new()
+    let l = Builder::new()
       .with_capacity(120 << 20)
-      .alloc::<_, _, SkipMap<[u8], [u8]>>()
+      .alloc::<SkipMap<[u8], [u8]>>()
       .unwrap();
     for i in 0..N2 {
       let l = l.clone();

@@ -6,7 +6,8 @@ use super::{
 };
 use crate::{internal::Flags, MIN_VERSION};
 
-pub(crate) type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
+/// The allocator used to allocate nodes in the `SkipMap`.
+pub type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;
 
 node!(
   /// A node that only supports version.

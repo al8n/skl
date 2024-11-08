@@ -11,7 +11,7 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{allocator::WithoutVersion, map::Map, KeyBuilder, ValueBuilder};
+use crate::{allocator::WithoutVersion, generic::unique::Map, KeyBuilder, ValueBuilder};
 
 use super::*;
 

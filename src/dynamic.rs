@@ -4,4 +4,4 @@ mod multiple_version;
 mod unique;
 
 mod builder;
-pub use builder::*;
+pub use builder::Builder;

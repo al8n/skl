@@ -1,7 +1,11 @@
 mod builder;
 mod list;
-mod multiple_version;
-mod unique;
+
+/// Generic `SkipMap` implementation with multiple versions support.
+pub mod multiple_version;
+
+/// Generic `SkipMap` implementation without multiple versions support.
+pub mod unique;
 
 /// Iterators for the skipmaps.
 pub mod iter {
@@ -13,4 +17,4 @@ pub mod entry {
   pub use super::list::{EntryRef, VersionedEntryRef};
 }
 
-pub use builder::*;
+pub use builder::Builder;

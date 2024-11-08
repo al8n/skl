@@ -60,7 +60,7 @@ where
       .validate(height, key.encoded_len(), value.encoded_len())
       .map_err(Among::Right)?;
 
-    let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf).map(|_| ());
+    let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf);
     let val_len = value.encoded_len();
 
     self
@@ -102,7 +102,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -156,7 +156,7 @@ where
       .validate(height, key.encoded_len(), value.encoded_len())
       .map_err(Among::Right)?;
 
-    let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf).map(|_| ());
+    let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf);
     let val_len = value.encoded_len();
 
     self
@@ -199,7 +199,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -246,8 +246,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -302,8 +302,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
@@ -359,7 +359,6 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-
     success: Ordering,
     failure: Ordering,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
@@ -466,7 +465,7 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,

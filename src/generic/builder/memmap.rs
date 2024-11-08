@@ -3,22 +3,24 @@ use core::mem;
 use either::Either;
 use rarena_allocator::Allocator;
 
-use super::Options;
+use super::Builder;
 use crate::{
-  allocator::{Header, Node, Sealed}, error::{bad_magic_version, bad_version, flags_mismtach, invalid_data}, traits::Constructable, Arena, CURRENT_VERSION
+  allocator::{Node, Sealed},
+  error::{bad_magic_version, bad_version, flags_mismtach, invalid_data},
+  traits::Constructable,
+  Arena, CURRENT_VERSION,
 };
 
-
-impl Options {
+impl Builder {
   /// Create a new map which is backed by a anonymous memory map.
   ///
-  /// **What the difference between this method and [`Options::alloc`]?**
+  /// **What the difference between this method and [`Builder::alloc`]?**
   ///
   /// 1. This method will use mmap anonymous to require memory from the OS directly.
   ///    If you require very large contiguous memory regions, this method might be more suitable because
   ///    it's more direct in requesting large chunks of memory from the OS.
   ///
-  /// 2. Where as [`Options::alloc`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
+  /// 2. Where as [`Builder::alloc`] will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
   ///    Even if we are working with raw pointers with `Box::into_raw`,
   ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
   ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
@@ -27,38 +29,39 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::sync, multiple_version::unsync, Options};
+  /// use skl::generic::{map::sync, multiple_version::unsync, Builder};
   ///
-  /// let map = Options::new().with_capacity(1024).map_anon::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).map_anon::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// let arena = Options::new().with_capacity(1024).map_anon::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Builder::new().with_capacity(1024).map_anon::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
-  ///
-  /// [`Options::alloc`]: #method.alloc
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
   pub fn map_anon<T>(self) -> std::io::Result<T>
   where
     T: Arena,
+    T::Constructable: Constructable<Comparator = ()>,
   {
-    let node_align = mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
+    let node_align =
+      mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
+    let Builder { options } = self;
 
     #[allow(clippy::bind_instead_of_map)]
-    self
+    options
       .to_arena_options()
       .with_maximum_alignment(node_align)
       .map_anon::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
       .and_then(|arena| {
-        T::construct(arena, self, false)
+        T::construct(arena, options, false, ())
           .map_err(invalid_data)
           .and_then(|map| {
             // Lock the memory of first page to prevent it from being swapped out.
             #[cfg(not(miri))]
-            if self.lock_meta {
+            if options.lock_meta {
               unsafe {
-                let arena = map.allocator();
+                let arena = map.as_ref().allocator();
                 arena.mlock(0, arena.page_size().min(arena.capacity()))?;
               }
             }
@@ -79,13 +82,14 @@ impl Options {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map<K, V, T, P>(self, path: P) -> std::io::Result<T>
+  pub unsafe fn map<T, P>(self, path: P) -> std::io::Result<T>
   where
     T: Arena,
+    T::Constructable: Constructable<Comparator = ()>,
     P: AsRef<std::path::Path>,
   {
     self
-      .map_with_path_builder::<K, V, T, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_with_path_builder::<T, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
@@ -100,19 +104,23 @@ impl Options {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map_with_path_builder<K, V, T, PB, E>(
+  pub unsafe fn map_with_path_builder<T, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<T, Either<E, std::io::Error>>
   where
     T: Arena,
+    T::Constructable: Constructable<Comparator = ()>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    let node_align = mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
-    let magic_version = self.magic_version();
+    let node_align =
+      mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
+
+    let Builder { options } = self;
+    let magic_version = options.magic_version();
 
     #[allow(clippy::bind_instead_of_map)]
-    self
+    options
       .to_arena_options()
       .with_unify(true)
       .with_read(true)
@@ -124,10 +132,10 @@ impl Options {
       .with_maximum_alignment(node_align)
       .map_with_path_builder::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
-        T::construct(arena, self, true)
+        T::construct(arena, options, true, ())
           .map_err(invalid_data)
           .and_then(|map| {
-            let flags = map.as_ref().meta().flags();
+            let flags = map.flags();
             let node_flags = <<<T::Constructable as Constructable>::Allocator as Sealed>::Node as Node>::flags();
 
             if flags != node_flags {
@@ -136,14 +144,14 @@ impl Options {
 
             if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
-            } else if map.version() != CURRENT_VERSION {
+            } else if map.as_ref().version() != CURRENT_VERSION {
               Err(bad_version())
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
               #[cfg(not(miri))]
-              if self.lock_meta {
+              if options.lock_meta {
                 unsafe {
-                  let allocator = map.allocator();
+                  let allocator = map.as_ref().allocator();
                   allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
                 }
               }
@@ -167,13 +175,14 @@ impl Options {
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
-  pub unsafe fn map_mut<K, V, T, P>(self, path: P) -> std::io::Result<T>
+  pub unsafe fn map_mut<T, P>(self, path: P) -> std::io::Result<T>
   where
     T: Arena,
+    T::Constructable: Constructable<Comparator = ()>,
     P: AsRef<std::path::Path>,
   {
     self
-      .map_mut_with_path_builder::<K, V, T, _, ()>(|| Ok(path.as_ref().to_path_buf()))
+      .map_mut_with_path_builder::<T, _, ()>(|| Ok(path.as_ref().to_path_buf()))
       .map_err(Either::unwrap_right)
   }
 
@@ -187,32 +196,36 @@ impl Options {
   ///   unlinked) files exist but are platform specific and limited.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
-  pub unsafe fn map_mut_with_path_builder<K, V, T, PB, E>(
+  pub unsafe fn map_mut_with_path_builder<T, PB, E>(
     self,
     path_builder: PB,
   ) -> Result<T, Either<E, std::io::Error>>
   where
     T: Arena,
+    T::Constructable: Constructable<Comparator = ()>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
-    let node_align = mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
-    let magic_version = self.magic_version();
+    let node_align =
+      mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
+    let Builder { options } = self;
+    let magic_version = options.magic_version();
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
 
     #[allow(clippy::bind_instead_of_map)]
-    self
+    options
       .to_arena_options()
       .with_maximum_alignment(node_align)
       .with_unify(true)
       .map_mut::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator, _>(path)
       .map_err(Either::Right)
       .and_then(|arena| {
-        T::construct(arena, self, exist)
+        T::construct(arena, options, exist, ())
           .map_err(invalid_data)
           .and_then(|map| {
-            let flags = map.as_ref().meta().flags();
-            let node_flags = <<<T::Constructable as Constructable>::Allocator as Sealed>::Node as Node>::flags();
+            let flags = map.flags();
+            let node_flags =
+              <<<T::Constructable as Constructable>::Allocator as Sealed>::Node as Node>::flags();
 
             if flags != node_flags {
               return Err(flags_mismtach(flags, node_flags));
@@ -220,14 +233,14 @@ impl Options {
 
             if Arena::magic_version(&map) != magic_version {
               Err(bad_magic_version())
-            } else if map.version() != CURRENT_VERSION {
+            } else if map.as_ref().version() != CURRENT_VERSION {
               Err(bad_version())
             } else {
               // Lock the memory of first page to prevent it from being swapped out.
               #[cfg(not(miri))]
-              if self.lock_meta {
+              if options.lock_meta {
                 unsafe {
-                  let allocator = map.allocator();
+                  let allocator = map.as_ref().allocator();
                   allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
                 }
               }

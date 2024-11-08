@@ -1,6 +1,9 @@
 use skl::{
-  map::{sync::SkipMap, Map},
-  Arena, Options,
+  generic::{
+    unique::{sync::SkipMap, Map},
+    Builder,
+  },
+  Arena,
 };
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -14,12 +17,12 @@ fn main() {
   const N: usize = 1000;
 
   let l = unsafe {
-    Options::new()
+    Builder::new()
       .with_capacity(1 << 20)
       .with_read(true)
       .with_write(true)
       .with_create_new(true)
-      .map_mut::<[u8], [u8], SkipMap<[u8], [u8]>, _>("test.wal")
+      .map_mut::<SkipMap<[u8], [u8]>, _>("test.wal")
       .unwrap()
   };
 

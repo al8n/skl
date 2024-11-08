@@ -588,7 +588,7 @@ mod sealed {
     fn fetch_vacant_key<'a, 'b: 'a, E>(
       &'a self,
       key_size: u32,
-      key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, VacantBuffer<'a>), Either<E, Error>> {
       let (key_offset, key_size) = self
         .alloc_bytes(key_size)
@@ -621,7 +621,7 @@ mod sealed {
       &'a self,
       size: u32,
       offset: u32,
-      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, Pointer), E> {
       let buf = self.get_pointer_mut(offset as usize);
       let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
@@ -651,7 +651,7 @@ mod sealed {
       &'a self,
       offset: u32,
       size: u32,
-      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, Pointer), E> {
       let buf = self.get_pointer_mut(offset as usize);
       let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
@@ -705,8 +705,8 @@ mod sealed {
       &'a self,
       version: Version,
       height: u32,
-      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Among<KE, VE, Error>> {
       let (key_size, kf) = key_builder.into_components();
       let (value_size, vf) = value_builder.into_components();
@@ -808,7 +808,7 @@ mod sealed {
       version: Version,
       height: u32,
       key_size: usize,
-      kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let key_size = key_size as u32;
 
@@ -865,7 +865,7 @@ mod sealed {
       height: u32,
       key_size: usize,
       key_offset: u32,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let (value_size, vf) = value_builder.into_components();
 
@@ -942,7 +942,7 @@ mod sealed {
     fn allocate_and_update_value<'a, E>(
       &'a self,
       node: &<Self::Node as Node>::Pointer,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
     ) -> Result<(), Either<E, Error>> {
       let (value_size, f) = value_builder.into_components();
       let value_size = value_size as u32;

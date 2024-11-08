@@ -260,9 +260,7 @@ impl Options {
     self.populate = populate;
     self
   }
-}
 
-impl Options {
   /// Returns `true` if the file should be opened with read access.
   ///
   /// ## Examples

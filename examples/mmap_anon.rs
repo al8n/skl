@@ -1,6 +1,9 @@
 use skl::{
-  map::{sync::SkipMap, Map},
-  Arena, Options,
+  generic::{
+    unique::{sync::SkipMap, Map},
+    Builder,
+  },
+  Arena,
 };
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -14,9 +17,9 @@ pub fn new_value(i: usize) -> Vec<u8> {
 fn main() {
   const N: usize = 1000;
 
-  let l = Options::new()
+  let l = Builder::new()
     .with_capacity(1 << 20)
-    .map_anon::<[u8], [u8], SkipMap<[u8], [u8]>>()
+    .map_anon::<SkipMap<[u8], [u8]>>()
     .unwrap();
 
   for i in 0..N {

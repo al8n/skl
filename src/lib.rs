@@ -28,11 +28,12 @@ pub mod generic;
 /// Error types for the `SkipMap`s.
 pub mod error;
 
+#[macro_use]
 mod options;
 pub use options::*;
 
 mod traits;
-pub use traits::{map, multiple_version, Arena};
+pub use traits::Arena;
 
 mod types;
 pub use types::*;

@@ -1,12 +1,4 @@
-use among::Among;
-use core::{
-  mem,
-  ops::{Bound, RangeBounds},
-  ptr::NonNull,
-  sync::atomic::Ordering,
-};
-use dbutils::buffer::VacantBuffer;
-use either::Either;
+use core::{mem, ptr::NonNull, sync::atomic::Ordering};
 use rarena_allocator::Allocator as ArenaAllocator;
 
 use super::{
@@ -15,15 +7,8 @@ use super::{
   },
   error::Error,
   options::Options,
-  types::{Height, KeyBuilder, ValueBuilder},
-  MIN_VERSION,
+  types::Height,
 };
-
-/// [`Map`](map::Map) implementation
-pub mod map;
-
-/// [`Map`](multiple_version::Map) implementation
-pub mod multiple_version;
 
 pub trait Constructable: Sized {
   type Allocator: Allocator;
@@ -63,6 +48,8 @@ pub trait List: Sized + From<Self::Constructable> {
   fn as_ref(&self) -> &Self::Constructable;
 
   fn as_mut(&mut self) -> &mut Self::Constructable;
+
+  fn flags(&self) -> crate::internal::Flags;
 
   fn construct(
     arena: <<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Allocator,

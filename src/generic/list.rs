@@ -234,12 +234,12 @@ where
     version: Version,
     height: u32,
     key: &Key<'a, '_, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Among<K::Error, E, Error>> {
     let (nd, deallocator) = match key {
       Key::Structured(key) => {
         let kb = KeyBuilder::new(key.encoded_len(), |buf: &mut VacantBuffer<'_>| {
-          key.encode_to_buffer(buf).map(|_| ())
+          key.encode_to_buffer(buf)
         });
         let vb = value_builder.unwrap();
         self
@@ -247,9 +247,10 @@ where
           .allocate_entry_node::<K::Error, E>(version, height, kb, vb)?
       }
       Key::Occupied(key) => {
+        let klen = key.len();
         let kb = KeyBuilder::new(key.len(), |buf: &mut VacantBuffer<'_>| {
           buf.put_slice_unchecked(key);
-          Ok(())
+          Ok(klen)
         });
         let vb = value_builder.unwrap();
         self
@@ -276,18 +277,21 @@ where
           version,
           height,
           key.encoded_len(),
-          |buf| key.encode_to_buffer(buf).map(|_| ()),
+          |buf| key.encode_to_buffer(buf),
         )
         .map_err(Among::from_either_to_left_right)?,
-      Key::Remove(key) => self
-        .arena
-        .allocate_tombstone_node_with_key_builder::<K::Error>(version, height, key.len(), |buf| {
-          buf
-            .put_slice(key)
-            .expect("buffer must be large enough for key");
-          Ok(())
-        })
-        .map_err(Among::from_either_to_left_right)?,
+      Key::Remove(key) => {
+        let klen = key.len();
+        self
+          .arena
+          .allocate_tombstone_node_with_key_builder::<K::Error>(version, height, klen, |buf| {
+            buf
+              .put_slice(key)
+              .expect("buffer must be large enough for key");
+            Ok(klen)
+          })
+          .map_err(Among::from_either_to_left_right)?
+      }
       Key::RemoveVacant { buf: key, offset } => self
         .arena
         .allocate_tombstone_node::<K::Error>(version, height, *offset, key.len())
@@ -941,7 +945,7 @@ where
     version: Version,
     height: u32,
     key: Key<'a, 'b, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
@@ -1259,7 +1263,7 @@ where
     old: VersionedEntryRef<'a, K, V, A>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, K, V, A>, Either<E, Error>> {

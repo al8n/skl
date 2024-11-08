@@ -42,8 +42,11 @@ where
   ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
-    let copy = |buf: &mut VacantBuffer<'_>| buf.put_slice(value);
     let val_len = value.len();
+    let copy = |buf: &mut VacantBuffer<'_>| {
+      buf.put_slice(value)?;
+      Result::<_, dbutils::error::InsufficientBuffer>::Ok(val_len)
+    };
 
     self
       .update(
@@ -85,7 +88,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, A, C>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
@@ -128,8 +131,11 @@ where
   ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
-    let copy = |buf: &mut VacantBuffer<'_>| buf.put_slice(value);
     let val_len = value.len();
+    let copy = |buf: &mut VacantBuffer<'_>| {
+      buf.put_slice(value)?;
+      Result::<_, dbutils::error::InsufficientBuffer>::Ok(val_len)
+    };
 
     self
       .update(
@@ -172,7 +178,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, A, C>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
@@ -215,8 +221,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<Option<EntryRef<'a, A, C>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
@@ -264,8 +270,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<Option<EntryRef<'a, A, C>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
@@ -408,7 +414,7 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, A, C>>, Either<E, Error>> {
     self
       .validate(height, key_builder.size(), 0)

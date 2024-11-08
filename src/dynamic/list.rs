@@ -221,13 +221,14 @@ where
     version: Version,
     height: u32,
     key: &Key<'a, '_, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
   ) -> Result<(<A::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
     let (nd, deallocator) = match key {
       Key::Occupied(key) => {
-        let kb = KeyBuilder::new(key.len(), |buf: &mut VacantBuffer<'_>| {
+        let klen = key.len();
+        let kb = KeyBuilder::new(klen, |buf: &mut VacantBuffer<'_>| {
           buf.put_slice_unchecked(key);
-          Ok(())
+          Ok(klen)
         });
         let vb = value_builder.unwrap();
         self
@@ -249,15 +250,18 @@ where
         *offset,
         value_builder.unwrap(),
       )?,
-      Key::Remove(key) => self
-        .arena
-        .allocate_tombstone_node_with_key_builder::<()>(version, height, key.len(), |buf| {
-          buf
-            .put_slice(key)
-            .expect("buffer must be large enough for key");
-          Ok(())
-        })
-        .map_err(|e| Either::Right(e.unwrap_right()))?,
+      Key::Remove(key) => {
+        let klen = key.len();
+        self
+          .arena
+          .allocate_tombstone_node_with_key_builder::<()>(version, height, klen, |buf| {
+            buf
+              .put_slice(key)
+              .expect("buffer must be large enough for key");
+            Ok(klen)
+          })
+          .map_err(|e| Either::Right(e.unwrap_right()))?
+      }
       Key::RemoveVacant { buf: key, offset } => self
         .arena
         .allocate_tombstone_node::<()>(version, height, *offset, key.len())
@@ -852,7 +856,7 @@ where
     version: Version,
     height: u32,
     key: Key<'a, 'b, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
@@ -1163,7 +1167,7 @@ where
     old: VersionedEntryRef<'a, A, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
-    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>>,
+    value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
   ) -> Result<UpdateOk<'a, 'b, A, C>, Either<E, Error>> {

@@ -17,7 +17,7 @@ use crate::{
   random_height,
   traits::Constructable,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  CompressionPolicy, Inserter, Splice, Version,
+  CompressionPolicy, FindResult, Inserter, Splice, Version,
 };
 
 mod entry;
@@ -1287,13 +1287,4 @@ impl<'a, A> Key<'a, '_, A> {
       len: pointer.size,
     }
   }
-}
-
-struct FindResult<P> {
-  // both key and version are equal.
-  found: bool,
-  // only key is equal.
-  found_key: Option<Pointer>,
-  splice: Splice<P>,
-  curr: Option<P>,
 }

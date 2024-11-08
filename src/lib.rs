@@ -132,6 +132,15 @@ impl<P: allocator::NodePointer> Default for Splice<P> {
   }
 }
 
+struct FindResult<P> {
+  // both key and version are equal.
+  found: bool,
+  // only key is equal.
+  found_key: Option<allocator::Pointer>,
+  splice: Splice<P>,
+  curr: Option<P>,
+}
+
 /// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]
 pub fn random_height(max_height: Height) -> Height {

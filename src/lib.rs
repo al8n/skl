@@ -39,8 +39,6 @@ pub use traits::Arena;
 mod types;
 pub use types::*;
 
-pub use dbutils::equivalent::*;
-
 #[cfg(any(
   all(test, not(miri)),
   all_skl_tests,

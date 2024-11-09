@@ -1,6 +1,6 @@
 use super::*;
 
-/// The allocator used to allocate nodes in the [`SkipMap`].
+/// The allocator used to allocate nodes in the `SkipMap`.
 pub type Allocator = GenericAllocator<Meta, RawNode, Arena>;
 
 node!(

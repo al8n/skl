@@ -50,7 +50,7 @@ pub mod unsync {
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
-  /// If you want to use in concurrent environment, you can use [`map::sync::SkipMap`](crate::map::sync::SkipMap).
+  /// If you want to use in concurrent environment, you can use [`unique::sync::SkipMap`](crate::generic::unique::sync::SkipMap).
   #[repr(transparent)]
   pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 
@@ -149,7 +149,7 @@ pub mod sync {
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
-  /// If you want to use in non-concurrent environment, you can use [`map::unsync::SkipMap`](crate::map::unsync::SkipMap).
+  /// If you want to use in non-concurrent environment, you can use [`unique::unsync::SkipMap`](crate::generic::unique::unsync::SkipMap).
   #[repr(transparent)]
   pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
 

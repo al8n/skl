@@ -1,7 +1,7 @@
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 use arbitrary_int::{u27, u5, Number, TryNewError};
-pub use dbutils::{buffer::*, types::*};
+pub use dbutils::buffer::*;
 
 const MAX_U5: u8 = (1 << 5) - 1;
 const MAX_U27: u32 = (1 << 27) - 1;

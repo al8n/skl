@@ -162,6 +162,11 @@ where
   }
 
   #[inline]
+  fn data_offset(&self) -> usize {
+    self.data_offset as usize
+  }
+
+  #[inline]
   unsafe fn clear(&mut self) -> Result<(), crate::error::Error> {
     self.arena.clear()?;
 

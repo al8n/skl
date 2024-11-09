@@ -78,9 +78,9 @@ impl Builder {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::Builder;
+  /// use skl::{generic::Builder, Options};
   ///
-  /// let builder = Builder::new().with_options(1024);
+  /// let builder = Builder::new().with_options(Options::new());
   /// ```
   #[inline]
   pub const fn with_options(mut self, opts: Options) -> Self {
@@ -102,6 +102,7 @@ impl Builder {
   /// let map = opts.alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
   ///
+  /// let opts = Builder::new().with_capacity(1024);
   /// let data_offset_from_opts = opts.data_offset_unify::<sync::SkipMap<[u8], [u8]>>();
   /// let map = opts.with_unify(true).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
@@ -112,6 +113,7 @@ impl Builder {
   /// let map = opts.alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
   ///
+  /// let opts = Builder::new().with_capacity(1024);
   /// let data_offset_from_opts = opts.data_offset_unify::<unsync::SkipMap<[u8], [u8]>>();
   /// let map = opts.with_unify(true).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
@@ -146,6 +148,7 @@ impl Builder {
   /// let map = opts.alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
   ///
+  /// let opts = Builder::new().with_capacity(1024);
   /// let data_offset_from_opts = opts.data_offset_unify::<sync::SkipMap<[u8], [u8]>>();
   /// let map = opts.with_unify(true).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
@@ -156,6 +159,7 @@ impl Builder {
   /// let map = opts.alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
   ///
+  /// let opts = Builder::new().with_capacity(1024);
   /// let data_offset_from_opts = opts.data_offset_unify::<unsync::SkipMap<[u8], [u8]>>();
   /// let map = opts.with_unify(true).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// assert_eq!(data_offset_from_opts, map.data_offset());
@@ -198,7 +202,7 @@ impl Builder {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{map::sync, multiple_version::unsync, Builder};
+  /// use skl::generic::{unique::sync, multiple_version::unsync, Builder};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   ///

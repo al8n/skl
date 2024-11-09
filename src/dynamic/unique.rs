@@ -211,13 +211,13 @@ where
   /// ```rust
   /// use skl::dynamic::{unique::{unsync::SkipMap, Map}, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap::>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert("hello", "world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// map.remove("hello").unwrap();
+  /// map.remove(b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key("hello"));
+  /// assert!(!map.contains_key(b"hello"));
   /// ```
   #[inline]
   fn contains_key<Q>(&self, key: &Q) -> bool
@@ -252,14 +252,14 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert("hello", "world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
-  /// let ent = map.get("hello").unwrap();
-  /// assert_eq!(ent.value(), "world");
+  /// let ent = map.get(b"hello").unwrap();
+  /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.remove("hello").unwrap();
+  /// map.remove(b"hello").unwrap();
   ///
-  /// assert!(map.get("hello").is_none());
+  /// assert!(map.get(b"hello").is_none());
   /// ```
   #[inline]
   fn get<Q>(
@@ -348,7 +348,7 @@ where
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(height, "hello", "world").unwrap();
+  /// map.insert_at_height(height, b"hello", b"world").unwrap();
   /// ```
   #[inline]
   fn insert_at_height<'a, 'b: 'a>(
@@ -401,12 +401,12 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.insert_with_value_builder::<core::convert::Infallible>(b"alice".as_slice(), vb)
@@ -461,12 +461,12 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -565,12 +565,12 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(b"alice".as_slice(), vb)
   /// .unwrap();
@@ -625,12 +625,12 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -692,7 +692,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -757,7 +757,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -823,7 +823,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -885,7 +885,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -997,10 +997,10 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert("hello", "world").unwrap();
+  /// map.insert(b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(height, "hello").unwrap();
+  /// map.get_or_remove_at_height(height, b"hello").unwrap();
   /// ```
   #[allow(single_use_lifetimes)]
   #[inline]
@@ -1052,7 +1052,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -1107,7 +1107,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();

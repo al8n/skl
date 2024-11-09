@@ -29,6 +29,8 @@ pub trait Constructable: Sized {
 
   fn random_height(&self) -> Height;
 
+  fn data_offset(&self) -> usize;
+
   unsafe fn clear(&mut self) -> Result<(), Error>;
 
   fn construct(
@@ -166,9 +168,8 @@ pub trait Arena: List {
   /// and the data section will be allocated after the tail node.
   ///
   /// This method will return the offset of the data section in the ARENA.
-  #[inline]
   fn data_offset(&self) -> usize {
-    self.as_ref().allocator().data_offset()
+    self.as_ref().data_offset()
   }
 
   /// Returns the magic version number of the [`Arena`].

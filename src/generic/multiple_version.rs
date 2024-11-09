@@ -717,7 +717,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb)
@@ -787,7 +787,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -910,7 +910,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb)
   /// .unwrap();
@@ -980,7 +980,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -1048,13 +1048,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.insert_with_builders::<(), ()>(1, kb, vb)
@@ -1124,13 +1124,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -1196,13 +1196,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.get_or_insert_with_builders::<(), ()>(1, kb, vb)
@@ -1269,13 +1269,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -1459,7 +1459,7 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb)
   /// .unwrap();
@@ -1522,7 +1522,7 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   /// let height = l.random_height();
   /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1, height, kb)

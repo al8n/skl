@@ -246,12 +246,12 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, "hello", "world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, "hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1, "hello"));
-  /// assert!(map.contains_key_versioned(1, "hello"));
+  /// assert!(!map.contains_key(1, b"hello"));
+  /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
   fn contains_key<Q>(&self, version: Version, key: &Q) -> bool
@@ -274,12 +274,12 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, "hello", "world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, "hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(!map.contains_key(1, "hello"));
-  /// assert!(map.contains_key_versioned(1, "hello"));
+  /// assert!(!map.contains_key(1, b"hello"));
+  /// assert!(map.contains_key_versioned(1, b"hello"));
   /// ```
   #[inline]
   fn contains_key_versioned<Q>(&self, version: Version, key: &Q) -> bool
@@ -367,14 +367,14 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, "hello", "world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// let ent = map.get(0, "hello").unwrap();
-  /// assert_eq!(ent.value(), "world");
+  /// let ent = map.get(0, b"hello").unwrap();
+  /// assert_eq!(ent.value(), b"world");
   ///
-  /// map.get_or_remove(1, "hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(map.get(1, "hello").is_none());
+  /// assert!(map.get(1, b"hello").is_none());
   /// ```
   #[inline]
   fn get<Q>(
@@ -403,13 +403,13 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, "hello", "world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
-  /// map.get_or_remove(1, "hello").unwrap();
+  /// map.get_or_remove(1, b"hello").unwrap();
   ///
-  /// assert!(map.get(1, "hello").is_none());
+  /// assert!(map.get(1, b"hello").is_none());
   ///
-  /// let ent = map.get_versioned(1, "hello").unwrap();
+  /// let ent = map.get_versioned(1, b"hello").unwrap();
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```
@@ -595,7 +595,7 @@ where
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let height = map.random_height();
-  /// map.insert_at_height(0, height, "hello", "world").unwrap();
+  /// map.insert_at_height(0, height, b"hello", b"world").unwrap();
   /// ```
   #[inline]
   fn insert_at_height<'a, 'b: 'a>(
@@ -652,7 +652,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb)
@@ -717,7 +717,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -825,7 +825,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   /// l.get_or_insert_with_value_builder::<core::convert::Infallible>(1, b"alice".as_slice(), vb)
   /// .unwrap();
@@ -890,7 +890,7 @@ where
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -953,13 +953,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.insert_with_builders::<(), ()>(1, kb, vb)
@@ -1024,13 +1024,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -1091,13 +1091,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// l.get_or_insert_with_builders::<(), ()>(1, kb, vb)
@@ -1159,13 +1159,13 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
   ///   val.put_slice(alice.name.as_bytes()).unwrap();
-  ///   Ok(())
+  ///   Ok(encoded_size)
   /// });
   ///
   /// let height = l.random_height();
@@ -1267,10 +1267,10 @@ where
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
-  /// map.insert(0, "hello", "world").unwrap();
+  /// map.insert(0, b"hello", b"world").unwrap();
   ///
   /// let height = map.random_height();
-  /// map.get_or_remove_at_height(0, height, "hello").unwrap();
+  /// map.get_or_remove_at_height(0, height, b"hello").unwrap();
   /// ```
   #[inline]
   fn get_or_remove_at_height<'a, 'b: 'a>(
@@ -1324,7 +1324,7 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   /// l.get_or_remove_with_builder::<core::convert::Infallible>(1, kb)
   /// .unwrap();
@@ -1382,7 +1382,7 @@ where
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
-  ///   Ok(())
+  ///   Ok(5)
   /// });
   /// let height = l.random_height();
   /// l.get_or_remove_at_height_with_builder::<core::convert::Infallible>(1, height, kb)

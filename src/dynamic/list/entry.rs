@@ -146,7 +146,7 @@ where
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<A, C>,
     key: Option<&'a [u8]>,
-  ) -> VersionedEntryRef<'a, A, C> {
+  ) -> Self {
     unsafe {
       let (value, _) = node.get_value_with_pointer(&list.arena);
 
@@ -155,7 +155,7 @@ where
         None => node.get_key(&list.arena),
       };
 
-      VersionedEntryRef {
+      Self {
         list,
         key,
         value,
@@ -173,7 +173,7 @@ where
     list: &'a SkipList<A, C>,
     pointer: ValuePointer,
     key: Option<&'a [u8]>,
-  ) -> VersionedEntryRef<'a, A, C> {
+  ) -> Self {
     unsafe {
       let value =
         node.get_value_by_value_offset(&list.arena, pointer.value_offset, pointer.value_len);
@@ -183,7 +183,7 @@ where
         None => node.get_key(&list.arena),
       };
 
-      VersionedEntryRef {
+      Self {
         list,
         key,
         value,

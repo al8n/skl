@@ -186,7 +186,7 @@ where
     list: &'a SkipList<K, V, A>,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
-  ) -> VersionedEntryRef<'a, K, V, A> {
+  ) -> Self {
     unsafe {
       let (raw_value, vp) = node.get_value_with_pointer(&list.arena);
 
@@ -204,7 +204,7 @@ where
         }),
       };
 
-      VersionedEntryRef {
+      Self {
         list,
         key,
         value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
@@ -224,7 +224,7 @@ where
     pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
-  ) -> VersionedEntryRef<'a, K, V, A> {
+  ) -> Self {
     unsafe {
       let raw_value =
         node.get_value_by_value_offset(&list.arena, pointer.value_offset, pointer.value_len);
@@ -243,7 +243,7 @@ where
         }),
       };
 
-      VersionedEntryRef {
+      Self {
         list,
         key,
         value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),

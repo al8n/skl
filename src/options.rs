@@ -3,12 +3,9 @@ use core::mem;
 pub use rarena_allocator::Freelist;
 use rarena_allocator::Options as ArenaOptions;
 
-use crate::traits::Constructable;
-
 use crate::{
   allocator::{Node, Sealed as AllocatorSealed},
   types::{Height, KeySize},
-  Arena,
 };
 
 /// The memory format version.
@@ -187,7 +184,7 @@ impl Options {
   /// ## Example
   ///
   /// ```
-  /// use skl::{Options, Freelist};
+  /// use skl::{Options, options::Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
@@ -204,7 +201,7 @@ impl Options {
   /// ## Example
   ///
   /// ```
-  /// use skl::{Options, CompressionPolicy};
+  /// use skl::{Options, options::CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::Fast);
   /// ```
@@ -472,7 +469,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, Freelist};
+  /// use skl::{Options, options::Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   ///
@@ -490,7 +487,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, CompressionPolicy};
+  /// use skl::{Options, options::CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::Fast);
   ///
@@ -499,92 +496,6 @@ impl Options {
   #[inline]
   pub const fn compression_policy(&self) -> CompressionPolicy {
     self.policy
-  }
-
-  /// Returns the data offset of the `SkipMap` if the `SkipMap` is in unified memory layout.
-  ///
-  /// See also [`Options::data_offset`].
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
-  ///
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// // Create a unsync ARENA.
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  /// ```
-  pub fn data_offset_unify<A>(&self) -> usize
-  where
-    A: Arena,
-  {
-    let arena_opts = self.to_arena_options();
-    let arena_data_offset =
-      arena_opts.data_offset_unify::<<<A::Constructable as Constructable>::Allocator as AllocatorSealed>::Allocator>();
-
-    data_offset_in::<<A::Constructable as Constructable>::Allocator>(
-      arena_data_offset,
-      self.max_height(),
-      true,
-    )
-  }
-
-  /// Returns the data offset of the `SkipMap` if the `SkipMap` is not in unified memory layout.
-  ///
-  /// As the file backed `SkipMap` will only use the unified memory layout and ignore the unify configuration of `Options`,
-  /// so see also [`Options::data_offset_unify`], if you want to get the data offset of the `SkipMap` in unified memory layout.
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
-  ///
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// // Create a unsync ARENA.
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  /// ```
-  pub fn data_offset<A>(&self) -> usize
-  where
-    A: Arena,
-  {
-    let arena_opts = self.to_arena_options();
-    let arena_data_offset =
-      arena_opts.data_offset::<<<A::Constructable as Constructable>::Allocator as crate::allocator::Sealed>::Allocator>();
-    data_offset_in::<<A::Constructable as Constructable>::Allocator>(
-      arena_data_offset,
-      self.max_height(),
-      false,
-    )
   }
 }
 
@@ -621,7 +532,11 @@ impl Options {
 }
 
 #[inline]
-fn data_offset_in<A: AllocatorSealed>(offset: usize, max_height: Height, unify: bool) -> usize {
+pub(crate) fn data_offset_in<A: AllocatorSealed>(
+  offset: usize,
+  max_height: Height,
+  unify: bool,
+) -> usize {
   let meta_end = if unify {
     let alignment = mem::align_of::<A::Header>();
     let meta_offset = (offset + alignment - 1) & !(alignment - 1);
@@ -812,7 +727,7 @@ macro_rules! __builder_opts {
     /// ## Example
     ///
     /// ```rust
-    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::Height};")]
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", Height};")]
     ///
     #[doc = concat!("let options = ", stringify!($name), "::new().with_max_height(Height::new());")]
     /// ```
@@ -923,7 +838,7 @@ macro_rules! __builder_opts {
     /// ## Example
     ///
     /// ```
-    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::Height};")]
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", Height};")]
     ///
     #[doc = concat!("let options = ", stringify!($name), "::new().with_max_height(Height::from_u8_unchecked(5));")]
     ///

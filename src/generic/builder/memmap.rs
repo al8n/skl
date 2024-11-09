@@ -7,8 +7,9 @@ use super::Builder;
 use crate::{
   allocator::{Node, Sealed},
   error::{bad_magic_version, bad_version, flags_mismtach, invalid_data},
+  options::CURRENT_VERSION,
   traits::Constructable,
-  Arena, CURRENT_VERSION,
+  Arena,
 };
 
 impl Builder {
@@ -29,11 +30,11 @@ impl Builder {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{map::sync, multiple_version::unsync, Builder};
+  /// use skl::generic::{unique::sync, multiple_version::unsync, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).map_anon::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).map_anon::<sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// let arena = Builder::new().with_capacity(1024).map_anon::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Builder::new().with_capacity(1024).map_anon::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]

@@ -29,9 +29,9 @@ pub mod unsync {
 
   use super::Header;
 
-  #[cfg(any(all(test, not(miri)), all_tests, test_unsync_versioned,))]
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
   mod tests {
-    crate::__multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
+    crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
   }
 
   type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator>;
@@ -107,32 +107,36 @@ pub mod sync {
   use super::Header;
   pub use crate::sync::multiple_version::Allocator;
 
-  #[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned,))]
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
   mod tests {
-    crate::__multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
-  }
-
-  #[cfg(any(all(test, not(miri)), all_tests, test_sync_multiple_version_concurrent,))]
-  mod concurrent_tests {
-    crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
+    crate::__generic_multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
   }
 
   #[cfg(any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+  ))]
+  mod concurrent_tests {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
+  }
+
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
   ))]
   mod concurrent_tests_with_optimistic_freelist {
-    crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
   }
 
   #[cfg(any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
   ))]
   mod concurrent_tests_with_pessimistic_freelist {
-    crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
   type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator>;

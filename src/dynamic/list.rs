@@ -14,10 +14,11 @@ use crate::{
   allocator::{Allocator, Deallocator, Header, Link, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
+  options::CompressionPolicy,
   random_height,
   traits::Constructable,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  CompressionPolicy, FindResult, Inserter, Splice, Version,
+  FindResult, Inserter, Splice, Version,
 };
 
 mod entry;
@@ -768,29 +769,27 @@ where
     key: Either<&'a [u8], &'b [u8]>,
   ) -> Option<Pointer> {
     match key {
-      Either::Left(key) | Either::Right(key) => {
-        match self.arena.options().compression_policy() {
-          CompressionPolicy::Fast => {
-            if next_key.starts_with(key) {
-              return Some(Pointer {
-                offset: next_node.key_offset(),
-                size: key.len() as u32,
-                height: Some(next_node.height()),
-              });
-            }
-          }
-          #[cfg(feature = "experimental")]
-          CompressionPolicy::High => {
-            if let Some(idx) = memchr::memmem::find(next_key, key) {
-              return Some(Pointer {
-                offset: next_node.key_offset() + idx as u32,
-                size: key.len() as u32,
-                height: Some(next_node.height()),
-              });
-            }
+      Either::Left(key) | Either::Right(key) => match self.arena.options().compression_policy() {
+        CompressionPolicy::Fast => {
+          if next_key.starts_with(key) {
+            return Some(Pointer {
+              offset: next_node.key_offset(),
+              size: key.len() as u32,
+              height: Some(next_node.height()),
+            });
           }
         }
-      }
+        #[cfg(feature = "experimental")]
+        CompressionPolicy::High => {
+          if let Some(idx) = memchr::memmem::find(next_key, key) {
+            return Some(Pointer {
+              offset: next_node.key_offset() + idx as u32,
+              size: key.len() as u32,
+              height: Some(next_node.height()),
+            });
+          }
+        }
+      },
     }
 
     None

@@ -15,11 +15,12 @@ use crate::{
   allocator::{Allocator, Deallocator, Header, Link, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
+  options::CompressionPolicy,
   random_height,
   traits::Constructable,
   ty_ref,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  CompressionPolicy, FindResult, Inserter, Splice, Version,
+  FindResult, Inserter, Splice, Version,
 };
 
 mod entry;

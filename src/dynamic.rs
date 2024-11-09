@@ -20,3 +20,5 @@ pub mod iter {
 pub mod entry {
   pub use super::list::{EntryRef, VersionedEntryRef};
 }
+
+pub use dbutils::equivalentor::*;

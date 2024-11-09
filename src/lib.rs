@@ -28,9 +28,10 @@ pub mod generic;
 /// Error types for the `SkipMap`s.
 pub mod error;
 
+/// Options for the `SkipMap`s.
 #[macro_use]
-mod options;
-pub use options::*;
+pub mod options;
+pub use options::Options;
 
 mod traits;
 pub use traits::Arena;
@@ -42,17 +43,27 @@ pub use dbutils::equivalent::*;
 
 #[cfg(any(
   all(test, not(miri)),
-  all_tests,
-  test_unsync_map,
-  test_unsync_versioned,
-  test_sync_map,
-  test_sync_versioned,
-  test_sync_map_concurrent,
-  test_sync_multiple_version_concurrent,
-  test_sync_map_concurrent_with_optimistic_freelist,
-  test_sync_multiple_version_concurrent_with_optimistic_freelist,
-  test_sync_map_concurrent_with_pessimistic_freelist,
-  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  all_skl_tests,
+  test_generic_unsync_map,
+  test_generic_unsync_versioned,
+  test_generic_sync_map,
+  test_generic_sync_versioned,
+  test_generic_sync_map_concurrent,
+  test_generic_sync_multiple_version_concurrent,
+  test_generic_sync_map_concurrent_with_optimistic_freelist,
+  test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_generic_sync_map_concurrent_with_pessimistic_freelist,
+  test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  test_dynamic_unsync_map,
+  test_dynamic_unsync_versioned,
+  test_dynamic_sync_map,
+  test_dynamic_sync_versioned,
+  test_dynamic_sync_map_concurrent,
+  test_dynamic_sync_multiple_version_concurrent,
+  test_dynamic_sync_map_concurrent_with_optimistic_freelist,
+  test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
+  test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
 ))]
 mod tests;
 

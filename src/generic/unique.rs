@@ -26,9 +26,9 @@ pub mod unsync {
 
   use super::Header;
 
-  #[cfg(any(all(test, not(miri)), all_tests, test_unsync_map,))]
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
   mod tests {
-    crate::__map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
+    crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
   }
 
   type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator>;
@@ -102,32 +102,32 @@ pub mod sync {
 
   use super::Header;
 
-  #[cfg(any(all(test, not(miri)), all_tests, test_sync_map,))]
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
   mod tests {
-    crate::__map_tests!("sync_map": super::SkipMap<[u8], [u8]>);
+    crate::__generic_map_tests!("sync_map": super::SkipMap<[u8], [u8]>);
   }
 
-  #[cfg(any(all(test, not(miri)), all_tests, test_sync_map_concurrent,))]
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map_concurrent,))]
   mod concurrent_tests {
-    crate::__map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS);
+    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
   }
 
   #[cfg(any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent_with_optimistic_freelist,
+    all_skl_tests,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
   ))]
   mod concurrent_tests_with_optimistic_freelist {
-    crate::__map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
   }
 
   #[cfg(any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent_with_pessimistic_freelist,
+    all_skl_tests,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist,
   ))]
   mod concurrent_tests_with_pessimistic_freelist {
-    crate::__map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
   type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator>;
@@ -1104,7 +1104,7 @@ where
   /// ```rust
   /// use skl::{generic::{unique::{sync::SkipMap, Map}, Builder}, Arena};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
   ///
   /// map.insert("hello", "world").unwrap();
   ///

@@ -363,10 +363,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent,
-    test_sync_map_concurrent_with_optimistic_freelist,
-    test_sync_map_concurrent_with_pessimistic_freelist,
+    all_skl_tests,
+    test_generic_sync_map_concurrent,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist,
   )
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
@@ -409,10 +409,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent,
-    test_sync_map_concurrent_with_optimistic_freelist,
-    test_sync_map_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_map_concurrent,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
@@ -429,14 +429,14 @@ where
     let l1 = l.clone();
     let l2 = l.clone();
     std::thread::Builder::new()
-      .name(format!("map-concurrent-basic2-writer-{i}-1"))
+      .name(std::format!("map-concurrent-basic2-writer-{i}-1"))
       .spawn(move || {
         let _ = l1.insert(int_key(i).as_slice(), new_value(i).as_slice());
       })
       .unwrap();
 
     std::thread::Builder::new()
-      .name(format!("map-concurrent-basic2-writer{i}-2"))
+      .name(std::format!("map-concurrent-basic2-writer{i}-2"))
       .spawn(move || {
         let _ = l2.insert(int_key(i).as_slice(), new_value(i).as_slice());
       })
@@ -465,10 +465,10 @@ where
   all(feature = "std", not(miri)),
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent,
-    test_sync_map_concurrent_with_optimistic_freelist,
-    test_sync_map_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_map_concurrent,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
@@ -512,10 +512,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent,
-    test_sync_map_concurrent_with_optimistic_freelist,
-    test_sync_map_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_map_concurrent,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
@@ -573,10 +573,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_map_concurrent,
-    test_sync_map_concurrent_with_optimistic_freelist,
-    test_sync_map_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_map_concurrent,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
@@ -1459,9 +1459,9 @@ where
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __map_tests {
+macro_rules! __generic_map_tests {
   ($prefix:literal: $ty:ty) => {
-    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::generic::map |$prefix, $ty, $crate::tests::generic::TEST_OPTIONS| {
       empty,
       basic,
       #[cfg(not(miri))]
@@ -1490,7 +1490,7 @@ macro_rules! __map_tests {
       le,
     });
 
-    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::generic::map |$prefix, $ty, $crate::tests::generic::TEST_FULL_OPTIONS| {
       full,
     });
 
@@ -1499,7 +1499,7 @@ macro_rules! __map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen() {
-      $crate::tests::map::reopen_mmap::<$ty>($prefix);
+      $crate::tests::generic::map::reopen_mmap::<$ty>($prefix);
     }
 
     #[test]
@@ -1507,7 +1507,7 @@ macro_rules! __map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen2() {
-      $crate::tests::map::reopen_mmap2::<$ty>($prefix);
+      $crate::tests::generic::map::reopen_mmap2::<$ty>($prefix);
     }
 
     #[test]
@@ -1515,12 +1515,12 @@ macro_rules! __map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen3() {
-      $crate::tests::map::reopen_mmap3::<$ty>($prefix);
+      $crate::tests::generic::map::reopen_mmap3::<$ty>($prefix);
     }
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty => $opts:path) => {
-    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $opts| {
+    $crate::__unit_tests!($crate::tests::generic::map |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
@@ -1547,7 +1547,7 @@ macro_rules! __map_tests {
     //   });
     // }
 
-    $crate::__unit_tests!($crate::tests::map |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::generic::map |$prefix, $ty, $crate::tests::generic::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

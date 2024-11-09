@@ -18,3 +18,5 @@ pub mod entry {
 }
 
 pub use builder::Builder;
+
+pub use dbutils::{equivalent::*, types::*};

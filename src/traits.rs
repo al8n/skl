@@ -241,9 +241,9 @@ pub trait Arena: List {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{map::sync::SkipMap, Arena, Options};
+  /// use skl::{generic::{unique::sync::SkipMap, Builder}, Arena};
   ///
-  /// let map = Options::new().with_capacity(1024).alloc::<_, _, SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   /// let height = map.random_height();
   ///
   /// let needed = SkipMap::<[u8], [u8]>::estimated_node_size(height, b"k1".len(), b"k2".len());
@@ -277,7 +277,7 @@ pub trait Arena: List {
   /// Undefine behavior:
   ///
   /// ```ignore
-  /// let map = Options::new().with_capacity(100).alloc().unwrap();
+  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
   ///
   /// map.insert(b"hello", b"world").unwrap();
   ///

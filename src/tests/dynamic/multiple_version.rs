@@ -9,17 +9,17 @@ use crate::{
 
 use core::sync::atomic::Ordering;
 
-use dbutils::buffer::VacantBuffer;
+use dbutils::{buffer::VacantBuffer, equivalentor::Ascend};
 
 use crate::{
-  allocator::WithVersion, generic::multiple_version::Map, KeyBuilder, ValueBuilder, MIN_VERSION,
+  allocator::WithVersion, dynamic::multiple_version::Map, KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
 use super::*;
 
 pub(crate) fn empty<M>(l: M)
 where
-  M: Map<[u8], [u8]>,
+  M: Map<Comparator = Ascend>,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let mut it = l.iter(MIN_VERSION);
@@ -42,7 +42,7 @@ where
 
 pub(crate) fn full<M>(l: M)
 where
-  M: Map<[u8], [u8]>,
+  M: Map<Comparator = Ascend>,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let mut found_arena_full = false;
@@ -54,7 +54,7 @@ where
       make_value(i).as_slice(),
     ) {
       assert!(matches!(
-        e.unwrap_right(),
+        e,
         Error::Arena(ArenaError::InsufficientSpace { .. })
       ));
       found_arena_full = true;
@@ -67,7 +67,7 @@ where
 
 pub(crate) fn basic<M>(mut l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   // Try adding values.
@@ -82,27 +82,21 @@ where
     let mut it = l.iter_all_versions(0);
     let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
     assert_eq!(ent.key(), b"key1".as_slice());
-    assert_eq!(ent.raw_key(), b"key1".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(1).as_slice());
-    assert_eq!(ent.raw_value().unwrap(), make_value(1).as_slice());
     assert_eq!(ent.version(), 0);
 
     let ent = it
       .seek_lower_bound(Bound::Included(b"key2".as_slice()))
       .unwrap();
     assert_eq!(ent.key(), b"key2".as_slice());
-    assert_eq!(ent.raw_key(), b"key2".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(2).as_slice());
-    assert_eq!(ent.raw_value().unwrap(), make_value(2).as_slice());
     assert_eq!(ent.version(), 0);
 
     let ent = it
       .seek_lower_bound(Bound::Included(b"key3".as_slice()))
       .unwrap();
     assert_eq!(ent.key(), b"key3".as_slice());
-    assert_eq!(ent.raw_key(), b"key3".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(3).as_slice());
-    assert_eq!(ent.raw_value().unwrap(), make_value(3).as_slice());
     assert_eq!(ent.version(), 0);
   }
 
@@ -115,16 +109,12 @@ where
       .seek_lower_bound(Bound::Included(b"a".as_slice()))
       .unwrap();
     assert_eq!(ent.key(), b"a".as_slice());
-    assert_eq!(ent.raw_key(), b"a".as_slice());
     assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
     assert_eq!(ent.key(), b"a".as_slice());
-    assert_eq!(ent.raw_key(), b"a".as_slice());
     assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
   }
 
@@ -135,23 +125,17 @@ where
     let mut it = l.iter_all_versions(2);
     let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
     assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.raw_key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 2);
 
     let ent = it.next().unwrap();
     assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.raw_key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
 
     let ent = it.head().unwrap();
     assert_eq!(ent.key(), b"b");
-    assert_eq!(ent.raw_key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
-    assert_eq!(ent.raw_value().unwrap(), &[]);
     assert_eq!(ent.version(), 1);
   }
 
@@ -185,7 +169,7 @@ where
 
 pub(crate) fn iter_all_versions_mvcc<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -290,7 +274,7 @@ where
 
 pub(crate) fn get_mvcc<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -353,7 +337,7 @@ where
 
 pub(crate) fn gt<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -441,7 +425,7 @@ where
 
 pub(crate) fn ge<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -530,7 +514,7 @@ where
 
 pub(crate) fn le<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -633,7 +617,7 @@ where
 
 pub(crate) fn lt<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -719,7 +703,7 @@ where
 #[cfg(not(miri))]
 pub(crate) fn basic_large<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let n = 1000;
@@ -744,15 +728,15 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent,
+    test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  M: Map<Comparator = Ascend> + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(miri))]
@@ -790,15 +774,15 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent,
+    test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  M: Map<Comparator = Ascend> + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(miri))]
@@ -810,14 +794,14 @@ where
     let l1 = l.clone();
     let l2 = l.clone();
     std::thread::Builder::new()
-      .name(format!("fullmap-concurrent-basic2-writer-{i}-1"))
+      .name(std::format!("fullmap-concurrent-basic2-writer-{i}-1"))
       .spawn(move || {
         let _ = l1.insert(MIN_VERSION, int_key(i).as_slice(), new_value(i).as_slice());
       })
       .unwrap();
 
     std::thread::Builder::new()
-      .name(format!("fullmap-concurrent-basic2-writer{i}-2"))
+      .name(std::format!("fullmap-concurrent-basic2-writer{i}-2"))
       .spawn(move || {
         let _ = l2.insert(MIN_VERSION, int_key(i).as_slice(), new_value(i).as_slice());
       })
@@ -846,15 +830,15 @@ where
   all(feature = "std", not(miri)),
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent,
+    test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  M: Map<Comparator = Ascend> + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -893,15 +877,15 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent,
+    test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  M: Map<Comparator = Ascend> + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use core::sync::atomic::Ordering;
@@ -957,15 +941,15 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent,
+    test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  M: Map<Comparator = Ascend> + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use core::sync::atomic::Ordering;
@@ -1019,7 +1003,7 @@ where
 
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1048,7 +1032,7 @@ where
 
 pub(crate) fn iter_all_versions_next_by_entry<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1076,7 +1060,7 @@ where
 
 pub(crate) fn iter_all_versions_next_by_multiple_version_entry<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1122,7 +1106,7 @@ where
 
 pub(crate) fn range_next<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1150,7 +1134,7 @@ where
 
 pub(crate) fn iter_all_versions_prev<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1179,7 +1163,7 @@ where
 
 pub(crate) fn iter_all_versions_prev_by_entry<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1207,7 +1191,7 @@ where
 
 pub(crate) fn iter_all_versions_prev_by_multiple_version_entry<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1253,7 +1237,7 @@ where
 
 pub(crate) fn range_prev<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1279,7 +1263,7 @@ where
 
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1339,7 +1323,7 @@ where
 
 pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1376,7 +1360,7 @@ where
     .unwrap();
   assert!(l
     .as_ref()
-    .upper_bound::<[u8]>(MIN_VERSION, Bound::Excluded(&[]))
+    .upper_bound(MIN_VERSION, Bound::Excluded(&[]))
     .is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b""));
@@ -1389,7 +1373,7 @@ where
 
 pub(crate) fn range<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 1..10 {
@@ -1488,7 +1472,7 @@ where
 
 pub(crate) fn iter_latest<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1548,7 +1532,7 @@ where
 
 pub(crate) fn range_latest<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1595,10 +1579,10 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::generic::Builder;
+  use crate::dynamic::Builder;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
@@ -1638,10 +1622,10 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::generic::Builder;
+  use crate::dynamic::Builder;
 
   unsafe {
     use rand::seq::SliceRandom;
@@ -1700,10 +1684,10 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap3<M>(prefix: &str)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::generic::Builder;
+  use crate::dynamic::Builder;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
@@ -1753,7 +1737,7 @@ impl Person {
 
 pub(crate) fn get_or_insert_with_value<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -1788,7 +1772,7 @@ where
 
 pub(crate) fn get_or_insert_with<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -1827,7 +1811,7 @@ where
 
 pub(crate) fn insert<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let k = 0u64.to_le_bytes();
@@ -1847,7 +1831,7 @@ where
 
 pub(crate) fn insert_with_value<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -1918,7 +1902,7 @@ where
 
 pub(crate) fn insert_with<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -1992,7 +1976,7 @@ where
 
 pub(crate) fn get_or_remove<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 0..100 {
@@ -2022,7 +2006,7 @@ where
 
 pub(crate) fn remove<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 0..100 {
@@ -2085,7 +2069,7 @@ where
 
 pub(crate) fn remove2<M>(l: M)
 where
-  M: Map<[u8], [u8]> + Clone,
+  M: Map<Comparator = Ascend> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 0..100 {
@@ -2143,9 +2127,9 @@ where
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __multiple_version_map_tests {
+macro_rules! __dynamic_multiple_version_map_tests {
   ($prefix:literal: $ty:ty) => {
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::dynamic::multiple_version |$prefix, $ty, $crate::tests::dynamic::TEST_OPTIONS| {
       empty,
       basic,
       #[cfg(not(miri))]
@@ -2179,7 +2163,7 @@ macro_rules! __multiple_version_map_tests {
       le,
     });
 
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::dynamic::multiple_version |$prefix, $ty, $crate::tests::dynamic::TEST_FULL_OPTIONS| {
       full,
     });
 
@@ -2188,7 +2172,7 @@ macro_rules! __multiple_version_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen() {
-      $crate::tests::multiple_version::reopen_mmap::<$ty>($prefix);
+      $crate::tests::dynamic::multiple_version::reopen_mmap::<$ty>($prefix);
     }
 
     #[test]
@@ -2196,7 +2180,7 @@ macro_rules! __multiple_version_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen2() {
-      $crate::tests::multiple_version::reopen_mmap2::<$ty>($prefix);
+      $crate::tests::dynamic::multiple_version::reopen_mmap2::<$ty>($prefix);
     }
 
     #[test]
@@ -2204,12 +2188,12 @@ macro_rules! __multiple_version_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen3() {
-      $crate::tests::multiple_version::reopen_mmap3::<$ty>($prefix);
+      $crate::tests::dynamic::multiple_version::reopen_mmap3::<$ty>($prefix);
     }
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty => $opts:path) => {
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $opts| {
+    $crate::__unit_tests!($crate::tests::dynamic::multiple_version |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
@@ -2236,7 +2220,7 @@ macro_rules! __multiple_version_map_tests {
     //   });
     // }
 
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::dynamic::multiple_version |$prefix, $ty, $crate::tests::dynamic::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

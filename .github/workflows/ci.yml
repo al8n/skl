@@ -250,15 +250,24 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         cfg:
-          - unsync_map
-          - unsync_versioned
-          - sync_map
-          - sync_versioned
-          - sync_map_concurrent
-          - sync_multiple_version_concurrent
-          - sync_map_concurrent_with_optimistic_freelist
-          - sync_map_concurrent_with_pessimistic_freelist
-          - sync_multiple_version_concurrent_with_pessimistic_freelist
+          - generic_unsync_map
+          - generic_unsync_versioned
+          - generic_sync_map
+          - generic_sync_versioned
+          - generic_sync_map_concurrent
+          - generic_sync_multiple_version_concurrent
+          - generic_sync_map_concurrent_with_optimistic_freelist
+          - generic_sync_map_concurrent_with_pessimistic_freelist
+          - generic_sync_multiple_version_concurrent_with_pessimistic_freelist
+          - dynamic_unsync_map
+          - dynamic_unsync_versioned
+          - dynamic_sync_map
+          - dynamic_sync_versioned
+          - dynamic_sync_map_concurrent
+          - dynamic_sync_multiple_version_concurrent
+          - dynamic_sync_map_concurrent_with_optimistic_freelist
+          - dynamic_sync_map_concurrent_with_pessimistic_freelist
+          - dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest
@@ -302,15 +311,24 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         cfg:
-          - unsync_map
-          - unsync_versioned
-          - sync_map
-          - sync_versioned
-          - sync_map_concurrent
-          - sync_multiple_version_concurrent
-          - sync_map_concurrent_with_optimistic_freelist
-          - sync_map_concurrent_with_pessimistic_freelist
-          - sync_multiple_version_concurrent_with_pessimistic_freelist
+          - generic_unsync_map
+          - generic_unsync_versioned
+          - generic_sync_map
+          - generic_sync_versioned
+          - generic_sync_map_concurrent
+          - generic_sync_multiple_version_concurrent
+          - generic_sync_map_concurrent_with_optimistic_freelist
+          - generic_sync_map_concurrent_with_pessimistic_freelist
+          - generic_sync_multiple_version_concurrent_with_pessimistic_freelist
+          - dynamic_unsync_map
+          - dynamic_unsync_versioned
+          - dynamic_sync_map
+          - dynamic_sync_versioned
+          - dynamic_sync_map_concurrent
+          - dynamic_sync_multiple_version_concurrent
+          - dynamic_sync_map_concurrent_with_optimistic_freelist
+          - dynamic_sync_map_concurrent_with_pessimistic_freelist
+          - dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist
         # Exclude invalid combinations
         exclude:
           - os: ubuntu-latest

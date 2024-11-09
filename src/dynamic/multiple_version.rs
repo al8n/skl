@@ -1,11 +1,11 @@
 use core::{
-  borrow::Borrow, ops::{Bound, RangeBounds}, sync::atomic::Ordering
+  borrow::Borrow,
+  ops::{Bound, RangeBounds},
+  sync::atomic::Ordering,
 };
 
 use among::Among;
-use dbutils::{
-  buffer::VacantBuffer, equivalentor::Comparator,
-};
+use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
 use either::Either;
 
 use crate::{
@@ -28,10 +28,10 @@ pub mod unsync {
 
   use super::Header;
 
-  // #[cfg(any(all(test, not(miri)), all_tests, test_unsync_versioned,))]
-  // mod tests {
-  //   crate::__multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_unsync_versioned,))]
+  mod tests {
+    crate::__dynamic_multiple_version_map_tests!("dynamic_unsync_multiple_version_map": super::SkipMap);
+  }
 
   type SkipList<C> = super::super::list::SkipList<Allocator, C>;
 
@@ -92,9 +92,9 @@ pub mod unsync {
     }
   }
 
-  impl<C: Comparator> super::Map<C> for SkipMap<C>
-  {
+  impl<C: Comparator> super::Map for SkipMap<C> {
     type Allocator = Allocator;
+    type Comparator = C;
   }
 }
 
@@ -102,36 +102,40 @@ pub mod unsync {
 pub mod sync {
   use dbutils::equivalentor::{Ascend, Comparator};
 
-use super::Header;
+  use super::Header;
   pub use crate::sync::multiple_version::Allocator;
 
-  // #[cfg(any(all(test, not(miri)), all_tests, test_sync_versioned,))]
-  // mod tests {
-  //   crate::__multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_sync_versioned,))]
+  mod tests {
+    crate::__dynamic_multiple_version_map_tests!("dynamic_sync_multiple_version_map": super::SkipMap);
+  }
 
-  // #[cfg(any(all(test, not(miri)), all_tests, test_sync_multiple_version_concurrent,))]
-  // mod concurrent_tests {
-  //   crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap => crate::tests::TEST_OPTIONS);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent,
+  ))]
+  mod concurrent_tests {
+    crate::__dynamic_multiple_version_map_tests!(go "dynamic_sync_multiple_version_map": super::SkipMap => crate::tests::dynamic::TEST_OPTIONS);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_tests,
-  //   test_sync_multiple_version_concurrent_with_optimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_optimistic_freelist {
-  //   crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap => crate::tests::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  ))]
+  mod concurrent_tests_with_optimistic_freelist {
+    crate::__dynamic_multiple_version_map_tests!(go "dynamic_sync_multiple_version_map": super::SkipMap => crate::tests::dynamic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_tests,
-  //   test_sync_multiple_version_concurrent_with_pessimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_pessimistic_freelist {
-  //   crate::__multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  ))]
+  mod concurrent_tests_with_pessimistic_freelist {
+    crate::__dynamic_multiple_version_map_tests!(go "dynamic_sync_multiple_version_map": super::SkipMap => crate::tests::dynamic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  }
 
   type SkipList<C> = super::super::list::SkipList<Allocator, C>;
 
@@ -192,9 +196,9 @@ use super::Header;
     }
   }
 
-  impl<C: Comparator> super::Map<C> for SkipMap<C>
-  {
+  impl<C: Comparator> super::Map for SkipMap<C> {
     type Allocator = Allocator;
+    type Comparator = C;
   }
 }
 
@@ -202,14 +206,15 @@ use super::Header;
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<C>
+pub trait Map
 where
-  C: Comparator,
-  Self: Arena<Constructable = super::list::SkipList<Self::Allocator, C>>,
+  Self: Arena<Constructable = super::list::SkipList<Self::Allocator, Self::Comparator>>,
   <<Self::Constructable as Constructable>::Allocator as Sealed>::Node: WithVersion,
 {
   /// The allocator type used to allocate nodes in the map.
   type Allocator: Allocator;
+  /// The comparator type used to compare keys in the map.
+  type Comparator: Comparator;
 
   /// Returns the maximum version of all entries in the map.
   #[inline]
@@ -237,9 +242,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{multiple_version::{sync::SkipMap, Map}, Builder};
+  /// use skl::dynamic::{multiple_version::{sync::SkipMap, Map}, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, "hello", "world").unwrap();
   ///
@@ -265,9 +270,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{multiple_version::{sync::SkipMap, Map}, Builder};
+  /// use skl::dynamic::{multiple_version::{sync::SkipMap, Map}, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, "hello", "world").unwrap();
   ///
@@ -293,8 +298,7 @@ where
   fn first(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
-  {
+  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>> {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -307,8 +311,7 @@ where
   fn last(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
-  {
+  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>> {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -324,8 +327,9 @@ where
   fn first_versioned(
     &self,
     version: Version,
-  ) -> Option<VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
-  {
+  ) -> Option<
+    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
+  > {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -341,8 +345,9 @@ where
   fn last_versioned(
     &self,
     version: Version,
-  ) -> Option<VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
-  {
+  ) -> Option<
+    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
+  > {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -358,9 +363,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{multiple_version::{sync::SkipMap, Map}, Builder};
+  /// use skl::dynamic::{multiple_version::{sync::SkipMap, Map}, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, "hello", "world").unwrap();
   ///
@@ -376,7 +381,7 @@ where
     &self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
+  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -394,9 +399,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{multiple_version::{sync::SkipMap, Map}, Builder};
+  /// use skl::dynamic::{multiple_version::{sync::SkipMap, Map}, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, "hello", "world").unwrap();
   ///
@@ -413,7 +418,9 @@ where
     &self,
     version: Version,
     key: &Q,
-  ) -> Option<VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
+  ) -> Option<
+    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
+  >
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -431,7 +438,7 @@ where
     &self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
+  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -449,7 +456,7 @@ where
     &self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
+  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -469,7 +476,9 @@ where
     &self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
+  ) -> Option<
+    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
+  >
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -492,7 +501,9 @@ where
     &self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, C>>
+  ) -> Option<
+    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
+  >
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -511,8 +522,7 @@ where
   fn iter(
     &self,
     version: Version,
-  ) -> Iter<'_, C, <Self::Constructable as Constructable>::Allocator>
-  {
+  ) -> Iter<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator> {
     self.as_ref().iter(version)
   }
 
@@ -521,8 +531,7 @@ where
   fn iter_all_versions(
     &self,
     version: Version,
-  ) -> IterAll<'_, C, <Self::Constructable as Constructable>::Allocator>
-  {
+  ) -> IterAll<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator> {
     self.as_ref().iter_all_versions(version)
   }
 
@@ -532,7 +541,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, C, <Self::Constructable as Constructable>::Allocator, Q, R>
+  ) -> Iter<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -546,7 +555,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> IterAll<'_, C, <Self::Constructable as Constructable>::Allocator, Q, R>
+  ) -> IterAll<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -566,10 +575,9 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self.as_ref().insert(version, key, value)
   }
 
@@ -582,9 +590,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, Arena};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let height = map.random_height();
   /// map.insert_at_height(0, height, "hello", "world").unwrap();
@@ -597,10 +605,9 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self.as_ref().insert_at_height(version, height, key, value)
   }
 
@@ -619,7 +626,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -640,7 +647,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -658,10 +665,9 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Either<E, Error>,
-  >
-  {
+  > {
     self.as_ref().insert_at_height_with_value_builder(
       version,
       self.random_height(),
@@ -685,7 +691,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -706,7 +712,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -726,10 +732,9 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Either<E, Error>,
-  >
-  {
+  > {
     self
       .as_ref()
       .insert_at_height_with_value_builder(version, height, key, value_builder)
@@ -748,10 +753,9 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self
       .as_ref()
       .get_or_insert_at_height(version, self.random_height(), key, value)
@@ -771,10 +775,9 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self
       .as_ref()
       .get_or_insert_at_height(version, height, key, value)
@@ -796,7 +799,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -817,7 +820,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -834,10 +837,9 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Either<E, Error>,
-  >
-  {
+  > {
     self.get_or_insert_at_height_with_value_builder(
       version,
       self.random_height(),
@@ -862,7 +864,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -883,7 +885,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let vb = ValueBuilder::new(encoded_size, |val: &mut skl::VacantBuffer<'_>| {
   ///   val.put_u32_le(alice.id).unwrap();
@@ -903,10 +905,9 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Either<E, Error>,
-  >
-  {
+  > {
     self
       .as_ref()
       .get_or_insert_at_height_with_value_builder(version, height, key, value_builder)
@@ -927,7 +928,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -948,7 +949,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -971,10 +972,9 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Among<KE, VE, Error>,
-  >
-  {
+  > {
     self.as_ref().insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -999,7 +999,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1020,7 +1020,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -1045,10 +1045,9 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Among<KE, VE, Error>,
-  >
-  {
+  > {
     self
       .as_ref()
       .insert_at_height_with_builders(version, height, key_builder, value_builder)
@@ -1067,7 +1066,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1088,7 +1087,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -1111,10 +1110,9 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Among<KE, VE, Error>,
-  >
-  {
+  > {
     self.as_ref().get_or_insert_at_height_with_builders(
       version,
       self.random_height(),
@@ -1136,7 +1134,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, ValueBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1157,7 +1155,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -1182,10 +1180,9 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Among<KE, VE, Error>,
-  >
-  {
+  > {
     self
       .as_ref()
       .get_or_insert_at_height_with_builders(version, height, key_builder, value_builder)
@@ -1207,10 +1204,9 @@ where
     success: Ordering,
     failure: Ordering,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self.compare_remove_at_height(version, self.random_height(), key, success, failure)
   }
 
@@ -1231,10 +1227,9 @@ where
     success: Ordering,
     failure: Ordering,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self
       .as_ref()
       .compare_remove_at_height(version, height, key, success, failure)
@@ -1252,10 +1247,9 @@ where
     version: Version,
     key: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self.get_or_remove_at_height(version, self.random_height(), key)
   }
 
@@ -1269,9 +1263,9 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, Arena};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// map.insert(0, "hello", "world").unwrap();
   ///
@@ -1285,10 +1279,9 @@ where
     height: Height,
     key: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Error,
-  >
-  {
+  > {
     self.as_ref().get_or_remove_at_height(version, height, key)
   }
 
@@ -1306,7 +1299,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1327,7 +1320,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -1342,10 +1335,9 @@ where
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Either<E, Error>,
-  >
-  {
+  > {
     self
       .as_ref()
       .get_or_remove_at_height_with_builder(version, self.random_height(), key_builder)
@@ -1365,7 +1357,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, KeyBuilder, Arena};
   ///
   /// struct Person {
   ///   id: u32,
@@ -1386,7 +1378,7 @@ where
   ///
   /// let encoded_size = alice.encoded_size();
   ///
-  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let l = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   ///
   /// let kb = KeyBuilder::new(5u8.into(), |key: &mut skl::VacantBuffer<'_>| {
   ///   key.put_slice(b"alice").unwrap();
@@ -1403,13 +1395,11 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, C>>,
+    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
     Either<E, Error>,
-  >
-  {
+  > {
     self
       .as_ref()
       .get_or_remove_at_height_with_builder(version, height, key_builder)
   }
 }
-

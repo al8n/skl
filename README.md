@@ -88,7 +88,7 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
 
     ```sh
     MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check" \
-    RUSTFLAGS = "--cfg all_tests" \
+    RUSTFLAGS = "--cfg all_skl_tests" \
     cargo miri test --all-features
     ```
 
@@ -96,7 +96,7 @@ Please see [examples](https://github.com/al8n/skl/tree/main/examples) folder for
 
     ```sh
     MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check -Zmiri-tree-borrows" \
-    RUSTFLAGS = "--cfg all_tests" \
+    RUSTFLAGS = "--cfg all_skl_tests" \
     cargo miri test --all-features
     ```
 

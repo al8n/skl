@@ -88,6 +88,92 @@ impl Builder {
     self
   }
 
+  /// Returns the data offset of the `SkipMap` if the `SkipMap` is in unified memory layout.
+  ///
+  /// See also [`Builder::data_offset`].
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{generic::{unique::sync, multiple_version::unsync, Builder}, Arena};
+  ///
+  /// let opts = Builder::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// // Create a unsync ARENA.
+  /// let opts = Builder::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  /// ```
+  pub fn data_offset_unify<A>(&self) -> usize
+  where
+    A: Arena,
+  {
+    let arena_opts = self.options.to_arena_options();
+    let arena_data_offset =
+        arena_opts.data_offset_unify::<<<A::Constructable as Constructable>::Allocator as crate::allocator::Sealed>::Allocator>();
+
+    crate::options::data_offset_in::<<A::Constructable as Constructable>::Allocator>(
+      arena_data_offset,
+      self.max_height(),
+      true,
+    )
+  }
+
+  /// Returns the data offset of the `SkipMap` if the `SkipMap` is not in unified memory layout.
+  ///
+  /// As the file backed `SkipMap` will only use the unified memory layout and ignore the unify configuration of `Options`,
+  /// so see also [`Builder::data_offset_unify`], if you want to get the data offset of the `SkipMap` in unified memory layout.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{generic::{unique::sync, multiple_version::unsync, Builder}, Arena};
+  ///
+  /// let opts = Builder::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<sync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// // Create a unsync ARENA.
+  /// let opts = Builder::new().with_capacity(1024);
+  /// let data_offset_from_opts = opts.data_offset::<unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  ///
+  /// let data_offset_from_opts = opts.data_offset_unify::<unsync::SkipMap<[u8], [u8]>>();
+  /// let map = opts.with_unify(true).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// assert_eq!(data_offset_from_opts, map.data_offset());
+  /// ```
+  pub fn data_offset<A>(&self) -> usize
+  where
+    A: Arena,
+  {
+    let arena_opts = self.options.to_arena_options();
+    let arena_data_offset =
+        arena_opts.data_offset::<<<A::Constructable as Constructable>::Allocator as crate::allocator::Sealed>::Allocator>();
+    crate::options::data_offset_in::<<A::Constructable as Constructable>::Allocator>(
+      arena_data_offset,
+      self.max_height(),
+      false,
+    )
+  }
+
   crate::__builder_opts!(generic::Builder);
 }
 
@@ -114,9 +200,9 @@ impl Builder {
   /// ```rust
   /// use skl::generic::{map::sync, multiple_version::unsync, Builder};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// let arena = Builder::new().with_capacity(1024).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Builder::new().with_capacity(1024).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[inline]
   pub fn alloc<T>(self) -> Result<T, Error>

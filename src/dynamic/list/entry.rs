@@ -148,7 +148,7 @@ where
     key: Option<&'a [u8]>,
   ) -> VersionedEntryRef<'a, A, C> {
     unsafe {
-      let (value, vp) = node.get_value_with_pointer(&list.arena);
+      let (value, _) = node.get_value_with_pointer(&list.arena);
 
       let key = match key {
         Some(key) => key,

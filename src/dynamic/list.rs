@@ -767,25 +767,27 @@ where
     next_key: &[u8],
     key: Either<&'a [u8], &'b [u8]>,
   ) -> Option<Pointer> {
-    if let Either::Left(key) | Either::Right(key) = key {
-      match self.arena.options().compression_policy() {
-        CompressionPolicy::Fast => {
-          if next_key.starts_with(key) {
-            return Some(Pointer {
-              offset: next_node.key_offset(),
-              size: key.len() as u32,
-              height: Some(next_node.height()),
-            });
+    match key {
+      Either::Left(key) | Either::Right(key) => {
+        match self.arena.options().compression_policy() {
+          CompressionPolicy::Fast => {
+            if next_key.starts_with(key) {
+              return Some(Pointer {
+                offset: next_node.key_offset(),
+                size: key.len() as u32,
+                height: Some(next_node.height()),
+              });
+            }
           }
-        }
-        #[cfg(feature = "experimental")]
-        CompressionPolicy::High => {
-          if let Some(idx) = memchr::memmem::find(next_key, key) {
-            return Some(Pointer {
-              offset: next_node.key_offset() + idx as u32,
-              size: key.len() as u32,
-              height: Some(next_node.height()),
-            });
+          #[cfg(feature = "experimental")]
+          CompressionPolicy::High => {
+            if let Some(idx) = memchr::memmem::find(next_key, key) {
+              return Some(Pointer {
+                offset: next_node.key_offset() + idx as u32,
+                size: key.len() as u32,
+                height: Some(next_node.height()),
+              });
+            }
           }
         }
       }

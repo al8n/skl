@@ -357,6 +357,68 @@ where
     test_generic_sync_map_concurrent_with_pessimistic_freelist,
   )
 ))]
+pub(crate) fn concurrent_basic_two_maps<M>(l: M)
+where
+  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
+{
+  #[cfg(not(miri))]
+  const N: usize = 1000;
+  #[cfg(miri)]
+  const N: usize = 200;
+
+  let l2 = M::create_from_allocator(l.allocator().clone()).unwrap();
+
+  for i in (0..N / 2).rev() {
+    let l = l.clone();
+    let l2 = l2.clone();
+    std::thread::spawn(move || {
+      l.get_or_insert(key(i).as_slice(), new_value(i).as_slice())
+        .unwrap();
+    });
+    std::thread::spawn(move || {
+      l2.get_or_insert(key(i + N / 2).as_slice(), new_value(i + N / 2).as_slice())
+        .unwrap();
+    });
+  }
+  while l.refs() > 2 {
+    ::core::hint::spin_loop();
+  }
+  for i in 0..N / 2 {
+    let l = l.clone();
+    let l2 = l2.clone();
+    std::thread::spawn(move || {
+      let k = key(i);
+      assert_eq!(
+        l.get(k.as_slice()).unwrap().value(),
+        new_value(i).as_slice(),
+        "broken: {i}"
+      );
+    });
+    std::thread::spawn(move || {
+      let k = key(i + N / 2);
+      assert_eq!(
+        l2.get(k.as_slice()).unwrap().value(),
+        new_value(i + N / 2).as_slice(),
+        "broken: {i}"
+      );
+    });
+  }
+  while l.refs() > 2 {
+    ::core::hint::spin_loop();
+  }
+}
+
+#[cfg(all(
+  feature = "std",
+  any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_map_concurrent,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist,
+  )
+))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone + Send + 'static,
@@ -1113,6 +1175,84 @@ where
   }
 }
 
+// reopen multiple skipmaps based on the same allocator
+#[cfg(feature = "memmap")]
+pub(crate) fn reopen_mmap4<M>(prefix: &str)
+where
+  M: Map<[u8], [u8]> + Clone + Send + Sync + 'static,
+  <M::Allocator as Sealed>::Node: WithoutVersion,
+{
+  use crate::generic::Builder;
+
+  unsafe {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join(std::format!("{prefix}_reopen4_skipmap"));
+    let header = {
+      let l = Builder::new()
+        .with_create_new(true)
+        .with_read(true)
+        .with_write(true)
+        .with_capacity(ARENA_SIZE as u32)
+        .map_mut::<M, _>(&p)
+        .unwrap();
+      let l2 = M::create_from_allocator(l.allocator().clone()).unwrap();
+      let h2 = l2.header().copied().unwrap();
+      let wg = std::sync::Arc::new(std::sync::Mutex::new(2usize));
+      let wg1 = wg.clone();
+      let wg2 = wg.clone();
+      std::thread::spawn(move || {
+        for i in 0..500 {
+          l.get_or_insert(key(i).as_slice(), new_value(i).as_slice())
+            .unwrap();
+        }
+        l.flush().unwrap();
+        let mut wg = wg1.lock().unwrap();
+        *wg -= 1;
+      });
+
+      std::thread::spawn(move || {
+        for i in 500..1000 {
+          l2.get_or_insert(key(i).as_slice(), new_value(i).as_slice())
+            .unwrap();
+        }
+        l2.flush().unwrap();
+        let mut wg = wg2.lock().unwrap();
+        *wg -= 1;
+      });
+
+      while *wg.lock().unwrap() > 0 {
+        ::core::hint::spin_loop();
+      }
+
+      h2
+    };
+
+    let l = Builder::new()
+      .with_read(true)
+      .with_write(true)
+      .with_capacity((ARENA_SIZE * 2) as u32)
+      .map_mut::<M, _>(&p)
+      .unwrap();
+    let l2 = M::open_from_allocator(header, l.allocator().clone()).unwrap();
+    assert_eq!(500, l.len());
+    assert_eq!(500, l2.len());
+
+    for i in 0..500 {
+      let k = key(i);
+      let ent = l.get(k.as_slice()).unwrap();
+      assert_eq!(new_value(i).as_slice(), ent.value());
+      assert_eq!(ent.key(), k.as_slice());
+    }
+
+    for i in 500..1000 {
+      let k = key(i);
+      let ent = l2.get(k.as_slice()).unwrap();
+      assert_eq!(new_value(i).as_slice(), ent.value());
+      assert_eq!(ent.key(), k.as_slice());
+    }
+  }
+}
+
 struct Person {
   id: u32,
   name: std::string::String,
@@ -1510,6 +1650,8 @@ macro_rules! __generic_map_tests {
   (go $prefix:literal: $ty:ty => $opts:path) => {
     $crate::__unit_tests!($crate::tests::generic::map |$prefix, $ty, $opts| {
       #[cfg(feature = "std")]
+      concurrent_basic_two_maps,
+      #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
       concurrent_basic2,
@@ -1518,6 +1660,14 @@ macro_rules! __generic_map_tests {
       #[cfg(feature = "std")]
       concurrent_one_key2,
     });
+
+    #[test]
+    #[cfg(feature = "memmap")]
+    #[cfg_attr(miri, ignore)]
+    #[allow(clippy::macro_metavars_in_unsafe)]
+    fn reopen4() {
+      $crate::tests::generic::map::reopen_mmap4::<$ty>($prefix);
+    }
 
     // #[cfg(not(miri))]
     // mod high_compression {

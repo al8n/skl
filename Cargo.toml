@@ -30,6 +30,11 @@ name = "mmap-anon"
 path = "examples/mmap_anon.rs"
 required-features = ["memmap"]
 
+[[example]]
+name = "multiple_maps"
+path = "examples/multiple_maps.rs"
+required-features = ["memmap"]
+
 [features]
 default = ["std"]
 alloc = ["rarena-allocator/alloc", "dbutils/alloc"]

@@ -13,6 +13,7 @@ pub fn key(i: usize) -> Vec<u8> {
 pub fn new_value(i: usize) -> Vec<u8> {
   format!("{:05}", i).into_bytes()
 }
+
 fn main() {
   const N: usize = 1000;
 

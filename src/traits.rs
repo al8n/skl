@@ -119,8 +119,6 @@ pub trait List: Sized + From<Self::Constructable> {
     ))
   }
 
-  /// ## Safety
-  /// - The `data_offset` must be the same as the same as
   unsafe fn try_open_from_allocator<L: List>(
     arena: <L::Constructable as Constructable>::Allocator,
     cmp: <L::Constructable as Constructable>::Comparator,
@@ -138,10 +136,7 @@ pub trait List: Sized + From<Self::Constructable> {
     )))
   }
 
-  /// ## Safety
-  /// - If the ARENA is file-backed, the caller must save the `data_offset` of the `SkipMap` before the ARENA is closed,
-  ///   so that users can reopen the `SkipMap` with the same `data_offset`.
-  unsafe fn try_create_from_allocator<L: List>(
+  fn try_create_from_allocator<L: List>(
     arena: <L::Constructable as Constructable>::Allocator,
     cmp: <L::Constructable as Constructable>::Comparator,
   ) -> Result<L, Error> {
@@ -168,6 +163,9 @@ pub trait List: Sized + From<Self::Constructable> {
     let head = arena.allocate_full_node(max_height)?;
     let tail = arena.allocate_full_node(max_height)?;
 
+    let head_offset = NodePointer::offset(&head);
+    let tail_offset = NodePointer::offset(&tail);
+
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
     unsafe {
@@ -175,12 +173,10 @@ pub trait List: Sized + From<Self::Constructable> {
       for i in 0..(max_height as usize) {
         let head_link = head.tower(&arena, i);
         let tail_link = tail.tower(&arena, i);
-        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
+        head_link.store_next_offset(tail_offset, Ordering::Relaxed);
+        tail_link.store_prev_offset(head_offset, Ordering::Relaxed);
       }
     }
-    let head_offset = head.offset();
-    let tail_offset = tail.offset();
 
     Ok(L::from(<L::Constructable as Constructable>::construct(
       arena,

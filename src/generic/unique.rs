@@ -211,6 +211,31 @@ where
   /// The allocator used to allocate nodes in the `SkipMap`.
   type Allocator: Allocator;
 
+  /// Try creates from a `SkipMap` from an allocator directly.
+  ///
+  /// This method is not the ideal constructor, it is recommended to use [`Builder`](super::Builder) to create a `SkipMap`,
+  /// if you are not attempting to create multiple `SkipMap`s on the same allocator.
+  ///
+  /// Besides, the only way to reconstruct `SkipMap`s created by this method is to use the [`open_from_allocator(header: Header, arena: Self::Allocator, cmp: Self::Comparator)`](Map::open_from_allocator) method,
+  /// users must save the header to reconstruct the `SkipMap` by their own.
+  /// The header can be obtained by calling [`header`](Map::header) method.
+  #[inline]
+  fn create_from_allocator(arena: Self::Allocator) -> Result<Self, Error> {
+    Self::try_create_from_allocator(arena, ())
+  }
+
+  /// Try open a `SkipMap` from an allocator directly.
+  ///
+  /// See documentation for [`create_from_allocator`](Map::create_from_allocator) for more information.
+  ///
+  /// ## Safety
+  /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
+  /// - The `K` and `V` types must be the same as the types used to create the map.
+  #[inline]
+  unsafe fn open_from_allocator(header: Header, arena: Self::Allocator) -> Result<Self, Error> {
+    Self::try_open_from_allocator(arena, (), header)
+  }
+
   /// Returns the header of the `SkipMap`, which can be used to reconstruct the `SkipMap`.
   ///
   /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,

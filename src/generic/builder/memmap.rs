@@ -80,6 +80,7 @@ impl Builder {
   ///   out of process. Applications must consider the risk and take appropriate precautions when
   ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   ///   unlinked) files exist but are platform specific and limited.
+  /// - The `K` and `V` types must be the same as the types used to create the map.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -102,6 +103,7 @@ impl Builder {
   ///   out of process. Applications must consider the risk and take appropriate precautions when
   ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   ///   unlinked) files exist but are platform specific and limited.
+  /// - The `K` and `V` types must be the same as the types used to create the map.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -175,6 +177,7 @@ impl Builder {
   ///   out of process. Applications must consider the risk and take appropriate precautions when
   ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   ///   unlinked) files exist but are platform specific and limited.
+  /// - The `K` and `V` types must be the same as the types used to create the map.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   #[inline]
@@ -197,6 +200,7 @@ impl Builder {
   ///   out of process. Applications must consider the risk and take appropriate precautions when
   ///   using file-backed maps. Solutions such as file permissions, locks or process-private (e.g.
   ///   unlinked) files exist but are platform specific and limited.
+  /// - The `K` and `V` types must be the same as the types used to create the map.
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
   pub unsafe fn map_mut_with_path_builder<T, PB, E>(

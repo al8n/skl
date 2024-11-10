@@ -12,6 +12,7 @@ use super::{
 
 use core::{marker::PhantomData, mem, ptr::NonNull, sync::atomic::Ordering};
 
+/// The allocator used to allocate nodes in the `SkipMap`.
 pub trait Allocator: Sealed {}
 
 impl<T> Allocator for T where T: Sealed {}
@@ -477,7 +478,7 @@ mod sealed {
     /// and returns the data offset.
     #[inline]
     fn check_capacity(&self, max_height: u8) -> Result<u32, Error> {
-      let offset = self.data_offset();
+      let offset = self.allocated();
 
       let meta_end = if self.options().unify() {
         let alignment = mem::align_of::<Self::Header>();

@@ -12,7 +12,7 @@ use either::Either;
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Deallocator, Header, Link, Node, NodePointer, Pointer, ValuePointer},
+  allocator::{Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
   options::CompressionPolicy,
@@ -142,6 +142,11 @@ where
   }
 
   #[inline]
+  fn allocator_mut(&mut self) -> &mut Self::Allocator {
+    &mut self.arena
+  }
+
+  #[inline]
   fn magic_version(&self) -> u16 {
     self.meta().magic_version()
   }
@@ -164,45 +169,6 @@ where
   #[inline]
   fn data_offset(&self) -> usize {
     self.data_offset as usize
-  }
-
-  #[inline]
-  unsafe fn clear(&mut self) -> Result<(), crate::error::Error> {
-    self.arena.clear()?;
-
-    let options = self.arena.options();
-
-    if self.arena.unify() {
-      self.meta = self
-        .arena
-        .allocate_header(self.meta.as_ref().magic_version())?;
-    } else {
-      let magic_version = self.meta.as_ref().magic_version();
-      let _ = Box::from_raw(self.meta.as_ptr());
-      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-        magic_version,
-      ))));
-    }
-
-    let max_height: u8 = options.max_height().into();
-    let head = self.arena.allocate_full_node(max_height)?;
-    let tail = self.arena.allocate_full_node(max_height)?;
-
-    // Safety:
-    // We will always allocate enough space for the head node and the tail node.
-    unsafe {
-      // Link all head/tail levels together.
-      for i in 0..(max_height as usize) {
-        let head_link = head.tower(&self.arena, i);
-        let tail_link = tail.tower(&self.arena, i);
-        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
-      }
-    }
-
-    self.head = head;
-    self.tail = tail;
-    Ok(())
   }
 
   #[inline]

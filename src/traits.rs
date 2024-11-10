@@ -16,6 +16,8 @@ pub trait Constructable: Sized {
 
   fn allocator(&self) -> &Self::Allocator;
 
+  fn allocator_mut(&mut self) -> &mut Self::Allocator;
+
   fn magic_version(&self) -> u16;
 
   #[inline]
@@ -30,8 +32,6 @@ pub trait Constructable: Sized {
   fn random_height(&self) -> Height;
 
   fn data_offset(&self) -> usize;
-
-  unsafe fn clear(&mut self) -> Result<(), Error>;
 
   fn construct(
     arena: Self::Allocator,
@@ -109,6 +109,76 @@ pub trait List: Sized + From<Self::Constructable> {
     Ok(Self::from(
       <Self::Constructable as Constructable>::construct(arena, meta, head, tail, data_offset, cmp),
     ))
+  }
+
+  /// ## Safety
+  /// - The `data_offset` must be the same as the same as
+  unsafe fn try_open_from_allocator<L: List>(
+    arena: <L::Constructable as Constructable>::Allocator,
+    cmp: <L::Constructable as Constructable>::Comparator,
+    data_offset: u32,
+  ) -> Result<L, Error> {
+    let (meta, head, tail) = arena.get_pointers();
+
+    Ok(L::from(<L::Constructable as Constructable>::construct(
+      arena,
+      meta,
+      head,
+      tail,
+      data_offset,
+      cmp,
+    )))
+  }
+
+  /// ## Safety
+  /// - If the ARENA is file-backed, the caller must save the `data_offset` of the `SkipMap` before the ARENA is closed,
+  ///   so that users can reopen the `SkipMap` with the same `data_offset`.
+  unsafe fn try_create_from_allocator<L: List>(
+    arena: <L::Constructable as Constructable>::Allocator,
+    cmp: <L::Constructable as Constructable>::Comparator,
+  ) -> Result<L, Error> {
+    use std::boxed::Box;
+
+    let opts = arena.options();
+    let max_height: u8 = opts.max_height().into();
+    let data_offset = arena.check_capacity(max_height)?;
+    if arena.read_only() {
+      return Err(Error::read_only());
+    }
+
+    let meta = if AllocatorSealed::unify(&arena) {
+      arena.allocate_header(opts.magic_version())?
+    } else {
+      unsafe {
+        NonNull::new_unchecked(Box::into_raw(Box::new(
+          <<<L::Constructable as Constructable>::Allocator as AllocatorSealed>::Header as Header>::new(opts.magic_version()),
+        )))
+      }
+    };
+
+    let head = arena.allocate_full_node(max_height)?;
+    let tail = arena.allocate_full_node(max_height)?;
+
+    // Safety:
+    // We will always allocate enough space for the head node and the tail node.
+    unsafe {
+      // Link all head/tail levels together.
+      for i in 0..(max_height as usize) {
+        let head_link = head.tower(&arena, i);
+        let tail_link = tail.tower(&arena, i);
+        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
+        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
+      }
+    }
+
+    Ok(L::from(<L::Constructable as Constructable>::construct(
+      arena,
+      meta,
+      head,
+      tail,
+      data_offset,
+      cmp,
+    )))
   }
 }
 
@@ -235,6 +305,48 @@ pub trait Arena: List {
     self.as_ref().allocator().unify()
   }
 
+  /// Returns the allocator used to allocate nodes.
+  #[inline]
+  fn allocator(&self) -> &<Self::Constructable as Constructable>::Allocator {
+    self.as_ref().allocator()
+  }
+
+  /// Returns the mutable reference to the allocator used to allocate nodes.
+  #[inline]
+  fn allocator_mut(&mut self) -> &mut <Self::Constructable as Constructable>::Allocator {
+    self.as_mut().allocator_mut()
+  }
+
+  /// Clear the allocator to empty and re-initialize.
+  ///
+  /// ## Safety
+  /// - The current pointers get from the allocator cannot be used anymore after calling this method.
+  /// - This method is not thread-safe.
+  ///
+  /// ## Example
+  ///
+  /// Undefine behavior:
+  ///
+  /// ```ignore
+  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
+  ///
+  /// map.insert(b"hello", b"world").unwrap();
+  ///
+  /// let data = map.get(b"hello").unwrap();
+  ///
+  /// map.allocator().clear().unwrap();
+  ///
+  /// let w = data[0]; // undefined behavior
+  /// ```
+  #[inline]
+  unsafe fn clear(&mut self) -> Result<(), Error> {
+    match self.as_mut().allocator_mut().clear() {
+      Ok(_) => Ok(()),
+      Err(rarena_allocator::Error::ReadOnly) => Err(Error::read_only()),
+      _ => unreachable!("unexpected error"),
+    }
+  }
+
   /// Returns a random generated height.
   ///
   /// This method is useful when you want to check if the underlying allocator can allocate a node.
@@ -265,32 +377,6 @@ pub trait Arena: List {
       + mem::size_of::<<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Node as Node>::Link>() * height
       + key_size
       + value_size
-  }
-
-  /// Clear the skiplist to empty and re-initialize.
-  ///
-  /// ## Safety
-  /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
-  /// - This method is not thread-safe.
-  ///
-  /// ## Example
-  ///
-  /// Undefine behavior:
-  ///
-  /// ```ignore
-  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
-  ///
-  /// map.insert(b"hello", b"world").unwrap();
-  ///
-  /// let data = map.get(b"hello").unwrap();
-  ///
-  /// map.clear().unwrap();
-  ///
-  /// let w = data[0]; // undefined behavior
-  /// ```
-  #[inline]
-  unsafe fn clear(&mut self) -> Result<(), Error> {
-    self.as_mut().clear()
   }
 
   /// Flushes outstanding memory map modifications to disk.

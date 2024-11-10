@@ -1,10 +1,7 @@
 use core::{
   mem,
   ops::{Bound, RangeBounds},
-  ptr::NonNull,
-  sync::atomic::Ordering,
 };
-use std::boxed::Box;
 
 use dbutils::{
   buffer::VacantBuffer,
@@ -14,7 +11,7 @@ use dbutils::{
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Header, Link, Node, NodePointer},
+  allocator::{Allocator, Header, Node, NodePointer},
   error::Error,
   random_height, ty_ref,
   types::{Height, ValueBuilder},
@@ -74,30 +71,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
     self.meta().height()
   }
 
-  /// Returns the number of remaining bytes can be allocated by the arena.
-  #[inline]
-  pub fn remaining(&self) -> usize {
-    self.arena.remaining()
-  }
-
-  /// Returns how many bytes are discarded by the ARENA.
-  #[inline]
-  pub fn discarded(&self) -> u32 {
-    self.arena.discarded()
-  }
-
-  /// Returns the number of bytes that have allocated from the arena.
-  #[inline]
-  pub fn allocated(&self) -> usize {
-    self.arena.allocated()
-  }
-
-  /// Returns the capacity of the arena.
-  #[inline]
-  pub fn capacity(&self) -> usize {
-    self.arena.capacity()
-  }
-
   /// Returns the number of entries in the skipmap.
   #[inline]
   pub fn len(&self) -> usize {
@@ -153,49 +126,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
       + mem::size_of::<<A::Node as Node>::Link>() * height
       + key_size
       + value_size
-  }
-
-  /// Clear the skiplist to empty and re-initialize.
-  ///
-  /// ## Safety
-  /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
-  /// - This method is not thread-safe.
-  pub unsafe fn clear(&mut self) -> Result<(), Error> {
-    self.arena.clear()?;
-
-    let options = self.arena.options();
-
-    if self.arena.unify() {
-      self.meta = self
-        .arena
-        .allocate_header(self.meta.as_ref().magic_version())?;
-    } else {
-      let magic_version = self.meta.as_ref().magic_version();
-      let _ = Box::from_raw(self.meta.as_ptr());
-      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-        magic_version,
-      ))));
-    }
-
-    let max_height: u8 = options.max_height().into();
-    let head = self.arena.allocate_full_node(max_height)?;
-    let tail = self.arena.allocate_full_node(max_height)?;
-
-    // Safety:
-    // We will always allocate enough space for the head node and the tail node.
-    unsafe {
-      // Link all head/tail levels together.
-      for i in 0..(max_height as usize) {
-        let head_link = head.tower(&self.arena, i);
-        let tail_link = tail.tower(&self.arena, i);
-        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
-      }
-    }
-
-    self.head = head;
-    self.tail = tail;
-    Ok(())
   }
 
   /// Flushes outstanding memory map modifications to disk.

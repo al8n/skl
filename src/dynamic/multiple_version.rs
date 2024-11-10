@@ -297,12 +297,12 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder}, Arena};
+  /// use skl::{dynamic::{multiple_version::{sync::SkipMap, Map}, Builder, Ascend}, Arena};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
   /// let height = map.random_height();
   ///
-  /// let needed = SkipMap::estimated_node_size(height, b"k1".len(), b"k2".len());
+  /// let needed = SkipMap::<Ascend>::estimated_node_size(height, b"k1".len(), b"k2".len());
   /// ```
   #[inline]
   fn random_height(&self) -> Height {

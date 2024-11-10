@@ -298,7 +298,7 @@ where
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{generic::{multiple_version::sync::SkipMap, Builder}, Arena};
+  /// use skl::{generic::{multiple_version::{sync::SkipMap, Map}, Builder}, Arena};
   ///
   /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
   /// let height = map.random_height();

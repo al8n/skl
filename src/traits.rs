@@ -334,6 +334,20 @@ pub trait Arena: List {
       + value_size
   }
 
+  /// Returns the full node size of the allocator.
+  #[inline]
+  fn full_node_size(max_height: Height) -> usize {
+    let max_height: usize = max_height.into();
+    mem::size_of::<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Node>()
+    + mem::size_of::<<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Node as Node>::Link>() * max_height
+  }
+
+  /// Returns the metadata of the allocator.
+  #[inline]
+  fn meta_size() -> usize {
+    mem::size_of::<<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Meta>()
+  }
+
   /// Flushes outstanding memory map modifications to disk.
   ///
   /// When this method returns with a non-error result,

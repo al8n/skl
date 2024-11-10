@@ -1,12 +1,7 @@
-use core::mem;
-
 pub use rarena_allocator::Freelist;
 use rarena_allocator::Options as ArenaOptions;
 
-use crate::{
-  allocator::{Node, Sealed as AllocatorSealed},
-  types::{Height, KeySize},
-};
+use crate::types::{Height, KeySize};
 
 /// The memory format version.
 pub(crate) const CURRENT_VERSION: u16 = 0;
@@ -529,32 +524,6 @@ impl Options {
     #[cfg(not(all(feature = "memmap", not(target_family = "wasm"))))]
     opts
   }
-}
-
-#[inline]
-pub(crate) fn data_offset_in<A: AllocatorSealed>(
-  offset: usize,
-  max_height: Height,
-  unify: bool,
-) -> usize {
-  let meta_end = if unify {
-    let alignment = mem::align_of::<A::Meta>();
-    let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-    meta_offset + mem::size_of::<A::Meta>()
-  } else {
-    offset
-  };
-
-  let alignment = mem::align_of::<A::Node>();
-  let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-  let head_end = head_offset
-    + mem::size_of::<A::Node>()
-    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize();
-
-  let tail_offset = (head_end + alignment - 1) & !(alignment - 1);
-  tail_offset
-    + mem::size_of::<A::Node>()
-    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize()
 }
 
 #[macro_export]

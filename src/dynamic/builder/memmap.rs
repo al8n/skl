@@ -117,6 +117,8 @@ impl<C: Comparator> Builder<C> {
     T::Constructable: Constructable<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
+    use crate::allocator::Meta as _;
+
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
 
@@ -139,7 +141,7 @@ impl<C: Comparator> Builder<C> {
         T::construct(arena, options, true, cmp)
           .map_err(invalid_data)
           .and_then(|map| {
-            let flags = map.flags();
+            let flags = map.meta().flags();
             let node_flags = <<<T::Constructable as Constructable>::Allocator as Sealed>::Node as Node>::flags();
 
             if flags != node_flags {
@@ -210,6 +212,8 @@ impl<C: Comparator> Builder<C> {
     T::Constructable: Constructable<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
+    use crate::allocator::Meta as _;
+
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
     let Self { options, cmp } = self;
@@ -228,7 +232,7 @@ impl<C: Comparator> Builder<C> {
         T::construct(arena, options, exist, cmp)
           .map_err(invalid_data)
           .and_then(|map| {
-            let flags = map.flags();
+            let flags = map.meta().flags();
             let node_flags =
               <<<T::Constructable as Constructable>::Allocator as Sealed>::Node as Node>::flags();
 

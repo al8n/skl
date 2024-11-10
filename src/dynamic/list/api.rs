@@ -8,11 +8,11 @@ use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Header, Node, NodePointer},
+  allocator::{Allocator, Meta, Node, NodePointer},
   error::Error,
   random_height,
   types::{Height, ValueBuilder},
-  Version,
+  Header, Version,
 };
 
 use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
@@ -36,15 +36,15 @@ impl<A: Allocator, C> SkipList<A, C> {
     self.arena.remove_on_drop(val);
   }
 
-  /// Returns the offset of the data section in the `SkipList`.
+  /// Returns the header of the `SkipList`.
   ///
   /// By default, `SkipList` will allocate meta, head node, and tail node in the ARENA,
   /// and the data section will be allocated after the tail node.
   ///
-  /// This method will return the offset of the data section in the ARENA.
+  /// This method will return the header of the `SkipList`.
   #[inline]
-  pub const fn data_offset(&self) -> usize {
-    self.data_offset as usize
+  pub const fn header(&self) -> Option<&Header> {
+    self.header.as_ref()
   }
 
   /// Returns the version number of the [`SkipList`].

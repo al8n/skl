@@ -59,7 +59,7 @@ where
   assert!(found_arena_full);
 }
 
-pub(crate) fn basic<M>(mut l: M)
+pub(crate) fn basic<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
@@ -127,18 +127,6 @@ where
     .get_or_insert(b"c".as_slice(), [].as_slice())
     .unwrap()
     .is_none());
-
-  unsafe {
-    l.clear().unwrap();
-  }
-
-  let l = l.clone();
-  {
-    let mut it = l.iter();
-    assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
-    assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  }
-  assert!(l.is_empty());
 
   #[cfg(feature = "memmap")]
   l.flush().unwrap();

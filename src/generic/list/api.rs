@@ -11,11 +11,11 @@ use dbutils::{
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Header, Node, NodePointer},
+  allocator::{Allocator, Meta, Node, NodePointer},
   error::Error,
   random_height, ty_ref,
   types::{Height, ValueBuilder},
-  Version,
+  Header, Version,
 };
 
 use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
@@ -39,15 +39,59 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
     self.arena.remove_on_drop(val);
   }
 
-  /// Returns the offset of the data section in the `SkipList`.
+  /// Clear the allocator to empty and re-initialize.
+  ///
+  /// ## Safety
+  /// - The current pointers get from the allocator cannot be used anymore after calling this method.
+  /// - This method is not thread-safe.
+  ///
+  /// ## Example
+  ///
+  /// Undefine behavior:
+  ///
+  /// ```ignore
+  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
+  ///
+  /// map.insert(b"hello", b"world").unwrap();
+  ///
+  /// let data = map.get(b"hello").unwrap();
+  ///
+  /// map.clear().unwrap();
+  ///
+  /// let w = data[0]; // undefined behavior
+  /// ```
+  #[inline]
+  pub unsafe fn clear(&mut self) -> Result<(), Error> {
+    use core::ptr::NonNull;
+    use std::boxed::Box;
+
+    self.arena.clear()?;
+
+    if self.arena.unify() {
+      let (_, meta) = self
+        .arena
+        .allocate_header(self.meta.as_ref().magic_version())?;
+      self.meta = meta;
+    } else {
+      let magic_version = self.meta.as_ref().magic_version();
+      let _ = Box::from_raw(self.meta.as_ptr());
+      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Meta as Meta>::new(
+        magic_version,
+      ))));
+    }
+
+    Ok(())
+  }
+
+  /// Returns the header of the `SkipList`.
   ///
   /// By default, `SkipList` will allocate meta, head node, and tail node in the ARENA,
   /// and the data section will be allocated after the tail node.
   ///
-  /// This method will return the offset of the data section in the ARENA.
+  /// This method will return the header of the `SkipList`.
   #[inline]
-  pub const fn data_offset(&self) -> usize {
-    self.data_offset as usize
+  pub const fn header(&self) -> Option<&Header> {
+    self.header.as_ref()
   }
 
   /// Returns the version number of the [`SkipList`].

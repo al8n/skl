@@ -12,7 +12,7 @@ use either::Either;
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Deallocator, Header, Node, NodePointer, Pointer, ValuePointer},
+  allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
   options::CompressionPolicy,
@@ -20,7 +20,7 @@ use crate::{
   traits::Constructable,
   ty_ref,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Inserter, Splice, Version,
+  FindResult, Header, Inserter, Splice, Version,
 };
 
 mod entry;
@@ -39,10 +39,10 @@ type UpdateOk<'a, 'b, K, V, A> = Either<
 #[derive(Debug)]
 pub struct SkipList<K: ?Sized, V: ?Sized, A: Allocator> {
   pub(crate) arena: A,
-  meta: NonNull<A::Header>,
+  meta: NonNull<A::Meta>,
   head: <A::Node as Node>::Pointer,
   tail: <A::Node as Node>::Pointer,
-  data_offset: u32,
+  header: Option<Header>,
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   on_disk: bool,
   /// If set to true by tests, then extra delays are added to make it easier to
@@ -83,7 +83,7 @@ where
       on_disk: self.on_disk,
       head: self.head,
       tail: self.tail,
-      data_offset: self.data_offset,
+      header: self.header,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
       _m: PhantomData,
@@ -121,7 +121,7 @@ where
   A: Allocator,
 {
   #[inline]
-  pub(crate) const fn meta(&self) -> &A::Header {
+  pub(crate) const fn meta(&self) -> &A::Meta {
     // Safety: the pointer is well aligned and initialized.
     unsafe { self.meta.as_ref() }
   }
@@ -167,17 +167,17 @@ where
   }
 
   #[inline]
-  fn data_offset(&self) -> usize {
-    self.data_offset as usize
+  fn header(&self) -> Option<&Header> {
+    self.header.as_ref()
   }
 
   #[inline]
   fn construct(
     arena: Self::Allocator,
-    meta: core::ptr::NonNull<<Self::Allocator as crate::allocator::Sealed>::Header>,
+    meta: core::ptr::NonNull<<Self::Allocator as crate::allocator::Sealed>::Meta>,
     head: <<Self::Allocator as crate::allocator::Sealed>::Node as crate::allocator::Node>::Pointer,
     tail: <<Self::Allocator as crate::allocator::Sealed>::Node as crate::allocator::Node>::Pointer,
-    data_offset: u32,
+    header: Option<Header>,
     _: Self::Comparator,
   ) -> Self {
     Self {
@@ -187,7 +187,7 @@ where
       meta,
       head,
       tail,
-      data_offset,
+      header,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
       _m: PhantomData,

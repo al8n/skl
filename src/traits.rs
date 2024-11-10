@@ -1,10 +1,10 @@
 use core::{mem, ptr::NonNull, sync::atomic::Ordering};
 use rarena_allocator::Allocator as ArenaAllocator;
 
+use crate::Header;
+
 use super::{
-  allocator::{
-    Allocator, AllocatorExt, Header, Link, Node, NodePointer, Sealed as AllocatorSealed,
-  },
+  allocator::{Allocator, AllocatorExt, Link, Meta, Node, NodePointer, Sealed as AllocatorSealed},
   error::Error,
   options::Options,
   types::Height,
@@ -31,14 +31,14 @@ pub trait Constructable: Sized {
 
   fn random_height(&self) -> Height;
 
-  fn data_offset(&self) -> usize;
+  fn header(&self) -> Option<&Header>;
 
   fn construct(
     arena: Self::Allocator,
-    meta: NonNull<<Self::Allocator as AllocatorSealed>::Header>,
+    meta: NonNull<<Self::Allocator as AllocatorSealed>::Meta>,
     head: <<Self::Allocator as AllocatorSealed>::Node as Node>::Pointer,
     tail: <<Self::Allocator as AllocatorSealed>::Node as Node>::Pointer,
-    data_offset: u32,
+    header: Option<Header>,
     cmp: Self::Comparator,
   ) -> Self;
 }
@@ -51,7 +51,7 @@ pub trait List: Sized + From<Self::Constructable> {
 
   fn as_mut(&mut self) -> &mut Self::Constructable;
 
-  fn flags(&self) -> crate::internal::Flags;
+  fn meta(&self) -> &<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Meta;
 
   fn construct(
     arena: <<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Allocator,
@@ -65,9 +65,9 @@ pub trait List: Sized + From<Self::Constructable> {
       <<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::new(arena, opts);
     let opts = arena.options();
     let max_height: u8 = opts.max_height().into();
-    let data_offset = arena.check_capacity(max_height)?;
     if arena.read_only() || exist {
-      let (meta, head, tail) = arena.get_pointers();
+      let header = arena.calculate_header(max_height)?;
+      let (meta, head, tail) = arena.get_pointers(header);
 
       return Ok(Self::from(
         <Self::Constructable as Constructable>::construct(
@@ -75,24 +75,29 @@ pub trait List: Sized + From<Self::Constructable> {
           meta,
           head,
           tail,
-          data_offset,
+          Some(header),
           cmp,
         ),
       ));
     }
 
-    let meta = if AllocatorSealed::unify(&arena) {
-      arena.allocate_header(opts.magic_version())?
+    let (header_offset, meta) = if AllocatorSealed::unify(&arena) {
+      arena
+        .allocate_header(opts.magic_version())
+        .map(|(header_offset, meta)| (Some(header_offset as u32), meta))?
     } else {
       unsafe {
-        NonNull::new_unchecked(Box::into_raw(Box::new(
-          <<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Header as Header>::new(opts.magic_version()),
-        )))
+        (None, NonNull::new_unchecked(Box::into_raw(Box::new(
+          <<<Self::Constructable as Constructable>::Allocator as AllocatorSealed>::Meta as Meta>::new(opts.magic_version()),
+        ))))
       }
     };
 
     let head = arena.allocate_full_node(max_height)?;
     let tail = arena.allocate_full_node(max_height)?;
+
+    let head_offset = head.offset();
+    let tail_offset = tail.offset();
 
     // Safety:
     // We will always allocate enough space for the head node and the tail node.
@@ -106,8 +111,11 @@ pub trait List: Sized + From<Self::Constructable> {
       }
     }
 
+    let header =
+      header_offset.map(|meta_offset| Header::new(meta_offset, head_offset, tail_offset));
+
     Ok(Self::from(
-      <Self::Constructable as Constructable>::construct(arena, meta, head, tail, data_offset, cmp),
+      <Self::Constructable as Constructable>::construct(arena, meta, head, tail, header, cmp),
     ))
   }
 
@@ -116,16 +124,16 @@ pub trait List: Sized + From<Self::Constructable> {
   unsafe fn try_open_from_allocator<L: List>(
     arena: <L::Constructable as Constructable>::Allocator,
     cmp: <L::Constructable as Constructable>::Comparator,
-    data_offset: u32,
+    header: Header,
   ) -> Result<L, Error> {
-    let (meta, head, tail) = arena.get_pointers();
+    let (meta, head, tail) = arena.get_pointers(header);
 
     Ok(L::from(<L::Constructable as Constructable>::construct(
       arena,
       meta,
       head,
       tail,
-      data_offset,
+      Some(header),
       cmp,
     )))
   }
@@ -141,18 +149,19 @@ pub trait List: Sized + From<Self::Constructable> {
 
     let opts = arena.options();
     let max_height: u8 = opts.max_height().into();
-    let data_offset = arena.check_capacity(max_height)?;
     if arena.read_only() {
       return Err(Error::read_only());
     }
 
-    let meta = if AllocatorSealed::unify(&arena) {
-      arena.allocate_header(opts.magic_version())?
+    let (header_offset, meta) = if AllocatorSealed::unify(&arena) {
+      arena
+        .allocate_header(opts.magic_version())
+        .map(|(header_offset, meta)| (Some(header_offset as u32), meta))?
     } else {
       unsafe {
-        NonNull::new_unchecked(Box::into_raw(Box::new(
-          <<<L::Constructable as Constructable>::Allocator as AllocatorSealed>::Header as Header>::new(opts.magic_version()),
-        )))
+        (None, NonNull::new_unchecked(Box::into_raw(Box::new(
+          <<<L::Constructable as Constructable>::Allocator as AllocatorSealed>::Meta as Meta>::new(opts.magic_version()),
+        ))))
       }
     };
 
@@ -170,13 +179,15 @@ pub trait List: Sized + From<Self::Constructable> {
         tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
       }
     }
+    let head_offset = head.offset();
+    let tail_offset = tail.offset();
 
     Ok(L::from(<L::Constructable as Constructable>::construct(
       arena,
       meta,
       head,
       tail,
-      data_offset,
+      header_offset.map(|offset| Header::new(offset, head_offset, tail_offset)),
       cmp,
     )))
   }
@@ -194,6 +205,32 @@ pub trait Arena: List {
   #[inline]
   fn reserved_slice(&self) -> &[u8] {
     self.as_ref().allocator().reserved_slice()
+  }
+
+  /// Clear the allocator to empty and re-initialize.
+  ///
+  /// ## Safety
+  /// - The current pointers get from the allocator cannot be used anymore after calling this method.
+  /// - This method is not thread-safe.
+  /// - This will clear the whole ARENA, all `SkipMap`s based on this ARENA cannot be used anymore after calling this method.
+  ///
+  /// ## Example
+  ///
+  /// Undefine behavior:
+  ///
+  /// ```ignore
+  /// let mut map = Builder::new().with_capacity(100).alloc().unwrap();
+  ///
+  /// map.insert(b"hello", b"world").unwrap();
+  ///
+  /// let data = map.get(b"hello").unwrap();
+  ///
+  /// map.allocator_mut().clear().unwrap();
+  ///
+  /// let w = data[0]; // undefined behavior
+  /// ```
+  unsafe fn clear(&mut self) -> Result<(), Error> {
+    self.allocator_mut().clear().map_err(Into::into)
   }
 
   /// Returns the mutable reserved bytes of the allocator specified in the [`Options::with_reserved`].
@@ -232,35 +269,12 @@ pub trait Arena: List {
     self.as_ref().allocator().remove_on_drop(val)
   }
 
-  /// Returns the offset of the data section in the `SkipMap`.
-  ///
-  /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,
-  /// and the data section will be allocated after the tail node.
-  ///
-  /// This method will return the offset of the data section in the ARENA.
-  fn data_offset(&self) -> usize {
-    self.as_ref().data_offset()
-  }
-
   /// Returns the magic version number of the [`Arena`].
   ///
   /// This value can be used to check the compatibility for application using [`Arena`].
   #[inline]
   fn magic_version(&self) -> u16 {
     self.as_ref().magic_version()
-  }
-
-  /// Returns the height of the highest tower within any of the nodes that
-  /// have ever been allocated as part of this skiplist.
-  #[inline]
-  fn height(&self) -> u8 {
-    self.as_ref().height()
-  }
-
-  /// Returns the number of remaining bytes can be allocated by the arena.
-  #[inline]
-  fn remaining(&self) -> usize {
-    self.as_ref().allocator().remaining()
   }
 
   /// Returns the number of bytes that have allocated from the arena.
@@ -275,16 +289,10 @@ pub trait Arena: List {
     self.as_ref().allocator().capacity()
   }
 
-  /// Returns the number of entries in the skipmap.
+  /// Returns the number of remaining bytes can be allocated by the arena.
   #[inline]
-  fn len(&self) -> usize {
-    self.as_ref().len()
-  }
-
-  /// Returns true if the skipmap is empty.
-  #[inline]
-  fn is_empty(&self) -> bool {
-    self.len() == 0
+  fn remaining(&self) -> usize {
+    self.as_ref().allocator().remaining()
   }
 
   /// Gets the number of pointers to this `SkipMap` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
@@ -315,55 +323,6 @@ pub trait Arena: List {
   #[inline]
   fn allocator_mut(&mut self) -> &mut <Self::Constructable as Constructable>::Allocator {
     self.as_mut().allocator_mut()
-  }
-
-  /// Clear the allocator to empty and re-initialize.
-  ///
-  /// ## Safety
-  /// - The current pointers get from the allocator cannot be used anymore after calling this method.
-  /// - This method is not thread-safe.
-  ///
-  /// ## Example
-  ///
-  /// Undefine behavior:
-  ///
-  /// ```ignore
-  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
-  ///
-  /// map.insert(b"hello", b"world").unwrap();
-  ///
-  /// let data = map.get(b"hello").unwrap();
-  ///
-  /// map.allocator().clear().unwrap();
-  ///
-  /// let w = data[0]; // undefined behavior
-  /// ```
-  #[inline]
-  unsafe fn clear(&mut self) -> Result<(), Error> {
-    match self.as_mut().allocator_mut().clear() {
-      Ok(_) => Ok(()),
-      Err(rarena_allocator::Error::ReadOnly) => Err(Error::read_only()),
-      _ => unreachable!("unexpected error"),
-    }
-  }
-
-  /// Returns a random generated height.
-  ///
-  /// This method is useful when you want to check if the underlying allocator can allocate a node.
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use skl::{generic::{unique::sync::SkipMap, Builder}, Arena};
-  ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
-  /// let height = map.random_height();
-  ///
-  /// let needed = SkipMap::<[u8], [u8]>::estimated_node_size(height, b"k1".len(), b"k2".len());
-  /// ```
-  #[inline]
-  fn random_height(&self) -> Height {
-    self.as_ref().random_height()
   }
 
   /// Returns the estimated size of a node with the given height and key/value sizes.

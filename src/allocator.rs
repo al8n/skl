@@ -24,7 +24,7 @@ mod sealed {
 
   use among::Among;
 
-  use crate::internal::Flags;
+  use crate::{internal::Flags, Header};
 
   use super::*;
 
@@ -441,7 +441,7 @@ mod sealed {
     }
   }
 
-  pub trait Header: core::fmt::Debug {
+  pub trait Meta: core::fmt::Debug {
     fn new(magic_version: u16) -> Self;
 
     fn magic_version(&self) -> u16;
@@ -474,18 +474,15 @@ mod sealed {
   impl<T: Allocator> AllocatorExt for T {}
 
   pub trait AllocatorExt: Allocator {
-    /// Checks if the arena has enough capacity to store the skiplist,
-    /// and returns the data offset.
+    /// Returns the header of the arena.
     #[inline]
-    fn check_capacity(&self, max_height: u8) -> Result<u32, Error> {
-      let offset = self.allocated();
+    fn calculate_header(&self, max_height: u8) -> Result<Header, Error> {
+      let offset = self.data_offset();
 
-      let meta_end = if self.options().unify() {
-        let alignment = mem::align_of::<Self::Header>();
+      let meta_end = {
+        let alignment = mem::align_of::<Self::Meta>();
         let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-        meta_offset + mem::size_of::<Self::Header>()
-      } else {
-        offset
+        meta_offset + mem::size_of::<Self::Meta>()
       };
 
       let alignment = mem::align_of::<Self::Node>();
@@ -502,33 +499,35 @@ mod sealed {
         return Err(Error::ArenaTooSmall);
       }
 
-      Ok(tail_end as u32)
+      Ok(Header::new(
+        offset as u32,
+        head_offset as u32,
+        tail_offset as u32,
+      ))
     }
 
     #[inline]
     fn get_pointers(
       &self,
+      header: Header,
     ) -> (
-      NonNull<Self::Header>,
+      NonNull<Self::Meta>,
       <Self::Node as Node>::Pointer,
       <Self::Node as Node>::Pointer,
     ) {
       unsafe {
-        let offset = self.data_offset();
-        let meta = self.get_aligned_pointer::<Self::Header>(offset);
+        let offset = header.meta_offset() as usize;
+        let meta = self.get_aligned_pointer::<Self::Meta>(offset);
 
-        let offset = self.offset(meta as _) + mem::size_of::<Self::Header>();
-        let head_ptr = self.get_aligned_pointer::<Self::Node>(offset);
-        let head_offset = self.offset(head_ptr as _);
+        let head_offset = header.head_node_offset() as usize;
+        let head_ptr = self.get_aligned_pointer::<Self::Node>(head_offset);
         let head = <<Self::Node as Node>::Pointer as NodePointer>::new(
           head_offset as u32,
           NonNull::new_unchecked(head_ptr as _),
         );
 
-        let (value_offset, _) = head.value_pointer().load();
-        let offset = value_offset;
-        let tail_ptr = self.get_aligned_pointer::<Self::Node>(offset as usize);
-        let tail_offset = self.offset(tail_ptr as _);
+        let tail_offset = header.tail_node_offset() as usize;
+        let tail_ptr = self.get_aligned_pointer::<Self::Node>(tail_offset);
         let tail = <<Self::Node as Node>::Pointer as NodePointer>::new(
           tail_offset as u32,
           NonNull::new_unchecked(tail_ptr as _),
@@ -541,7 +540,7 @@ mod sealed {
   pub trait Sealed:
     Sized + Clone + core::fmt::Debug + core::ops::Deref<Target = Self::Allocator>
   {
-    type Header: Header;
+    type Meta: Meta;
 
     type Node: Node;
 
@@ -680,14 +679,17 @@ mod sealed {
     }
 
     #[inline]
-    fn allocate_header(&self, magic_version: u16) -> Result<NonNull<Self::Header>, ArenaError> {
+    fn allocate_header(
+      &self,
+      magic_version: u16,
+    ) -> Result<(usize, NonNull<Self::Meta>), ArenaError> {
       // Safety: meta does not need to be dropped, and it is recoverable.
       unsafe {
-        let mut meta = self.alloc::<Self::Header>()?;
+        let mut meta = self.alloc::<Self::Meta>()?;
         meta.detach();
 
-        meta.write(Self::Header::new(magic_version));
-        Ok(meta.as_mut_ptr())
+        meta.write(Self::Meta::new(magic_version));
+        Ok((meta.offset(), meta.as_mut_ptr()))
       }
     }
 
@@ -1018,10 +1020,8 @@ impl<H, N, A> core::ops::Deref for GenericAllocator<H, N, A> {
   }
 }
 
-impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
-  for GenericAllocator<H, N, A>
-{
-  type Header = H;
+impl<H: Meta, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed for GenericAllocator<H, N, A> {
+  type Meta = H;
 
   type Node = N;
 

@@ -9,6 +9,44 @@ const MAX_U27: u32 = (1 << 27) - 1;
 /// Version, used for MVCC purpose, it is a 56-bit unsigned integer.
 pub type Version = u64;
 
+/// The information of the `SkipMap`, which can be used to reconstruct the `SkipMap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Header {
+  meta_offset: u32,
+  head_node_offset: u32,
+  tail_node_offset: u32,
+}
+
+impl Header {
+  /// Returns a new `Meta` with the given meta, head node, and tail node offsets.
+  #[inline]
+  pub const fn new(meta_offset: u32, head_node_offset: u32, tail_node_offset: u32) -> Self {
+    Self {
+      meta_offset,
+      head_node_offset,
+      tail_node_offset,
+    }
+  }
+
+  /// Returns the meta offset of the `SkipMap`.
+  #[inline]
+  pub const fn meta_offset(&self) -> u32 {
+    self.meta_offset
+  }
+
+  /// Returns the head node offset of the `SkipMap`.
+  #[inline]
+  pub const fn head_node_offset(&self) -> u32 {
+    self.head_node_offset
+  }
+
+  /// Returns the tail node offset of the `SkipMap`.
+  #[inline]
+  pub const fn tail_node_offset(&self) -> u32 {
+    self.tail_node_offset
+  }
+}
+
 pub(crate) mod internal {
   /// A pointer to a value in the `SkipMap`.
   #[derive(Debug)]

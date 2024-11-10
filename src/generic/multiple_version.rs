@@ -12,10 +12,10 @@ use dbutils::{
 use either::Either;
 
 use crate::{
-  allocator::{Allocator, Header, Sealed, WithVersion},
+  allocator::{Allocator, Sealed, WithVersion},
   error::Error,
   traits::Constructable,
-  Arena, Height, KeyBuilder, ValueBuilder, Version,
+  Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
 };
 
 use super::list::{
@@ -26,8 +26,6 @@ use super::list::{
 /// Implementations for single-threaded environments.
 pub mod unsync {
   pub use crate::unsync::multiple_version::Allocator;
-
-  use super::Header;
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
   mod tests {
@@ -88,8 +86,11 @@ pub mod unsync {
     }
 
     #[inline]
-    fn flags(&self) -> crate::internal::Flags {
-      self.0.meta().flags()
+    fn meta(
+      &self,
+    ) -> &<<Self::Constructable as crate::traits::Constructable>::Allocator as super::Sealed>::Meta
+    {
+      self.0.meta()
     }
   }
 
@@ -104,7 +105,6 @@ pub mod unsync {
 
 /// Implementations for concurrent environments.
 pub mod sync {
-  use super::Header;
   pub use crate::sync::multiple_version::Allocator;
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
@@ -193,8 +193,11 @@ pub mod sync {
     }
 
     #[inline]
-    fn flags(&self) -> crate::internal::Flags {
-      self.0.meta().flags()
+    fn meta(
+      &self,
+    ) -> &<<Self::Constructable as crate::traits::Constructable>::Allocator as super::Sealed>::Meta
+    {
+      self.0.meta()
     }
   }
 
@@ -221,6 +224,36 @@ where
   /// The allocator type used to allocate nodes in the map.
   type Allocator: Allocator;
 
+  /// Returns the header of the `SkipMap`, which can be used to reconstruct the `SkipMap`.
+  ///
+  /// By default, `SkipMap` will allocate meta, head node, and tail node in the ARENA,
+  /// and the data section will be allocated after the tail node.
+  ///
+  /// This method will return the header in the ARENA.
+  #[inline]
+  fn header(&self) -> Option<&Header> {
+    self.as_ref().header()
+  }
+
+  /// Returns the height of the highest tower within any of the nodes that
+  /// have ever been allocated as part of this skiplist.
+  #[inline]
+  fn height(&self) -> u8 {
+    self.as_ref().height()
+  }
+
+  /// Returns the number of entries in the skipmap.
+  #[inline]
+  fn len(&self) -> usize {
+    self.as_ref().len()
+  }
+
+  /// Returns true if the skipmap is empty.
+  #[inline]
+  fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+
   /// Returns the maximum version of all entries in the map.
   #[inline]
   fn maximum_version(&self) -> Version {
@@ -231,6 +264,25 @@ where
   #[inline]
   fn minimum_version(&self) -> Version {
     self.as_ref().minimum_version()
+  }
+
+  /// Returns a random generated height.
+  ///
+  /// This method is useful when you want to check if the underlying allocator can allocate a node.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::{generic::{multiple_version::sync::SkipMap, Builder}, Arena};
+  ///
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<[u8], [u8]>>().unwrap();
+  /// let height = map.random_height();
+  ///
+  /// let needed = SkipMap::<[u8], [u8]>::estimated_node_size(height, b"k1".len(), b"k2".len());
+  /// ```
+  #[inline]
+  fn random_height(&self) -> Height {
+    self.as_ref().random_height()
   }
 
   /// Returns `true` if the map may contains an entry whose version is less than or equal to the given version.

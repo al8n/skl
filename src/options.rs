@@ -538,9 +538,9 @@ pub(crate) fn data_offset_in<A: AllocatorSealed>(
   unify: bool,
 ) -> usize {
   let meta_end = if unify {
-    let alignment = mem::align_of::<A::Header>();
+    let alignment = mem::align_of::<A::Meta>();
     let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-    meta_offset + mem::size_of::<A::Header>()
+    meta_offset + mem::size_of::<A::Meta>()
   } else {
     offset
   };

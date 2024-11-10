@@ -25,7 +25,7 @@ pub struct VersionedMeta {
   flags: Flags,
 }
 
-impl Header for VersionedMeta {
+impl crate::allocator::Meta for VersionedMeta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
@@ -113,7 +113,7 @@ impl Header for VersionedMeta {
   }
 }
 
-/// Header of the skipmap.
+/// Meta of the skipmap.
 #[derive(Debug)]
 #[repr(C)]
 pub struct Meta {
@@ -124,7 +124,7 @@ pub struct Meta {
   flags: Flags,
 }
 
-impl Header for Meta {
+impl crate::allocator::Meta for Meta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {

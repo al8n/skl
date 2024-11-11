@@ -1,7 +1,5 @@
 use core::{cmp, ptr::NonNull, sync::atomic::Ordering};
 
-use std::boxed::Box;
-
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
@@ -14,8 +12,10 @@ use crate::{
   allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
+  internal::RefMeta,
   options::CompressionPolicy,
   random_height,
+  ref_counter::RefCounter,
   traits::Constructable,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
   FindResult, Header, Inserter, Splice, Version,
@@ -27,17 +27,21 @@ pub use entry::{EntryRef, VersionedEntryRef};
 mod api;
 pub(super) mod iterator;
 
-type UpdateOk<'a, 'b, A, C> = Either<
-  Option<VersionedEntryRef<'a, A, C>>,
-  Result<VersionedEntryRef<'a, A, C>, VersionedEntryRef<'a, A, C>>,
+type UpdateOk<'a, 'b, A, RC, C> = Either<
+  Option<VersionedEntryRef<'a, A, RC, C>>,
+  Result<VersionedEntryRef<'a, A, RC, C>, VersionedEntryRef<'a, A, RC, C>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<A: Allocator, C = Ascend> {
+pub struct SkipList<A, R, C = Ascend>
+where
+  A: Allocator,
+  R: RefCounter,
+{
   pub(crate) arena: A,
-  meta: NonNull<A::Meta>,
+  meta: RefMeta<A::Meta, R>,
   head: <A::Node as Node>::Pointer,
   tail: <A::Node as Node>::Pointer,
   header: Option<Header>,
@@ -51,29 +55,32 @@ pub struct SkipList<A: Allocator, C = Ascend> {
   cmp: C,
 }
 
-unsafe impl<A, C> Send for SkipList<A, C>
+unsafe impl<A, R, C> Send for SkipList<A, R, C>
 where
   C: Send,
   A: Allocator + Send,
+  R: RefCounter + Send,
 {
 }
 
-unsafe impl<A, C> Sync for SkipList<A, C>
+unsafe impl<A, R, C> Sync for SkipList<A, R, C>
 where
   C: Sync,
   A: Allocator + Sync,
+  R: RefCounter + Sync,
 {
 }
 
-impl<A, C> Clone for SkipList<A, C>
+impl<A, R, C> Clone for SkipList<A, R, C>
 where
   C: Clone,
   A: Allocator,
+  R: RefCounter,
 {
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
-      meta: self.meta,
+      meta: self.meta.clone(),
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       on_disk: self.on_disk,
       head: self.head,
@@ -86,41 +93,36 @@ where
   }
 }
 
-impl<A, C> Drop for SkipList<A, C>
+impl<A, R, C> Drop for SkipList<A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   #[allow(clippy::collapsible_if)]
   fn drop(&mut self) {
-    if self.arena.refs() == 1 {
-      if !self.arena.unify() {
-        unsafe {
-          let _ = Box::from_raw(self.meta.as_ptr());
-        }
-      }
-
-      #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(miri)))]
-      if self.arena.is_map() && self.arena.options().lock_meta() {
-        let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
-      }
-    }
+    //   #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(miri)))]
+    //   if self.arena.is_map() && self.arena.options().lock_meta() {
+    //     let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
+    //   }
+    // TODO: unlock the meta page
   }
 }
 
-impl<A, C> SkipList<A, C>
+impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   #[inline]
-  pub(crate) const fn meta(&self) -> &A::Meta {
-    // Safety: the pointer is well aligned and initialized.
-    unsafe { self.meta.as_ref() }
+  pub(crate) fn meta(&self) -> &A::Meta {
+    &self.meta
   }
 }
 
-impl<A, C> Constructable for SkipList<A, C>
+impl<A, R, C> Constructable for SkipList<A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   type Allocator = A;
   type Comparator = C;
@@ -172,8 +174,8 @@ where
     Self {
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       on_disk: arena.is_ondisk(),
+      meta: RefMeta::new(meta, arena.unify()),
       arena,
-      meta,
       head,
       tail,
       header,
@@ -184,9 +186,10 @@ where
   }
 }
 
-impl<A, C> SkipList<A, C>
+impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   fn new_node<'a, E>(
     &'a self,
@@ -263,9 +266,10 @@ where
   }
 }
 
-impl<A, C> SkipList<A, C>
+impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   /// ## Safety
   ///
@@ -314,17 +318,18 @@ where
   }
 }
 
-impl<A, C> SkipList<A, C>
+impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
   C: Comparator,
+  R: RefCounter,
 {
   unsafe fn move_to_prev<'a>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, C>> {
+  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.head.offset() {
@@ -354,7 +359,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, C>> {
+  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.head.offset() {
@@ -409,7 +414,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, C>> {
+  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.tail.offset() {
@@ -439,7 +444,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, C>> {
+  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.tail.offset() {
@@ -833,7 +838,7 @@ where
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, A, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, A, R, C>, Either<E, Error>> {
     let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
@@ -1097,14 +1102,14 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: VersionedEntryRef<'a, A, C>,
+    old: VersionedEntryRef<'a, A, R, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, A, C>, Error> {
+  ) -> Result<UpdateOk<'a, 'b, A, R, C>, Error> {
     match key {
       Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
@@ -1136,13 +1141,13 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: VersionedEntryRef<'a, A, C>,
+    old: VersionedEntryRef<'a, A, R, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, A, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, A, R, C>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena

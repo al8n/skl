@@ -11,7 +11,7 @@ use either::Either;
 use crate::{
   allocator::{Allocator, Sealed, WithVersion},
   error::Error,
-  traits::Constructable,
+  ref_counter::RefCounter,
   Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
 };
 
@@ -24,32 +24,33 @@ use super::list::{
 pub mod unsync {
   use dbutils::equivalentor::{Ascend, Comparator};
 
-  pub use crate::unsync::multiple_version::Allocator;
+  pub use crate::unsync::{multiple_version::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_unsync_versioned,))]
   mod tests {
     crate::__dynamic_multiple_version_map_tests!("dynamic_unsync_multiple_version_map": super::SkipMap);
   }
 
-  type SkipList<C> = super::super::list::SkipList<Allocator, C>;
+  type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, C> = super::super::iter::Iter<'a, C, Allocator>;
+  pub type Iter<'a, C> = super::super::iter::Iter<'a, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, C, Q, R> = super::super::iter::Iter<'a, C, Allocator, Q, R>;
+  pub type Range<'a, C, Q, R> = super::super::iter::Iter<'a, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Allocator, C>;
+  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Allocator, RefCounter, C>;
 
   /// The versioned entry reference of the [`SkipMap`].
-  pub type VersionedEntry<'a, C> = super::super::entry::VersionedEntryRef<'a, Allocator, C>;
+  pub type VersionedEntry<'a, C> =
+    super::super::entry::VersionedEntryRef<'a, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type IterAll<'a, C> = super::super::iter::IterAll<'a, Allocator, C>;
+  pub type IterAll<'a, C> = super::super::iter::IterAll<'a, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type RangeAll<'a, C, Q, R> = super::super::iter::IterAll<'a, C, Allocator, Q, R>;
+  pub type RangeAll<'a, C, Q, R> = super::super::iter::IterAll<'a, Allocator, RefCounter, C, Q, R>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -96,6 +97,7 @@ pub mod unsync {
   impl<C: Comparator> super::Map for SkipMap<C> {
     type Allocator = Allocator;
     type Comparator = C;
+    type RefCounter = RefCounter;
   }
 }
 
@@ -103,7 +105,7 @@ pub mod unsync {
 pub mod sync {
   use dbutils::equivalentor::{Ascend, Comparator};
 
-  pub use crate::sync::multiple_version::Allocator;
+  pub use crate::sync::{multiple_version::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_sync_versioned,))]
   mod tests {
@@ -137,25 +139,26 @@ pub mod sync {
     crate::__dynamic_multiple_version_map_tests!(go "dynamic_sync_multiple_version_map": super::SkipMap => crate::tests::dynamic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<C> = super::super::list::SkipList<Allocator, C>;
+  type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, C> = super::super::iter::Iter<'a, C, Allocator>;
+  pub type Iter<'a, C> = super::super::iter::Iter<'a, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, C, Q, R> = super::super::iter::Iter<'a, C, Allocator, Q, R>;
+  pub type Range<'a, C, Q, R> = super::super::iter::Iter<'a, Allocator, RefCounter, C, Q, R>;
 
   /// Iterator over the [`SkipMap`].
-  pub type IterAll<'a, C> = super::super::iter::IterAll<'a, C, Allocator>;
+  pub type IterAll<'a, C> = super::super::iter::IterAll<'a, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type RangeAll<'a, C, Q, R> = super::super::iter::IterAll<'a, C, Allocator, Q, R>;
+  pub type RangeAll<'a, C, Q, R> = super::super::iter::IterAll<'a, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Allocator, C>;
+  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Allocator, RefCounter, C>;
 
   /// The versioned entry reference of the [`SkipMap`].
-  pub type VersionedEntry<'a, C> = super::super::entry::VersionedEntryRef<'a, Allocator, C>;
+  pub type VersionedEntry<'a, C> =
+    super::super::entry::VersionedEntryRef<'a, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -201,6 +204,7 @@ pub mod sync {
 
   impl<C: Comparator> super::Map for SkipMap<C> {
     type Allocator = Allocator;
+    type RefCounter = RefCounter;
     type Comparator = C;
   }
 }
@@ -211,13 +215,17 @@ pub mod sync {
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait Map
 where
-  Self: Arena<Constructable = super::list::SkipList<Self::Allocator, Self::Comparator>>,
-  <<Self::Constructable as Constructable>::Allocator as Sealed>::Node: WithVersion,
+  Self: Arena<
+    Constructable = super::list::SkipList<Self::Allocator, Self::RefCounter, Self::Comparator>,
+  >,
+  <Self::Allocator as Sealed>::Node: WithVersion,
 {
   /// The allocator type used to allocate nodes in the map.
   type Allocator: Allocator;
   /// The comparator type used to compare keys in the map.
   type Comparator: Comparator;
+  /// The reference counter type of the map.
+  type RefCounter: RefCounter;
 
   /// Try creates from a `SkipMap` from an allocator directly.
   ///
@@ -379,7 +387,7 @@ where
   fn first(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>> {
+  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>> {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -392,7 +400,7 @@ where
   fn last(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>> {
+  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>> {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -408,9 +416,7 @@ where
   fn first_versioned(
     &self,
     version: Version,
-  ) -> Option<
-    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
-  > {
+  ) -> Option<VersionedEntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>> {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -426,9 +432,7 @@ where
   fn last_versioned(
     &self,
     version: Version,
-  ) -> Option<
-    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
-  > {
+  ) -> Option<VersionedEntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>> {
     if !self.may_contain_version(version) {
       return None;
     }
@@ -462,7 +466,7 @@ where
     &self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>
+  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -499,9 +503,7 @@ where
     &self,
     version: Version,
     key: &Q,
-  ) -> Option<
-    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
-  >
+  ) -> Option<VersionedEntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -519,7 +521,7 @@ where
     &self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>
+  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -537,7 +539,7 @@ where
     &self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>
+  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -557,9 +559,7 @@ where
     &self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<
-    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
-  >
+  ) -> Option<VersionedEntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -582,9 +582,7 @@ where
     &self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<
-    VersionedEntryRef<'_, <Self::Constructable as Constructable>::Allocator, Self::Comparator>,
-  >
+  ) -> Option<VersionedEntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -603,7 +601,7 @@ where
   fn iter(
     &self,
     version: Version,
-  ) -> Iter<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator> {
+  ) -> Iter<'_, Self::Allocator, Self::RefCounter, Self::Comparator> {
     self.as_ref().iter(version)
   }
 
@@ -612,7 +610,7 @@ where
   fn iter_all_versions(
     &self,
     version: Version,
-  ) -> IterAll<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator> {
+  ) -> IterAll<'_, Self::Allocator, Self::RefCounter, Self::Comparator> {
     self.as_ref().iter_all_versions(version)
   }
 
@@ -622,7 +620,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator, Q, R>
+  ) -> Iter<'_, Self::Allocator, Self::RefCounter, Self::Comparator, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -636,7 +634,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> IterAll<'_, Self::Comparator, <Self::Constructable as Constructable>::Allocator, Q, R>
+  ) -> IterAll<'_, Self::Allocator, Self::RefCounter, Self::Comparator, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -655,10 +653,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self.as_ref().insert(version, key, value)
   }
 
@@ -685,10 +680,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self.as_ref().insert_at_height(version, height, key, value)
   }
 
@@ -746,7 +738,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Either<E, Error>,
   > {
     self.as_ref().insert_at_height_with_value_builder(
@@ -813,7 +805,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Either<E, Error>,
   > {
     self
@@ -833,10 +825,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self
       .as_ref()
       .get_or_insert_at_height(version, self.random_height(), key, value)
@@ -855,10 +844,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self
       .as_ref()
       .get_or_insert_at_height(version, height, key, value)
@@ -918,7 +904,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Either<E, Error>,
   > {
     self.get_or_insert_at_height_with_value_builder(
@@ -986,7 +972,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Either<E, Error>,
   > {
     self
@@ -1053,7 +1039,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Among<KE, VE, Error>,
   > {
     self.as_ref().insert_at_height_with_builders(
@@ -1126,7 +1112,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Among<KE, VE, Error>,
   > {
     self
@@ -1191,7 +1177,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Among<KE, VE, Error>,
   > {
     self.as_ref().get_or_insert_at_height_with_builders(
@@ -1261,7 +1247,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Among<KE, VE, Error>,
   > {
     self
@@ -1284,10 +1270,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self.compare_remove_at_height(version, self.random_height(), key, success, failure)
   }
 
@@ -1307,10 +1290,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self
       .as_ref()
       .compare_remove_at_height(version, height, key, success, failure)
@@ -1327,10 +1307,7 @@ where
     &'a self,
     version: Version,
     key: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self.get_or_remove_at_height(version, self.random_height(), key)
   }
 
@@ -1359,10 +1336,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
-    Error,
-  > {
+  ) -> Result<Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>, Error> {
     self.as_ref().get_or_remove_at_height(version, height, key)
   }
 
@@ -1416,7 +1390,7 @@ where
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Either<E, Error>,
   > {
     self
@@ -1476,7 +1450,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, <Self::Constructable as Constructable>::Allocator, Self::Comparator>>,
+    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator>>,
     Either<E, Error>,
   > {
     self

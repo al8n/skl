@@ -1,6 +1,7 @@
 use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
   dynamic::list::SkipList,
+  ref_counter::RefCounter,
   types::internal::ValuePointer,
   Version,
 };
@@ -9,11 +10,12 @@ use dbutils::equivalentor::Comparator;
 /// A versioned entry reference of the skipmap.
 ///
 /// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
-pub struct VersionedEntryRef<'a, A, C>
+pub struct VersionedEntryRef<'a, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
-  pub(super) list: &'a SkipList<A, C>,
+  pub(super) list: &'a SkipList<A, R, C>,
   pub(super) key: &'a [u8],
   pub(super) value: Option<&'a [u8]>,
   pub(super) version: Version,
@@ -21,9 +23,10 @@ where
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<A, C> core::fmt::Debug for VersionedEntryRef<'_, A, C>
+impl<A, R, C> core::fmt::Debug for VersionedEntryRef<'_, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("VersionedEntryRef")
@@ -34,20 +37,27 @@ where
   }
 }
 
-impl<A, C> Clone for VersionedEntryRef<'_, A, C>
+impl<A, R, C> Clone for VersionedEntryRef<'_, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   fn clone(&self) -> Self {
     *self
   }
 }
 
-impl<A, C> Copy for VersionedEntryRef<'_, A, C> where A: Allocator {}
-
-impl<'a, A, C> VersionedEntryRef<'a, A, C>
+impl<A, R, C> Copy for VersionedEntryRef<'_, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
+{
+}
+
+impl<'a, A, R, C> VersionedEntryRef<'a, A, R, C>
+where
+  A: Allocator,
+  R: RefCounter,
 {
   /// Returns the reference to the key
   #[inline]
@@ -68,10 +78,11 @@ where
   }
 }
 
-impl<A, C> VersionedEntryRef<'_, A, C>
+impl<A, R, C> VersionedEntryRef<'_, A, R, C>
 where
   C: Comparator,
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the next entry in the map.
   #[inline]
@@ -124,10 +135,11 @@ where
   }
 }
 
-impl<A, C> VersionedEntryRef<'_, A, C>
+impl<A, R, C> VersionedEntryRef<'_, A, R, C>
 where
   A: Allocator,
   A::Node: WithVersion,
+  R: RefCounter,
 {
   /// Returns the version of the entry
   #[inline]
@@ -136,15 +148,16 @@ where
   }
 }
 
-impl<'a, A, C> VersionedEntryRef<'a, A, C>
+impl<'a, A, R, C> VersionedEntryRef<'a, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   #[inline]
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<A, C>,
+    list: &'a SkipList<A, R, C>,
     key: Option<&'a [u8]>,
   ) -> Self {
     unsafe {
@@ -170,7 +183,7 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<A, C>,
+    list: &'a SkipList<A, R, C>,
     pointer: ValuePointer,
     key: Option<&'a [u8]>,
   ) -> Self {
@@ -198,13 +211,15 @@ where
 /// An entry reference to the skipmap's entry.
 ///
 /// Compared to the [`VersionedEntryRef`], this one's value cannot be `None`.
-pub struct EntryRef<'a, A, C>(pub(crate) VersionedEntryRef<'a, A, C>)
-where
-  A: Allocator;
-
-impl<A, C> core::fmt::Debug for EntryRef<'_, A, C>
+pub struct EntryRef<'a, A, R, C>(pub(crate) VersionedEntryRef<'a, A, R, C>)
 where
   A: Allocator,
+  R: RefCounter;
+
+impl<A, R, C> core::fmt::Debug for EntryRef<'_, A, R, C>
+where
+  A: Allocator,
+  R: RefCounter,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -214,9 +229,10 @@ where
   }
 }
 
-impl<A, C> Clone for EntryRef<'_, A, C>
+impl<A, R, C> Clone for EntryRef<'_, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -224,12 +240,18 @@ where
   }
 }
 
-impl<A, C> Copy for EntryRef<'_, A, C> where A: Allocator {}
+impl<A, R, C> Copy for EntryRef<'_, A, R, C>
+where
+  A: Allocator,
+  R: RefCounter,
+{
+}
 
-impl<A, C> EntryRef<'_, A, C>
+impl<A, R, C> EntryRef<'_, A, R, C>
 where
   C: Comparator,
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the next entry in the map.
   #[inline]
@@ -244,10 +266,11 @@ where
   }
 }
 
-impl<A, C> EntryRef<'_, A, C>
+impl<A, R, C> EntryRef<'_, A, R, C>
 where
   A: Allocator,
   A::Node: WithVersion,
+  R: RefCounter,
 {
   /// Returns the version of the entry
   #[inline]
@@ -256,9 +279,10 @@ where
   }
 }
 
-impl<'a, A, C> EntryRef<'a, A, C>
+impl<'a, A, R, C> EntryRef<'a, A, R, C>
 where
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the reference to the key
   #[inline]

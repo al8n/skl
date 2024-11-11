@@ -78,6 +78,7 @@ where
   A: Allocator,
   R: RefCounter,
 {
+  #[inline]
   fn clone(&self) -> Self {
     Self {
       arena: self.arena.clone(),
@@ -91,6 +92,18 @@ where
       yield_now: self.yield_now,
       _m: PhantomData,
     }
+  }
+}
+
+impl<K, V, A, R> Drop for SkipList<K, V, A, R>
+where
+  K: ?Sized,
+  V: ?Sized,
+  A: Allocator,
+  R: RefCounter,
+{
+  fn drop(&mut self) {
+    // TODO: unlock the meta page.
   }
 }
 

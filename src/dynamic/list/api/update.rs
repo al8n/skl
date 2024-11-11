@@ -1,5 +1,5 @@
 use super::{
-  super::{Inserter, Key},
+  super::{Inserter, Key, RefCounter},
   Allocator, EntryRef, Error, Height, RemoveValueBuilder, SkipList, ValueBuilder, Version,
 };
 use crate::KeyBuilder;
@@ -8,10 +8,11 @@ use core::sync::atomic::Ordering;
 use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
 use either::Either;
 
-impl<A, C> SkipList<A, C>
+impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
   C: Comparator,
+  R: RefCounter,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipList::get_or_insert), this method will update the value if the key with the given version already exists.
@@ -24,7 +25,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
     self.insert_at_height(version, self.random_height(), key, value)
   }
 
@@ -39,7 +40,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -89,7 +90,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, A, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -128,7 +129,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -179,7 +180,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, A, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -223,7 +224,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, A, C>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -272,7 +273,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, A, C>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -322,7 +323,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -369,7 +370,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -415,7 +416,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, A, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
     self
       .validate(height, key_builder.size(), 0)
       .map_err(Either::Right)?;

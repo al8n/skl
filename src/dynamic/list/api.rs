@@ -15,14 +15,18 @@ use crate::{
   Header, Version,
 };
 
-use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
+use super::{iterator, EntryRef, RefCounter, SkipList, VersionedEntryRef};
 
 mod update;
 
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<usize, E>>>;
 
-impl<A: Allocator, C> SkipList<A, C> {
+impl<A, R, C> SkipList<A, R, C>
+where
+  A: Allocator,
+  R: RefCounter,
+{
   /// Sets remove on drop, only works on mmap with a file backend.
   ///
   /// Default is `false`.
@@ -148,10 +152,11 @@ impl<A: Allocator, C> SkipList<A, C> {
   }
 }
 
-impl<A: Allocator, C> SkipList<A, C>
+impl<A, RC, C> SkipList<A, RC, C>
 where
   A: Allocator,
   C: Comparator,
+  RC: RefCounter,
 {
   /// Returns `true` if the key exists in the map.
   ///
@@ -169,22 +174,22 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A, C>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A, C>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, C>> {
+  pub fn first_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, RC, C>> {
     self.iter_all_versions(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, C>> {
+  pub fn last_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, RC, C>> {
     self.iter_all_versions(version).last()
   }
 
@@ -192,7 +197,7 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A, C>> {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A, RC, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -234,7 +239,11 @@ where
   /// Returns the value associated with the given key, if it exists.
   ///
   /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  pub fn get_versioned(&self, version: Version, key: &[u8]) -> Option<VersionedEntryRef<'_, A, C>> {
+  pub fn get_versioned(
+    &self,
+    version: Version,
+    key: &[u8],
+  ) -> Option<VersionedEntryRef<'_, A, RC, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -271,31 +280,39 @@ where
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound(&self, version: Version, upper: Bound<&[u8]>) -> Option<EntryRef<'_, A, C>> {
+  pub fn upper_bound(
+    &self,
+    version: Version,
+    upper: Bound<&[u8]>,
+  ) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound(&self, version: Version, lower: Bound<&[u8]>) -> Option<EntryRef<'_, A, C>> {
+  pub fn lower_bound(
+    &self,
+    version: Version,
+    lower: Bound<&[u8]>,
+  ) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, C, A> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, A, RC, C> {
     iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> iterator::IterAll<'_, C, A> {
+  pub fn iter_all_versions(&self, version: Version) -> iterator::IterAll<'_, A, RC, C> {
     iterator::IterAll::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<Q, R>(&self, version: Version, range: R) -> iterator::Iter<'_, C, A, Q, R>
+  pub fn range<Q, R>(&self, version: Version, range: R) -> iterator::Iter<'_, A, RC, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -309,7 +326,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> iterator::IterAll<'_, C, A, Q, R>
+  ) -> iterator::IterAll<'_, A, RC, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,

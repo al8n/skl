@@ -6,51 +6,57 @@ use core::{
 use dbutils::equivalentor::Comparator;
 
 use super::{
-  super::{Allocator, EntryRef, SkipList, Version},
+  super::{Allocator, EntryRef, RefCounter, SkipList, Version},
   IterAll,
 };
 
 /// An iterator over the skipmap. The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct Iter<'a, C, A: Allocator, Q = [u8], R = core::ops::RangeFull>(IterAll<'a, C, A, Q, R>)
+pub struct Iter<'a, A, RC, C, Q = [u8], R = core::ops::RangeFull>(IterAll<'a, A, RC, C, Q, R>)
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized;
 
-impl<C, A, R: Clone, Q> Clone for Iter<'_, C, A, Q, R>
+impl<A, RC, C, R, Q> Clone for Iter<'_, A, RC, C, Q, R>
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized,
+  R: Clone,
 {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, A, C> Iter<'a, C, A>
+impl<'a, A, RC, C> Iter<'a, A, RC, C>
 where
   A: Allocator,
+  RC: RefCounter,
 {
   #[inline]
-  pub(crate) const fn new(version: Version, map: &'a SkipList<A, C>) -> Self {
+  pub(crate) const fn new(version: Version, map: &'a SkipList<A, RC, C>) -> Self {
     Self(IterAll::new(version, map, false))
   }
 }
 
-impl<'a, C, A, Q, R> Iter<'a, C, A, Q, R>
+impl<'a, A, RC, C, Q, R> Iter<'a, A, RC, C, Q, R>
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized,
 {
   #[inline]
-  pub(crate) fn range(version: Version, map: &'a SkipList<A, C>, r: R) -> Self {
+  pub(crate) fn range(version: Version, map: &'a SkipList<A, RC, C>, r: R) -> Self {
     Self(IterAll::range(version, map, r, false))
   }
 }
 
-impl<C, A, Q, R> Iter<'_, C, A, Q, R>
+impl<A, RC, C, Q, R> Iter<'_, A, RC, C, Q, R>
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized,
   R: RangeBounds<Q>,
 {
@@ -67,28 +73,30 @@ where
   }
 }
 
-impl<'a, C, A, Q, R> Iter<'a, C, A, Q, R>
+impl<'a, A, RC, C, Q, R> Iter<'a, A, RC, C, Q, R>
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized,
   R: RangeBounds<Q>,
 {
   /// Returns the entry at the current head position of the iterator.
   #[inline]
-  pub fn head(&self) -> Option<EntryRef<'a, A, C>> {
-    self.0.head().map(|e| EntryRef::<A, C>(*e))
+  pub fn head(&self) -> Option<EntryRef<'a, A, RC, C>> {
+    self.0.head().map(|e| EntryRef::<A, RC, C>(*e))
   }
 
   /// Returns the entry at the current tail position of the iterator.
   #[inline]
-  pub fn tail(&self) -> Option<EntryRef<'a, A, C>> {
-    self.0.tail().map(|e| EntryRef::<A, C>(*e))
+  pub fn tail(&self) -> Option<EntryRef<'a, A, RC, C>> {
+    self.0.tail().map(|e| EntryRef::<A, RC, C>(*e))
   }
 }
 
-impl<'a, C, A, Q, R> Iter<'a, C, A, Q, R>
+impl<'a, A, RC, C, Q, R> Iter<'a, A, RC, C, Q, R>
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   C: Comparator,
   R: RangeBounds<Q>,
@@ -97,7 +105,7 @@ where
   /// If no such element is found then `None` is returned.
   ///
   /// **Note**: This method will clear the current state of the iterator.
-  pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, A, C>>
+  pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, A, RC, C>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -108,7 +116,7 @@ where
   /// If no such element is found then `None` is returned.
   ///
   /// **Note**: This method will clear the current state of the iterator.
-  pub(crate) fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, A, C>>
+  pub(crate) fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, A, RC, C>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -116,14 +124,15 @@ where
   }
 }
 
-impl<'a, C, A, Q, R> Iterator for Iter<'a, C, A, Q, R>
+impl<'a, A, RC, C, Q, R> Iterator for Iter<'a, A, RC, C, Q, R>
 where
   A: Allocator,
   C: Comparator,
+  RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
 {
-  type Item = EntryRef<'a, A, C>;
+  type Item = EntryRef<'a, A, RC, C>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -139,9 +148,10 @@ where
   }
 }
 
-impl<C, A, Q, R> DoubleEndedIterator for Iter<'_, C, A, Q, R>
+impl<A, RC, C, Q, R> DoubleEndedIterator for Iter<'_, A, RC, C, Q, R>
 where
   A: Allocator,
+  RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   C: Comparator,
   R: RangeBounds<Q>,

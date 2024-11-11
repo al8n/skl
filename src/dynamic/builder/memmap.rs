@@ -2,7 +2,6 @@ use core::mem;
 
 use dbutils::equivalentor::Comparator;
 use either::Either;
-use rarena_allocator::Allocator;
 
 use super::Builder;
 use crate::{
@@ -49,28 +48,12 @@ impl<C: Comparator> Builder<C> {
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
     let Builder { options, cmp } = self;
 
-    #[allow(clippy::bind_instead_of_map)]
     options
       .to_arena_options()
       .with_maximum_alignment(node_align)
       .map_anon::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
-      .and_then(|arena| {
-        T::construct(arena, options, false, cmp)
-          .map_err(invalid_data)
-          .and_then(|map| {
-            // Lock the memory of first page to prevent it from being swapped out.
-            #[cfg(not(miri))]
-            if options.lock_meta {
-              unsafe {
-                let arena = map.as_ref().allocator();
-                arena.mlock(0, arena.page_size().min(arena.capacity()))?;
-              }
-            }
-
-            Ok(map)
-          })
-      })
+      .and_then(|arena| T::construct(arena, options, false, cmp).map_err(invalid_data))
   }
 
   /// Opens a read-only map which backed by file-backed memory map.
@@ -153,15 +136,6 @@ impl<C: Comparator> Builder<C> {
             } else if map.as_ref().version() != CURRENT_VERSION {
               Err(bad_version())
             } else {
-              // Lock the memory of first page to prevent it from being swapped out.
-              #[cfg(not(miri))]
-              if options.lock_meta {
-                unsafe {
-                  let allocator = map.as_ref().allocator();
-                  allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
-                }
-              }
-
               Ok(map)
             }
           })
@@ -245,15 +219,6 @@ impl<C: Comparator> Builder<C> {
             } else if map.as_ref().version() != CURRENT_VERSION {
               Err(bad_version())
             } else {
-              // Lock the memory of first page to prevent it from being swapped out.
-              #[cfg(not(miri))]
-              if options.lock_meta {
-                unsafe {
-                  let allocator = map.as_ref().allocator();
-                  allocator.mlock(0, allocator.page_size().min(allocator.capacity()))?;
-                }
-              }
-
               Ok(map)
             }
           })

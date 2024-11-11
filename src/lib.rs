@@ -39,36 +39,35 @@ pub use traits::Arena;
 mod types;
 pub use types::*;
 
-// #[cfg(any(
-//   all(test, not(miri)),
-//   all_skl_tests,
-//   test_generic_unsync_map,
-//   test_generic_unsync_versioned,
-//   test_generic_sync_map,
-//   test_generic_sync_versioned,
-//   test_generic_sync_map_concurrent,
-//   test_generic_sync_multiple_version_concurrent,
-//   test_generic_sync_map_concurrent_with_optimistic_freelist,
-//   test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
-//   test_generic_sync_map_concurrent_with_pessimistic_freelist,
-//   test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
-//   test_dynamic_unsync_map,
-//   test_dynamic_unsync_versioned,
-//   test_dynamic_sync_map,
-//   test_dynamic_sync_versioned,
-//   test_dynamic_sync_map_concurrent,
-//   test_dynamic_sync_multiple_version_concurrent,
-//   test_dynamic_sync_map_concurrent_with_optimistic_freelist,
-//   test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
-//   test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
-//   test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
-// ))]
-#[cfg(test)]
+#[cfg(any(
+  all(test, not(miri)),
+  all_skl_tests,
+  test_generic_unsync_map,
+  test_generic_unsync_versioned,
+  test_generic_sync_map,
+  test_generic_sync_versioned,
+  test_generic_sync_map_concurrent,
+  test_generic_sync_multiple_version_concurrent,
+  test_generic_sync_map_concurrent_with_optimistic_freelist,
+  test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_generic_sync_map_concurrent_with_pessimistic_freelist,
+  test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  test_dynamic_unsync_map,
+  test_dynamic_unsync_versioned,
+  test_dynamic_sync_map,
+  test_dynamic_sync_versioned,
+  test_dynamic_sync_map_concurrent,
+  test_dynamic_sync_multiple_version_concurrent,
+  test_dynamic_sync_map_concurrent_with_optimistic_freelist,
+  test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
+  test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+))]
 mod tests;
 
 pub use among;
 pub use either;
-pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition};
+pub use rarena_allocator::Allocator;
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;

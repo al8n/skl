@@ -93,21 +93,6 @@ where
   }
 }
 
-impl<A, R, C> Drop for SkipList<A, R, C>
-where
-  A: Allocator,
-  R: RefCounter,
-{
-  #[allow(clippy::collapsible_if)]
-  fn drop(&mut self) {
-    //   #[cfg(all(feature = "memmap", not(target_family = "wasm"), not(miri)))]
-    //   if self.arena.is_map() && self.arena.options().lock_meta() {
-    //     let _ = unsafe { self.arena.munlock(0, self.arena.page_size()) };
-    //   }
-    // TODO: unlock the meta page
-  }
-}
-
 impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,

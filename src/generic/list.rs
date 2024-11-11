@@ -95,18 +95,6 @@ where
   }
 }
 
-impl<K, V, A, R> Drop for SkipList<K, V, A, R>
-where
-  K: ?Sized,
-  V: ?Sized,
-  A: Allocator,
-  R: RefCounter,
-{
-  fn drop(&mut self) {
-    // TODO: unlock the meta page.
-  }
-}
-
 impl<K, V, A, R> SkipList<K, V, A, R>
 where
   K: ?Sized,

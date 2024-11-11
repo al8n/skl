@@ -14,7 +14,7 @@ use either::Either;
 use crate::{
   allocator::{Allocator, Sealed, WithoutVersion},
   error::Error,
-  traits::Constructable,
+  ref_counter::RefCounter,
   Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
@@ -22,29 +22,23 @@ use super::list::{iterator::Iter, EntryRef};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
-  pub use crate::unsync::map::Allocator;
+  pub use crate::unsync::{map::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
   mod tests {
     crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator>;
+  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V> = super::super::iter::Iter<'a, K, V, Allocator>;
+  pub type Iter<'a, K, V> = super::super::iter::Iter<'a, K, V, Allocator, RefCounter>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R> = super::super::iter::Iter<'a, K, V, Allocator, Q, R>;
-
-  /// Iterator over the [`SkipMap`].
-  pub type IterAll<'a, K, V> = super::super::iter::IterAll<'a, K, V, Allocator>;
-
-  /// Iterator over a subset of the [`SkipMap`].
-  pub type RangeAll<'a, K, V, Q, R> = super::super::iter::IterAll<'a, K, V, Allocator, Q, R>;
+  pub type Range<'a, K, V, Q, R> = super::super::iter::Iter<'a, K, V, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V> = super::super::entry::EntryRef<'a, K, V, Allocator>;
+  pub type Entry<'a, K, V> = super::super::entry::EntryRef<'a, K, V, Allocator, RefCounter>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -94,12 +88,13 @@ pub mod unsync {
     V: ?Sized + 'static,
   {
     type Allocator = Allocator;
+    type RefCounter = RefCounter;
   }
 }
 
 /// Implementations for concurrent environments.
 pub mod sync {
-  pub use crate::sync::map::Allocator;
+  pub use crate::sync::{map::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
   mod tests {
@@ -129,22 +124,16 @@ pub mod sync {
     crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator>;
+  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V> = super::super::iter::Iter<'a, K, V, Allocator>;
+  pub type Iter<'a, K, V> = super::super::iter::Iter<'a, K, V, Allocator, RefCounter>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R> = super::super::iter::Iter<'a, K, V, Allocator, Q, R>;
-
-  /// Iterator over the [`SkipMap`].
-  pub type IterAll<'a, K, V> = super::super::iter::IterAll<'a, K, V, Allocator>;
-
-  /// Iterator over a subset of the [`SkipMap`].
-  pub type RangeAll<'a, K, V, Q, R> = super::super::iter::IterAll<'a, K, V, Allocator, Q, R>;
+  pub type Range<'a, K, V, Q, R> = super::super::iter::Iter<'a, K, V, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V> = super::super::entry::EntryRef<'a, K, V, Allocator>;
+  pub type Entry<'a, K, V> = super::super::entry::EntryRef<'a, K, V, Allocator, RefCounter>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -194,6 +183,7 @@ pub mod sync {
     V: ?Sized + 'static,
   {
     type Allocator = Allocator;
+    type RefCounter = RefCounter;
   }
 }
 
@@ -205,11 +195,13 @@ pub trait Map<K, V>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
-  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator>>,
-  <<Self::Constructable as Constructable>::Allocator as Sealed>::Node: WithoutVersion,
+  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator, Self::RefCounter>>,
+  <Self::Allocator as Sealed>::Node: WithoutVersion,
 {
   /// The allocator used to allocate nodes in the `SkipMap`.
   type Allocator: Allocator;
+  /// The reference counter of the `SkipMap`.
+  type RefCounter: RefCounter;
 
   /// Try creates from a `SkipMap` from an allocator directly.
   ///
@@ -312,9 +304,7 @@ where
 
   /// Returns the first entry in the map.
   #[inline]
-  fn first<'a>(
-    &'a self,
-  ) -> Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>
+  fn first<'a>(&'a self) -> Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -325,9 +315,7 @@ where
 
   /// Returns the last entry in the map.
   #[inline]
-  fn last<'a>(
-    &'a self,
-  ) -> Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>
+  fn last<'a>(&'a self) -> Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -355,10 +343,7 @@ where
   /// assert!(map.get("hello").is_none());
   /// ```
   #[inline]
-  fn get<'a, Q>(
-    &'a self,
-    key: &Q,
-  ) -> Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>
+  fn get<'a, Q>(&'a self, key: &Q) -> Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -374,7 +359,7 @@ where
   fn upper_bound<'a, Q>(
     &'a self,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>
+  ) -> Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -390,7 +375,7 @@ where
   fn lower_bound<'a, Q>(
     &'a self,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>
+  ) -> Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -402,7 +387,7 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter<'a>(&'a self) -> Iter<'a, K, V, <Self::Constructable as Constructable>::Allocator>
+  fn iter<'a>(&'a self) -> Iter<'a, K, V, Self::Allocator, Self::RefCounter>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -413,10 +398,7 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  fn range<'a, Q, R>(
-    &'a self,
-    range: R,
-  ) -> Iter<'a, K, V, <Self::Constructable as Constructable>::Allocator, Q, R>
+  fn range<'a, Q, R>(&'a self, range: R) -> Iter<'a, K, V, Self::Allocator, Self::RefCounter, Q, R>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -438,7 +420,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -472,7 +454,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -539,7 +521,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -606,7 +588,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -631,7 +613,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -655,7 +637,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -722,7 +704,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -790,7 +772,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
+    Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -863,10 +845,7 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Among<KE, VE, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Among<KE, VE, Error>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -935,10 +914,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Among<KE, VE, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Among<KE, VE, Error>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1004,10 +980,7 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Among<KE, VE, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Among<KE, VE, Error>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1073,10 +1046,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Among<KE, VE, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Among<KE, VE, Error>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1102,10 +1072,7 @@ where
   fn remove<'a, 'b: 'a>(
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Either<K::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Either<K::Error, Error>>
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1128,10 +1095,7 @@ where
     &'a self,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Either<K::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Either<K::Error, Error>>
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1156,10 +1120,7 @@ where
   fn get_or_remove<'a, 'b: 'a>(
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Either<K::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Either<K::Error, Error>>
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1193,10 +1154,7 @@ where
     &'a self,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Either<K::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Either<K::Error, Error>>
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1255,10 +1213,7 @@ where
   fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -1317,10 +1272,7 @@ where
     &'a self,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, <Self::Constructable as Constructable>::Allocator>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,

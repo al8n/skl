@@ -48,6 +48,10 @@ impl Header {
 }
 
 pub(crate) mod internal {
+  use core::{ptr::NonNull, sync::atomic::Ordering};
+
+  use crate::ref_counter::RefCounter;
+
   /// A pointer to a value in the `SkipMap`.
   #[derive(Debug)]
   pub struct ValuePointer {
@@ -78,6 +82,116 @@ pub(crate) mod internal {
     pub struct Flags: u8 {
       /// Indicates that the wal is muliple version.
       const MULTIPLE_VERSION = 0b0000_0001;
+    }
+  }
+
+  /// A reference counter for [`Meta`](crate::allocator::Meta).
+  #[doc(hidden)]
+  pub(crate) struct RefMeta<M, R: RefCounter> {
+    unify: bool,
+    meta: NonNull<M>,
+    ref_counter: R,
+  }
+
+  impl<M: core::fmt::Debug, R: RefCounter> core::fmt::Debug for RefMeta<M, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+      f.debug_struct("RefMeta")
+        .field("meta", unsafe { &*self.meta.as_ptr() })
+        .field("refs", &self.ref_counter.load(Ordering::Acquire))
+        .field("unify", &self.unify)
+        .finish()
+    }
+  }
+
+  impl<M, R: RefCounter> core::ops::Deref for RefMeta<M, R> {
+    type Target = M;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+      unsafe { self.meta.as_ref() }
+    }
+  }
+
+  impl<M, R: RefCounter> core::ops::DerefMut for RefMeta<M, R> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+      unsafe { self.meta.as_mut() }
+    }
+  }
+
+  impl<M, R> RefMeta<M, R>
+  where
+    R: RefCounter,
+  {
+    #[inline]
+    pub(crate) fn new(meta: NonNull<M>, unify: bool) -> Self {
+      Self {
+        meta,
+        ref_counter: R::new(),
+        unify,
+      }
+    }
+
+    #[inline]
+    pub(crate) fn refs(&self) -> usize {
+      self.ref_counter.load(Ordering::Acquire)
+    }
+  }
+
+  impl<M, R: RefCounter> Clone for RefMeta<M, R> {
+    #[inline]
+    fn clone(&self) -> Self {
+      let old_size = self.ref_counter.fetch_add(Ordering::Release);
+      if old_size > usize::MAX >> 1 {
+        dbutils::utils::abort();
+      }
+
+      // Safety:
+      // The ptr is always non-null, and the data is only deallocated when the
+      // last Arena is dropped.
+      Self {
+        meta: self.meta,
+        ref_counter: self.ref_counter.clone(),
+        unify: self.unify,
+      }
+    }
+  }
+
+  impl<M, R: RefCounter> Drop for RefMeta<M, R> {
+    fn drop(&mut self) {
+      if self.ref_counter.fetch_sub(Ordering::Release) != 1 {
+        return;
+      }
+
+      if self.unify {
+        return;
+      }
+
+      unsafe {
+        // This fence is needed to prevent reordering of use of the data and
+        // deletion of the data.  Because it is marked `Release`, the decreasing
+        // of the reference count synchronizes with this `Acquire` fence. This
+        // means that use of the data happens before decreasing the reference
+        // count, which happens before this fence, which happens before the
+        // deletion of the data.
+        //
+        // As explained in the [Boost documentation][1],
+        //
+        // > It is important to enforce any possible access to the object in one
+        // > thread (through an existing reference) to *happen before* deleting
+        // > the object in a different thread. This is achieved by a "release"
+        // > operation after dropping a reference (any access to the object
+        // > through this reference must obviously happened before), and an
+        // > "acquire" operation before deleting the object.
+        //
+        // [1]: (www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html)
+        //
+        // Thread sanitizer does not support atomic fences. Use an atomic load
+        // instead.
+        self.ref_counter.load(Ordering::Acquire);
+        // Drop the data
+        let _ = std::boxed::Box::from_raw(self.meta.as_ptr());
+      }
     }
   }
 }

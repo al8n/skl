@@ -362,6 +362,8 @@ mod sync;
 /// Implementations for single-threaded environments.
 mod unsync;
 
+mod ref_counter;
+
 #[inline]
 fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
   unsafe { <T::Ref<'a> as dbutils::types::TypeRef<'a>>::from_slice(src) }

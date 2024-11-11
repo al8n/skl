@@ -18,14 +18,20 @@ use crate::{
   Header, Version,
 };
 
-use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
+use super::{iterator, EntryRef, RefCounter, SkipList, VersionedEntryRef};
 
 mod update;
 
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<usize, E>>>;
 
-impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
+impl<K, V, A, R> SkipList<K, V, A, R>
+where
+  K: ?Sized,
+  V: ?Sized,
+  A: Allocator,
+  R: RefCounter,
+{
   /// Sets remove on drop, only works on mmap with a file backend.
   ///
   /// Default is `false`.
@@ -37,50 +43,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
   #[inline]
   pub fn remove_on_drop(&self, val: bool) {
     self.arena.remove_on_drop(val);
-  }
-
-  /// Clear the allocator to empty and re-initialize.
-  ///
-  /// ## Safety
-  /// - The current pointers get from the allocator cannot be used anymore after calling this method.
-  /// - This method is not thread-safe.
-  ///
-  /// ## Example
-  ///
-  /// Undefine behavior:
-  ///
-  /// ```ignore
-  /// let map = Builder::new().with_capacity(100).alloc().unwrap();
-  ///
-  /// map.insert(b"hello", b"world").unwrap();
-  ///
-  /// let data = map.get(b"hello").unwrap();
-  ///
-  /// map.clear().unwrap();
-  ///
-  /// let w = data[0]; // undefined behavior
-  /// ```
-  #[inline]
-  pub unsafe fn clear(&mut self) -> Result<(), Error> {
-    use core::ptr::NonNull;
-    use std::boxed::Box;
-
-    self.arena.clear()?;
-
-    if self.arena.unify() {
-      let (_, meta) = self
-        .arena
-        .allocate_header(self.meta.as_ref().magic_version())?;
-      self.meta = meta;
-    } else {
-      let magic_version = self.meta.as_ref().magic_version();
-      let _ = Box::from_raw(self.meta.as_ptr());
-      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Meta as Meta>::new(
-        magic_version,
-      ))));
-    }
-
-    Ok(())
   }
 
   /// Returns the header of the `SkipList`.
@@ -130,7 +92,7 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
   /// Gets the number of pointers to this `SkipList` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
   #[inline]
   pub fn refs(&self) -> usize {
-    self.arena.refs()
+    self.meta.refs()
   }
 
   /// Returns the maximum version of all entries in the map.
@@ -195,11 +157,12 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
   }
 }
 
-impl<K, V, A: Allocator> SkipList<K, V, A>
+impl<K, V, A, RC> SkipList<K, V, A, RC>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  RC: RefCounter,
 {
   /// Returns `true` if the key exists in the map.
   ///
@@ -223,7 +186,7 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A>>
+  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -231,7 +194,7 @@ where
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A>>
+  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -239,7 +202,10 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
+  pub fn first_versioned<'a>(
+    &'a self,
+    version: Version,
+  ) -> Option<VersionedEntryRef<'a, K, V, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -247,7 +213,10 @@ where
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
+  pub fn last_versioned<'a>(
+    &'a self,
+    version: Version,
+  ) -> Option<VersionedEntryRef<'a, K, V, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -258,7 +227,7 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get<'a, Q>(&'a self, version: Version, key: &Q) -> Option<EntryRef<'a, K, V, A>>
+  pub fn get<'a, Q>(&'a self, version: Version, key: &Q) -> Option<EntryRef<'a, K, V, A, RC>>
   where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -310,7 +279,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<VersionedEntryRef<'a, K, V, A>>
+  ) -> Option<VersionedEntryRef<'a, K, V, A, RC>>
   where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -357,7 +326,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, A>>
+  ) -> Option<EntryRef<'a, K, V, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -371,7 +340,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, A>>
+  ) -> Option<EntryRef<'a, K, V, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -381,7 +350,7 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter<'a>(&'a self, version: Version) -> iterator::Iter<'a, K, V, A>
+  pub fn iter<'a>(&'a self, version: Version) -> iterator::Iter<'a, K, V, A, RC>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -390,7 +359,7 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::IterAll<'a, K, V, A>
+  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::IterAll<'a, K, V, A, RC>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -399,7 +368,11 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> iterator::Iter<'a, K, V, A, Q, R>
+  pub fn range<'a, Q, R>(
+    &'a self,
+    version: Version,
+    range: R,
+  ) -> iterator::Iter<'a, K, V, A, RC, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -414,7 +387,7 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> iterator::IterAll<'a, K, V, A, Q, R>
+  ) -> iterator::IterAll<'a, K, V, A, RC, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,

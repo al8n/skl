@@ -766,7 +766,7 @@ where
       .unwrap();
     });
   }
-  while l.refs() > 2 {
+  while <M as Map<_, _>>::refs(&l) > 2 {
     ::core::hint::spin_loop();
   }
   for i in 0..N / 2 {
@@ -789,7 +789,7 @@ where
       );
     });
   }
-  while l.refs() > 2 {
+  while <M as Map<_, _>>::refs(&l) > 2 {
     ::core::hint::spin_loop();
   }
 }
@@ -821,7 +821,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   for i in 0..N {
@@ -835,7 +835,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -877,7 +877,7 @@ where
       })
       .unwrap();
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   for i in 0..N {
@@ -891,7 +891,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -923,7 +923,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   // assert_eq!(N, l.len());
@@ -938,7 +938,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -973,7 +973,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -999,7 +999,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -1037,7 +1037,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -1063,7 +1063,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -1817,32 +1817,24 @@ where
       let l2 = M::create_from_allocator(l.allocator().clone()).unwrap();
       let h2 = l2.header().copied().unwrap();
 
-      let wg = std::sync::Arc::new(std::sync::Mutex::new(2usize));
-      let wg1 = wg.clone();
-      let wg2 = wg.clone();
-      std::thread::spawn(move || {
+      let t1 = std::thread::spawn(move || {
         for i in 0..500 {
           l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
             .unwrap();
         }
         l.flush().unwrap();
-        let mut wg = wg1.lock().unwrap();
-        *wg -= 1;
       });
 
-      std::thread::spawn(move || {
+      let t2 = std::thread::spawn(move || {
         for i in 500..1000 {
           l2.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
             .unwrap();
         }
         l2.flush().unwrap();
-        let mut wg = wg2.lock().unwrap();
-        *wg -= 1;
       });
 
-      while *wg.lock().unwrap() > 0 {
-        ::core::hint::spin_loop();
-      }
+      t1.join().unwrap();
+      t2.join().unwrap();
 
       h2
     };

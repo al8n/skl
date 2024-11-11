@@ -153,6 +153,7 @@ pub trait List: Sized + From<Self::Constructable> {
         .allocate_header(opts.magic_version())
         .map(|(header_offset, meta)| (Some(header_offset as u32), meta))?
     } else {
+      std::println!("here");
       unsafe {
         (None, NonNull::new_unchecked(Box::into_raw(Box::new(
           <<<L::Constructable as Constructable>::Allocator as AllocatorSealed>::Meta as Meta>::new(opts.magic_version()),

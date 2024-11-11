@@ -1,12 +1,13 @@
-#[cfg(any(
-  all(test, not(miri)),
-  all_skl_tests,
-  test_dynamic_unsync_map,
-  test_dynamic_sync_map,
-  test_dynamic_sync_map_concurrent,
-  test_dynamic_sync_map_concurrent_with_optimistic_freelist,
-  test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
-))]
+// #[cfg(any(
+//   all(test, not(miri)),
+//   all_skl_tests,
+//   test_dynamic_unsync_map,
+//   test_dynamic_sync_map,
+//   test_dynamic_sync_map_concurrent,
+//   test_dynamic_sync_map_concurrent_with_optimistic_freelist,
+//   test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
+// ))]
+#[cfg(test)]
 pub(crate) mod map;
 
 #[cfg(any(

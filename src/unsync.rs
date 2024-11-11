@@ -10,6 +10,9 @@ use super::{
   decode_value_pointer, encode_value_pointer, Version, MIN_VERSION, REMOVE,
 };
 
+/// The reference counter type used in the unsync `SkipMap`.
+pub type RefCounter = std::rc::Rc<core::cell::Cell<usize>>;
+
 /// Versioned header of the skipmap.
 #[derive(Debug)]
 #[repr(C)]

@@ -16,20 +16,21 @@
 ))]
 pub mod generic;
 
-#[cfg(any(
-  all(test, not(miri)),
-  all_skl_tests,
-  test_dynamic_unsync_map,
-  test_dynamic_unsync_versioned,
-  test_dynamic_sync_map,
-  test_dynamic_sync_versioned,
-  test_dynamic_sync_map_concurrent,
-  test_dynamic_sync_multiple_version_concurrent,
-  test_dynamic_sync_map_concurrent_with_optimistic_freelist,
-  test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
-  test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
-  test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
-))]
+// #[cfg(any(
+//   all(test, not(miri)),
+//   all_skl_tests,
+//   test_dynamic_unsync_map,
+//   test_dynamic_unsync_versioned,
+//   test_dynamic_sync_map,
+//   test_dynamic_sync_versioned,
+//   test_dynamic_sync_map_concurrent,
+//   test_dynamic_sync_multiple_version_concurrent,
+//   test_dynamic_sync_map_concurrent_with_optimistic_freelist,
+//   test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+//   test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
+//   test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+// ))]
+#[cfg(test)]
 pub mod dynamic;
 
 pub(crate) const KB: usize = 1 << 10;

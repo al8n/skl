@@ -10,15 +10,16 @@ use either::Either;
 use crate::KeyBuilder;
 
 use super::{
-  super::{Inserter, Key},
+  super::{Inserter, Key, RefCounter},
   Allocator, EntryRef, Error, Height, RemoveValueBuilder, SkipList, ValueBuilder, Version,
 };
 
-impl<K, V, A> SkipList<K, V, A>
+impl<K, V, A, R> SkipList<K, V, A, R>
 where
   K: ?Sized + Type + 'static,
   V: ?Sized + Type + 'static,
   A: Allocator,
+  R: RefCounter,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipList::get_or_insert), this method will update the value if the key with the given version already exists.
@@ -31,7 +32,7 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -49,7 +50,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -103,7 +104,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -146,7 +147,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -200,7 +201,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -248,7 +249,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -304,7 +305,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -361,7 +362,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Either<K::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -414,7 +415,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Either<K::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -466,7 +467,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Either<E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {

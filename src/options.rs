@@ -81,7 +81,7 @@ impl Options {
       freelist: Freelist::None,
       policy: CompressionPolicy::Fast,
       reserved: 0,
-      lock_meta: true,
+      lock_meta: false,
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       create_new: false,

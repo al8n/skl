@@ -585,7 +585,7 @@ mod sealed {
       rarena_allocator::align_offset::<T>(offset)
     }
 
-    fn fetch_vacant_key<'a, 'b: 'a, E>(
+    fn fetch_vacant_key<'a, E>(
       &'a self,
       key_size: u32,
       key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
@@ -704,7 +704,7 @@ mod sealed {
     }
 
     /// Allocates a `Node`, key and value
-    fn allocate_entry_node<'a, 'b: 'a, KE, VE>(
+    fn allocate_entry_node<'a, KE, VE>(
       &'a self,
       version: Version,
       height: u32,
@@ -762,8 +762,8 @@ mod sealed {
     }
 
     /// Allocates a tombstone `Node`
-    fn allocate_tombstone_node<'a, 'b: 'a, E>(
-      &'a self,
+    fn allocate_tombstone_node<E>(
+      &self,
       version: Version,
       height: u32,
       key_offset: u32,
@@ -806,7 +806,7 @@ mod sealed {
     }
 
     /// Allocates a `Node`, key
-    fn allocate_tombstone_node_with_key_builder<'a, 'b: 'a, E>(
+    fn allocate_tombstone_node_with_key_builder<'a, E>(
       &'a self,
       version: Version,
       height: u32,
@@ -862,7 +862,7 @@ mod sealed {
     }
 
     /// Allocates a `Node`, value
-    fn allocate_value_node<'a, 'b: 'a, E>(
+    fn allocate_value_node<'a, E>(
       &'a self,
       version: Version,
       height: u32,

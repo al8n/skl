@@ -1,9 +1,9 @@
 use criterion::*;
 use parking_lot::Mutex;
 use rand::prelude::*;
-use skl::{
-  map::{sync::SkipMap, Map},
-  *,
+use skl::generic::{
+  unique::{sync::SkipMap, Map},
+  Builder,
 };
 use std::{
   collections::*,
@@ -45,9 +45,9 @@ fn random_key(rng: &mut ThreadRng) -> Vec<u8> {
 fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
   let frac = *frac;
   let value = b"00123".to_vec();
-  let list = Options::new()
+  let list = Builder::new()
     .with_capacity(512 << 20)
-    .alloc::<_, _, SkipMap<[u8], [u8]>>()
+    .alloc::<SkipMap<[u8], [u8]>>()
     .unwrap();
   let l = list.clone();
   let stop = Arc::new(AtomicBool::new(false));
@@ -170,9 +170,9 @@ fn bench_write_fixed_map(c: &mut Criterion) {
 }
 
 fn bench_write_fixed_skiplist(c: &mut Criterion) {
-  let list = Options::new()
+  let list = Builder::new()
     .with_capacity(512 << 20)
-    .alloc::<_, _, SkipMap<[u8], [u8]>>()
+    .alloc::<SkipMap<[u8], [u8]>>()
     .unwrap();
   let l = list.clone();
   let value = b"00123".to_vec();

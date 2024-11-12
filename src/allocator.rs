@@ -12,6 +12,7 @@ use super::{
 
 use core::{marker::PhantomData, mem, ptr::NonNull, sync::atomic::Ordering};
 
+/// The allocator used to allocate nodes in the `SkipMap`.
 pub trait Allocator: Sealed {}
 
 impl<T> Allocator for T where T: Sealed {}
@@ -23,7 +24,7 @@ mod sealed {
 
   use among::Among;
 
-  use crate::internal::Flags;
+  use crate::{internal::Flags, Header};
 
   use super::*;
 
@@ -440,7 +441,7 @@ mod sealed {
     }
   }
 
-  pub trait Header: core::fmt::Debug {
+  pub trait Meta: core::fmt::Debug {
     fn new(magic_version: u16) -> Self;
 
     fn magic_version(&self) -> u16;
@@ -473,18 +474,15 @@ mod sealed {
   impl<T: Allocator> AllocatorExt for T {}
 
   pub trait AllocatorExt: Allocator {
-    /// Checks if the arena has enough capacity to store the skiplist,
-    /// and returns the data offset.
+    /// Returns the header of the arena.
     #[inline]
-    fn check_capacity(&self, max_height: u8) -> Result<u32, Error> {
+    fn calculate_header(&self, max_height: u8) -> Result<Header, Error> {
       let offset = self.data_offset();
 
-      let meta_end = if self.options().unify() {
-        let alignment = mem::align_of::<Self::Header>();
+      let meta_end = {
+        let alignment = mem::align_of::<Self::Meta>();
         let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-        meta_offset + mem::size_of::<Self::Header>()
-      } else {
-        offset
+        meta_offset + mem::size_of::<Self::Meta>()
       };
 
       let alignment = mem::align_of::<Self::Node>();
@@ -501,33 +499,35 @@ mod sealed {
         return Err(Error::ArenaTooSmall);
       }
 
-      Ok(tail_end as u32)
+      Ok(Header::new(
+        offset as u32,
+        head_offset as u32,
+        tail_offset as u32,
+      ))
     }
 
     #[inline]
     fn get_pointers(
       &self,
+      header: Header,
     ) -> (
-      NonNull<Self::Header>,
+      NonNull<Self::Meta>,
       <Self::Node as Node>::Pointer,
       <Self::Node as Node>::Pointer,
     ) {
       unsafe {
-        let offset = self.data_offset();
-        let meta = self.get_aligned_pointer::<Self::Header>(offset);
+        let offset = header.meta_offset() as usize;
+        let meta = self.get_aligned_pointer::<Self::Meta>(offset);
 
-        let offset = self.offset(meta as _) + mem::size_of::<Self::Header>();
-        let head_ptr = self.get_aligned_pointer::<Self::Node>(offset);
-        let head_offset = self.offset(head_ptr as _);
+        let head_offset = header.head_node_offset() as usize;
+        let head_ptr = self.get_aligned_pointer::<Self::Node>(head_offset);
         let head = <<Self::Node as Node>::Pointer as NodePointer>::new(
           head_offset as u32,
           NonNull::new_unchecked(head_ptr as _),
         );
 
-        let (value_offset, _) = head.value_pointer().load();
-        let offset = value_offset;
-        let tail_ptr = self.get_aligned_pointer::<Self::Node>(offset as usize);
-        let tail_offset = self.offset(tail_ptr as _);
+        let tail_offset = header.tail_node_offset() as usize;
+        let tail_ptr = self.get_aligned_pointer::<Self::Node>(tail_offset);
         let tail = <<Self::Node as Node>::Pointer as NodePointer>::new(
           tail_offset as u32,
           NonNull::new_unchecked(tail_ptr as _),
@@ -540,13 +540,15 @@ mod sealed {
   pub trait Sealed:
     Sized + Clone + core::fmt::Debug + core::ops::Deref<Target = Self::Allocator>
   {
-    type Header: Header;
+    type Meta: Meta;
 
     type Node: Node;
 
     type Allocator: ArenaAllocator;
 
     fn options(&self) -> &Options;
+
+    fn arena(&self) -> &Self::Allocator;
 
     #[inline]
     fn reserved_bytes(&self) -> usize {
@@ -586,7 +588,7 @@ mod sealed {
     fn fetch_vacant_key<'a, 'b: 'a, E>(
       &'a self,
       key_size: u32,
-      key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      key: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, VacantBuffer<'a>), Either<E, Error>> {
       let (key_offset, key_size) = self
         .alloc_bytes(key_size)
@@ -619,7 +621,7 @@ mod sealed {
       &'a self,
       size: u32,
       offset: u32,
-      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, Pointer), E> {
       let buf = self.get_pointer_mut(offset as usize);
       let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
@@ -649,7 +651,7 @@ mod sealed {
       &'a self,
       offset: u32,
       size: u32,
-      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, Pointer), E> {
       let buf = self.get_pointer_mut(offset as usize);
       let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
@@ -677,14 +679,17 @@ mod sealed {
     }
 
     #[inline]
-    fn allocate_header(&self, magic_version: u16) -> Result<NonNull<Self::Header>, ArenaError> {
+    fn allocate_header(
+      &self,
+      magic_version: u16,
+    ) -> Result<(usize, NonNull<Self::Meta>), ArenaError> {
       // Safety: meta does not need to be dropped, and it is recoverable.
       unsafe {
-        let mut meta = self.alloc::<Self::Header>()?;
+        let mut meta = self.alloc::<Self::Meta>()?;
         meta.detach();
 
-        meta.write(Self::Header::new(magic_version));
-        Ok(meta.as_mut_ptr())
+        meta.write(Self::Meta::new(magic_version));
+        Ok((meta.offset(), meta.as_mut_ptr()))
       }
     }
 
@@ -703,8 +708,8 @@ mod sealed {
       &'a self,
       version: Version,
       height: u32,
-      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
+      key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Among<KE, VE, Error>> {
       let (key_size, kf) = key_builder.into_components();
       let (value_size, vf) = value_builder.into_components();
@@ -806,7 +811,7 @@ mod sealed {
       version: Version,
       height: u32,
       key_size: usize,
-      kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>,
+      kf: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let key_size = key_size as u32;
 
@@ -863,7 +868,7 @@ mod sealed {
       height: u32,
       key_size: usize,
       key_offset: u32,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
     ) -> Result<(<Self::Node as Node>::Pointer, Deallocator), Either<E, Error>> {
       let (value_size, vf) = value_builder.into_components();
 
@@ -940,7 +945,7 @@ mod sealed {
     fn allocate_and_update_value<'a, E>(
       &'a self,
       node: &<Self::Node as Node>::Pointer,
-      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
+      value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
     ) -> Result<(), Either<E, Error>> {
       let (value_size, f) = value_builder.into_components();
       let value_size = value_size as u32;
@@ -1015,10 +1020,8 @@ impl<H, N, A> core::ops::Deref for GenericAllocator<H, N, A> {
   }
 }
 
-impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
-  for GenericAllocator<H, N, A>
-{
-  type Header = H;
+impl<H: Meta, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed for GenericAllocator<H, N, A> {
+  type Meta = H;
 
   type Node = N;
 
@@ -1036,6 +1039,11 @@ impl<H: Header, N: Node, A: ArenaAllocator + core::fmt::Debug> Sealed
       opts,
       _m: PhantomData,
     }
+  }
+
+  #[inline]
+  fn arena(&self) -> &Self::Allocator {
+    &self.arena
   }
 
   #[inline]

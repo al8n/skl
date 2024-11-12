@@ -19,52 +19,136 @@ extern crate std;
 mod allocator;
 pub use allocator::GenericAllocator;
 
-/// Skiplist implementation
-mod base;
+/// The dynamic key-value type `SkipMap`s.
+pub mod dynamic;
+
+/// The generic key-value type `SkipMap`s.
+pub mod generic;
 
 /// Error types for the `SkipMap`s.
 pub mod error;
 
-mod options;
-pub use options::*;
+/// Options for the `SkipMap`s.
+#[macro_use]
+pub mod options;
+pub use options::Options;
 
 mod traits;
-pub use traits::{map, multiple_version, Arena};
+pub use traits::Arena;
 
 mod types;
 pub use types::*;
 
-pub use dbutils::equivalent::*;
-
-/// Iterators for the skipmaps.
-pub mod iter {
-  pub use super::base::iterator::{Iter, IterAll};
-}
-
 #[cfg(any(
   all(test, not(miri)),
-  all_tests,
-  test_unsync_map,
-  test_unsync_versioned,
-  test_sync_map,
-  test_sync_versioned,
-  test_sync_map_concurrent,
-  test_sync_multiple_version_concurrent,
-  test_sync_map_concurrent_with_optimistic_freelist,
-  test_sync_multiple_version_concurrent_with_optimistic_freelist,
-  test_sync_map_concurrent_with_pessimistic_freelist,
-  test_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  all_skl_tests,
+  test_generic_unsync_map,
+  test_generic_unsync_versioned,
+  test_generic_sync_map,
+  test_generic_sync_versioned,
+  test_generic_sync_map_concurrent,
+  test_generic_sync_multiple_version_concurrent,
+  test_generic_sync_map_concurrent_with_optimistic_freelist,
+  test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_generic_sync_map_concurrent_with_pessimistic_freelist,
+  test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  test_dynamic_unsync_map,
+  test_dynamic_unsync_versioned,
+  test_dynamic_sync_map,
+  test_dynamic_sync_versioned,
+  test_dynamic_sync_map_concurrent,
+  test_dynamic_sync_multiple_version_concurrent,
+  test_dynamic_sync_map_concurrent_with_optimistic_freelist,
+  test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  test_dynamic_sync_map_concurrent_with_pessimistic_freelist,
+  test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist,
 ))]
 mod tests;
 
 pub use among;
 pub use either;
-pub use rarena_allocator::{Allocator as ArenaAllocator, ArenaPosition};
+pub use rarena_allocator::Allocator;
 
 const MAX_HEIGHT: usize = 1 << 5;
 const MIN_VERSION: Version = Version::MIN;
 /// The tombstone value size, if a node's value size is equal to this value, then it is a tombstone.
 const REMOVE: u32 = u32::MAX;
+
+/// A helper struct for caching splice information
+pub struct Inserter<'a, P> {
+  spl: [Splice<P>; crate::MAX_HEIGHT],
+  height: u32,
+  _m: core::marker::PhantomData<&'a ()>,
+}
+
+impl<P: allocator::NodePointer> Default for Inserter<'_, P> {
+  #[inline]
+  fn default() -> Self {
+    Self {
+      spl: [
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+        Splice::default(),
+      ],
+      height: 0,
+      _m: core::marker::PhantomData,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Splice<P> {
+  prev: P,
+  next: P,
+}
+
+impl<P: allocator::NodePointer> Default for Splice<P> {
+  #[inline]
+  fn default() -> Self {
+    Self {
+      prev: P::NULL,
+      next: P::NULL,
+    }
+  }
+}
+
+struct FindResult<P> {
+  // both key and version are equal.
+  found: bool,
+  // only key is equal.
+  found_key: Option<allocator::Pointer>,
+  splice: Splice<P>,
+  curr: Option<P>,
+}
 
 /// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]
@@ -276,6 +360,8 @@ mod sync;
 
 /// Implementations for single-threaded environments.
 mod unsync;
+
+mod ref_counter;
 
 #[inline]
 fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {

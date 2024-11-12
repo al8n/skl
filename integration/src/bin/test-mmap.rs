@@ -1,7 +1,10 @@
 use integration::{key, new_value};
 use skl::{
-  map::{sync::SkipMap, Map},
-  *,
+  generic::{
+    unique::{sync::SkipMap, Map},
+    Builder,
+  },
+  Arena,
 };
 
 fn main() {
@@ -11,12 +14,12 @@ fn main() {
     const N: usize = 10;
 
     let l = unsafe {
-      Options::new()
+      Builder::new()
         .with_capacity(1 << 20)
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
-        .map_mut::<[u8], [u8], SkipMap<[u8], [u8]>, _>(&p)
+        .map_mut::<SkipMap<[u8], [u8]>, _>(&p)
         .unwrap()
     };
 
@@ -52,11 +55,11 @@ fn main() {
     const N2: usize = 10;
 
     let l = unsafe {
-      Options::new()
+      Builder::new()
         .with_capacity(120 << 20)
         .with_read(true)
         .with_write(true)
-        .map_mut::<[u8], [u8], SkipMap<[u8], [u8]>, _>(&p)
+        .map_mut::<SkipMap<[u8], [u8]>, _>(&p)
         .unwrap()
     };
 

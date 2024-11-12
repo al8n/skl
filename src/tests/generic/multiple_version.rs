@@ -11,7 +11,9 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{allocator::WithVersion, multiple_version::Map, KeyBuilder, ValueBuilder, MIN_VERSION};
+use crate::{
+  allocator::WithVersion, generic::multiple_version::Map, KeyBuilder, ValueBuilder, MIN_VERSION,
+};
 
 use super::*;
 
@@ -63,7 +65,7 @@ where
   assert!(found_arena_full);
 }
 
-pub(crate) fn basic<M>(mut l: M)
+pub(crate) fn basic<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -161,18 +163,6 @@ where
     .get_or_insert(2, b"c".as_slice(), [].as_slice())
     .unwrap()
     .is_none());
-
-  unsafe {
-    l.clear().unwrap();
-  }
-
-  let l = l.clone();
-  {
-    let mut it = l.iter_all_versions(0);
-    assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
-    assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  }
-  assert!(l.is_empty());
 
   #[cfg(feature = "memmap")]
   l.flush().unwrap();
@@ -742,10 +732,76 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist
+  )
+))]
+pub(crate) fn concurrent_basic_two_maps<M>(l: M)
+where
+  M: Map<[u8], [u8]> + Clone + Send + 'static,
+  <M::Allocator as Sealed>::Node: WithVersion,
+{
+  #[cfg(not(miri))]
+  const N: usize = 1000;
+  #[cfg(miri)]
+  const N: usize = 200;
+
+  let l2 = M::create_from_allocator(l.allocator().clone()).unwrap();
+
+  for i in (0..N / 2).rev() {
+    let l = l.clone();
+    let l2 = l2.clone();
+    std::thread::spawn(move || {
+      l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
+        .unwrap();
+    });
+    std::thread::spawn(move || {
+      l2.get_or_insert(
+        MIN_VERSION,
+        key(i + N / 2).as_slice(),
+        new_value(i + N / 2).as_slice(),
+      )
+      .unwrap();
+    });
+  }
+  while <M as Map<_, _>>::refs(&l) > 2 {
+    ::core::hint::spin_loop();
+  }
+  for i in 0..N / 2 {
+    let l = l.clone();
+    let l2 = l2.clone();
+    std::thread::spawn(move || {
+      let k = key(i);
+      assert_eq!(
+        l.get(MIN_VERSION, k.as_slice()).unwrap().value(),
+        new_value(i).as_slice(),
+        "broken: {i}"
+      );
+    });
+    std::thread::spawn(move || {
+      let k = key(i + N / 2);
+      assert_eq!(
+        l2.get(MIN_VERSION, k.as_slice()).unwrap().value(),
+        new_value(i + N / 2).as_slice(),
+        "broken: {i}"
+      );
+    });
+  }
+  while <M as Map<_, _>>::refs(&l) > 2 {
+    ::core::hint::spin_loop();
+  }
+}
+
+#[cfg(all(
+  feature = "std",
+  any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
@@ -765,7 +821,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   for i in 0..N {
@@ -779,7 +835,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -788,10 +844,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
@@ -808,20 +864,20 @@ where
     let l1 = l.clone();
     let l2 = l.clone();
     std::thread::Builder::new()
-      .name(format!("fullmap-concurrent-basic2-writer-{i}-1"))
+      .name(std::format!("fullmap-concurrent-basic2-writer-{i}-1"))
       .spawn(move || {
         let _ = l1.insert(MIN_VERSION, int_key(i).as_slice(), new_value(i).as_slice());
       })
       .unwrap();
 
     std::thread::Builder::new()
-      .name(format!("fullmap-concurrent-basic2-writer{i}-2"))
+      .name(std::format!("fullmap-concurrent-basic2-writer{i}-2"))
       .spawn(move || {
         let _ = l2.insert(MIN_VERSION, int_key(i).as_slice(), new_value(i).as_slice());
       })
       .unwrap();
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   for i in 0..N {
@@ -835,7 +891,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -844,10 +900,10 @@ where
   all(feature = "std", not(miri)),
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
@@ -867,7 +923,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   // assert_eq!(N, l.len());
@@ -882,7 +938,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -891,10 +947,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
@@ -917,7 +973,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -943,7 +999,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -955,10 +1011,10 @@ where
   feature = "std",
   any(
     all(test, not(miri)),
-    all_tests,
-    test_sync_multiple_version_concurrent,
-    test_sync_multiple_version_concurrent_with_optimistic_freelist,
-    test_sync_multiple_version_concurrent_with_pessimistic_freelist
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist
   )
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
@@ -981,7 +1037,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -1007,7 +1063,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while <M as Map<_, _>>::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -1596,18 +1652,18 @@ where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::Options;
+  use crate::generic::Builder;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(std::format!("{prefix}_reopen_skipmap"));
     {
-      let l = Options::new()
+      let l = Builder::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .with_capacity(ARENA_SIZE as u32)
-        .map_mut::<[u8], [u8], M, _>(&p)
+        .map_mut::<M, _>(&p)
         .unwrap();
       for i in 0..1000 {
         l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
@@ -1616,11 +1672,11 @@ where
       l.flush().unwrap();
     }
 
-    let l = Options::new()
+    let l = Builder::new()
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
-      .map::<[u8], [u8], M, _>(&p)
+      .map::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
@@ -1639,7 +1695,7 @@ where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::Options;
+  use crate::generic::Builder;
 
   unsafe {
     use rand::seq::SliceRandom;
@@ -1647,12 +1703,12 @@ where
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(::std::format!("{prefix}_reopen2_skipmap"));
     {
-      let l = Options::new()
+      let l = Builder::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .with_capacity(ARENA_SIZE as u32)
-        .map_mut::<[u8], [u8], M, _>(&p)
+        .map_mut::<M, _>(&p)
         .unwrap();
       let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
       data.shuffle(&mut rand::thread_rng());
@@ -1674,11 +1730,11 @@ where
       }
     }
 
-    let l = Options::new()
+    let l = Builder::new()
       .with_read(true)
       .with_write(true)
       .with_capacity(ARENA_SIZE as u32)
-      .map::<[u8], [u8], M, _>(&p)
+      .map::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
     let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
@@ -1701,18 +1757,18 @@ where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
-  use crate::Options;
+  use crate::generic::Builder;
 
   unsafe {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(std::format!("{prefix}_reopen3_skipmap"));
     {
-      let l = Options::new()
+      let l = Builder::new()
         .with_create_new(true)
         .with_read(true)
         .with_write(true)
         .with_capacity(ARENA_SIZE as u32)
-        .map_mut::<[u8], [u8], M, _>(&p)
+        .map_mut::<M, _>(&p)
         .unwrap();
       for i in 0..1000 {
         l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
@@ -1721,11 +1777,11 @@ where
       l.flush().unwrap();
     }
 
-    let l = Options::new()
+    let l = Builder::new()
       .with_read(true)
       .with_write(true)
       .with_capacity((ARENA_SIZE * 2) as u32)
-      .map_mut::<[u8], [u8], M, _>(&p)
+      .map_mut::<M, _>(&p)
       .unwrap();
     assert_eq!(1000, l.len());
     for i in 0..1000 {
@@ -1733,6 +1789,77 @@ where
       let ent = l.get(MIN_VERSION, k.as_slice()).unwrap();
       assert_eq!(new_value(i).as_slice(), ent.value());
       assert_eq!(ent.version(), 0);
+      assert_eq!(ent.key(), k.as_slice());
+    }
+  }
+}
+
+// reopen multiple skipmaps based on the same allocator
+#[cfg(feature = "memmap")]
+pub(crate) fn reopen_mmap4<M>(prefix: &str)
+where
+  M: Map<[u8], [u8]> + Clone + Send + Sync + 'static,
+  <M::Allocator as Sealed>::Node: WithVersion,
+{
+  use crate::generic::Builder;
+
+  unsafe {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join(std::format!("{prefix}_reopen4_skipmap"));
+    let header = {
+      let l = Builder::new()
+        .with_create_new(true)
+        .with_read(true)
+        .with_write(true)
+        .with_capacity(ARENA_SIZE as u32)
+        .map_mut::<M, _>(&p)
+        .unwrap();
+      let l2 = M::create_from_allocator(l.allocator().clone()).unwrap();
+      let h2 = l2.header().copied().unwrap();
+
+      let t1 = std::thread::spawn(move || {
+        for i in 0..500 {
+          l.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
+            .unwrap();
+        }
+        l.flush().unwrap();
+      });
+
+      let t2 = std::thread::spawn(move || {
+        for i in 500..1000 {
+          l2.get_or_insert(MIN_VERSION, key(i).as_slice(), new_value(i).as_slice())
+            .unwrap();
+        }
+        l2.flush().unwrap();
+      });
+
+      t1.join().unwrap();
+      t2.join().unwrap();
+
+      h2
+    };
+
+    let l = Builder::new()
+      .with_read(true)
+      .with_write(true)
+      .with_capacity((ARENA_SIZE * 2) as u32)
+      .map_mut::<M, _>(&p)
+      .unwrap();
+    let l2 = M::open_from_allocator(header, l.allocator().clone()).unwrap();
+    assert_eq!(500, l.len());
+    assert_eq!(500, l2.len());
+
+    for i in 0..500 {
+      let k = key(i);
+      let ent = l.get(MIN_VERSION, k.as_slice()).unwrap();
+      assert_eq!(new_value(i).as_slice(), ent.value());
+      assert_eq!(ent.key(), k.as_slice());
+    }
+
+    for i in 500..1000 {
+      let k = key(i);
+      let ent = l2.get(MIN_VERSION, k.as_slice()).unwrap();
+      assert_eq!(new_value(i).as_slice(), ent.value());
       assert_eq!(ent.key(), k.as_slice());
     }
   }
@@ -1777,7 +1904,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.get_or_insert_with_value_builder::<()>(1, b"alice".as_slice(), vb)
@@ -1798,7 +1925,7 @@ where
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
-    Ok(())
+    Ok(5)
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
@@ -1817,7 +1944,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.get_or_insert_with_builders::<(), ()>(1, kb, vb).unwrap();
@@ -1871,7 +1998,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.insert_with_value_builder::<()>(1, b"alice".as_slice(), vb)
@@ -1898,7 +2025,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   let old = l
@@ -1928,7 +2055,7 @@ where
 
   let kb = KeyBuilder::new(5u8.into(), |key: &mut VacantBuffer<'_>| {
     key.put_slice(b"alice").unwrap();
-    Ok(())
+    Ok(5)
   });
 
   let vb = ValueBuilder::new(encoded_size, |val: &mut VacantBuffer<'_>| {
@@ -1947,7 +2074,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
 
   l.insert_with_builders::<(), ()>(1, kb, vb).unwrap();
@@ -1973,7 +2100,7 @@ where
       std::string::ToString::to_string(&err),
       "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
     );
-    Ok(())
+    Ok(encoded_size)
   });
   let old = l
     .insert_with_builders::<(), ()>(1, kb, vb)
@@ -2141,9 +2268,9 @@ where
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __multiple_version_map_tests {
+macro_rules! __generic_multiple_version_map_tests {
   ($prefix:literal: $ty:ty) => {
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::generic::multiple_version |$prefix, $ty, $crate::tests::generic::TEST_OPTIONS| {
       empty,
       basic,
       #[cfg(not(miri))]
@@ -2177,7 +2304,7 @@ macro_rules! __multiple_version_map_tests {
       le,
     });
 
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::TEST_FULL_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::generic::multiple_version |$prefix, $ty, $crate::tests::generic::TEST_FULL_OPTIONS| {
       full,
     });
 
@@ -2186,7 +2313,7 @@ macro_rules! __multiple_version_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen() {
-      $crate::tests::multiple_version::reopen_mmap::<$ty>($prefix);
+      $crate::tests::generic::multiple_version::reopen_mmap::<$ty>($prefix);
     }
 
     #[test]
@@ -2194,7 +2321,7 @@ macro_rules! __multiple_version_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen2() {
-      $crate::tests::multiple_version::reopen_mmap2::<$ty>($prefix);
+      $crate::tests::generic::multiple_version::reopen_mmap2::<$ty>($prefix);
     }
 
     #[test]
@@ -2202,12 +2329,14 @@ macro_rules! __multiple_version_map_tests {
     #[cfg_attr(miri, ignore)]
     #[allow(clippy::macro_metavars_in_unsafe)]
     fn reopen3() {
-      $crate::tests::multiple_version::reopen_mmap3::<$ty>($prefix);
+      $crate::tests::generic::multiple_version::reopen_mmap3::<$ty>($prefix);
     }
   };
   // Support from golang :)
   (go $prefix:literal: $ty:ty => $opts:path) => {
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $opts| {
+    $crate::__unit_tests!($crate::tests::generic::multiple_version |$prefix, $ty, $opts| {
+      #[cfg(feature = "std")]
+      concurrent_basic_two_maps,
       #[cfg(feature = "std")]
       concurrent_basic,
       #[cfg(feature = "std")]
@@ -2217,6 +2346,14 @@ macro_rules! __multiple_version_map_tests {
       #[cfg(feature = "std")]
       concurrent_one_key2,
     });
+
+    #[test]
+    #[cfg(feature = "memmap")]
+    #[cfg_attr(miri, ignore)]
+    #[allow(clippy::macro_metavars_in_unsafe)]
+    fn reopen4() {
+      $crate::tests::generic::multiple_version::reopen_mmap4::<$ty>($prefix);
+    }
 
     // #[cfg(not(miri))]
     // mod high_compression {
@@ -2234,7 +2371,7 @@ macro_rules! __multiple_version_map_tests {
     //   });
     // }
 
-    $crate::__unit_tests!($crate::tests::multiple_version |$prefix, $ty, $crate::tests::BIG_TEST_OPTIONS| {
+    $crate::__unit_tests!($crate::tests::generic::multiple_version |$prefix, $ty, $crate::tests::generic::BIG_TEST_OPTIONS| {
       #[cfg(all(feature = "std", not(miri)))]
       concurrent_basic_big_values,
     });

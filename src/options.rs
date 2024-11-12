@@ -1,14 +1,7 @@
-use core::mem;
-
 pub use rarena_allocator::Freelist;
 use rarena_allocator::Options as ArenaOptions;
 
-use super::{
-  allocator::{Node, Sealed as AllocatorSealed},
-  error::Error,
-  types::{Height, KeySize},
-  Arena,
-};
+use crate::types::{Height, KeySize};
 
 /// The memory format version.
 pub(crate) const CURRENT_VERSION: u16 = 0;
@@ -88,7 +81,7 @@ impl Options {
       freelist: Freelist::None,
       policy: CompressionPolicy::Fast,
       reserved: 0,
-      lock_meta: true,
+      lock_meta: false,
 
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
       create_new: false,
@@ -186,7 +179,7 @@ impl Options {
   /// ## Example
   ///
   /// ```
-  /// use skl::{Options, Freelist};
+  /// use skl::{Options, options::Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   /// ```
@@ -203,7 +196,7 @@ impl Options {
   /// ## Example
   ///
   /// ```
-  /// use skl::{Options, CompressionPolicy};
+  /// use skl::{Options, options::CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::Fast);
   /// ```
@@ -471,7 +464,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, Freelist};
+  /// use skl::{Options, options::Freelist};
   ///
   /// let opts = Options::new().with_freelist(Freelist::Optimistic);
   ///
@@ -489,7 +482,7 @@ impl Options {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::{Options, CompressionPolicy};
+  /// use skl::{Options, options::CompressionPolicy};
   ///
   /// let opts = Options::new().with_compression_policy(CompressionPolicy::Fast);
   ///
@@ -498,88 +491,6 @@ impl Options {
   #[inline]
   pub const fn compression_policy(&self) -> CompressionPolicy {
     self.policy
-  }
-
-  /// Returns the data offset of the `SkipMap` if the `SkipMap` is in unified memory layout.
-  ///
-  /// See also [`Options::data_offset`].
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
-  ///
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// // Create a unsync ARENA.
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  /// ```
-  pub fn data_offset_unify<K, V, A>(&self) -> usize
-  where
-    K: ?Sized + 'static,
-    V: ?Sized + 'static,
-    A: Arena<K, V>,
-  {
-    let arena_opts = self.to_arena_options();
-    let arena_data_offset =
-      arena_opts.data_offset_unify::<<A::Allocator as AllocatorSealed>::Allocator>();
-
-    data_offset_in::<A::Allocator>(arena_data_offset, self.max_height(), true)
-  }
-
-  /// Returns the data offset of the `SkipMap` if the `SkipMap` is not in unified memory layout.
-  ///
-  /// As the file backed `SkipMap` will only use the unified memory layout and ignore the unify configuration of `Options`,
-  /// so see also [`Options::data_offset_unify`], if you want to get the data offset of the `SkipMap` in unified memory layout.
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use skl::{map::sync, multiple_version::unsync, Options, Arena};
-  ///
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, sync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// // Create a unsync ARENA.
-  /// let opts = Options::new().with_capacity(1024);
-  /// let data_offset_from_opts = opts.data_offset::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  ///
-  /// let data_offset_from_opts = opts.data_offset_unify::<_, _, unsync::SkipMap<[u8], [u8]>>();
-  /// let map = opts.with_unify(true).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// assert_eq!(data_offset_from_opts, map.data_offset());
-  /// ```
-  pub fn data_offset<K, V, A>(&self) -> usize
-  where
-    K: ?Sized + 'static,
-    V: ?Sized + 'static,
-    A: Arena<K, V>,
-  {
-    let arena_opts = self.to_arena_options();
-    let arena_data_offset =
-      arena_opts.data_offset::<<A::Allocator as crate::allocator::Sealed>::Allocator>();
-    data_offset_in::<A::Allocator>(arena_data_offset, self.max_height(), false)
   }
 }
 
@@ -597,7 +508,7 @@ impl Options {
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
     {
       opts
-        .with_lock_meta(false) // we need to avoid arena's lock_meta
+        .with_lock_meta(self.lock_meta())
         .with_create(self.create())
         .with_create_new(self.create_new())
         .with_read(self.read())
@@ -615,69 +526,823 @@ impl Options {
   }
 }
 
-impl Options {
-  /// Create a new map which is backed by a `AlignedVec`.
-  ///
-  /// **Note:** The capacity stands for how many memory allocated,
-  /// it does not mean the skiplist can store `cap` entries.
-  ///
-  /// **What the difference between this method and [`Options::map_anon`]?**
-  ///
-  /// 1. This method will use an `AlignedVec` ensures we are working within Rust's memory safety guarantees.
-  ///    Even if we are working with raw pointers with `Box::into_raw`,
-  ///    the backend ARENA will reclaim the ownership of this memory by converting it back to a `Box`
-  ///    when dropping the backend ARENA. Since `AlignedVec` uses heap memory, the data might be more cache-friendly,
-  ///    especially if you're frequently accessing or modifying it.
-  ///
-  /// 2. Where as [`Options::map_anon`] will use mmap anonymous to require memory from the OS.
-  ///    If you require very large contiguous memory regions, `mmap` might be more suitable because
-  ///    it's more direct in requesting large chunks of memory from the OS.
-  ///
-  /// ## Example
-  ///
-  /// ```rust
-  /// use skl::{map::sync, multiple_version::unsync, Options};
-  ///
-  /// let map = Options::new().with_capacity(1024).alloc::<_, _, sync::SkipMap<[u8], [u8]>>().unwrap();
-  ///
-  /// let arena = Options::new().with_capacity(1024).alloc::<_, _, unsync::SkipMap<[u8], [u8]>>().unwrap();
-  /// ```
-  #[inline]
-  pub fn alloc<K, V, T>(self) -> Result<T, Error>
-  where
-    K: ?Sized + 'static,
-    V: ?Sized + 'static,
-    T: Arena<K, V>,
-  {
-    let node_align = mem::align_of::<<T::Allocator as AllocatorSealed>::Node>();
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __builder_opts {
+  ($mod:ident::$name:ident) => {
+    /// Set the reserved bytes of the ARENA.
+    ///
+    /// The reserved is used to configure the start position of the ARENA. This is useful
+    /// when you want to add some bytes before the ARENA, e.g. when using the memory map file backed ARENA,
+    /// you can set the reserved to the size to `8` to store a 8 bytes checksum.
+    ///
+    /// The default reserved is `0`.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_reserved(8);")]
+    /// ```
+    #[inline]
+    pub const fn with_reserved(mut self, reserved: u32) -> Self {
+      self.options.reserved = reserved;
+      self
+    }
 
-    self
-      .to_arena_options()
-      .with_maximum_alignment(node_align)
-      .alloc::<<T::Allocator as AllocatorSealed>::Allocator>()
-      .map_err(Into::into)
-      .and_then(|arena| T::construct(arena, self, false))
-  }
-}
+    /// Set if lock the meta of the ARENA in the memory to prevent OS from swapping out the first page of ARENA.
+    /// When using memory map backed ARENA, the meta of the ARENA
+    /// is in the first page, meta is frequently accessed,
+    /// lock (`mlock` on the first page) the meta can reduce the page fault,
+    /// but yes, this means that one `SkipMap` will have one page are locked in memory,
+    /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+    ///
+    /// Default is `true`.
+    ///
+    /// This configuration has no effect on windows and vec backed ARENA.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_lock_meta(false);")]
+    /// ```
+    #[inline]
+    pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
+      self.options.lock_meta = lock_meta;
+      self
+    }
 
-#[inline]
-fn data_offset_in<A: AllocatorSealed>(offset: usize, max_height: Height, unify: bool) -> usize {
-  let meta_end = if unify {
-    let alignment = mem::align_of::<A::Header>();
-    let meta_offset = (offset + alignment - 1) & !(alignment - 1);
-    meta_offset + mem::size_of::<A::Header>()
-  } else {
-    offset
+    /// Set the magic version of the [`Arena`](crate::traits::Arena).
+    ///
+    /// This is used by the application using [`Arena`](crate::traits::Arena)
+    /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
+    /// with incompatible data format.
+    ///
+    /// The default value is `0`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_magic_version(1);")]
+    /// ```
+    #[inline]
+    pub const fn with_magic_version(mut self, magic_version: u16) -> Self {
+      self.options.magic_version = magic_version;
+      self
+    }
+
+    /// Set the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
+    ///
+    /// The default value is [`Freelist::Optimistic`].
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::Freelist};")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_freelist(Freelist::Optimistic);")]
+    /// ```
+    #[inline]
+    pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
+      self.options.freelist = freelist;
+      self
+    }
+
+    /// Set the compression policy of the key in [`Arena`](crate::traits::Arena).
+    ///
+    /// The default value is [`CompressionPolicy::Fast`].
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::CompressionPolicy};")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_compression_policy(CompressionPolicy::Fast);")]
+    /// ```
+    #[inline]
+    pub const fn with_compression_policy(mut self, policy: CompressionPolicy) -> Self {
+      self.options.policy = policy;
+      self
+    }
+
+    /// Set if use the unify memory layout of the [`Arena`](crate::traits::Arena).
+    ///
+    /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+    /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+    /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
+    ///
+    /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
+    ///
+    /// The default value is `false`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_unify(true);")]
+    /// ```
+    #[inline]
+    pub const fn with_unify(mut self, unify: bool) -> Self {
+      self.options.unify = unify;
+      self
+    }
+
+    /// Sets the maximum size of the value.
+    ///
+    /// Default is `u32::MAX`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_value_size(1024);")]
+    /// ```
+    #[inline]
+    pub const fn with_max_value_size(mut self, size: u32) -> Self {
+      self.options.max_value_size = size;
+      self
+    }
+
+    /// Sets the maximum size of the key.
+    ///
+    /// The maximum size of the key is `u27::MAX`.
+    ///
+    /// Default is `65535`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", KeySize};")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_key_size(KeySize::new());")]
+    /// ```
+    #[inline]
+    pub const fn with_max_key_size(mut self, size: KeySize) -> Self {
+      self.options.max_key_size = size;
+      self
+    }
+
+    /// Sets the maximum height.
+    ///
+    /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", Height};")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_height(Height::new());")]
+    /// ```
+    #[inline]
+    pub const fn with_max_height(mut self, height: Height) -> Self {
+      self.options.max_height = height;
+      self
+    }
+
+    /// Sets the capacity of the underlying ARENA.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_capacity(1024);")]
+    /// ```
+    #[inline]
+    pub const fn with_capacity(mut self, capacity: u32) -> Self {
+      self.options.capacity = Some(capacity);
+      self
+    }
+
+    /// Get the reserved of the ARENA.
+    ///
+    /// The reserved is used to configure the start position of the ARENA. This is useful
+    /// when you want to add some bytes before the ARENA, e.g. when using the memory map file backed ARENA,
+    /// you can set the reserved to the size to `8` to store a 8 bytes checksum.
+    ///
+    /// The default reserved is `0`.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_reserved(8);")]
+    ///
+    /// assert_eq!(opts.reserved(), 8);
+    /// ```
+    #[inline]
+    pub const fn reserved(&self) -> u32 {
+      self.options.reserved
+    }
+
+    /// Get if lock the meta of the ARENA in the memory to prevent OS from swapping out the first page of ARENA.
+    /// When using memory map backed ARENA, the meta of the ARENA
+    /// is in the first page, meta is frequently accessed,
+    /// lock (`mlock` on the first page) the meta can reduce the page fault,
+    /// but yes, this means that one `SkipMap` will have one page are locked in memory,
+    /// and will not be swapped out. So, this is a trade-off between performance and memory usage.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_lock_meta(false);")]
+    ///
+    /// assert_eq!(opts.lock_meta(), false);
+    /// ```
+    #[inline]
+    pub const fn lock_meta(&self) -> bool {
+      self.options.lock_meta
+    }
+
+    /// Returns the maximum size of the value.
+    ///
+    /// Default is `u32::MAX`. The maximum size of the value is `u32::MAX - header`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_value_size(1024);")]
+    /// ```
+    #[inline]
+    pub const fn max_value_size(&self) -> u32 {
+      self.options.max_value_size
+    }
+
+    /// Returns the maximum size of the key.
+    ///
+    /// The maximum size of the key is `u27::MAX`.
+    ///
+    /// Default is `65535`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", KeySize};")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_key_size(KeySize::new());")]
+    ///
+    /// assert_eq!(options.max_key_size(), u16::MAX);
+    /// ```
+    #[inline]
+    pub const fn max_key_size(&self) -> KeySize {
+      self.options.max_key_size
+    }
+
+    /// Returns the maximum height.
+    ///
+    /// Default is `20`. The maximum height is `31`. The minimum height is `1`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", Height};")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_height(Height::from_u8_unchecked(5));")]
+    ///
+    /// assert_eq!(options.max_height(), 5);
+    /// ```
+    #[inline]
+    pub const fn max_height(&self) -> Height {
+      self.options.max_height
+    }
+
+    /// Returns the configuration of underlying ARENA size.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let options = ", stringify!($name), "::new().with_capacity(1024);")]
+    /// ```
+    #[inline]
+    pub const fn capacity(&self) -> u32 {
+      match self.options.capacity {
+        Some(capacity) => capacity,
+        None => 0,
+      }
+    }
+
+    /// Get if use the unify memory layout of the [`Arena`](crate::traits::Arena).
+    ///
+    /// File backed [`Arena`](crate::traits::Arena) has different memory layout with other kind backed [`Arena`](crate::traits::Arena),
+    /// set this value to `true` will unify the memory layout of the [`Arena`](crate::traits::Arena), which means
+    /// all kinds of backed [`Arena`](crate::traits::Arena) will have the same memory layout.
+    ///
+    /// This value will be ignored if the [`Arena`](crate::traits::Arena) is backed by a file backed memory map.
+    ///
+    /// The default value is `false`.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_unify(true);")]
+    ///
+    /// assert_eq!(opts.unify(), true);
+    /// ```
+    #[inline]
+    pub const fn unify(&self) -> bool {
+      self.options.unify
+    }
+
+    /// Get the magic version of the [`Arena`](crate::traits::Arena).
+    ///
+    /// This is used by the application using [`Arena`](crate::traits::Arena)
+    /// to ensure that it doesn't open the [`Arena`](crate::traits::Arena)
+    /// with incompatible data format.
+    ///
+    /// The default value is `0`.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_magic_version(1);")]
+    ///
+    /// assert_eq!(opts.magic_version(), 1);
+    /// ```
+    #[inline]
+    pub const fn magic_version(&self) -> u16 {
+      self.options.magic_version
+    }
+
+    /// Get the [`Freelist`] kind of the [`Arena`](crate::traits::Arena).
+    ///
+    /// The default value is [`Freelist::Optimistic`].
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::Freelist};")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_freelist(Freelist::Optimistic);")]
+    ///
+    /// assert_eq!(opts.freelist(), Freelist::Optimistic);
+    /// ```
+    #[inline]
+    pub const fn freelist(&self) -> Freelist {
+      self.options.freelist
+    }
+
+    /// Get the compression policy of the keys in [`Arena`](crate::traits::Arena).
+    ///
+    /// The default value is [`CompressionPolicy::Fast`].
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::CompressionPolicy};")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_compression_policy(CompressionPolicy::Fast);")]
+    ///
+    /// assert_eq!(opts.compression_policy(), CompressionPolicy::Fast);
+    /// ```
+    #[inline]
+    pub const fn compression_policy(&self) -> CompressionPolicy {
+      self.options.policy
+    }
+
+    /// Sets the option for read access.
+    ///
+    /// This option, when true, will indicate that the file should be
+    /// `read`-able if opened.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_read(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_read(mut self, read: bool) -> Self {
+      self.options.read = read;
+      self
+    }
+
+    /// Sets the option for write access.
+    ///
+    /// This option, when true, will indicate that the file should be
+    /// `write`-able if opened.
+    ///
+    /// If the file already exists, any write calls on it will overwrite its
+    /// contents, without truncating it.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_write(mut self, write: bool) -> Self {
+      self.options.write = write;
+      self
+    }
+
+    /// Sets the option for the append mode.
+    ///
+    /// This option, when true, means that writes will append to a file instead
+    /// of overwriting previous contents.
+    /// Note that setting `.write(true).append(true)` has the same effect as
+    /// setting only `.append(true)`.
+    ///
+    /// For most filesystems, the operating system guarantees that all writes are
+    /// atomic: no writes get mangled because another process writes at the same
+    /// time.
+    ///
+    /// One maybe obvious note when using append-mode: make sure that all data
+    /// that belongs together is written to the file in one operation. This
+    /// can be done by concatenating strings before passing them to [`write()`],
+    /// or using a buffered writer (with a buffer of adequate size),
+    /// and calling [`flush()`] when the message is complete.
+    ///
+    /// If a file is opened with both read and append access, beware that after
+    /// opening, and after every write, the position for reading may be set at the
+    /// end of the file. So, before writing, save the current position (using
+    /// <code>[seek]\([SeekFrom](std::io::SeekFrom)::[Current]\(opts))</code>), and restore it before the next read.
+    ///
+    /// ## Note
+    ///
+    /// This function doesn't create the file if it doesn't exist. Use the
+    /// [`Options::with_create`] method to do so.
+    ///
+    /// [`write()`]: std::io::Write::write "io::Write::write"
+    /// [`flush()`]: std::io::Write::flush "io::Write::flush"
+    /// [seek]: std::io::Seek::seek "io::Seek::seek"
+    /// [Current]: std::io::SeekFrom::Current "io::SeekFrom::Current"
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_append(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_append(mut self, append: bool) -> Self {
+      self.options.write = true;
+      self.options.append = append;
+      self
+    }
+
+    /// Sets the option for truncating a previous file.
+    ///
+    /// If a file is successfully opened with this option set it will truncate
+    /// the file to opts length if it already exists.
+    ///
+    /// The file must be opened with write access for truncate to work.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true).with_truncate(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_truncate(mut self, truncate: bool) -> Self {
+      self.options.truncate = truncate;
+      self.options.write = true;
+      self
+    }
+
+    /// Sets the option to create a new file, or open it if it already exists.
+    /// If the file does not exist, it is created and set the lenght of the file to the given size.
+    ///
+    /// In order for the file to be created, [`Options::with_write`] or
+    /// [`Options::with_append`] access must be used.
+    ///
+    /// See also [`std::fs::write()`][std::fs::write] for a simple function to
+    /// create a file with some given data.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true).with_create(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_create(mut self, val: bool) -> Self {
+      self.options.create = val;
+      self
+    }
+
+    /// Sets the option to create a new file and set the file length to the given value, failing if it already exists.
+    ///
+    /// No file is allowed to exist at the target location, also no (dangling) symlink. In this
+    /// way, if the call succeeds, the file returned is guaranteed to be new.
+    ///
+    /// This option is useful because it is atomic. Otherwise between checking
+    /// whether a file exists and creating a new one, the file may have been
+    /// created by another process (a TOCTOU race condition / attack).
+    ///
+    /// If `.with_create_new(true)` is set, [`.with_create()`](Options::with_create) and [`.with_truncate()`](Options::with_truncate) are
+    /// ignored.
+    ///
+    /// The file must be opened with write or append access in order to create
+    /// a new file.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true).with_create_new(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_create_new(mut self, val: bool) -> Self {
+      self.options.create_new = val;
+      self
+    }
+
+    /// Configures the memory map to start at byte `offset` from the beginning of the file.
+    ///
+    /// This option has no effect on anonymous memory maps or vec backed [`Arena`](crate::traits::Arena).
+    ///
+    /// By default, the offset is 0.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_offset(30);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_offset(mut self, offset: u64) -> Self {
+      self.options.offset = offset;
+      self
+    }
+
+    /// Configures the anonymous memory map to be suitable for a process or thread stack.
+    ///
+    /// This option corresponds to the `MAP_STACK` flag on Linux. It has no effect on Windows.
+    ///
+    /// This option has no effect on file-backed memory maps and vec backed [`Arena`](crate::traits::Arena).
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let stack = ", stringify!($name), "::new().with_stack(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_stack(mut self, stack: bool) -> Self {
+      self.options.stack = stack;
+      self
+    }
+
+    /// Configures the anonymous memory map to be allocated using huge pages.
+    ///
+    /// This option corresponds to the `MAP_HUGETLB` flag on Linux. It has no effect on Windows.
+    ///
+    /// The size of the requested page can be specified in page bits. If not provided, the system
+    /// default is requested. The requested length should be a multiple of this, or the mapping
+    /// will fail.
+    ///
+    /// This option has no effect on file-backed memory maps and vec backed [`Arena`](crate::traits::Arena).
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let huge = ", stringify!($name), "::new().with_huge(Some(8));")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_huge(mut self, page_bits: Option<u8>) -> Self {
+      self.options.huge = page_bits;
+      self
+    }
+
+    /// Populate (prefault) page tables for a mapping.
+    ///
+    /// For a file mapping, this causes read-ahead on the file. This will help to reduce blocking on page faults later.
+    ///
+    /// This option corresponds to the `MAP_POPULATE` flag on Linux. It has no effect on Windows.
+    ///
+    /// This option has no effect on vec backed [`Arena`](crate::traits::Arena).
+    ///
+    /// ## Example
+    ///
+    /// ```
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let populate = ", stringify!($name), "::new().with_populate(true);")]
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub fn with_populate(mut self, populate: bool) -> Self {
+      self.options.populate = populate;
+      self
+    }
+
+    /// Returns `true` if the file should be opened with read access.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_read(true);")]
+    /// assert_eq!(opts.read(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn read(&self) -> bool {
+      self.options.read
+    }
+
+    /// Returns `true` if the file should be opened with write access.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true);")]
+    /// assert_eq!(opts.write(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn write(&self) -> bool {
+      self.options.write
+    }
+
+    /// Returns `true` if the file should be opened with append access.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_append(true);")]
+    /// assert_eq!(opts.append(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn append(&self) -> bool {
+      self.options.append
+    }
+
+    /// Returns `true` if the file should be opened with truncate access.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_truncate(true);")]
+    /// assert_eq!(opts.truncate(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn truncate(&self) -> bool {
+      self.options.truncate
+    }
+
+    /// Returns `true` if the file should be created if it does not exist.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_create(true);")]
+    /// assert_eq!(opts.create(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn create(&self) -> bool {
+      self.options.create
+    }
+
+    /// Returns `true` if the file should be created if it does not exist and fail if it does.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_create_new(true);")]
+    /// assert_eq!(opts.create_new(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn create_new(&self) -> bool {
+      self.options.create_new
+    }
+
+    /// Returns the offset of the memory map.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_offset(30);")]
+    /// assert_eq!(opts.offset(), 30);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn offset(&self) -> u64 {
+      self.options.offset
+    }
+
+    /// Returns `true` if the memory map should be suitable for a process or thread stack.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_stack(true);")]
+    /// assert_eq!(opts.stack(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn stack(&self) -> bool {
+      self.options.stack
+    }
+
+    /// Returns the page bits of the memory map.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_huge(Some(8));")]
+    /// assert_eq!(opts.huge(), Some(8));
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn huge(&self) -> Option<u8> {
+      self.options.huge
+    }
+
+    /// Returns `true` if the memory map should populate (prefault) page tables for a mapping.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
+    ///
+    #[doc = concat!("let opts = ", stringify!($name), "::new().with_populate(true);")]
+    /// assert_eq!(opts.populate(), true);
+    /// ```
+    #[inline]
+    #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]
+    pub const fn populate(&self) -> bool {
+      self.options.populate
+    }
   };
-
-  let alignment = mem::align_of::<A::Node>();
-  let head_offset = (meta_end + alignment - 1) & !(alignment - 1);
-  let head_end = head_offset
-    + mem::size_of::<A::Node>()
-    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize();
-
-  let tail_offset = (head_end + alignment - 1) & !(alignment - 1);
-  tail_offset
-    + mem::size_of::<A::Node>()
-    + mem::size_of::<<A::Node as Node>::Link>() * max_height.to_usize()
 }

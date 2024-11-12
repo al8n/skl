@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.19.2"
+version = "0.20.0"
 edition = "2021"
 rust-version = "1.81.0"
 repository = "https://github.com/al8n/skl"
@@ -30,6 +30,11 @@ name = "mmap-anon"
 path = "examples/mmap_anon.rs"
 required-features = ["memmap"]
 
+[[example]]
+name = "multiple_maps"
+path = "examples/multiple_maps.rs"
+required-features = ["memmap"]
+
 [features]
 default = ["std"]
 alloc = ["rarena-allocator/alloc", "dbutils/alloc"]
@@ -46,7 +51,7 @@ getrandom = { version = "0.2", features = ["js"] }
 among = { version = "0.1", default-features = false, features = ["either"] }
 arbitrary-int = { version = "1.2", default-features = false }
 bitflags = "2"
-dbutils = { version = "0.9", default-features = false }
+dbutils = { version = "0.10", default-features = false }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
@@ -84,15 +89,25 @@ members = ["integration"]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(all_tests)',
-  'cfg(test_unsync_versioned)',
-  'cfg(test_unsync_map)',
-  'cfg(test_sync_versioned)',
-  'cfg(test_sync_map)',
-  'cfg(test_sync_multiple_version_concurrent)',
-  'cfg(test_sync_map_concurrent)',
-  'cfg(test_sync_multiple_version_concurrent_with_optimistic_freelist)',
-  'cfg(test_sync_map_concurrent_with_optimistic_freelist)',
-  'cfg(test_sync_multiple_version_concurrent_with_pessimistic_freelist)',
-  'cfg(test_sync_map_concurrent_with_pessimistic_freelist)', 
+  'cfg(all_skl_tests)',
+  'cfg(test_generic_unsync_versioned)',
+  'cfg(test_generic_unsync_map)',
+  'cfg(test_generic_sync_versioned)',
+  'cfg(test_generic_sync_map)',
+  'cfg(test_generic_sync_multiple_version_concurrent)',
+  'cfg(test_generic_sync_map_concurrent)',
+  'cfg(test_generic_sync_multiple_version_concurrent_with_optimistic_freelist)',
+  'cfg(test_generic_sync_map_concurrent_with_optimistic_freelist)',
+  'cfg(test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist)',
+  'cfg(test_generic_sync_map_concurrent_with_pessimistic_freelist)', 
+  'cfg(test_dynamic_unsync_versioned)',
+  'cfg(test_dynamic_unsync_map)',
+  'cfg(test_dynamic_sync_versioned)',
+  'cfg(test_dynamic_sync_map)',
+  'cfg(test_dynamic_sync_multiple_version_concurrent)',
+  'cfg(test_dynamic_sync_map_concurrent)',
+  'cfg(test_dynamic_sync_multiple_version_concurrent_with_optimistic_freelist)',
+  'cfg(test_dynamic_sync_map_concurrent_with_optimistic_freelist)',
+  'cfg(test_dynamic_sync_multiple_version_concurrent_with_pessimistic_freelist)',
+  'cfg(test_dynamic_sync_map_concurrent_with_pessimistic_freelist)', 
 ] }

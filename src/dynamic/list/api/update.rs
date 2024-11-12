@@ -1,24 +1,18 @@
-use core::sync::atomic::Ordering;
-
-use among::Among;
-use dbutils::{
-  buffer::VacantBuffer,
-  types::{KeyRef, MaybeStructured, Type},
-};
-use either::Either;
-
-use crate::KeyBuilder;
-
 use super::{
-  super::{Inserter, Key},
+  super::{Inserter, Key, RefCounter},
   Allocator, EntryRef, Error, Height, RemoveValueBuilder, SkipList, ValueBuilder, Version,
 };
+use crate::KeyBuilder;
+use among::Among;
+use core::sync::atomic::Ordering;
+use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
+use either::Either;
 
-impl<K, V, A> SkipList<K, V, A>
+impl<A, R, C> SkipList<A, R, C>
 where
-  K: ?Sized + Type + 'static,
-  V: ?Sized + Type + 'static,
   A: Allocator,
+  C: Comparator,
+  R: RefCounter,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
   /// Unlike [`get_or_insert`](SkipList::get_or_insert), this method will update the value if the key with the given version already exists.
@@ -29,12 +23,9 @@ where
   pub fn insert<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    key: impl Into<MaybeStructured<'b, K>>,
-    value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+    key: &'b [u8],
+    value: &'b [u8],
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
     self.insert_at_height(version, self.random_height(), key, value)
   }
 
@@ -47,27 +38,22 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'b, K>>,
-    value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let key: MaybeStructured<'_, K> = key.into();
-    let value: MaybeStructured<'_, V> = value.into();
+    key: &'b [u8],
+    value: &'b [u8],
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+    self.validate(height, key.len(), value.len())?;
 
-    self
-      .validate(height, key.encoded_len(), value.encoded_len())
-      .map_err(Among::Right)?;
-
-    let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf).map(|_| ());
-    let val_len = value.encoded_len();
+    let val_len = value.len();
+    let copy = |buf: &mut VacantBuffer<'_>| {
+      buf.put_slice(value)?;
+      Result::<_, dbutils::error::InsufficientBuffer>::Ok(val_len)
+    };
 
     self
       .update(
         version,
         height.into(),
-        Key::from((false, key)),
+        Key::Occupied(key),
         Some(ValueBuilder::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -83,6 +69,7 @@ where
           }
         })
       })
+      .map_err(Either::unwrap_right)
   }
 
   /// Upserts a new key if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -101,22 +88,18 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let key: MaybeStructured<'_, K> = key.into();
+    key: &'b [u8],
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
     self
-      .validate(height, key.encoded_len(), value_builder.size())
+      .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
 
     self
       .update(
         version,
         height.into(),
-        Key::from((false, key)),
+        Key::Occupied(key),
         Some(value_builder),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -144,26 +127,22 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'b, K>>,
-    value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, V::Error, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let key: MaybeStructured<'_, K> = key.into();
-    let value: MaybeStructured<'_, V> = value.into();
-    self
-      .validate(height, key.encoded_len(), value.encoded_len())
-      .map_err(Among::Right)?;
+    key: &'b [u8],
+    value: &'b [u8],
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+    self.validate(height, key.len(), value.len())?;
 
-    let copy = |buf: &mut VacantBuffer<'_>| value.encode_to_buffer(buf).map(|_| ());
-    let val_len = value.encoded_len();
+    let val_len = value.len();
+    let copy = |buf: &mut VacantBuffer<'_>| {
+      buf.put_slice(value)?;
+      Result::<_, dbutils::error::InsufficientBuffer>::Ok(val_len)
+    };
 
     self
       .update(
         version,
         height.into(),
-        Key::from((false, key)),
+        Key::Occupied(key),
         Some(ValueBuilder::new(val_len, copy)),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -179,6 +158,7 @@ where
           }
         })
       })
+      .map_err(Either::unwrap_right)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -198,22 +178,18 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'b, K>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<K::Error, E, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let key: MaybeStructured<'_, K> = key.into();
+    key: &'b [u8],
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
     self
-      .validate(height, key.encoded_len(), value_builder.size())
+      .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
 
     self
       .update(
         version,
         height.into(),
-        Key::from((false, key)),
+        Key::Occupied(key),
         Some(value_builder),
         Ordering::Relaxed,
         Ordering::Relaxed,
@@ -246,12 +222,9 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -282,11 +255,7 @@ where
           }
         })
       })
-      .map_err(|e| match e {
-        Among::Left(_) => unreachable!(),
-        Among::Right(e) => Among::Right(e),
-        Among::Middle(e) => Among::Middle(e),
-      })
+      .map_err(Among::from_either_to_middle_right)
   }
 
   /// Inserts a new key if it does not yet exist.
@@ -302,12 +271,9 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), KE>>,
-    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Among<KE, VE, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
+    value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -338,11 +304,7 @@ where
           }
         })
       })
-      .map_err(|e| match e {
-        Among::Left(_) => unreachable!(),
-        Among::Right(e) => Among::Right(e),
-        Among::Middle(e) => Among::Middle(e),
-      })
+      .map_err(Among::from_either_to_middle_right)
   }
 
   /// Removes the key-value pair if it exists. A CAS operation will be used to ensure the operation is atomic.
@@ -358,25 +320,18 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'b, K>>,
-
+    key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let key: MaybeStructured<'_, K> = key.into();
-    self
-      .validate(height, key.encoded_len(), 0)
-      .map_err(Either::Right)?;
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+    self.validate(height, key.len(), 0)?;
 
     self
       .update(
         version,
         height.into(),
-        Key::from((true, key)),
-        Option::<RemoveValueBuilder<V::Error>>::None,
+        Key::Remove(key),
+        Option::<RemoveValueBuilder<()>>::None,
         success,
         failure,
         Inserter::default(),
@@ -401,7 +356,7 @@ where
           }
         },
       })
-      .map_err(Among::into_left_right)
+      .map_err(Either::unwrap_right)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -414,22 +369,16 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<K::Error, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
-    let key: MaybeStructured<'_, K> = key.into();
-    self
-      .validate(height, key.encoded_len(), 0)
-      .map_err(Either::Right)?;
+    key: &'b [u8],
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+    self.validate(height, key.len(), 0)?;
 
     self
       .update(
         version,
         height.into(),
-        Key::from((true, key)),
-        Option::<RemoveValueBuilder<V::Error>>::None,
+        Key::Remove(key),
+        Option::<RemoveValueBuilder<()>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -448,7 +397,7 @@ where
         },
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
-      .map_err(Among::into_left_right)
+      .map_err(Either::unwrap_right)
   }
 
   /// Gets or removes the key-value pair if it exists.
@@ -466,11 +415,8 @@ where
     &'a self,
     version: Version,
     height: Height,
-    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<(), E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A>>, Either<E, Error>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+    key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
+  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
     self
       .validate(height, key_builder.size(), 0)
       .map_err(Either::Right)?;
@@ -483,7 +429,7 @@ where
         version,
         height.into(),
         key,
-        Option::<RemoveValueBuilder<V::Error>>::None,
+        Option::<RemoveValueBuilder<()>>::None,
         Ordering::Relaxed,
         Ordering::Relaxed,
         Inserter::default(),
@@ -503,7 +449,7 @@ where
         _ => unreachable!("get_or_remove does not use CAS, so it must return `Either::Left`"),
       })
       .map_err(|e| match e {
-        Among::Right(e) => Either::Right(e),
+        Either::Right(e) => Either::Right(e),
         _ => unreachable!(),
       })
   }

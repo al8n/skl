@@ -1,34 +1,32 @@
 use core::{
+  borrow::Borrow,
   mem,
   ops::{Bound, RangeBounds},
-  ptr::NonNull,
-  sync::atomic::Ordering,
 };
-use std::boxed::Box;
 
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalent::{Comparable, Equivalent},
-  types::{KeyRef, Type},
-};
+use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
 use rarena_allocator::Allocator as _;
 
 use crate::{
-  allocator::{Allocator, Header, Link, Node, NodePointer},
+  allocator::{Allocator, Meta, Node, NodePointer},
   error::Error,
-  random_height, ty_ref,
+  random_height,
   types::{Height, ValueBuilder},
-  Version,
+  Header, Version,
 };
 
-use super::{iterator, EntryRef, SkipList, VersionedEntryRef};
+use super::{iterator, EntryRef, RefCounter, SkipList, VersionedEntryRef};
 
 mod update;
 
 type RemoveValueBuilder<E> =
-  ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<(), E>>>;
+  ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<usize, E>>>;
 
-impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
+impl<A, R, C> SkipList<A, R, C>
+where
+  A: Allocator,
+  R: RefCounter,
+{
   /// Sets remove on drop, only works on mmap with a file backend.
   ///
   /// Default is `false`.
@@ -42,15 +40,15 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
     self.arena.remove_on_drop(val);
   }
 
-  /// Returns the offset of the data section in the `SkipList`.
+  /// Returns the header of the `SkipList`.
   ///
   /// By default, `SkipList` will allocate meta, head node, and tail node in the ARENA,
   /// and the data section will be allocated after the tail node.
   ///
-  /// This method will return the offset of the data section in the ARENA.
+  /// This method will return the header of the `SkipList`.
   #[inline]
-  pub const fn data_offset(&self) -> usize {
-    self.data_offset as usize
+  pub const fn header(&self) -> Option<&Header> {
+    self.header.as_ref()
   }
 
   /// Returns the version number of the [`SkipList`].
@@ -72,30 +70,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
   #[inline]
   pub fn height(&self) -> u8 {
     self.meta().height()
-  }
-
-  /// Returns the number of remaining bytes can be allocated by the arena.
-  #[inline]
-  pub fn remaining(&self) -> usize {
-    self.arena.remaining()
-  }
-
-  /// Returns how many bytes are discarded by the ARENA.
-  #[inline]
-  pub fn discarded(&self) -> u32 {
-    self.arena.discarded()
-  }
-
-  /// Returns the number of bytes that have allocated from the arena.
-  #[inline]
-  pub fn allocated(&self) -> usize {
-    self.arena.allocated()
-  }
-
-  /// Returns the capacity of the arena.
-  #[inline]
-  pub fn capacity(&self) -> usize {
-    self.arena.capacity()
   }
 
   /// Returns the number of entries in the skipmap.
@@ -155,49 +129,6 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
       + value_size
   }
 
-  /// Clear the skiplist to empty and re-initialize.
-  ///
-  /// ## Safety
-  /// - The current pointers get from the ARENA cannot be used anymore after calling this method.
-  /// - This method is not thread-safe.
-  pub unsafe fn clear(&mut self) -> Result<(), Error> {
-    self.arena.clear()?;
-
-    let options = self.arena.options();
-
-    if self.arena.unify() {
-      self.meta = self
-        .arena
-        .allocate_header(self.meta.as_ref().magic_version())?;
-    } else {
-      let magic_version = self.meta.as_ref().magic_version();
-      let _ = Box::from_raw(self.meta.as_ptr());
-      self.meta = NonNull::new_unchecked(Box::into_raw(Box::new(<A::Header as Header>::new(
-        magic_version,
-      ))));
-    }
-
-    let max_height: u8 = options.max_height().into();
-    let head = self.arena.allocate_full_node(max_height)?;
-    let tail = self.arena.allocate_full_node(max_height)?;
-
-    // Safety:
-    // We will always allocate enough space for the head node and the tail node.
-    unsafe {
-      // Link all head/tail levels together.
-      for i in 0..(max_height as usize) {
-        let head_link = head.tower(&self.arena, i);
-        let tail_link = tail.tower(&self.arena, i);
-        head_link.store_next_offset(tail.offset(), Ordering::Relaxed);
-        tail_link.store_prev_offset(head.offset(), Ordering::Relaxed);
-      }
-    }
-
-    self.head = head;
-    self.tail = tail;
-    Ok(())
-  }
-
   /// Flushes outstanding memory map modifications to disk.
   ///
   /// When this method returns with a non-error result,
@@ -221,62 +152,44 @@ impl<K: ?Sized, V: ?Sized, A: Allocator> SkipList<K, V, A> {
   }
 }
 
-impl<K, V, A: Allocator> SkipList<K, V, A>
+impl<A, RC, C> SkipList<A, RC, C>
 where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
   A: Allocator,
+  C: Comparator,
+  RC: RefCounter,
 {
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
   /// you can use [`contains_key_versioned`](SkipList::contains_key_versioned).
   #[inline]
-  pub fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
-  where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
+  pub fn contains_key(&self, version: Version, key: &[u8]) -> bool {
     self.get(version, key).is_some()
   }
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
   #[inline]
-  pub fn contains_key_versioned<'a, Q>(&'a self, version: Version, key: &Q) -> bool
-  where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
+  pub fn contains_key_versioned(&self, version: Version, key: &[u8]) -> bool {
     self.get_versioned(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn first_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, RC, C>> {
     self.iter_all_versions(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned<'a>(&'a self, version: Version) -> Option<VersionedEntryRef<'a, K, V, A>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn last_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, RC, C>> {
     self.iter_all_versions(version).last()
   }
 
@@ -284,10 +197,7 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get<'a, Q>(&'a self, version: Version, key: &Q) -> Option<EntryRef<'a, K, V, A>>
-  where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A, RC, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -302,13 +212,11 @@ where
             self,
             pointer,
             Some(raw_node_key),
-            None,
           ))
         });
       }
 
-      let node_key = ty_ref::<K>(raw_node_key);
-      if !Equivalent::equivalent(key, &node_key) {
+      if !self.cmp.equivalent(key, raw_node_key) {
         return None;
       }
 
@@ -323,7 +231,6 @@ where
           self,
           pointer,
           Some(raw_node_key),
-          Some(node_key),
         ))
       })
     }
@@ -332,14 +239,11 @@ where
   /// Returns the value associated with the given key, if it exists.
   ///
   /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  pub fn get_versioned<'a, Q>(
-    &'a self,
+  pub fn get_versioned(
+    &self,
     version: Version,
-    key: &Q,
-  ) -> Option<VersionedEntryRef<'a, K, V, A>>
-  where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
+    key: &[u8],
+  ) -> Option<VersionedEntryRef<'_, A, RC, C>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -353,12 +257,10 @@ where
           self,
           pointer,
           Some(raw_node_key),
-          None,
         ));
       }
 
-      let node_key = ty_ref::<K>(raw_node_key);
-      if !Equivalent::equivalent(key, &node_key) {
+      if !self.cmp.equivalent(key, raw_node_key) {
         return None;
       }
 
@@ -372,63 +274,47 @@ where
         self,
         pointer,
         Some(raw_node_key),
-        Some(node_key),
       ))
     }
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound<'a, Q>(
-    &'a self,
+  pub fn upper_bound(
+    &self,
     version: Version,
-    upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, A>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
+    upper: Bound<&[u8]>,
+  ) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound<'a, Q>(
-    &'a self,
+  pub fn lower_bound(
+    &self,
     version: Version,
-    lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, A>>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
-  {
+    lower: Bound<&[u8]>,
+  ) -> Option<EntryRef<'_, A, RC, C>> {
     self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter<'a>(&'a self, version: Version) -> iterator::Iter<'a, K, V, A>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, A, RC, C> {
     iterator::Iter::new(version, self)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::IterAll<'a, K, V, A>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn iter_all_versions(&self, version: Version) -> iterator::IterAll<'_, A, RC, C> {
     iterator::IterAll::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(&'a self, version: Version, range: R) -> iterator::Iter<'a, K, V, A, Q, R>
+  pub fn range<Q, R>(&self, version: Version, range: R) -> iterator::Iter<'_, A, RC, C, Q, R>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
     iterator::Iter::range(version, self, range)
@@ -436,14 +322,13 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range_all_versions<'a, Q, R>(
-    &'a self,
+  pub fn range_all_versions<Q, R>(
+    &self,
     version: Version,
     range: R,
-  ) -> iterator::IterAll<'a, K, V, A, Q, R>
+  ) -> iterator::IterAll<'_, A, RC, C, Q, R>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
     iterator::IterAll::range(version, self, range, true)

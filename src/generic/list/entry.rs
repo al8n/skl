@@ -1,8 +1,8 @@
 use dbutils::types::{KeyRef, LazyRef, Type};
 
+use super::{RefCounter, SkipList};
 use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
-  base::SkipList,
   types::internal::ValuePointer,
   Version,
 };
@@ -10,13 +10,14 @@ use crate::{
 /// A versioned entry reference of the skipmap.
 ///
 /// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
-pub struct VersionedEntryRef<'a, K, V, A>
+pub struct VersionedEntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
-  pub(super) list: &'a SkipList<K, V, A>,
+  pub(super) list: &'a SkipList<K, V, A, R>,
   pub(super) key: LazyRef<'a, K>,
   pub(super) value: Option<LazyRef<'a, V>>,
   pub(super) value_part_pointer: ValuePointer,
@@ -25,11 +26,12 @@ where
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<K, V, A> core::fmt::Debug for VersionedEntryRef<'_, K, V, A>
+impl<K, V, A, R> core::fmt::Debug for VersionedEntryRef<'_, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("VersionedEntryRef")
@@ -40,13 +42,14 @@ where
   }
 }
 
-impl<'a, K, V, A: Allocator> Clone for VersionedEntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> Clone for VersionedEntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
   V: ?Sized + Type,
   V::Ref<'a>: Clone,
   A: Allocator,
+  R: RefCounter,
 {
   fn clone(&self) -> Self {
     Self {
@@ -61,11 +64,12 @@ where
   }
 }
 
-impl<'a, K, V, A: Allocator> VersionedEntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> VersionedEntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the reference to the key
   #[inline]
@@ -101,12 +105,13 @@ where
   }
 }
 
-impl<'a, K, V, A: Allocator> VersionedEntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> VersionedEntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the next entry in the map.
   #[inline]
@@ -159,12 +164,13 @@ where
   }
 }
 
-impl<K, V, A> VersionedEntryRef<'_, K, V, A>
+impl<K, V, A, R> VersionedEntryRef<'_, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
   A::Node: WithVersion,
+  R: RefCounter,
 {
   /// Returns the version of the entry
   #[inline]
@@ -173,20 +179,21 @@ where
   }
 }
 
-impl<'a, K, V, A> VersionedEntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> VersionedEntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   #[inline]
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V, A>,
+    list: &'a SkipList<K, V, A, R>,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
-  ) -> VersionedEntryRef<'a, K, V, A> {
+  ) -> Self {
     unsafe {
       let (raw_value, vp) = node.get_value_with_pointer(&list.arena);
 
@@ -204,7 +211,7 @@ where
         }),
       };
 
-      VersionedEntryRef {
+      Self {
         list,
         key,
         value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
@@ -220,11 +227,11 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V, A>,
+    list: &'a SkipList<K, V, A, R>,
     pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
-  ) -> VersionedEntryRef<'a, K, V, A> {
+  ) -> Self {
     unsafe {
       let raw_value =
         node.get_value_by_value_offset(&list.arena, pointer.value_offset, pointer.value_len);
@@ -243,7 +250,7 @@ where
         }),
       };
 
-      VersionedEntryRef {
+      Self {
         list,
         key,
         value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
@@ -259,17 +266,19 @@ where
 /// An entry reference to the skipmap's entry.
 ///
 /// Compared to the [`VersionedEntryRef`], this one's value cannot be `None`.
-pub struct EntryRef<'a, K, V, A>(pub(crate) VersionedEntryRef<'a, K, V, A>)
+pub struct EntryRef<'a, K, V, A, R>(pub(crate) VersionedEntryRef<'a, K, V, A, R>)
 where
   K: Type + ?Sized,
   V: Type + ?Sized,
-  A: Allocator;
+  A: Allocator,
+  R: RefCounter;
 
-impl<K, V, A> core::fmt::Debug for EntryRef<'_, K, V, A>
+impl<K, V, A, R> core::fmt::Debug for EntryRef<'_, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -279,25 +288,27 @@ where
   }
 }
 
-impl<'a, K, V, A: Allocator> Clone for EntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> Clone for EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
   V: ?Sized + Type,
   V::Ref<'a>: Clone,
   A: Allocator,
+  R: RefCounter,
 {
   fn clone(&self) -> Self {
     Self(self.0.clone())
   }
 }
 
-impl<'a, K, V, A: Allocator> EntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the next entry in the map.
   #[inline]
@@ -312,12 +323,13 @@ where
   }
 }
 
-impl<K, V, A> EntryRef<'_, K, V, A>
+impl<K, V, A, R> EntryRef<'_, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
   A::Node: WithVersion,
+  R: RefCounter,
 {
   /// Returns the version of the entry
   #[inline]
@@ -326,11 +338,12 @@ where
   }
 }
 
-impl<'a, K, V, A: Allocator> EntryRef<'a, K, V, A>
+impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
   A: Allocator,
+  R: RefCounter,
 {
   /// Returns the reference to the key
   #[inline]

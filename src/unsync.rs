@@ -10,6 +10,9 @@ use super::{
   decode_value_pointer, encode_value_pointer, Version, MIN_VERSION, REMOVE,
 };
 
+/// The reference counter type used in the unsync `SkipMap`.
+pub type RefCounter = std::rc::Rc<core::cell::Cell<usize>>;
+
 /// Versioned header of the skipmap.
 #[derive(Debug)]
 #[repr(C)]
@@ -25,7 +28,7 @@ pub struct VersionedMeta {
   flags: Flags,
 }
 
-impl Header for VersionedMeta {
+impl crate::allocator::Meta for VersionedMeta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {
@@ -113,7 +116,7 @@ impl Header for VersionedMeta {
   }
 }
 
-/// Header of the skipmap.
+/// Meta of the skipmap.
 #[derive(Debug)]
 #[repr(C)]
 pub struct Meta {
@@ -124,7 +127,7 @@ pub struct Meta {
   flags: Flags,
 }
 
-impl Header for Meta {
+impl crate::allocator::Meta for Meta {
   #[inline]
   fn new(version: u16) -> Self {
     Self {

@@ -143,7 +143,7 @@ pub(crate) mod internal {
     fn clone(&self) -> Self {
       let old_size = self.ref_counter.fetch_add(Ordering::Release);
       if old_size > usize::MAX >> 1 {
-        dbutils::utils::abort();
+        dbutils::abort();
       }
 
       // Safety:

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.20.0
+
+- Add dynamic `SkipMap`s
+- Support create multiple `SkipMap`s on the same `Allocator`
+- Improve docs on some constructor methods
+
 ## 0.19.0
 
 - Cleanup structures and remove `Trailer`, `TrailedMap` and `FullMap`

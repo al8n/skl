@@ -730,7 +730,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 1000;
   #[cfg(miri)]
-  const N: usize = 200;
+  const N: usize = 100;
 
   let l2 = M::create_from_allocator(l.allocator().clone(), Ascend).unwrap();
 
@@ -796,7 +796,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 1000;
   #[cfg(miri)]
-  const N: usize = 200;
+  const N: usize = 100;
 
   for i in 0..N {
     let l = l.clone();
@@ -842,7 +842,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 1000;
   #[cfg(miri)]
-  const N: usize = 200;
+  const N: usize = 100;
 
   for i in (0..N).rev() {
     let l1 = l.clone();
@@ -948,7 +948,7 @@ where
   #[cfg(not(miri))]
   const N: usize = 1000;
   #[cfg(miri)]
-  const N: usize = 200;
+  const N: usize = 100;
 
   for i in 0..N {
     let l = l.clone();

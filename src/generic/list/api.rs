@@ -6,7 +6,7 @@ use core::{
 use dbutils::{
   buffer::VacantBuffer,
   equivalent::{Comparable, Equivalent},
-  types::{KeyRef, Type},
+  types::{KeyRef, LazyRef, Type},
 };
 use rarena_allocator::Allocator as _;
 
@@ -18,7 +18,7 @@ use crate::{
   Header, Version,
 };
 
-use super::{iterator, EntryRef, RefCounter, SkipList, VersionedEntryRef};
+use super::{iterator, EntryRef, RefCounter, SkipList};
 
 mod update;
 
@@ -186,7 +186,7 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A, RC>>
+  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -194,7 +194,7 @@ where
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, A, RC>>
+  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -205,7 +205,7 @@ where
   pub fn first_versioned<'a>(
     &'a self,
     version: Version,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, RC>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -216,7 +216,7 @@ where
   pub fn last_versioned<'a>(
     &'a self,
     version: Version,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, RC>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -227,7 +227,11 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get<'a, Q>(&'a self, version: Version, key: &Q) -> Option<EntryRef<'a, K, V, A, RC>>
+  pub fn get<'a, Q>(
+    &'a self,
+    version: Version,
+    key: &Q,
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
   where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -239,14 +243,7 @@ where
       let (value, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
         return value.map(|_| {
-          EntryRef(VersionedEntryRef::from_node_with_pointer(
-            version,
-            node,
-            self,
-            pointer,
-            Some(raw_node_key),
-            None,
-          ))
+          EntryRef::from_node_with_pointer(version, node, self, pointer, Some(raw_node_key), None)
         });
       }
 
@@ -260,14 +257,14 @@ where
       }
 
       value.map(|_| {
-        EntryRef(VersionedEntryRef::from_node_with_pointer(
+        EntryRef::from_node_with_pointer(
           version,
           node,
           self,
           pointer,
           Some(raw_node_key),
           Some(node_key),
-        ))
+        )
       })
     }
   }
@@ -279,7 +276,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, RC>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC>>
   where
     Q: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -290,7 +287,7 @@ where
       let raw_node_key = node.get_key(&self.arena);
       let (_, pointer) = node.get_value_with_pointer(&self.arena);
       if eq {
-        return Some(VersionedEntryRef::from_node_with_pointer(
+        return Some(EntryRef::from_node_with_pointer(
           version,
           node,
           self,
@@ -309,7 +306,7 @@ where
         return None;
       }
 
-      Some(VersionedEntryRef::from_node_with_pointer(
+      Some(EntryRef::from_node_with_pointer(
         version,
         node,
         self,
@@ -326,7 +323,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, A, RC>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -340,7 +337,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, A, RC>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
@@ -350,20 +347,23 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter<'a>(&'a self, version: Version) -> iterator::Iter<'a, K, V, A, RC>
+  pub fn iter<'a>(&'a self, version: Version) -> iterator::Iter<'a, K, LazyRef<'a, V>, A, RC>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    iterator::Iter::new(version, self)
+    iterator::Iter::new(version, self, false)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions<'a>(&'a self, version: Version) -> iterator::IterAll<'a, K, V, A, RC>
+  pub fn iter_all_versions<'a>(
+    &'a self,
+    version: Version,
+  ) -> iterator::Iter<'a, K, Option<LazyRef<'a, V>>, A, RC>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
-    iterator::IterAll::new(version, self, true)
+    iterator::Iter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
@@ -372,13 +372,13 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'a, K, V, A, RC, Q, R>
+  ) -> iterator::Iter<'a, K, LazyRef<'a, V>, A, RC, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     R: RangeBounds<Q>,
   {
-    iterator::Iter::range(version, self, range)
+    iterator::Iter::range(version, self, range, false)
   }
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
@@ -387,12 +387,12 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> iterator::IterAll<'a, K, V, A, RC, Q, R>
+  ) -> iterator::Iter<'a, K, Option<LazyRef<'a, V>>, A, RC, Q, R>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     Q: ?Sized + Comparable<K::Ref<'a>>,
     R: RangeBounds<Q>,
   {
-    iterator::IterAll::range(version, self, range, true)
+    iterator::Iter::range(version, self, range, true)
   }
 }

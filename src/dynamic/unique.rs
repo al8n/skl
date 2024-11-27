@@ -307,7 +307,7 @@ where
   #[inline]
   fn first(
     &self,
-  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator, &[u8]>> {
+  ) -> Option<EntryRef<'_, &[u8], Self::Comparator, Self::Allocator, Self::RefCounter>> {
     self.as_ref().first(MIN_VERSION)
   }
 
@@ -315,7 +315,7 @@ where
   #[inline]
   fn last(
     &self,
-  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator, &[u8]>> {
+  ) -> Option<EntryRef<'_, &[u8], Self::Comparator, Self::Allocator, Self::RefCounter>> {
     self.as_ref().last(MIN_VERSION)
   }
 
@@ -341,7 +341,7 @@ where
   fn get<Q>(
     &self,
     key: &Q,
-  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator, &[u8]>>
+  ) -> Option<EntryRef<'_, &[u8], Self::Comparator, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -354,7 +354,7 @@ where
   fn upper_bound<Q>(
     &self,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator, &[u8]>>
+  ) -> Option<EntryRef<'_, &[u8], Self::Comparator, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -367,7 +367,7 @@ where
   fn lower_bound<Q>(
     &self,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'_, Self::Allocator, Self::RefCounter, Self::Comparator, &[u8]>>
+  ) -> Option<EntryRef<'_, &[u8], Self::Comparator, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
   {
@@ -404,7 +404,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self.insert_at_height(self.random_height(), key, value)
@@ -433,7 +433,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self
@@ -495,7 +495,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   > {
     self.insert_at_height_with_value_builder(self.random_height(), key, value_builder)
@@ -557,7 +557,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   > {
     self
@@ -577,7 +577,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self.get_or_insert_at_height(self.random_height(), key, value)
@@ -596,7 +596,7 @@ where
     key: &'b [u8],
     value: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self
@@ -658,7 +658,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   > {
     self.get_or_insert_at_height_with_value_builder(self.random_height(), key, value_builder)
@@ -721,7 +721,7 @@ where
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   > {
     self.as_ref().get_or_insert_at_height_with_value_builder(
@@ -790,7 +790,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   > {
     self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
@@ -857,7 +857,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   > {
     self
@@ -921,7 +921,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   > {
     self.get_or_insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
@@ -985,7 +985,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   > {
     self.as_ref().get_or_insert_at_height_with_builders(
@@ -1010,7 +1010,7 @@ where
     &'a self,
     key: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self.remove_at_height(self.random_height(), key)
@@ -1031,7 +1031,7 @@ where
     height: Height,
     key: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self.as_ref().compare_remove_at_height(
@@ -1055,7 +1055,7 @@ where
     &'a self,
     key: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self.get_or_remove_at_height(self.random_height(), key)
@@ -1087,7 +1087,7 @@ where
     height: Height,
     key: &'b [u8],
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Error,
   > {
     self
@@ -1144,7 +1144,7 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   > {
     self.get_or_remove_at_height_with_builder(self.random_height(), key_builder)
@@ -1201,7 +1201,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, Self::Allocator, Self::RefCounter, Self::Comparator, &'a [u8]>>,
+    Option<EntryRef<'a, &'a [u8], Self::Comparator, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   > {
     self

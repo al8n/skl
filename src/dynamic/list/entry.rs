@@ -1,30 +1,30 @@
 use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
-  dynamic::{list::SkipList, FromValueBytes},
+  dynamic::{list::SkipList, Value},
   ref_counter::RefCounter,
   Version,
 };
 use dbutils::equivalentor::Comparator;
 
-/// A versioned entry reference of the skipmap.
-pub struct EntryRef<'a, A, R, C, S>
+/// An entry reference of the `SkipMap`.
+pub struct EntryRef<'a, V, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
 {
   pub(super) list: &'a SkipList<A, R, C>,
   pub(super) key: &'a [u8],
-  pub(super) value: S,
+  pub(super) value: V,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<A, R, C, S> core::fmt::Debug for EntryRef<'_, A, R, C, S>
+impl<V, C, A, R> core::fmt::Debug for EntryRef<'_, V, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: core::fmt::Debug,
+  V: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -35,11 +35,11 @@ where
   }
 }
 
-impl<A, R, C, S> Clone for EntryRef<'_, A, R, C, S>
+impl<V, C, A, R> Clone for EntryRef<'_, V, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: Clone,
+  V: Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -54,28 +54,28 @@ where
   }
 }
 
-impl<A, R, C, S> Copy for EntryRef<'_, A, R, C, S>
+impl<V, C, A, R> Copy for EntryRef<'_, V, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: Copy,
+  V: Copy,
 {
 }
 
-impl<'a, A, R, C> EntryRef<'a, A, R, C, Option<&'a [u8]>>
+impl<'a, A, R, C> EntryRef<'a, Option<&'a [u8]>, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn map<NS>(self) -> EntryRef<'a, A, R, C, NS>
+  pub(super) fn map<NV>(self) -> EntryRef<'a, NV, C, A, R>
   where
-    NS: FromValueBytes<'a> + 'a,
+    NV: Value<'a> + 'a,
   {
     EntryRef {
       list: self.list,
       key: self.key,
-      value: NS::from_value_bytes(self.value),
+      value: NV::from_value_bytes(self.value),
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
@@ -83,7 +83,7 @@ where
   }
 }
 
-impl<'a, A, R, C, S> EntryRef<'a, A, R, C, S>
+impl<'a, V, C, A, R> EntryRef<'a, V, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -102,9 +102,9 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> S::Ref
+  pub fn value(&self) -> V::Ref
   where
-    S: FromValueBytes<'a>,
+    V: Value<'a>,
   {
     self.value.as_ref()
   }
@@ -113,18 +113,18 @@ where
   #[inline]
   pub fn is_removed(&self) -> bool
   where
-    S: FromValueBytes<'a>,
+    V: Value<'a>,
   {
     self.value.is_removed()
   }
 }
 
-impl<'a, A, R, C, S> EntryRef<'a, A, R, C, S>
+impl<'a, V, C, A, R> EntryRef<'a, V, C, A, R>
 where
   C: Comparator,
   A: Allocator,
   R: RefCounter,
-  S: FromValueBytes<'a> + 'a,
+  V: Value<'a> + 'a,
 {
   /// Returns the next entry in the map.
   #[inline]
@@ -180,7 +180,7 @@ where
   }
 }
 
-impl<A, R, C, S> EntryRef<'_, A, R, C, S>
+impl<V, C, A, R> EntryRef<'_, V, C, A, R>
 where
   A: Allocator,
   A::Node: WithVersion,
@@ -193,7 +193,7 @@ where
   }
 }
 
-impl<'a, A, R, C, V> EntryRef<'a, A, R, C, V>
+impl<'a, V, C, A, R> EntryRef<'a, V, C, A, R>
 where
   A: Allocator,
   R: RefCounter,

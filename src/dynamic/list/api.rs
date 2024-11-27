@@ -174,22 +174,22 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
     self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, Option<&[u8]>>> {
+  pub fn first_versioned(&self, version: Version) -> Option<EntryRef<'_, Option<&[u8]>, C, A, RC>> {
     self.iter_all_versions(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, Option<&[u8]>>> {
+  pub fn last_versioned(&self, version: Version) -> Option<EntryRef<'_, Option<&[u8]>, C, A, RC>> {
     self.iter_all_versions(version).last()
   }
 
@@ -197,7 +197,7 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -231,7 +231,7 @@ where
     &self,
     version: Version,
     key: &[u8],
-  ) -> Option<EntryRef<'_, A, RC, C, Option<&[u8]>>> {
+  ) -> Option<EntryRef<'_, Option<&[u8]>, C, A, RC>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -272,7 +272,7 @@ where
     &self,
     version: Version,
     upper: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
+  ) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
@@ -282,7 +282,7 @@ where
     &self,
     version: Version,
     lower: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
+  ) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
     self.iter(version).seek_lower_bound(lower)
   }
 

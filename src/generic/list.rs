@@ -4,7 +4,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalent::Comparable,
-  types::{KeyRef, MaybeStructured, Type},
+  types::{KeyRef, LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -24,14 +24,19 @@ use crate::{
 };
 
 mod entry;
-pub use entry::{EntryRef, VersionedEntryRef};
+pub use entry::EntryRef;
+
+use super::GenericValue;
 
 mod api;
 pub(super) mod iterator;
 
 type UpdateOk<'a, 'b, K, V, A, R> = Either<
-  Option<VersionedEntryRef<'a, K, V, A, R>>,
-  Result<VersionedEntryRef<'a, K, V, A, R>, VersionedEntryRef<'a, K, V, A, R>>,
+  Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>>,
+  Result<
+    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
+    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
+  >,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -337,14 +342,15 @@ where
   A: Allocator,
   R: RefCounter,
 {
-  unsafe fn move_to_prev<'a>(
+  unsafe fn move_to_prev<'a, L>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    L: GenericValue<'a, Value = V> + 'a,
   {
     loop {
       unsafe {
@@ -361,14 +367,8 @@ where
         let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent = VersionedEntryRef::from_node_with_pointer(
-            version,
-            *nd,
-            self,
-            pointer,
-            Some(raw_key),
-            Some(nk),
-          );
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(raw_key), Some(nk));
           return Some(ent);
         }
 
@@ -377,14 +377,15 @@ where
     }
   }
 
-  unsafe fn move_to_prev_maximum_version<'a>(
+  unsafe fn move_to_prev_maximum_version<'a, L>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    L: GenericValue<'a, Value = V> + 'a,
   {
     loop {
       unsafe {
@@ -408,7 +409,7 @@ where
 
             if contains_key(&nk) {
               let pointer = nd.get_value_pointer::<A>();
-              let ent = VersionedEntryRef::from_node_with_pointer(
+              let ent = EntryRef::from_node_with_pointer(
                 version,
                 *nd,
                 self,
@@ -432,7 +433,7 @@ where
 
           if !nd.is_removed() && contains_key(&nk) {
             let pointer = nd.get_value_pointer::<A>();
-            let ent = VersionedEntryRef::from_node_with_pointer(
+            let ent = EntryRef::from_node_with_pointer(
               version,
               *nd,
               self,
@@ -449,14 +450,15 @@ where
     }
   }
 
-  unsafe fn move_to_next<'a>(
+  unsafe fn move_to_next<'a, L>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    L: GenericValue<'a, Value = V> + 'a,
   {
     loop {
       unsafe {
@@ -473,14 +475,8 @@ where
         let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent = VersionedEntryRef::from_node_with_pointer(
-            version,
-            *nd,
-            self,
-            pointer,
-            Some(raw_key),
-            Some(nk),
-          );
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(raw_key), Some(nk));
           return Some(ent);
         }
 
@@ -489,14 +485,15 @@ where
     }
   }
 
-  unsafe fn move_to_next_maximum_version<'a>(
+  unsafe fn move_to_next_maximum_version<'a, L>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<VersionedEntryRef<'a, K, V, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    L: GenericValue<'a, Value = V> + 'a,
   {
     loop {
       unsafe {
@@ -536,14 +533,8 @@ where
         let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent = VersionedEntryRef::from_node_with_pointer(
-            version,
-            *nd,
-            self,
-            pointer,
-            Some(raw_key),
-            Some(nk),
-          );
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(raw_key), Some(nk));
           return Some(ent);
         }
 
@@ -923,7 +914,7 @@ where
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let k = found_key.expect("the key cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(version, node_ptr, self, None, None);
+        let old = EntryRef::from_node(version, node_ptr, self, None, None);
 
         if upsert {
           return self
@@ -1099,7 +1090,7 @@ where
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = VersionedEntryRef::from_node(version, node_ptr, self, None, None);
+                let old = EntryRef::from_node(version, node_ptr, self, None, None);
 
                 if upsert {
                   // let curr = nd.as_ref(&self.arena);
@@ -1176,7 +1167,7 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: VersionedEntryRef<'a, K, V, A, R>,
+    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_offset: u32,
@@ -1199,16 +1190,14 @@ where
       | Key::RemoveVacant { .. }
       | Key::RemovePointer { .. } => match old_node.clear_value(&self.arena, success, failure) {
         Ok(_) => Ok(Either::Left(None)),
-        Err((offset, len)) => Ok(Either::Right(Err(
-          VersionedEntryRef::from_node_with_pointer(
-            version,
-            old_node,
-            self,
-            ValuePointerType::new(offset, len),
-            None,
-            None,
-          ),
-        ))),
+        Err((offset, len)) => Ok(Either::Right(Err(EntryRef::from_node_with_pointer(
+          version,
+          old_node,
+          self,
+          ValuePointerType::new(offset, len),
+          None,
+          None,
+        )))),
       },
     }
   }
@@ -1217,7 +1206,7 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: VersionedEntryRef<'a, K, V, A, R>,
+    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
@@ -1234,16 +1223,14 @@ where
       | Key::RemoveVacant { .. }
       | Key::RemovePointer { .. } => match old_node.clear_value(&self.arena, success, failure) {
         Ok(_) => Ok(Either::Left(None)),
-        Err((offset, len)) => Ok(Either::Right(Err(
-          VersionedEntryRef::from_node_with_pointer(
-            version,
-            old_node,
-            self,
-            ValuePointerType::new(offset, len),
-            None,
-            None,
-          ),
-        ))),
+        Err((offset, len)) => Ok(Either::Right(Err(EntryRef::from_node_with_pointer(
+          version,
+          old_node,
+          self,
+          ValuePointerType::new(offset, len),
+          None,
+          None,
+        )))),
       },
     }
   }

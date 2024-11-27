@@ -21,25 +21,10 @@ pub mod entry {
 
 pub use dbutils::equivalentor::*;
 
-/// The value of an entry in the [`SkipMap`].
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(transparent)]
-pub struct Value<T: ?Sized>(T);
-
-impl<T> core::fmt::Debug for Value<T>
-where
-  T: core::fmt::Debug + ?Sized,
-{
-  #[inline]
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    self.0.fmt(f)
-  }
-}
-
 /// Value that can be converted from a byte slice.
-pub trait FromValueBytes<'a>: sealed::Sealed<'a> {}
+pub trait Value<'a>: sealed::Sealed<'a> {}
 
-impl<'a, T> FromValueBytes<'a> for T where T: sealed::Sealed<'a> {}
+impl<'a, T> Value<'a> for T where T: sealed::Sealed<'a> {}
 
 mod sealed {
   pub trait Sealed<'a> {

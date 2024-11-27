@@ -3,38 +3,38 @@ use dbutils::types::{KeyRef, LazyRef, Type};
 use super::{RefCounter, SkipList};
 use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
+  generic::GenericValue,
   types::internal::ValuePointer,
   Version,
 };
 
-/// A versioned entry reference of the skipmap.
-///
-/// Compared to the [`EntryRef`], this one's value can be `None` which means the entry is removed.
-pub struct VersionedEntryRef<'a, K, V, A, R>
+/// An entry reference of the `SkipMap`.
+pub struct EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
-  V: ?Sized + Type,
+  V: GenericValue<'a>,
   A: Allocator,
   R: RefCounter,
 {
-  pub(super) list: &'a SkipList<K, V, A, R>,
+  pub(super) list: &'a SkipList<K, V::Value, A, R>,
   pub(super) key: LazyRef<'a, K>,
-  pub(super) value: Option<LazyRef<'a, V>>,
+  pub(super) value: V,
   pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<K, V, A, R> core::fmt::Debug for VersionedEntryRef<'_, K, V, A, R>
+impl<'a, K, V, A, R> core::fmt::Debug for EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
-  V: ?Sized + Type,
+  V: GenericValue<'a>,
+  V::Ref: core::fmt::Debug,
   A: Allocator,
   R: RefCounter,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("VersionedEntryRef")
+    f.debug_struct("EntryRef")
       .field("key", &self.key())
       .field("value", &self.value())
       .field("version", &self.version)
@@ -42,12 +42,11 @@ where
   }
 }
 
-impl<'a, K, V, A, R> Clone for VersionedEntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R> Clone for EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
-  V: ?Sized + Type,
-  V::Ref<'a>: Clone,
+  V: GenericValue<'a> + Clone,
   A: Allocator,
   R: RefCounter,
 {
@@ -64,10 +63,35 @@ where
   }
 }
 
-impl<'a, K, V, A, R> VersionedEntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R> EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>
 where
   K: ?Sized + Type,
+  K::Ref<'a>: Clone,
   V: ?Sized + Type,
+  A: Allocator,
+  R: RefCounter,
+{
+  #[inline]
+  pub(super) fn map<NV>(self) -> EntryRef<'a, K, NV, A, R>
+  where
+    NV: GenericValue<'a, Value = V> + 'a,
+  {
+    EntryRef {
+      list: self.list,
+      key: self.key,
+      value: NV::from_lazy_ref(self.value),
+      value_part_pointer: self.value_part_pointer,
+      version: self.version,
+      query_version: self.query_version,
+      ptr: self.ptr,
+    }
+  }
+}
+
+impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
+where
+  K: ?Sized + Type,
+  V: GenericValue<'a>,
   A: Allocator,
   R: RefCounter,
 {
@@ -85,31 +109,28 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> Option<&V::Ref<'a>> {
-    self.value.as_deref()
+  pub fn value(&self) -> V::Ref {
+    self.value.as_ref()
   }
 
   /// Returns the value in raw bytes
   #[inline]
   pub fn raw_value(&self) -> Option<&'a [u8]> {
-    self
-      .value
-      .as_ref()
-      .map(|value| value.raw().expect("raw value must be available"))
+    self.value.raw()
   }
 
   /// Returns if the entry is marked as removed
   #[inline]
   pub fn is_removed(&self) -> bool {
-    self.value().is_none()
+    self.value.is_removed()
   }
 }
 
-impl<'a, K, V, A, R> VersionedEntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
-  V: ?Sized + Type,
+  V: GenericValue<'a> + 'a,
   A: Allocator,
   R: RefCounter,
 {
@@ -164,10 +185,10 @@ where
   }
 }
 
-impl<K, V, A, R> VersionedEntryRef<'_, K, V, A, R>
+impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
-  V: ?Sized + Type,
+  V: GenericValue<'a>,
   A: Allocator,
   A::Node: WithVersion,
   R: RefCounter,
@@ -179,10 +200,10 @@ where
   }
 }
 
-impl<'a, K, V, A, R> VersionedEntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
 where
   K: ?Sized + Type,
-  V: ?Sized + Type,
+  V: GenericValue<'a> + 'a,
   A: Allocator,
   R: RefCounter,
 {
@@ -190,7 +211,7 @@ where
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V, A, R>,
+    list: &'a SkipList<K, V::Value, A, R>,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
   ) -> Self {
@@ -214,7 +235,7 @@ where
       Self {
         list,
         key,
-        value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
+        value: V::from_bytes(raw_value),
         value_part_pointer: vp,
         version: node.version(),
         query_version,
@@ -227,7 +248,7 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V, A, R>,
+    list: &'a SkipList<K, V::Value, A, R>,
     pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
@@ -253,122 +274,12 @@ where
       Self {
         list,
         key,
-        value: raw_value.map(|raw_value| LazyRef::from_raw(raw_value)),
+        value: V::from_bytes(raw_value),
         value_part_pointer: pointer,
         version: node.version(),
         query_version,
         ptr: node,
       }
     }
-  }
-}
-
-/// An entry reference to the skipmap's entry.
-///
-/// Compared to the [`VersionedEntryRef`], this one's value cannot be `None`.
-pub struct EntryRef<'a, K, V, A, R>(pub(crate) VersionedEntryRef<'a, K, V, A, R>)
-where
-  K: Type + ?Sized,
-  V: Type + ?Sized,
-  A: Allocator,
-  R: RefCounter;
-
-impl<K, V, A, R> core::fmt::Debug for EntryRef<'_, K, V, A, R>
-where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  A: Allocator,
-  R: RefCounter,
-{
-  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-    f.debug_struct("EntryRef")
-      .field("key", &self.key())
-      .field("value", &self.value())
-      .finish()
-  }
-}
-
-impl<'a, K, V, A, R> Clone for EntryRef<'a, K, V, A, R>
-where
-  K: ?Sized + Type,
-  K::Ref<'a>: Clone,
-  V: ?Sized + Type,
-  V::Ref<'a>: Clone,
-  A: Allocator,
-  R: RefCounter,
-{
-  fn clone(&self) -> Self {
-    Self(self.0.clone())
-  }
-}
-
-impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
-where
-  K: ?Sized + Type,
-  K::Ref<'a>: KeyRef<'a, K>,
-  V: ?Sized + Type,
-  A: Allocator,
-  R: RefCounter,
-{
-  /// Returns the next entry in the map.
-  #[inline]
-  pub fn next(&self) -> Option<Self> {
-    self.0.next_in(false).map(Self)
-  }
-
-  /// Returns the previous entry in the map.
-  #[inline]
-  pub fn prev(&self) -> Option<Self> {
-    self.0.prev_in(false).map(Self)
-  }
-}
-
-impl<K, V, A, R> EntryRef<'_, K, V, A, R>
-where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  A: Allocator,
-  A::Node: WithVersion,
-  R: RefCounter,
-{
-  /// Returns the version of the entry
-  #[inline]
-  pub fn version(&self) -> Version {
-    self.0.version()
-  }
-}
-
-impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
-where
-  K: ?Sized + Type,
-  V: ?Sized + Type,
-  A: Allocator,
-  R: RefCounter,
-{
-  /// Returns the reference to the key
-  #[inline]
-  pub fn key(&self) -> &K::Ref<'a> {
-    self.0.key()
-  }
-
-  /// Returns the key in raw bytes
-  #[inline]
-  pub fn raw_key(&self) -> &'a [u8] {
-    self.0.raw_key()
-  }
-
-  /// Returns the reference to the value, `None` means the entry is removed.
-  #[inline]
-  pub fn value(&self) -> &V::Ref<'a> {
-    self.0.value().expect("EntryRef's value cannot be `None`")
-  }
-
-  /// Returns the value in raw bytes
-  #[inline]
-  pub fn raw_value(&self) -> &'a [u8] {
-    self
-      .0
-      .raw_value()
-      .expect("EntryRef's raw value cannot be `None`")
   }
 }

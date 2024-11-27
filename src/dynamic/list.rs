@@ -10,6 +10,7 @@ use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
+  dynamic::Value,
   encode_key_size_and_height,
   error::Error,
   internal::RefMeta,
@@ -24,14 +25,12 @@ use crate::{
 mod entry;
 pub use entry::EntryRef;
 
-use super::FromValueBytes;
-
 mod api;
 pub(super) mod iterator;
 
 type UpdateOk<'a, 'b, A, RC, C> = Either<
-  Option<EntryRef<'a, A, RC, C, Option<&'a [u8]>>>,
-  Result<EntryRef<'a, A, RC, C, Option<&'a [u8]>>, EntryRef<'a, A, RC, C, Option<&'a [u8]>>>,
+  Option<EntryRef<'a, Option<&'a [u8]>, C, A, RC>>,
+  Result<EntryRef<'a, Option<&'a [u8]>, C, A, RC>, EntryRef<'a, Option<&'a [u8]>, C, A, RC>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -321,9 +320,9 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<EntryRef<'a, A, R, C, V>>
+  ) -> Option<EntryRef<'a, V, C, A, R>>
   where
-    V: FromValueBytes<'a> + 'a,
+    V: Value<'a> + 'a,
   {
     loop {
       unsafe {
@@ -355,9 +354,9 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<EntryRef<'a, A, R, C, V>>
+  ) -> Option<EntryRef<'a, V, C, A, R>>
   where
-    V: FromValueBytes<'a> + 'a,
+    V: Value<'a> + 'a,
   {
     loop {
       unsafe {
@@ -415,9 +414,9 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<EntryRef<'a, A, R, C, V>>
+  ) -> Option<EntryRef<'a, V, C, A, R>>
   where
-    V: FromValueBytes<'a> + 'a,
+    V: Value<'a> + 'a,
   {
     loop {
       unsafe {
@@ -449,9 +448,9 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<EntryRef<'a, A, R, C, V>>
+  ) -> Option<EntryRef<'a, V, C, A, R>>
   where
-    V: FromValueBytes<'a> + 'a,
+    V: Value<'a> + 'a,
   {
     loop {
       unsafe {
@@ -1113,7 +1112,7 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, A, R, C, Option<&'a [u8]>>,
+    old: EntryRef<'a, Option<&'a [u8]>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_offset: u32,
@@ -1154,7 +1153,7 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, A, R, C, Option<&'a [u8]>>,
+    old: EntryRef<'a, Option<&'a [u8]>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,

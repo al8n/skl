@@ -59,6 +59,12 @@ where
   A: Allocator,
   R: RefCounter,
 {
+  /// Returns the comparator.
+  #[inline]
+  pub const fn comparator(&self) -> &C {
+    self.list.comparator()
+  }
+
   /// Returns the reference to the key
   #[inline]
   pub const fn key(&self) -> &'a [u8] {
@@ -284,6 +290,12 @@ where
   A: Allocator,
   R: RefCounter,
 {
+  /// Returns the comparator.
+  #[inline]
+  pub const fn comparator(&self) -> &C {
+    self.0.comparator()
+  }
+
   /// Returns the reference to the key
   #[inline]
   pub fn key(&self) -> &'a [u8] {

@@ -176,6 +176,11 @@ where
   A: Allocator,
   R: RefCounter,
 {
+  #[inline]
+  const fn comparator(&self) -> &C {
+    &self.cmp
+  }
+
   fn new_node<'a, E>(
     &'a self,
     version: Version,

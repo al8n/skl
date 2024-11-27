@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.21.0
+
+- Use state pattern for `EntryRef`
+
 ## 0.20.0
 
 - Add dynamic `SkipMap`s

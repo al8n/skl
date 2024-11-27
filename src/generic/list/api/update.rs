@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
-  types::{KeyRef, MaybeStructured, Type},
+  types::{KeyRef, LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 
@@ -32,7 +32,7 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -50,7 +50,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -80,7 +80,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -104,7 +104,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -129,7 +129,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -147,7 +147,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<K::Error, V::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -176,7 +176,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -201,7 +201,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -226,7 +226,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -249,7 +249,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -279,7 +279,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -305,7 +305,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Among<KE, VE, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -335,7 +335,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -362,7 +362,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Either<K::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -389,14 +389,14 @@ where
             if old.is_removed() {
               None
             } else {
-              Some(EntryRef(old))
+              Some(old.map())
             }
           }
           Err(current) => {
             if current.is_removed() {
               None
             } else {
-              Some(EntryRef(current))
+              Some(current.map())
             }
           }
         },
@@ -415,7 +415,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Either<K::Error, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -441,7 +441,7 @@ where
             if old.is_removed() {
               None
             } else {
-              Some(EntryRef(old))
+              Some(old.map())
             }
           }
           None => None,
@@ -467,7 +467,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, A, R>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R>>, Either<E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
   {
@@ -495,7 +495,7 @@ where
             if old.is_removed() {
               None
             } else {
-              Some(EntryRef(old))
+              Some(old.map())
             }
           }
           None => None,

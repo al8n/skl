@@ -25,7 +25,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
     self.insert_at_height(version, self.random_height(), key, value)
   }
 
@@ -40,7 +40,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -65,7 +65,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -90,7 +90,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -111,7 +111,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -129,7 +129,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -154,7 +154,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -180,7 +180,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -201,7 +201,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -224,7 +224,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -251,7 +251,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -273,7 +273,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -300,7 +300,7 @@ where
           if old.is_removed() {
             None
           } else {
-            Some(EntryRef(old))
+            Some(old.map())
           }
         })
       })
@@ -323,7 +323,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -344,14 +344,14 @@ where
             if old.is_removed() {
               None
             } else {
-              Some(EntryRef(old))
+              Some(old.map())
             }
           }
           Err(current) => {
             if current.is_removed() {
               None
             } else {
-              Some(EntryRef(current))
+              Some(current.map())
             }
           }
         },
@@ -370,7 +370,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Error> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -390,7 +390,7 @@ where
             if old.is_removed() {
               None
             } else {
-              Some(EntryRef(old))
+              Some(old.map())
             }
           }
           None => None,
@@ -416,7 +416,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, A, R, C>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key_builder.size(), 0)
       .map_err(Either::Right)?;
@@ -441,7 +441,7 @@ where
             if old.is_removed() {
               None
             } else {
-              Some(EntryRef(old))
+              Some(old.map())
             }
           }
           None => None,

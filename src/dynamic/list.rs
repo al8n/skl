@@ -10,6 +10,7 @@ use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
+  dynamic::Value,
   encode_key_size_and_height,
   error::Error,
   internal::RefMeta,
@@ -22,14 +23,14 @@ use crate::{
 };
 
 mod entry;
-pub use entry::{EntryRef, VersionedEntryRef};
+pub use entry::EntryRef;
 
 mod api;
 pub(super) mod iterator;
 
 type UpdateOk<'a, 'b, A, RC, C> = Either<
-  Option<VersionedEntryRef<'a, A, RC, C>>,
-  Result<VersionedEntryRef<'a, A, RC, C>, VersionedEntryRef<'a, A, RC, C>>,
+  Option<EntryRef<'a, Option<&'a [u8]>, C, A, RC>>,
+  Result<EntryRef<'a, Option<&'a [u8]>, C, A, RC>, EntryRef<'a, Option<&'a [u8]>, C, A, RC>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -314,12 +315,15 @@ where
   C: Comparator,
   R: RefCounter,
 {
-  unsafe fn move_to_prev<'a>(
+  unsafe fn move_to_prev<'a, V>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
+  ) -> Option<EntryRef<'a, V, C, A, R>>
+  where
+    V: Value<'a> + 'a,
+  {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.head.offset() {
@@ -334,9 +338,10 @@ where
         let nk = nd.get_key(&self.arena);
         if contains_key(nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(nk));
-          return Some(ent);
+          let value =
+            nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
+          let ent = EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), value);
+          return Some(ent.map());
         }
 
         *nd = self.get_prev(*nd, 0);
@@ -344,12 +349,15 @@ where
     }
   }
 
-  unsafe fn move_to_prev_maximum_version<'a>(
+  unsafe fn move_to_prev_maximum_version<'a, V>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
+  ) -> Option<EntryRef<'a, V, C, A, R>>
+  where
+    V: Value<'a> + 'a,
+  {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.head.offset() {
@@ -371,9 +379,10 @@ where
 
             if contains_key(nk) {
               let pointer = nd.get_value_pointer::<A>();
-              let ent =
-                VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(nk));
-              return Some(ent);
+              let value =
+                nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
+              let ent = EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), value);
+              return Some(ent.map());
             }
           }
 
@@ -388,9 +397,10 @@ where
 
           if !nd.is_removed() && contains_key(nk) {
             let pointer = nd.get_value_pointer::<A>();
-            let ent =
-              VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(nk));
-            return Some(ent);
+            let value =
+              nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
+            let ent = EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), value);
+            return Some(ent.map());
           }
         }
 
@@ -399,12 +409,15 @@ where
     }
   }
 
-  unsafe fn move_to_next<'a>(
+  unsafe fn move_to_next<'a, V>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
+  ) -> Option<EntryRef<'a, V, C, A, R>>
+  where
+    V: Value<'a> + 'a,
+  {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.tail.offset() {
@@ -419,9 +432,10 @@ where
         let nk = nd.get_key(&self.arena);
         if contains_key(nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(nk));
-          return Some(ent);
+          let value =
+            nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
+          let ent = EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), value);
+          return Some(ent.map());
         }
 
         *nd = self.get_next(*nd, 0);
@@ -429,12 +443,15 @@ where
     }
   }
 
-  unsafe fn move_to_next_maximum_version<'a>(
+  unsafe fn move_to_next_maximum_version<'a, V>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&[u8]) -> bool,
-  ) -> Option<VersionedEntryRef<'a, A, R, C>> {
+  ) -> Option<EntryRef<'a, V, C, A, R>>
+  where
+    V: Value<'a> + 'a,
+  {
     loop {
       unsafe {
         if nd.is_null() || nd.offset() == self.tail.offset() {
@@ -472,9 +489,10 @@ where
         let nk = nd.get_key(&self.arena);
         if contains_key(nk) {
           let pointer = nd.get_value_pointer::<A>();
-          let ent =
-            VersionedEntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(nk));
-          return Some(ent);
+          let value =
+            nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
+          let ent = EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), value);
+          return Some(ent.map());
         }
 
         *nd = self.get_next(*nd, 0);
@@ -584,10 +602,10 @@ where
   ///
   /// ## Safety:
   /// - All of splices in the inserter must be contains node ptrs are allocated by the current skip map.
-  unsafe fn find_splice<'a, 'b: 'a>(
+  unsafe fn find_splice<'a>(
     &'a self,
     version: Version,
-    key: Either<&'a [u8], &'b [u8]>,
+    key: Either<&'a [u8], &'a [u8]>,
     ins: &mut Inserter<'a, <A::Node as Node>::Pointer>,
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>) {
@@ -660,10 +678,10 @@ where
   /// ## Safety
   /// - `level` is less than `MAX_HEIGHT`.
   /// - `start` must be allocated by self's arena.
-  unsafe fn find_splice_for_level<'a, 'b: 'a>(
+  unsafe fn find_splice_for_level<'a>(
     &'a self,
     version: Version,
-    key: Either<&'a [u8], &'b [u8]>,
+    key: Either<&'a [u8], &'a [u8]>,
     level: usize,
     start: <A::Node as Node>::Pointer,
   ) -> FindResult<<A::Node as Node>::Pointer> {
@@ -728,11 +746,11 @@ where
     }
   }
 
-  fn try_get_pointer<'a, 'b: 'a>(
+  fn try_get_pointer<'a>(
     &'a self,
     next_node: &<A::Node as Node>::Pointer,
     next_key: &[u8],
-    key: Either<&'a [u8], &'b [u8]>,
+    key: Either<&'a [u8], &'a [u8]>,
   ) -> Option<Pointer> {
     match key {
       Either::Left(key) | Either::Right(key) => match self.arena.options().compression_policy() {
@@ -764,11 +782,11 @@ where
   /// ## Safety
   /// - The caller must ensure that the node is allocated by the arena.
   /// - The caller must ensure that the node is not null.
-  unsafe fn key_is_after_node<'a, 'b: 'a>(
+  unsafe fn key_is_after_node<'a>(
     &'a self,
     nd: <A::Node as Node>::Pointer,
     version: Version,
-    key: Either<&'a [u8], &'b [u8]>,
+    key: Either<&'a [u8], &'a [u8]>,
   ) -> bool {
     let nd_key = self
       .arena
@@ -841,7 +859,8 @@ where
       if found {
         let node_ptr = ptr.expect("the NodePtr cannot be `None` when we found");
         let k = found_key.expect("the key cannot be `None` when we found");
-        let old = VersionedEntryRef::from_node(version, node_ptr, self, None);
+        let (value, _) = node_ptr.get_value_with_pointer(&self.arena);
+        let old = EntryRef::from_node(version, node_ptr, self, None, value);
 
         if upsert {
           return self.upsert(
@@ -1015,7 +1034,8 @@ where
                 let node_ptr = fr
                   .curr
                   .expect("the current should not be `None` when we found");
-                let old = VersionedEntryRef::from_node(version, node_ptr, self, None);
+                let (value, _) = node_ptr.get_value_with_pointer(&self.arena);
+                let old = EntryRef::from_node(version, node_ptr, self, None, value);
 
                 if upsert {
                   // let curr = nd.as_ref(&self.arena);
@@ -1092,7 +1112,7 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: VersionedEntryRef<'a, A, R, C>,
+    old: EntryRef<'a, Option<&'a [u8]>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_offset: u32,
@@ -1113,15 +1133,17 @@ where
       Key::Remove(_) | Key::RemoveVacant { .. } | Key::RemovePointer { .. } => {
         match old_node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
-          Err((offset, len)) => Ok(Either::Right(Err(
-            VersionedEntryRef::from_node_with_pointer(
-              version,
-              old_node,
-              self,
-              ValuePointerType::new(offset, len),
-              None,
-            ),
-          ))),
+          Err((offset, len)) => {
+            let pointer = ValuePointerType::new(offset, len);
+            let value = old_node.get_value_by_value_offset(
+              &self.arena,
+              pointer.value_offset,
+              pointer.value_len,
+            );
+            Ok(Either::Right(Err(EntryRef::from_node_with_pointer(
+              version, old_node, self, None, value,
+            ))))
+          }
         }
       }
     }
@@ -1131,7 +1153,7 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: VersionedEntryRef<'a, A, R, C>,
+    old: EntryRef<'a, Option<&'a [u8]>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
@@ -1146,15 +1168,17 @@ where
       Key::Remove(_) | Key::RemoveVacant { .. } | Key::RemovePointer { .. } => {
         match old_node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),
-          Err((offset, len)) => Ok(Either::Right(Err(
-            VersionedEntryRef::from_node_with_pointer(
-              version,
-              old_node,
-              self,
-              ValuePointerType::new(offset, len),
-              None,
-            ),
-          ))),
+          Err((offset, len)) => {
+            let pointer = ValuePointerType::new(offset, len);
+            let value = old_node.get_value_by_value_offset(
+              &self.arena,
+              pointer.value_offset,
+              pointer.value_len,
+            );
+            Ok(Either::Right(Err(EntryRef::from_node_with_pointer(
+              version, old_node, self, None, value,
+            ))))
+          }
         }
       }
     }

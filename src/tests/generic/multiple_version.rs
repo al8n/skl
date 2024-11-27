@@ -1591,7 +1591,7 @@ where
       ent.value(),
       make_value(i + 1000).as_slice(),
       "{} != {}",
-      core::str::from_utf8(ent.value()).unwrap(),
+      core::str::from_utf8(ent.value().as_ref()).unwrap(),
       core::str::from_utf8(make_value(i + 1000).as_slice()).unwrap()
     );
 

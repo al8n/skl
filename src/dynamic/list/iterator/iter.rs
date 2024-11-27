@@ -5,6 +5,8 @@ use core::{
 
 use dbutils::equivalentor::Comparator;
 
+use crate::Value;
+
 use super::{
   super::{Allocator, EntryRef, RefCounter, SkipList, Version},
   IterAll,
@@ -82,13 +84,13 @@ where
 {
   /// Returns the entry at the current head position of the iterator.
   #[inline]
-  pub fn head(&self) -> Option<EntryRef<'a, A, RC, C>> {
+  pub fn head(&self) -> Option<EntryRef<'a, A, RC, C, &'a [u8]>> {
     self.0.head().map(|e| EntryRef::<A, RC, C>(*e))
   }
 
   /// Returns the entry at the current tail position of the iterator.
   #[inline]
-  pub fn tail(&self) -> Option<EntryRef<'a, A, RC, C>> {
+  pub fn tail(&self) -> Option<EntryRef<'a, A, RC, C, &'a [u8]>> {
     self.0.tail().map(|e| EntryRef::<A, RC, C>(*e))
   }
 }

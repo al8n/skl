@@ -15,7 +15,7 @@ use crate::{
   Header, Version,
 };
 
-use super::{iterator, EntryRef, RefCounter, SkipList, VersionedEntryRef};
+use super::{iterator, EntryRef, RefCounter, SkipList};
 
 mod update;
 
@@ -174,22 +174,22 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A, RC, C>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A, RC, C>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
     self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, RC, C>> {
+  pub fn first_versioned(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, Option<&[u8]>>> {
     self.iter_all_versions(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned(&self, version: Version) -> Option<VersionedEntryRef<'_, A, RC, C>> {
+  pub fn last_versioned(&self, version: Version) -> Option<EntryRef<'_, A, RC, C, Option<&[u8]>>> {
     self.iter_all_versions(version).last()
   }
 
@@ -197,22 +197,16 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A, RC, C>> {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
       let raw_node_key = node.get_key(&self.arena);
-      let (value, pointer) = node.get_value_with_pointer(&self.arena);
+      let (value, _) = node.get_value_with_pointer(&self.arena);
       if eq {
-        return value.map(|_| {
-          EntryRef(VersionedEntryRef::from_node_with_pointer(
-            version,
-            node,
-            self,
-            pointer,
-            Some(raw_node_key),
-          ))
+        return value.map(|value| {
+          EntryRef::from_node_with_pointer(version, node, self, Some(raw_node_key), value)
         });
       }
 
@@ -224,14 +218,8 @@ where
         return None;
       }
 
-      value.map(|_| {
-        EntryRef(VersionedEntryRef::from_node_with_pointer(
-          version,
-          node,
-          self,
-          pointer,
-          Some(raw_node_key),
-        ))
+      value.map(|value| {
+        EntryRef::from_node_with_pointer(version, node, self, Some(raw_node_key), value)
       })
     }
   }
@@ -243,20 +231,20 @@ where
     &self,
     version: Version,
     key: &[u8],
-  ) -> Option<VersionedEntryRef<'_, A, RC, C>> {
+  ) -> Option<EntryRef<'_, A, RC, C, Option<&[u8]>>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
       let node = n?;
       let raw_node_key = node.get_key(&self.arena);
-      let (_, pointer) = node.get_value_with_pointer(&self.arena);
+      let (value, _) = node.get_value_with_pointer(&self.arena);
       if eq {
-        return Some(VersionedEntryRef::from_node_with_pointer(
+        return Some(EntryRef::from_node_with_pointer(
           version,
           node,
           self,
-          pointer,
           Some(raw_node_key),
+          value,
         ));
       }
 
@@ -268,12 +256,12 @@ where
         return None;
       }
 
-      Some(VersionedEntryRef::from_node_with_pointer(
+      Some(EntryRef::from_node_with_pointer(
         version,
         node,
         self,
-        pointer,
         Some(raw_node_key),
+        value,
       ))
     }
   }
@@ -284,7 +272,7 @@ where
     &self,
     version: Version,
     upper: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, A, RC, C>> {
+  ) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
@@ -294,30 +282,30 @@ where
     &self,
     version: Version,
     lower: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, A, RC, C>> {
+  ) -> Option<EntryRef<'_, A, RC, C, &[u8]>> {
     self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, A, RC, C> {
-    iterator::Iter::new(version, self)
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, &[u8], A, RC, C> {
+    iterator::Iter::new(version, self, false)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> iterator::IterAll<'_, A, RC, C> {
-    iterator::IterAll::new(version, self, true)
+  pub fn iter_all_versions(&self, version: Version) -> iterator::Iter<'_, Option<&[u8]>, A, RC, C> {
+    iterator::Iter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<Q, R>(&self, version: Version, range: R) -> iterator::Iter<'_, A, RC, C, Q, R>
+  pub fn range<Q, R>(&self, version: Version, range: R) -> iterator::Iter<'_, &[u8], A, RC, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
-    iterator::Iter::range(version, self, range)
+    iterator::Iter::range(version, self, range, false)
   }
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
@@ -326,11 +314,11 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> iterator::IterAll<'_, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, Option<&[u8]>, A, RC, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
-    iterator::IterAll::range(version, self, range, true)
+    iterator::Iter::range(version, self, range, true)
   }
 }

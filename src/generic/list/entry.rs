@@ -1,4 +1,4 @@
-use dbutils::types::{KeyRef, LazyRef, Type};
+use dbutils::{equivalentor::Comparator, types::{KeyRef, LazyRef, Type}};
 
 use super::{RefCounter, SkipList};
 use crate::{
@@ -9,14 +9,14 @@ use crate::{
 };
 
 /// An entry reference of the `SkipMap`.
-pub struct EntryRef<'a, K, V, A, R>
+pub struct EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: GenericValue<'a>,
   A: Allocator,
   R: RefCounter,
 {
-  pub(super) list: &'a SkipList<K, V::Value, A, R>,
+  pub(super) list: &'a SkipList<K, V::Value, A, R, C>,
   pub(super) key: LazyRef<'a, K>,
   pub(super) value: V,
   pub(super) value_part_pointer: ValuePointer,
@@ -25,7 +25,7 @@ where
   pub(super) ptr: <A::Node as Node>::Pointer,
 }
 
-impl<'a, K, V, A, R> core::fmt::Debug for EntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R, C> core::fmt::Debug for EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: GenericValue<'a>,
@@ -42,7 +42,7 @@ where
   }
 }
 
-impl<'a, K, V, A, R> Clone for EntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R, C> Clone for EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
@@ -63,7 +63,7 @@ where
   }
 }
 
-impl<'a, K, V, A, R> EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>
+impl<'a, K, V, A, R, C> EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
@@ -72,7 +72,7 @@ where
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn map<NV>(self) -> EntryRef<'a, K, NV, A, R>
+  pub(super) fn map<NV>(self) -> EntryRef<'a, K, NV, A, R, C>
   where
     NV: GenericValue<'a, Value = V> + 'a,
   {
@@ -88,7 +88,7 @@ where
   }
 }
 
-impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: GenericValue<'a>,
@@ -126,13 +126,14 @@ where
   }
 }
 
-impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
   V: GenericValue<'a> + 'a,
   A: Allocator,
   R: RefCounter,
+  C: Comparator,
 {
   /// Returns the next entry in the map.
   #[inline]
@@ -185,7 +186,7 @@ where
   }
 }
 
-impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: GenericValue<'a>,
@@ -200,7 +201,7 @@ where
   }
 }
 
-impl<'a, K, V, A, R> EntryRef<'a, K, V, A, R>
+impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: GenericValue<'a> + 'a,
@@ -211,7 +212,7 @@ where
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V::Value, A, R>,
+    list: &'a SkipList<K, V::Value, A, R, C>,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
   ) -> Self {
@@ -248,7 +249,7 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V::Value, A, R>,
+    list: &'a SkipList<K, V::Value, A, R, C>,
     pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,

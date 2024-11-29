@@ -2,9 +2,7 @@ use core::{cmp, marker::PhantomData, ptr::NonNull, sync::atomic::Ordering};
 
 use among::Among;
 use dbutils::{
-  buffer::VacantBuffer,
-  equivalent::Comparable,
-  types::{KeyRef, LazyRef, MaybeStructured, Type},
+  buffer::VacantBuffer, equivalent::Comparable, equivalentor::Comparator, types::{KeyRef, LazyRef, MaybeStructured, Type}
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -31,18 +29,18 @@ use super::GenericValue;
 mod api;
 pub(super) mod iterator;
 
-type UpdateOk<'a, 'b, K, V, A, R> = Either<
-  Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>>,
+type UpdateOk<'a, 'b, K, V, A, R, C> = Either<
+  Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>>,
   Result<
-    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
-    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
+    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
+    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
   >,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<K: ?Sized, V: ?Sized, A: Allocator, R: RefCounter> {
+pub struct SkipList<K: ?Sized, V: ?Sized, A: Allocator, R: RefCounter, C> {
   pub(crate) arena: A,
   meta: RefMeta<A::Meta, R>,
   head: <A::Node as Node>::Pointer,
@@ -55,33 +53,38 @@ pub struct SkipList<K: ?Sized, V: ?Sized, A: Allocator, R: RefCounter> {
   #[cfg(all(test, feature = "std"))]
   yield_now: bool,
 
+  cmp: C,
+
   _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-unsafe impl<K, V, A, R> Send for SkipList<K, V, A, R>
+unsafe impl<K, V, A, R, C> Send for SkipList<K, V, A, R, C>
 where
   K: ?Sized,
   V: ?Sized,
   A: Allocator + Send,
   R: RefCounter + Send,
+  C: Send,
 {
 }
 
-unsafe impl<K, V, A, R> Sync for SkipList<K, V, A, R>
+unsafe impl<K, V, A, R, C> Sync for SkipList<K, V, A, R, C>
 where
   K: ?Sized,
   V: ?Sized,
   A: Allocator + Sync,
   R: RefCounter + Sync,
+  C: Sync,
 {
 }
 
-impl<K, V, A, R> Clone for SkipList<K, V, A, R>
+impl<K, V, A, R, C> Clone for SkipList<K, V, A, R, C>
 where
   K: ?Sized,
   V: ?Sized,
   A: Allocator,
   R: RefCounter,
+  C: Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -95,12 +98,13 @@ where
       header: self.header,
       #[cfg(all(test, feature = "std"))]
       yield_now: self.yield_now,
+      cmp: self.cmp.clone(),
       _m: PhantomData,
     }
   }
 }
 
-impl<K, V, A, R> SkipList<K, V, A, R>
+impl<K, V, A, R, C> SkipList<K, V, A, R, C>
 where
   K: ?Sized,
   V: ?Sized,
@@ -113,7 +117,7 @@ where
   }
 }
 
-impl<K, V, A, R> Constructable for SkipList<K, V, A, R>
+impl<K, V, A, R, C> Constructable for SkipList<K, V, A, R, C>
 where
   K: ?Sized,
   V: ?Sized,
@@ -121,7 +125,7 @@ where
   R: RefCounter,
 {
   type Allocator = A;
-  type Comparator = ();
+  type Comparator = C;
 
   #[inline]
   fn allocator(&self) -> &Self::Allocator {
@@ -165,7 +169,7 @@ where
     head: <<Self::Allocator as crate::allocator::Sealed>::Node as crate::allocator::Node>::Pointer,
     tail: <<Self::Allocator as crate::allocator::Sealed>::Node as crate::allocator::Node>::Pointer,
     header: Option<Header>,
-    _: Self::Comparator,
+    cmp: Self::Comparator,
   ) -> Self {
     Self {
       #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -177,12 +181,13 @@ where
       header,
       #[cfg(all(test, feature = "std"))]
       yield_now: false,
+      cmp,
       _m: PhantomData,
     }
   }
 }
 
-impl<K, V, A, R> SkipList<K, V, A, R>
+impl<K, V, A, R, C> SkipList<K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -281,7 +286,7 @@ where
   }
 }
 
-impl<K, V, A, R> SkipList<K, V, A, R>
+impl<K, V, A, R, C> SkipList<K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -335,7 +340,7 @@ where
   }
 }
 
-impl<K, V, A, R> SkipList<K, V, A, R>
+impl<K, V, A, R, C> SkipList<K, V, A, R, C>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -347,7 +352,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R, C>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     L: GenericValue<'a, Value = V> + 'a,
@@ -382,7 +387,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R, C>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     L: GenericValue<'a, Value = V> + 'a,
@@ -455,7 +460,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R, C>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     L: GenericValue<'a, Value = V> + 'a,
@@ -490,7 +495,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R>>
+  ) -> Option<EntryRef<'a, K, L, A, R, C>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
     L: GenericValue<'a, Value = V> + 'a,
@@ -558,6 +563,7 @@ where
   ) -> (Option<<A::Node as Node>::Pointer>, bool)
   where
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     let mut x = self.head;
     let mut level = self.meta().height() as usize - 1;
@@ -590,7 +596,7 @@ where
 
       // let next_node = next.as_ref(&self.arena);
       let next_key = ty_ref::<K>(next.get_key(&self.arena));
-      let cmp = Comparable::compare(key, &next_key).then_with(|| next.version().cmp(&version));
+      let cmp = self.cmp.compare(&next_key, key).reverse().then_with(|| next.version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {
@@ -654,6 +660,7 @@ where
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>)
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    C: Comparator,
   {
     let list_height = self.meta().height() as u32;
     let mut level = 0;
@@ -733,6 +740,7 @@ where
   ) -> FindResult<<A::Node as Node>::Pointer>
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    C: Comparator,
   {
     let mut prev = start;
 
@@ -753,7 +761,7 @@ where
       // let next_node = next.as_ref(&self.arena);
       let next_key = next.get_key(&self.arena);
 
-      let cmp = Key::<'a, '_, K, A>::compare(key, Either::Left(next_key));
+      let cmp = Key::<'a, '_, K, A>::compare(&self.cmp, key, Either::Left(next_key));
 
       let mut found_key = None;
 
@@ -839,11 +847,12 @@ where
   ) -> bool
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    C: Comparator,
   {
     let nd_key = self
       .arena
       .get_bytes(nd.key_offset() as usize, nd.key_size() as usize);
-    match Key::<'a, '_, K, A>::compare(key, Either::Left(nd_key)) {
+    match Key::<'a, '_, K, A>::compare(&self.cmp, key, Either::Left(nd_key)) {
       cmp::Ordering::Less => false,
       cmp::Ordering::Greater => true,
       cmp::Ordering::Equal => {
@@ -898,9 +907,10 @@ where
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A, R>, Among<K::Error, E, Error>>
+  ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Among<K::Error, E, Error>>
   where
     K::Ref<'a>: KeyRef<'a, K>,
+    C: Comparator,
   {
     let is_remove = key.is_remove();
 
@@ -1167,14 +1177,14 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
+    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A, R>, Error> {
+  ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Error> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
@@ -1206,13 +1216,13 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R>,
+    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A, R>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Either<E, Error>> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena
@@ -1319,12 +1329,14 @@ where
   A: Allocator,
 {
   #[inline]
-  fn compare(
+  fn compare<C>(
+    cmp: &C,
     this: Among<&'a [u8], &'b [u8], &'b K>,
     other: Either<&'a [u8], &K::Ref<'a>>,
   ) -> cmp::Ordering
   where
     K::Ref<'a>: Comparable<K> + KeyRef<'a, K>,
+    C: Comparator,
   {
     match this {
       Among::Right(key) => match other {
@@ -1332,8 +1344,8 @@ where
         Either::Right(other) => Comparable::compare(other, key).reverse(),
       },
       Among::Left(key) | Among::Middle(key) => match other {
-        Either::Left(other) => unsafe { K::Ref::compare_binary(key, other) },
-        Either::Right(other) => ty_ref::<K>(key).cmp(other),
+        Either::Left(other) => cmp.compare(&ty_ref::<K>(key), &ty_ref::<K>(other)),
+        Either::Right(other) => cmp.compare(&ty_ref::<K>(key), other),
       },
     }
   }

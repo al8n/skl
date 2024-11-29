@@ -1,8 +1,7 @@
 use core::ops::{Bound, RangeBounds};
 
 use dbutils::{
-  equivalent::{Comparable, ComparableRangeBounds},
-  types::{KeyRef, Type},
+  equivalent::Comparable, equivalentor::{Comparator, RangeComparator}, types::{KeyRef, Type}
 };
 
 use crate::{allocator::Node, generic::GenericValue};
@@ -11,7 +10,7 @@ use super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
 /// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct Iter<'a, K, L, A, RC, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
+pub struct Iter<'a, K, L, A, RC, C, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
 where
   A: Allocator,
   K: ?Sized + Type,
@@ -19,16 +18,16 @@ where
   Q: ?Sized,
   RC: RefCounter,
 {
-  pub(super) map: &'a SkipList<K, L::Value, A, RC>,
+  pub(super) map: &'a SkipList<K, L::Value, A, RC, C>,
   pub(super) version: Version,
   pub(super) range: Option<R>,
   pub(super) all_versions: bool,
-  pub(super) head: Option<EntryRef<'a, K, L, A, RC>>,
-  pub(super) tail: Option<EntryRef<'a, K, L, A, RC>>,
+  pub(super) head: Option<EntryRef<'a, K, L, A, RC, C>>,
+  pub(super) tail: Option<EntryRef<'a, K, L, A, RC, C>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, K, L, A, RC, Q, R: Clone> Clone for Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R: Clone> Clone for Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: Clone,
@@ -50,7 +49,7 @@ where
   }
 }
 
-impl<'a, K, L, A, RC> Iter<'a, K, L, A, RC>
+impl<'a, K, L, A, RC, C> Iter<'a, K, L, A, RC, C>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -61,7 +60,7 @@ where
   #[inline]
   pub(crate) const fn new(
     version: Version,
-    map: &'a SkipList<K, L::Value, A, RC>,
+    map: &'a SkipList<K, L::Value, A, RC, C>,
     all_versions: bool,
   ) -> Self {
     Self {
@@ -76,7 +75,7 @@ where
   }
 }
 
-impl<'a, K, L, A, RC, Q, R> Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R> Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -88,7 +87,7 @@ where
   #[inline]
   pub(crate) fn range(
     version: Version,
-    map: &'a SkipList<K, L::Value, A, RC>,
+    map: &'a SkipList<K, L::Value, A, RC, C>,
     r: R,
     all_versions: bool,
   ) -> Self {
@@ -104,7 +103,7 @@ where
   }
 }
 
-impl<'a, K, L, A, RC, Q, R> Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R> Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -136,18 +135,18 @@ where
 
   /// Returns the entry at the current head position of the iterator.
   #[inline]
-  pub const fn head(&self) -> Option<&EntryRef<'a, K, L, A, RC>> {
+  pub const fn head(&self) -> Option<&EntryRef<'a, K, L, A, RC, C>> {
     self.head.as_ref()
   }
 
   /// Returns the entry at the current tail position of the iterator.
   #[inline]
-  pub const fn tail(&self) -> Option<&EntryRef<'a, K, L, A, RC>> {
+  pub const fn tail(&self) -> Option<&EntryRef<'a, K, L, A, RC, C>> {
     self.tail.as_ref()
   }
 }
 
-impl<'a, K, L, A, RC, Q, R> Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R> Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -156,10 +155,11 @@ where
   RC: RefCounter,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
+  C: Comparator,
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn next_in(&mut self) -> Option<EntryRef<'a, K, L, A, RC>> {
+  fn next_in(&mut self) -> Option<EntryRef<'a, K, L, A, RC, C>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
         Some(head) => self.map.get_next(head.ptr, 0),
@@ -207,7 +207,7 @@ where
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn prev(&mut self) -> Option<EntryRef<'a, K, L, A, RC>> {
+  fn prev(&mut self) -> Option<EntryRef<'a, K, L, A, RC, C>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
         Some(tail) => self.map.get_prev(tail.ptr, 0),
@@ -254,7 +254,7 @@ where
     }
   }
 
-  fn range_next_in(&mut self) -> Option<EntryRef<'a, K, L, A, RC>> {
+  fn range_next_in(&mut self) -> Option<EntryRef<'a, K, L, A, RC, C>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
         Some(head) => self.map.get_next(head.ptr, 0),
@@ -312,7 +312,7 @@ where
     }
   }
 
-  fn range_prev(&mut self) -> Option<EntryRef<'a, K, L, A, RC>> {
+  fn range_prev(&mut self) -> Option<EntryRef<'a, K, L, A, RC, C>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
         Some(tail) => self.map.get_prev(tail.ptr, 0),
@@ -371,7 +371,7 @@ where
   }
 }
 
-impl<'a, K, L, A, RC, Q, R> Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R> Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -380,12 +380,13 @@ where
   RC: RefCounter,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
+  C: Comparator,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   ///
   /// **Note:** This method will clear the current state of the iterator.
-  pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, K, L, A, RC>>
+  pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, K, L, A, RC, C>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -407,7 +408,7 @@ where
   /// If no such element is found then `None` is returned.
   ///
   /// **Note:** This method will clear the current state of the iterator.
-  pub fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, K, L, A, RC>>
+  pub fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, K, L, A, RC, C>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -428,7 +429,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC>>
+  fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC, C>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -443,7 +444,7 @@ where
       if self.all_versions {
         self.map.move_to_next(&mut n, self.version, |nk| {
           if let Some(ref range) = self.range {
-            range.compare_contains(nk)
+            self.map.cmp.compare_contains(range, nk)
           } else {
             true
           }
@@ -453,7 +454,7 @@ where
           .map
           .move_to_next_maximum_version(&mut n, self.version, |nk| {
             if let Some(ref range) = self.range {
-              range.compare_contains(nk)
+              self.map.cmp.compare_contains(range, nk)
             } else {
               true
             }
@@ -465,7 +466,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC>>
+  fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC, C>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -480,7 +481,7 @@ where
       if self.all_versions {
         self.map.move_to_next(&mut n, self.version, |nk| {
           if let Some(ref range) = self.range {
-            range.compare_contains(nk)
+            self.map.cmp.compare_contains(range, nk)
           } else {
             true
           }
@@ -490,7 +491,7 @@ where
           .map
           .move_to_next_maximum_version(&mut n, self.version, |nk| {
             if let Some(ref range) = self.range {
-              range.compare_contains(nk)
+              self.map.cmp.compare_contains(range, nk)
             } else {
               true
             }
@@ -502,7 +503,7 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC>>
+  fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC, C>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -517,7 +518,7 @@ where
       if self.all_versions {
         self.map.move_to_prev(&mut n, self.version, |nk| {
           if let Some(ref range) = self.range {
-            range.compare_contains(nk)
+            self.map.cmp.compare_contains(range, nk)
           } else {
             true
           }
@@ -527,7 +528,7 @@ where
           .map
           .move_to_prev_maximum_version(&mut n, self.version, |nk| {
             if let Some(ref range) = self.range {
-              range.compare_contains(nk)
+              self.map.cmp.compare_contains(range, nk)
             } else {
               true
             }
@@ -539,7 +540,7 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC>>
+  fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, L, A, RC, C>>
   where
     QR: ?Sized + Comparable<K::Ref<'a>>,
   {
@@ -554,7 +555,7 @@ where
       if self.all_versions {
         self.map.move_to_prev(&mut n, self.version, |nk| {
           if let Some(ref range) = self.range {
-            range.compare_contains(nk)
+            self.map.cmp.compare_contains(range, nk)
           } else {
             true
           }
@@ -568,14 +569,14 @@ where
   }
 
   #[inline]
-  fn first(&mut self) -> Option<EntryRef<'a, K, L, A, RC>> {
+  fn first(&mut self) -> Option<EntryRef<'a, K, L, A, RC, C>> {
     self.head = None;
     self.tail = None;
     self.next()
   }
 
   #[inline]
-  fn last(&mut self) -> Option<EntryRef<'a, K, L, A, RC>> {
+  fn last(&mut self) -> Option<EntryRef<'a, K, L, A, RC, C>> {
     self.tail = None;
     self.head = None;
     self.prev()
@@ -584,14 +585,14 @@ where
   #[inline]
   fn check_bounds(&self, nk: &K::Ref<'a>) -> bool {
     if let Some(ref range) = self.range {
-      range.compare_contains(nk)
+      self.map.cmp.compare_contains(range, nk)
     } else {
       true
     }
   }
 }
 
-impl<'a, K, L, A, RC, Q, R> Iterator for Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R> Iterator for Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -600,8 +601,9 @@ where
   RC: RefCounter,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
+  C: Comparator,
 {
-  type Item = EntryRef<'a, K, L, A, RC>;
+  type Item = EntryRef<'a, K, L, A, RC, C>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -639,7 +641,7 @@ where
   }
 }
 
-impl<'a, K, L, A, RC, Q, R> DoubleEndedIterator for Iter<'a, K, L, A, RC, Q, R>
+impl<'a, K, L, A, RC, C, Q, R> DoubleEndedIterator for Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
   K::Ref<'a>: KeyRef<'a, K>,
@@ -648,6 +650,7 @@ where
   RC: RefCounter,
   Q: ?Sized + Comparable<K::Ref<'a>>,
   R: RangeBounds<Q>,
+  C: Comparator,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

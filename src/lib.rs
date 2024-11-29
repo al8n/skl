@@ -19,8 +19,8 @@ extern crate std;
 mod allocator;
 pub use allocator::GenericAllocator;
 
-/// The dynamic key-value type `SkipMap`s.
-pub mod dynamic;
+// /// The dynamic key-value type `SkipMap`s.
+// pub mod dynamic;
 
 /// The generic key-value type `SkipMap`s.
 pub mod generic;

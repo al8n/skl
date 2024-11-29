@@ -19,7 +19,34 @@ pub mod entry {
 
 pub use builder::Builder;
 
+use dbutils::equivalentor::{Comparator, Equivalentor};
 pub use dbutils::{equivalent::*, types::*};
+
+
+/// The default stateless comparator.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DefaultComparator;
+
+impl Equivalentor for DefaultComparator {
+  #[inline]
+  fn equivalent<A, B>(&self, a: &A, b: &B) -> bool
+  where
+    A: ?Sized,
+    B: ?Sized + Equivalent<A>
+  {
+    b.equivalent(a)  
+  }
+}
+
+impl Comparator for DefaultComparator {
+  #[inline]
+  fn compare<A, B>(&self, a: &A, b: &B) -> core::cmp::Ordering
+    where
+      A: ?Sized,
+      B: ?Sized + Comparable<A> {
+    b.compare(a).reverse()
+  }
+}
 
 /// Value that can be converted from a byte slice.
 pub trait GenericValue<'a>: sealed::Sealed<'a> {}

@@ -5,23 +5,21 @@ use core::{
 
 use among::Among;
 use dbutils::{
-  buffer::VacantBuffer,
-  equivalent::Comparable,
-  types::{KeyRef, LazyRef, MaybeStructured, Type},
+  buffer::VacantBuffer, equivalent::Comparable, equivalentor::Comparator, types::{KeyRef, LazyRef, MaybeStructured, Type}
 };
 use either::Either;
 
 use crate::{
-  allocator::{Allocator, Sealed, WithVersion},
-  error::Error,
-  ref_counter::RefCounter,
-  Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
+  allocator::{Allocator, Sealed, WithVersion}, error::Error, ref_counter::RefCounter, Arena, Header, Height, KeyBuilder, ValueBuilder, Version
 };
 
-use super::list::{iterator::Iter, EntryRef};
+use super::{list::{iterator::Iter, EntryRef}, DefaultComparator};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
+  use dbutils::equivalentor::Comparator;
+
+  use crate::generic::DefaultComparator;
   pub use crate::unsync::{multiple_version::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
@@ -29,39 +27,39 @@ pub mod unsync {
     crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator, RefCounter>;
+  type SkipList<K, V, C = DefaultComparator> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter>;
+  pub type Iter<'a, K, L, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, Q, R>;
+  pub type Range<'a, K, L, Q, R, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L> = super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter>;
+  pub type Entry<'a, K, L, C = DefaultComparator> = super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
   /// If you want to use in concurrent environment, you can use [`multiple_version::sync::SkipMap`](crate::generic::multiple_version::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator>(SkipList<K, V, C>);
 
-  impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
+  impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
     fn clone(&self) -> Self {
       Self(self.0.clone())
     }
   }
 
-  impl<K: ?Sized, V: ?Sized> From<SkipList<K, V>> for SkipMap<K, V> {
+  impl<K: ?Sized, V: ?Sized, C> From<SkipList<K, V, C>> for SkipMap<K, V, C> {
     #[inline]
-    fn from(list: SkipList<K, V>) -> Self {
+    fn from(list: SkipList<K, V, C>) -> Self {
       Self(list)
     }
   }
 
-  impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List for SkipMap<K, V> {
-    type Constructable = SkipList<K, V>;
+  impl<K: ?Sized + 'static, V: ?Sized + 'static, C> crate::traits::List for SkipMap<K, V, C> {
+    type Constructable = SkipList<K, V, C>;
 
     #[inline]
     fn as_ref(&self) -> &Self::Constructable {
@@ -82,10 +80,11 @@ pub mod unsync {
     }
   }
 
-  impl<K, V> super::Map<K, V> for SkipMap<K, V>
+  impl<K, V, C> super::Map<K, V, C> for SkipMap<K, V, C>
   where
     K: ?Sized + 'static,
     V: ?Sized + 'static,
+    C: Comparator + 'static,
   {
     type Allocator = Allocator;
     type RefCounter = RefCounter;
@@ -94,7 +93,10 @@ pub mod unsync {
 
 /// Implementations for concurrent environments.
 pub mod sync {
+  use dbutils::equivalentor::Comparator;
+
   pub use crate::sync::{multiple_version::Allocator, RefCounter};
+  use crate::{generic::DefaultComparator, traits::List};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
   mod tests {
@@ -128,39 +130,39 @@ pub mod sync {
     crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator, RefCounter>;
+  type SkipList<K, V, C = DefaultComparator> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter>;
+  pub type Iter<'a, K, L, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, Q, R>;
+  pub type Range<'a, K, L, Q, R, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L> = super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter>;
+  pub type Entry<'a, K, L, C = DefaultComparator> = super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
   /// If you want to use in non-concurrent environment, you can use [`multiple_version::unsync::SkipMap`](crate::generic::multiple_version::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator>(SkipList<K, V, C>);
 
-  impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
+  impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
     fn clone(&self) -> Self {
       Self(self.0.clone())
     }
   }
 
-  impl<K: ?Sized, V: ?Sized> From<SkipList<K, V>> for SkipMap<K, V> {
+  impl<K: ?Sized, V: ?Sized, C> From<SkipList<K, V, C>> for SkipMap<K, V, C> {
     #[inline]
-    fn from(list: SkipList<K, V>) -> Self {
+    fn from(list: SkipList<K, V, C>) -> Self {
       Self(list)
     }
   }
 
-  impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List for SkipMap<K, V> {
-    type Constructable = SkipList<K, V>;
+  impl<K: ?Sized + 'static, V: ?Sized + 'static, C> crate::traits::List for SkipMap<K, V, C> {
+    type Constructable = SkipList<K, V, C>;
 
     #[inline]
     fn as_ref(&self) -> &Self::Constructable {
@@ -181,13 +183,46 @@ pub mod sync {
     }
   }
 
-  impl<K, V> super::Map<K, V> for SkipMap<K, V>
+  impl<K, V, C> super::Map<K, V, C> for SkipMap<K, V, C>
   where
     K: ?Sized + 'static,
     V: ?Sized + 'static,
+    C: Comparator + 'static,
   {
     type Allocator = Allocator;
     type RefCounter = RefCounter;
+  }
+
+  impl<K, V, C> SkipMap<K, V, C>
+  where
+    K: ?Sized + 'static,
+    V: ?Sized + 'static,
+    C: Comparator + 'static,
+  {
+    /// Try creates from a `SkipMap` from an allocator directly.
+    ///
+    /// This method is not the ideal constructor, it is recommended to use [`Builder`](super::Builder) to create a `SkipMap`,
+    /// if you are not attempting to create multiple `SkipMap`s on the same allocator.
+    ///
+    /// Besides, the only way to reconstruct `SkipMap`s created by this method is to use the [`open_from_allocator(header: Header, arena: Self::Allocator, cmp: Self::Comparator)`](Self::open_from_allocator) method,
+    /// users must save the header to reconstruct the `SkipMap` by their own.
+    /// The header can be obtained by calling [`header`](Map::header) method.
+    #[inline]
+    pub fn create_from_allocator(arena: <Self as super::Map<K, V, C>>::Allocator, cmp: C) -> Result<Self, super::Error> {
+      <Self as List>::try_create_from_allocator(arena, cmp)
+    }
+
+    /// Try open a `SkipMap` from an allocator directly.
+    ///
+    /// See documentation for [`create_from_allocator`](Self::create_from_allocator) for more information.
+    ///
+    /// ## Safety
+    /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
+    /// - The `K` and `V` types must be the same as the types used to create the map.
+    #[inline]
+    pub unsafe fn open_from_allocator(header: super::Header, arena: <Self as super::Map<K, V, C>>::Allocator, cmp: C) -> Result<Self, super::Error> {
+      <Self as List>::try_open_from_allocator(arena, cmp, header)
+    }
   }
 }
 
@@ -195,42 +230,18 @@ pub mod sync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<K, V>
+pub trait Map<K, V, C = DefaultComparator>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
-  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator, Self::RefCounter>>,
+  C: 'static,
+  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator, Self::RefCounter, C>>,
   <Self::Allocator as Sealed>::Node: WithVersion,
 {
   /// The allocator type used to allocate nodes in the map.
   type Allocator: Allocator;
   /// The reference counter type used in the map.
   type RefCounter: RefCounter;
-
-  /// Try creates from a `SkipMap` from an allocator directly.
-  ///
-  /// This method is not the ideal constructor, it is recommended to use [`Builder`](super::Builder) to create a `SkipMap`,
-  /// if you are not attempting to create multiple `SkipMap`s on the same allocator.
-  ///
-  /// Besides, the only way to reconstruct `SkipMap`s created by this method is to use the [`open_from_allocator(header: Header, arena: Self::Allocator, cmp: Self::Comparator)`](Map::open_from_allocator) method,
-  /// users must save the header to reconstruct the `SkipMap` by their own.
-  /// The header can be obtained by calling [`header`](Map::header) method.
-  #[inline]
-  fn create_from_allocator(arena: Self::Allocator) -> Result<Self, Error> {
-    Self::try_create_from_allocator(arena, ())
-  }
-
-  /// Try open a `SkipMap` from an allocator directly.
-  ///
-  /// See documentation for [`create_from_allocator`](Map::create_from_allocator) for more information.
-  ///
-  /// ## Safety
-  /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
-  /// - The `K` and `V` types must be the same as the types used to create the map.
-  #[inline]
-  unsafe fn open_from_allocator(header: Header, arena: Self::Allocator) -> Result<Self, Error> {
-    Self::try_open_from_allocator(arena, (), header)
-  }
 
   /// Returns the header of the `SkipMap`, which can be used to reconstruct the `SkipMap`.
   ///
@@ -331,6 +342,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return false;
@@ -362,6 +374,7 @@ where
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return false;
@@ -375,11 +388,12 @@ where
   fn first<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -393,11 +407,12 @@ where
   fn last<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -414,11 +429,12 @@ where
   fn first_versioned<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -435,11 +451,12 @@ where
   fn last_versioned<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -474,12 +491,13 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -514,12 +532,13 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -535,12 +554,13 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -556,12 +576,13 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -579,12 +600,13 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -605,12 +627,13 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
     Q: ?Sized + Comparable<K::Ref<'a>>,
+    C: Comparator,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -627,7 +650,7 @@ where
   fn iter<'a>(
     &'a self,
     version: Version,
-  ) -> Iter<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>
+  ) -> Iter<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -641,7 +664,7 @@ where
   fn iter_all_versions<'a>(
     &'a self,
     version: Version,
-  ) -> Iter<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter>
+  ) -> Iter<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -656,7 +679,7 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> Iter<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, Q, R>
+  ) -> Iter<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -673,7 +696,7 @@ where
     &'a self,
     version: Version,
     range: R,
-  ) -> Iter<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, Q, R>
+  ) -> Iter<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
@@ -696,13 +719,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self.as_ref().insert(version, key, value)
   }
@@ -731,13 +755,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self.as_ref().insert_at_height(version, height, key, value)
   }
@@ -796,13 +821,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self.as_ref().insert_at_height_with_value_builder(
       version,
@@ -868,13 +894,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -894,13 +921,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -921,13 +949,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -988,13 +1017,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self.get_or_insert_at_height_with_value_builder(
       version,
@@ -1061,13 +1091,14 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -1133,13 +1164,14 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self.as_ref().insert_at_height_with_builders(
       version,
@@ -1211,13 +1243,14 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -1281,13 +1314,14 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self.as_ref().get_or_insert_at_height_with_builders(
       version,
@@ -1356,13 +1390,14 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -1385,13 +1420,14 @@ where
     success: Ordering,
     failure: Ordering,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self.compare_remove_at_height(version, self.random_height(), key, success, failure)
   }
@@ -1413,13 +1449,14 @@ where
     success: Ordering,
     failure: Ordering,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -1438,13 +1475,14 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self.get_or_remove_at_height(version, self.random_height(), key)
   }
@@ -1475,13 +1513,14 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self.as_ref().get_or_remove_at_height(version, height, key)
   }
@@ -1536,13 +1575,14 @@ where
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<E, Error>,
   >
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self
       .as_ref()
@@ -1601,13 +1641,14 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<E, Error>,
   >
   where
     K: Type,
     K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: Comparator,
   {
     self
       .as_ref()

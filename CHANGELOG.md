@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.22.0
+
+- Improve the flexibility of generic version `SkipMap`
+
 ## 0.21.0
 
 - Use state pattern for `EntryRef`

@@ -1,6 +1,6 @@
 use core::mem;
 
-use dbutils::equivalentor::Comparator;
+use dbutils::equivalentor::DynComparator;
 use either::Either;
 
 use super::Builder;
@@ -12,7 +12,7 @@ use crate::{
   Arena,
 };
 
-impl<C: Comparator> Builder<C> {
+impl<C: DynComparator<[u8], [u8]>> Builder<C> {
   /// Create a new map which is backed by a anonymous memory map.
   ///
   /// **What the difference between this method and [`Builder::alloc`]?**
@@ -59,7 +59,7 @@ impl<C: Comparator> Builder<C> {
   /// Opens a read-only map which backed by file-backed memory map.
   ///
   /// ## Safety
-  /// - The file must be created with the same [`Comparator`].
+  /// - The file must be created with the same [`DynComparator`].
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -82,7 +82,7 @@ impl<C: Comparator> Builder<C> {
   /// Opens a read-only map which backed by file-backed memory map with a path builder.
   ///
   /// ## Safety
-  /// - The file must be created with the same [`Comparator`].
+  /// - The file must be created with the same [`DynComparator`].
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -146,7 +146,7 @@ impl<C: Comparator> Builder<C> {
   /// Creates a new map or reopens a map which backed by a file backed memory map.
   ///
   /// ## Safety
-  /// - If you are reopening a file, then the file must be created with the same [`Comparator`].
+  /// - If you are reopening a file, then the file must be created with the same [`DynComparator`].
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when
@@ -169,7 +169,7 @@ impl<C: Comparator> Builder<C> {
   /// Creates a new map or reopens a map which backed by a file backed memory map with path builder.
   ///
   /// # Safety
-  /// - If you are reopening a file, then the file must be created with the same [`Comparator`].
+  /// - If you are reopening a file, then the file must be created with the same [`DynComparator`].
   /// - All file-backed memory map constructors are marked `unsafe` because of the potential for
   ///   *Undefined Behavior* (UB) using the map if the underlying file is subsequently modified, in or
   ///   out of process. Applications must consider the risk and take appropriate precautions when

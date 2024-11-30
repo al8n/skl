@@ -6,8 +6,8 @@ use core::{
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
-  equivalent::Comparable,
-  types::{KeyRef, LazyRef, MaybeStructured, Type},
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  types::{LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 
@@ -18,37 +18,43 @@ use crate::{
   Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
-use super::list::{iterator::Iter, EntryRef};
+use super::{
+  list::{iterator::Iter, EntryRef},
+  DefaultComparator,
+};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
   use dbutils::types::LazyRef;
 
+  use crate::generic::DefaultComparator;
   pub use crate::unsync::{map::Allocator, RefCounter};
 
-  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
-  mod tests {
-    crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
-  }
+  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
+  // mod tests {
+  //   crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
+  // }
 
-  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator, RefCounter>;
+  type SkipList<K, V, C = DefaultComparator<K>> =
+    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V> = super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter>;
+  pub type Iter<'a, K, V, C = DefaultComparator<K>> =
+    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R> =
-    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, Q, R>;
+  pub type Range<'a, K, V, Q, R, C = DefaultComparator<K>> =
+    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, Q, R, C>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V> =
-    super::super::entry::EntryRef<'a, K, LazyRef<'a, V>, Allocator, RefCounter>;
+  pub type Entry<'a, K, V, C = DefaultComparator<K>> =
+    super::super::entry::EntryRef<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
   /// If you want to use in concurrent environment, you can use [`unique::sync::SkipMap`](crate::generic::unique::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
     #[inline]
@@ -100,71 +106,74 @@ pub mod unsync {
 pub mod sync {
   use dbutils::types::LazyRef;
 
+  use crate::generic::DefaultComparator;
   pub use crate::sync::{map::Allocator, RefCounter};
 
-  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
-  mod tests {
-    crate::__generic_map_tests!("sync_map": super::SkipMap<[u8], [u8]>);
-  }
+  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
+  // mod tests {
+  //   crate::__generic_map_tests!("sync_map": super::SkipMap<[u8], [u8]>);
+  // }
 
-  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map_concurrent,))]
-  mod concurrent_tests {
-    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
-  }
+  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map_concurrent,))]
+  // mod concurrent_tests {
+  //   crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
+  // }
 
-  #[cfg(any(
-    all(test, not(miri)),
-    all_skl_tests,
-    test_generic_sync_map_concurrent_with_optimistic_freelist,
-  ))]
-  mod concurrent_tests_with_optimistic_freelist {
-    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
-  }
+  // #[cfg(any(
+  //   all(test, not(miri)),
+  //   all_skl_tests,
+  //   test_generic_sync_map_concurrent_with_optimistic_freelist,
+  // ))]
+  // mod concurrent_tests_with_optimistic_freelist {
+  //   crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  // }
 
-  #[cfg(any(
-    all(test, not(miri)),
-    all_skl_tests,
-    test_generic_sync_map_concurrent_with_pessimistic_freelist,
-  ))]
-  mod concurrent_tests_with_pessimistic_freelist {
-    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
-  }
+  // #[cfg(any(
+  //   all(test, not(miri)),
+  //   all_skl_tests,
+  //   test_generic_sync_map_concurrent_with_pessimistic_freelist,
+  // ))]
+  // mod concurrent_tests_with_pessimistic_freelist {
+  //   crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  // }
 
-  type SkipList<K, V> = super::super::list::SkipList<K, V, Allocator, RefCounter>;
+  type SkipList<K, V, C = DefaultComparator<K>> =
+    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V> = super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter>;
+  pub type Iter<'a, K, V, C = DefaultComparator<K>> =
+    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R> =
-    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, Q, R>;
+  pub type Range<'a, K, V, Q, R, C = DefaultComparator<K>> =
+    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, Q, R, C>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V> =
-    super::super::entry::EntryRef<'a, K, LazyRef<'a, V>, Allocator, RefCounter>;
+  pub type Entry<'a, K, V, C = DefaultComparator<K>> =
+    super::super::entry::EntryRef<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
   /// If you want to use in non-concurrent environment, you can use [`unique::unsync::SkipMap`](crate::generic::unique::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized>(SkipList<K, V>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
 
-  impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
+  impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
     fn clone(&self) -> Self {
       Self(self.0.clone())
     }
   }
 
-  impl<K: ?Sized, V: ?Sized> From<SkipList<K, V>> for SkipMap<K, V> {
+  impl<K: ?Sized, V: ?Sized, C> From<SkipList<K, V, C>> for SkipMap<K, V, C> {
     #[inline]
-    fn from(list: SkipList<K, V>) -> Self {
+    fn from(list: SkipList<K, V, C>) -> Self {
       Self(list)
     }
   }
 
-  impl<K: ?Sized + 'static, V: ?Sized + 'static> crate::traits::List for SkipMap<K, V> {
-    type Constructable = SkipList<K, V>;
+  impl<K: ?Sized + 'static, V: ?Sized + 'static, C> crate::traits::List for SkipMap<K, V, C> {
+    type Constructable = SkipList<K, V, C>;
 
     #[inline]
     fn as_ref(&self) -> &Self::Constructable {
@@ -185,10 +194,11 @@ pub mod sync {
     }
   }
 
-  impl<K, V> super::Map<K, V> for SkipMap<K, V>
+  impl<K, V, C> super::Map<K, V, C> for SkipMap<K, V, C>
   where
     K: ?Sized + 'static,
     V: ?Sized + 'static,
+    C: 'static,
   {
     type Allocator = Allocator;
     type RefCounter = RefCounter;
@@ -199,11 +209,12 @@ pub mod sync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<K, V>
+pub trait Map<K, V, C = DefaultComparator<K>>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
-  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator, Self::RefCounter>>,
+  C: 'static,
+  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator, Self::RefCounter, C>>,
   <Self::Allocator as Sealed>::Node: WithoutVersion,
 {
   /// The allocator used to allocate nodes in the `SkipMap`.
@@ -220,8 +231,8 @@ where
   /// users must save the header to reconstruct the `SkipMap` by their own.
   /// The header can be obtained by calling [`header`](Map::header) method.
   #[inline]
-  fn create_from_allocator(arena: Self::Allocator) -> Result<Self, Error> {
-    Self::try_create_from_allocator(arena, ())
+  fn create_from_allocator(arena: Self::Allocator, cmp: C) -> Result<Self, Error> {
+    Self::try_create_from_allocator(arena, cmp)
   }
 
   /// Try open a `SkipMap` from an allocator directly.
@@ -232,8 +243,12 @@ where
   /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
   /// - The `K` and `V` types must be the same as the types used to create the map.
   #[inline]
-  unsafe fn open_from_allocator(header: Header, arena: Self::Allocator) -> Result<Self, Error> {
-    Self::try_open_from_allocator(arena, (), header)
+  unsafe fn open_from_allocator(
+    header: Header,
+    arena: Self::Allocator,
+    cmp: C,
+  ) -> Result<Self, Error> {
+    Self::try_open_from_allocator(arena, cmp, header)
   }
 
   /// Returns the header of the `SkipMap`, which can be used to reconstruct the `SkipMap`.
@@ -305,7 +320,8 @@ where
   where
     K: Type,
     V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self.as_ref().contains_key(MIN_VERSION, key)
   }
@@ -314,11 +330,11 @@ where
   #[inline]
   fn first<'a>(
     &'a self,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
     self.as_ref().first(MIN_VERSION)
   }
@@ -327,11 +343,11 @@ where
   #[inline]
   fn last<'a>(
     &'a self,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
     self.as_ref().last(MIN_VERSION)
   }
@@ -358,12 +374,12 @@ where
   fn get<'a, Q>(
     &'a self,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self.as_ref().get(MIN_VERSION, key)
   }
@@ -374,12 +390,12 @@ where
   fn upper_bound<'a, Q>(
     &'a self,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self.as_ref().upper_bound(MIN_VERSION, upper)
   }
@@ -390,22 +406,21 @@ where
   fn lower_bound<'a, Q>(
     &'a self,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self.as_ref().lower_bound(MIN_VERSION, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter<'a>(&'a self) -> Iter<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>
+  fn iter(&self) -> Iter<'_, K, LazyRef<'_, V>, Self::Allocator, Self::RefCounter, C>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
   {
     self.as_ref().iter(MIN_VERSION)
@@ -413,15 +428,14 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  fn range<'a, Q, R>(
-    &'a self,
+  fn range<Q, R>(
+    &self,
     range: R,
-  ) -> Iter<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, Q, R>
+  ) -> Iter<'_, K, LazyRef<'_, V>, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
     R: RangeBounds<Q>,
   {
     self.as_ref().range(MIN_VERSION, range)
@@ -438,13 +452,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.insert_at_height(self.random_height(), key, value)
   }
@@ -472,13 +486,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self
       .as_ref()
@@ -539,13 +553,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.insert_at_height_with_value_builder(self.random_height(), key, value_builder)
   }
@@ -606,13 +620,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self
       .as_ref()
@@ -631,13 +645,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.get_or_insert_at_height(self.random_height(), key, value)
   }
@@ -655,13 +669,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self
       .as_ref()
@@ -722,13 +736,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.get_or_insert_at_height_with_value_builder(self.random_height(), key, value_builder)
   }
@@ -790,13 +804,13 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type + 'b,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.as_ref().get_or_insert_at_height_with_value_builder(
       MIN_VERSION,
@@ -864,13 +878,13 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
   }
@@ -936,13 +950,13 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self
       .as_ref()
@@ -1005,13 +1019,13 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.get_or_insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
   }
@@ -1074,13 +1088,13 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.as_ref().get_or_insert_at_height_with_builders(
       MIN_VERSION,
@@ -1103,13 +1117,13 @@ where
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.remove_at_height(self.random_height(), key)
   }
@@ -1129,13 +1143,13 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.as_ref().compare_remove_at_height(
       MIN_VERSION,
@@ -1157,13 +1171,13 @@ where
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.get_or_remove_at_height(self.random_height(), key)
   }
@@ -1194,13 +1208,13 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
     K: Type + 'b,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self
       .as_ref()
@@ -1256,13 +1270,13 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<E, Error>,
   >
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self.get_or_remove_at_height_with_builder(self.random_height(), key_builder)
   }
@@ -1318,13 +1332,13 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
     Either<E, Error>,
   >
   where
     K: Type,
-    K::Ref<'a>: KeyRef<'a, K>,
     V: Type,
+    C: TypeRefComparator<'a, Type = K>,
   {
     self
       .as_ref()

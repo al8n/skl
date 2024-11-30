@@ -1,6 +1,6 @@
 use core::mem;
 
-use super::super::Options;
+use super::{super::Options, DefaultComparator};
 use crate::{
   allocator::Sealed,
   error::Error,
@@ -15,46 +15,111 @@ use crate::{
 mod memmap;
 
 /// A builder for creating a generic key-value `SkipMap`.
-#[derive(Debug, Clone)]
-pub struct Builder {
+#[derive(Debug)]
+pub struct Builder<C = DefaultComparator<[u8]>> {
   options: Options,
+  cmp: C,
 }
 
-impl Default for Builder {
+impl<C> Default for Builder<C>
+where
+  C: Default,
+{
   #[inline]
   fn default() -> Self {
-    Self::new()
+    Self {
+      options: Options::default(),
+      cmp: Default::default(),
+    }
   }
 }
 
-impl From<Options> for Builder {
+impl<C: Default> From<Options> for Builder<C> {
   #[inline]
   fn from(options: Options) -> Self {
-    Self { options }
+    Self {
+      options,
+      cmp: Default::default(),
+    }
   }
 }
 
-impl From<Builder> for Options {
+impl<C> From<Builder<C>> for Options {
   #[inline]
-  fn from(builder: Builder) -> Self {
+  fn from(builder: Builder<C>) -> Self {
     builder.options
   }
 }
 
-impl Builder {
+impl<C> Builder<C> {
   /// Create a new builder with the given options.
   ///
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::Builder;
+  /// use skl::generic::{Builder, DefaultComparator};
   ///
-  /// let builder = Builder::new();
+  /// let builder = Builder::with(DefaultComparator::<[u8]>::new());
   /// ```
   #[inline]
-  pub const fn new() -> Self {
+  pub const fn with(cmp: C) -> Self {
     Self {
       options: Options::new(),
+      cmp,
+    }
+  }
+}
+
+impl<C: Default> Builder<C> {
+  /// Create a new builder with the given options.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::{Builder, DefaultComparator};
+  ///
+  /// let builder = Builder::<DefaultComparator<str>>::new();
+  /// ```
+  #[inline]
+  pub fn new() -> Self {
+    Self {
+      options: Options::new(),
+      cmp: Default::default(),
+    }
+  }
+}
+
+impl<C> Builder<C> {
+  /// Get the comparator of the builder.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::{Builder, DefaultComparator};
+  ///
+  /// let builder = Builder::<DefaultComparator<str>>::new().comparator();
+  /// ```
+  #[inline]
+  pub const fn comparator(&self) -> &C {
+    &self.cmp
+  }
+
+  /// Set the comparator for the builder.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::{Builder, DefaultComparator};
+  ///
+  /// let builder = Builder::<DefaultComparator<[u8]>>::new().with_comparator(DefaultComparator::<Vec<u8>>::new());
+  ///
+  /// assert_eq!(builder.comparator(), &DefaultComparator::new());
+  /// ```
+  #[inline]
+  pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC> {
+    Builder {
+      options: self.options,
+      cmp,
     }
   }
 
@@ -63,9 +128,9 @@ impl Builder {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::Builder;
+  /// use skl::generic::{Builder, DefaultComparator};
   ///
-  /// let builder = Builder::new();
+  /// let builder = Builder::<DefaultComparator<str>>::new();
   /// let options = builder.options();
   /// ```
   #[inline]
@@ -80,7 +145,7 @@ impl Builder {
   /// ```rust
   /// use skl::{generic::Builder, Options};
   ///
-  /// let builder = Builder::new().with_options(Options::new());
+  /// let builder: Builder = Builder::new().with_options(Options::new());
   /// ```
   #[inline]
   pub const fn with_options(mut self, opts: Options) -> Self {
@@ -91,7 +156,7 @@ impl Builder {
   crate::__builder_opts!(generic::Builder);
 }
 
-impl Builder {
+impl<C> Builder<C> {
   /// Create a new map which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -112,27 +177,27 @@ impl Builder {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{unique::sync, multiple_version::unsync, Builder};
+  /// use skl::generic::{unique::sync, multiple_version::unsync, Builder, DefaultComparator};
   ///
-  /// let map = Builder::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::<DefaultComparator<[u8]>>::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// let arena = Builder::new().with_capacity(1024).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Builder::<DefaultComparator<[u8]>>::new().with_capacity(1024).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[inline]
   pub fn alloc<T>(self) -> Result<T, Error>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
   {
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
 
-    let Builder { options } = self;
+    let Builder { options, cmp, .. } = self;
     options
       .to_arena_options()
       .with_maximum_alignment(node_align)
       .alloc::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
-      .and_then(|arena| T::construct(arena, options, false, ()))
+      .and_then(|arena| T::construct(arena, options, false, cmp))
   }
 }

@@ -4,7 +4,7 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
+use dbutils::{buffer::VacantBuffer, equivalentor::DynComparator};
 use rarena_allocator::Allocator as _;
 
 use crate::{
@@ -155,7 +155,7 @@ where
 impl<A, RC, C> SkipList<A, RC, C>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   RC: RefCounter,
 {
   /// Returns `true` if the key exists in the map.

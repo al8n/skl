@@ -5,13 +5,13 @@ use super::{
 use crate::KeyBuilder;
 use among::Among;
 use core::sync::atomic::Ordering;
-use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
+use dbutils::{buffer::VacantBuffer, equivalentor::DynComparator};
 use either::Either;
 
 impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   R: RefCounter,
 {
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.

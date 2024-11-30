@@ -543,7 +543,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_reserved(8);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_reserved(8);")]
     /// ```
     #[inline]
     pub const fn with_reserved(mut self, reserved: u32) -> Self {
@@ -567,7 +567,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_lock_meta(false);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_lock_meta(false);")]
     /// ```
     #[inline]
     pub const fn with_lock_meta(mut self, lock_meta: bool) -> Self {
@@ -588,7 +588,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_magic_version(1);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_magic_version(1);")]
     /// ```
     #[inline]
     pub const fn with_magic_version(mut self, magic_version: u16) -> Self {
@@ -605,7 +605,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::Freelist};")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_freelist(Freelist::Optimistic);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_freelist(Freelist::Optimistic);")]
     /// ```
     #[inline]
     pub const fn with_freelist(mut self, freelist: Freelist) -> Self {
@@ -622,7 +622,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::CompressionPolicy};")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_compression_policy(CompressionPolicy::Fast);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_compression_policy(CompressionPolicy::Fast);")]
     /// ```
     #[inline]
     pub const fn with_compression_policy(mut self, policy: CompressionPolicy) -> Self {
@@ -645,7 +645,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_unify(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_unify(true);")]
     /// ```
     #[inline]
     pub const fn with_unify(mut self, unify: bool) -> Self {
@@ -662,7 +662,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_value_size(1024);")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_max_value_size(1024);")]
     /// ```
     #[inline]
     pub const fn with_max_value_size(mut self, size: u32) -> Self {
@@ -681,7 +681,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", KeySize};")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_key_size(KeySize::new());")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_max_key_size(KeySize::new());")]
     /// ```
     #[inline]
     pub const fn with_max_key_size(mut self, size: KeySize) -> Self {
@@ -698,7 +698,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", Height};")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_height(Height::new());")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_max_height(Height::new());")]
     /// ```
     #[inline]
     pub const fn with_max_height(mut self, height: Height) -> Self {
@@ -713,7 +713,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_capacity(1024);")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_capacity(1024);")]
     /// ```
     #[inline]
     pub const fn with_capacity(mut self, capacity: u32) -> Self {
@@ -734,7 +734,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_reserved(8);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_reserved(8);")]
     ///
     /// assert_eq!(opts.reserved(), 8);
     /// ```
@@ -755,7 +755,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_lock_meta(false);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_lock_meta(false);")]
     ///
     /// assert_eq!(opts.lock_meta(), false);
     /// ```
@@ -773,7 +773,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_value_size(1024);")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_max_value_size(1024);")]
     /// ```
     #[inline]
     pub const fn max_value_size(&self) -> u32 {
@@ -791,7 +791,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", KeySize};")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_key_size(KeySize::new());")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_max_key_size(KeySize::new());")]
     ///
     /// assert_eq!(options.max_key_size(), u16::MAX);
     /// ```
@@ -809,7 +809,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", Height};")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_max_height(Height::from_u8_unchecked(5));")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_max_height(Height::from_u8_unchecked(5));")]
     ///
     /// assert_eq!(options.max_height(), 5);
     /// ```
@@ -825,7 +825,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let options = ", stringify!($name), "::new().with_capacity(1024);")]
+    #[doc = concat!("let options: ", stringify!($name), " = ", stringify!($name), "::new().with_capacity(1024);")]
     /// ```
     #[inline]
     pub const fn capacity(&self) -> u32 {
@@ -850,7 +850,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_unify(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_unify(true);")]
     ///
     /// assert_eq!(opts.unify(), true);
     /// ```
@@ -872,7 +872,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_magic_version(1);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_magic_version(1);")]
     ///
     /// assert_eq!(opts.magic_version(), 1);
     /// ```
@@ -890,7 +890,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::Freelist};")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_freelist(Freelist::Optimistic);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_freelist(Freelist::Optimistic);")]
     ///
     /// assert_eq!(opts.freelist(), Freelist::Optimistic);
     /// ```
@@ -908,7 +908,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::{", stringify!($mod), "::", stringify!($name), ", options::CompressionPolicy};")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_compression_policy(CompressionPolicy::Fast);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_compression_policy(CompressionPolicy::Fast);")]
     ///
     /// assert_eq!(opts.compression_policy(), CompressionPolicy::Fast);
     /// ```
@@ -927,7 +927,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_read(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_read(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -950,7 +950,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_write(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -997,7 +997,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_append(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_append(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1020,7 +1020,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true).with_truncate(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_write(true).with_truncate(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1045,7 +1045,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true).with_create(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_write(true).with_create(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1075,7 +1075,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true).with_create_new(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_write(true).with_create_new(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1096,7 +1096,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_offset(30);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_offset(30);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1117,7 +1117,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let stack = ", stringify!($name), "::new().with_stack(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_stack(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1142,7 +1142,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let huge = ", stringify!($name), "::new().with_huge(Some(8));")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_huge(Some(8));")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1165,7 +1165,7 @@ macro_rules! __builder_opts {
     /// ```
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let populate = ", stringify!($name), "::new().with_populate(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_populate(true);")]
     /// ```
     #[inline]
     #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
@@ -1182,7 +1182,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_read(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_read(true);")]
     /// assert_eq!(opts.read(), true);
     /// ```
     #[inline]
@@ -1199,7 +1199,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_write(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_write(true);")]
     /// assert_eq!(opts.write(), true);
     /// ```
     #[inline]
@@ -1216,7 +1216,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_append(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_append(true);")]
     /// assert_eq!(opts.append(), true);
     /// ```
     #[inline]
@@ -1233,7 +1233,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_truncate(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_truncate(true);")]
     /// assert_eq!(opts.truncate(), true);
     /// ```
     #[inline]
@@ -1250,7 +1250,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_create(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_create(true);")]
     /// assert_eq!(opts.create(), true);
     /// ```
     #[inline]
@@ -1267,7 +1267,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_create_new(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_create_new(true);")]
     /// assert_eq!(opts.create_new(), true);
     /// ```
     #[inline]
@@ -1284,7 +1284,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_offset(30);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_offset(30);")]
     /// assert_eq!(opts.offset(), 30);
     /// ```
     #[inline]
@@ -1301,7 +1301,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_stack(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_stack(true);")]
     /// assert_eq!(opts.stack(), true);
     /// ```
     #[inline]
@@ -1318,7 +1318,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_huge(Some(8));")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_huge(Some(8));")]
     /// assert_eq!(opts.huge(), Some(8));
     /// ```
     #[inline]
@@ -1335,7 +1335,7 @@ macro_rules! __builder_opts {
     /// ```rust
     #[doc = concat!("use skl::", stringify!($mod), "::", stringify!($name), ";")]
     ///
-    #[doc = concat!("let opts = ", stringify!($name), "::new().with_populate(true);")]
+    #[doc = concat!("let opts: ", stringify!($name), " = ", stringify!($name), "::new().with_populate(true);")]
     /// assert_eq!(opts.populate(), true);
     /// ```
     #[inline]

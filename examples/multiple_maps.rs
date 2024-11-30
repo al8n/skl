@@ -1,7 +1,7 @@
 use skl::{
   generic::{
     unique::{sync::SkipMap, Map},
-    Builder,
+    Builder, DefaultComparator,
   },
   Arena,
 };
@@ -25,7 +25,11 @@ fn main() {
         .with_capacity(1024 * 1024)
         .map_mut::<SkipMap<[u8], [u8]>, _>("multiple_maps.wal")
         .unwrap();
-      let l2 = SkipMap::<[u8], [u8]>::create_from_allocator(l.allocator().clone()).unwrap();
+      let l2 = SkipMap::<[u8], [u8]>::create_from_allocator(
+        l.allocator().clone(),
+        DefaultComparator::new(),
+      )
+      .unwrap();
       let h2 = l2.header().copied().unwrap();
 
       let t1 = std::thread::spawn(move || {
@@ -56,7 +60,12 @@ fn main() {
       .with_capacity((1024 * 1024 * 2) as u32)
       .map_mut::<SkipMap<[u8], [u8]>, _>("multiple_maps.wal")
       .unwrap();
-    let l2 = SkipMap::<[u8], [u8]>::open_from_allocator(header, l.allocator().clone()).unwrap();
+    let l2 = SkipMap::<[u8], [u8]>::open_from_allocator(
+      header,
+      l.allocator().clone(),
+      DefaultComparator::new(),
+    )
+    .unwrap();
     assert_eq!(500, l.len());
     assert_eq!(500, l2.len());
 

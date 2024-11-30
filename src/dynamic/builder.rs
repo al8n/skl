@@ -1,6 +1,6 @@
 use core::mem;
 
-use dbutils::equivalentor::{Ascend, Comparator};
+use dbutils::equivalentor::{Ascend, DynComparator};
 
 use crate::{
   allocator::Sealed,
@@ -61,7 +61,7 @@ impl Builder {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::dynamic::Builder;
+  /// use skl::dynamic::{Builder, Descend};
   ///
   /// let builder = Builder::new();
   /// ```
@@ -75,6 +75,23 @@ impl Builder {
 }
 
 impl<C> Builder<C> {
+  /// Create a new builder with the given options.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::dynamic::{Builder, Descend};
+  ///
+  /// let builder = Builder::with(Descend);
+  /// ```
+  #[inline]
+  pub const fn with(cmp: C) -> Self {
+    Self {
+      options: Options::new(),
+      cmp,
+    }
+  }
+
   /// Get the options of the builder.
   ///
   /// ## Example
@@ -143,7 +160,7 @@ impl<C> Builder<C> {
   crate::__builder_opts!(dynamic::Builder);
 }
 
-impl<C: Comparator> Builder<C> {
+impl<C: DynComparator<[u8], [u8]>> Builder<C> {
   /// Create a new map which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,

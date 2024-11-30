@@ -5,8 +5,8 @@ use core::{
 
 use dbutils::{
   buffer::VacantBuffer,
-  equivalent::{Comparable, Equivalent},
-  types::{KeyRef, LazyRef, Type},
+  equivalentor::TypeRefQueryComparator,
+  types::{LazyRef, Type},
 };
 use rarena_allocator::Allocator as _;
 
@@ -25,7 +25,7 @@ mod update;
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<usize, E>>>;
 
-impl<K, V, A, R> SkipList<K, V, A, R>
+impl<K, V, A, R, C> SkipList<K, V, A, R, C>
 where
   K: ?Sized,
   V: ?Sized,
@@ -157,7 +157,7 @@ where
   }
 }
 
-impl<K, V, A, RC> SkipList<K, V, A, RC>
+impl<K, V, A, RC, C> SkipList<K, V, A, RC, C>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -171,7 +171,8 @@ where
   #[inline]
   pub fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self.get(version, key).is_some()
   }
@@ -180,23 +181,24 @@ where
   #[inline]
   pub fn contains_key_versioned<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self.get_versioned(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
+  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
+    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
+  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
+    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
     self.iter(version).last()
   }
@@ -205,9 +207,9 @@ where
   pub fn first_versioned<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
+    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
     self.iter_all_versions(version).next()
   }
@@ -216,9 +218,9 @@ where
   pub fn last_versioned<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
+    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
     self.iter_all_versions(version).last()
   }
@@ -231,9 +233,10 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
   where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -248,7 +251,7 @@ where
       }
 
       let node_key = ty_ref::<K>(raw_node_key);
-      if !Equivalent::equivalent(key, &node_key) {
+      if !self.cmp.query_equivalent_ref(&node_key, key) {
         return None;
       }
 
@@ -276,9 +279,10 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC>>
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
   where
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -298,7 +302,7 @@ where
       }
 
       let node_key = ty_ref::<K>(raw_node_key);
-      if !Equivalent::equivalent(key, &node_key) {
+      if !self.cmp.query_equivalent_ref(&node_key, key) {
         return None;
       }
 
@@ -323,12 +327,12 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
-    self.iter(version).seek_upper_bound(upper)
+    self.range(version, (Bound::Unbounded, upper)).next()
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -337,45 +341,39 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC>>
+  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
-    self.iter(version).seek_lower_bound(lower)
+    self.range(version, (lower, Bound::Unbounded)).next()
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter<'a>(&'a self, version: Version) -> iterator::Iter<'a, K, LazyRef<'a, V>, A, RC>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, K, LazyRef<'_, V>, A, RC, C> {
     iterator::Iter::new(version, self, false)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions<'a>(
-    &'a self,
+  pub fn iter_all_versions(
+    &self,
     version: Version,
-  ) -> iterator::Iter<'a, K, Option<LazyRef<'a, V>>, A, RC>
-  where
-    K::Ref<'a>: KeyRef<'a, K>,
-  {
+  ) -> iterator::Iter<'_, K, Option<LazyRef<'_, V>>, A, RC, C>
+where {
     iterator::Iter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<'a, Q, R>(
-    &'a self,
+  pub fn range<Q, R>(
+    &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'a, K, LazyRef<'a, V>, A, RC, Q, R>
+  ) -> iterator::Iter<'_, K, LazyRef<'_, V>, A, RC, C, Q, R>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
     R: RangeBounds<Q>,
   {
     iterator::Iter::range(version, self, range, false)
@@ -383,14 +381,13 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range_all_versions<'a, Q, R>(
-    &'a self,
+  pub fn range_all_versions<Q, R>(
+    &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'a, K, Option<LazyRef<'a, V>>, A, RC, Q, R>
+  ) -> iterator::Iter<'_, K, Option<LazyRef<'_, V>>, A, RC, C, Q, R>
   where
-    K::Ref<'a>: KeyRef<'a, K>,
-    Q: ?Sized + Comparable<K::Ref<'a>>,
+    Q: ?Sized,
     R: RangeBounds<Q>,
   {
     iterator::Iter::range(version, self, range, true)

@@ -1,7 +1,9 @@
 use core::ops::{Bound, RangeBounds};
 
 use dbutils::{
-  equivalent::Comparable, equivalentor::{Comparator, RangeComparator}, types::{KeyRef, Type}
+  equivalent::Comparable,
+  equivalentor::{Comparator, RangeComparator},
+  types::{KeyRef, Type},
 };
 
 use crate::{allocator::Node, generic::GenericValue};

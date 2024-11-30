@@ -19,7 +19,10 @@ pub mod entry {
   pub use super::list::EntryRef;
 }
 
-pub use dbutils::equivalentor::*;
+pub use dbutils::equivalentor::{
+  Ascend, Descend, DynComparator, DynEquivalentor, DynRangeComparator, StaticComparator,
+  StaticEquivalentor, StaticRangeComparator,
+};
 
 /// Value that can be converted from a byte slice.
 pub trait Value<'a>: sealed::Sealed<'a> {}

@@ -4,7 +4,10 @@ use core::{
 };
 
 use dbutils::{
-  buffer::VacantBuffer, equivalent::{Comparable, Equivalent}, equivalentor::Comparator, types::{KeyRef, LazyRef, Type}
+  buffer::VacantBuffer,
+  equivalent::{Comparable, Equivalent},
+  equivalentor::Comparator,
+  types::{KeyRef, LazyRef, Type},
 };
 use rarena_allocator::Allocator as _;
 

@@ -5,15 +5,24 @@ use core::{
 
 use among::Among;
 use dbutils::{
-  buffer::VacantBuffer, equivalent::Comparable, equivalentor::Comparator, types::{KeyRef, LazyRef, MaybeStructured, Type}
+  buffer::VacantBuffer,
+  equivalent::Comparable,
+  equivalentor::Comparator,
+  types::{KeyRef, LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 
 use crate::{
-  allocator::{Allocator, Sealed, WithVersion}, error::Error, ref_counter::RefCounter, Arena, Header, Height, KeyBuilder, ValueBuilder, Version
+  allocator::{Allocator, Sealed, WithVersion},
+  error::Error,
+  ref_counter::RefCounter,
+  Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
 };
 
-use super::{list::{iterator::Iter, EntryRef}, DefaultComparator};
+use super::{
+  list::{iterator::Iter, EntryRef},
+  DefaultComparator,
+};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
@@ -27,16 +36,20 @@ pub mod unsync {
     crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V, C = DefaultComparator> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = DefaultComparator> =
+    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, L, C = DefaultComparator> =
+    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, K, L, Q, R, C = DefaultComparator> =
+    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = DefaultComparator> = super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
+  pub type Entry<'a, K, L, C = DefaultComparator> =
+    super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -95,8 +108,8 @@ pub mod unsync {
 pub mod sync {
   use dbutils::equivalentor::Comparator;
 
+  use crate::generic::DefaultComparator;
   pub use crate::sync::{multiple_version::Allocator, RefCounter};
-  use crate::{generic::DefaultComparator, traits::List};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
   mod tests {
@@ -130,16 +143,20 @@ pub mod sync {
     crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V, C = DefaultComparator> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = DefaultComparator> =
+    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, L, C = DefaultComparator> =
+    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = DefaultComparator> = super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, K, L, Q, R, C = DefaultComparator> =
+    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = DefaultComparator> = super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
+  pub type Entry<'a, K, L, C = DefaultComparator> =
+    super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -192,38 +209,6 @@ pub mod sync {
     type Allocator = Allocator;
     type RefCounter = RefCounter;
   }
-
-  impl<K, V, C> SkipMap<K, V, C>
-  where
-    K: ?Sized + 'static,
-    V: ?Sized + 'static,
-    C: Comparator + 'static,
-  {
-    /// Try creates from a `SkipMap` from an allocator directly.
-    ///
-    /// This method is not the ideal constructor, it is recommended to use [`Builder`](super::Builder) to create a `SkipMap`,
-    /// if you are not attempting to create multiple `SkipMap`s on the same allocator.
-    ///
-    /// Besides, the only way to reconstruct `SkipMap`s created by this method is to use the [`open_from_allocator(header: Header, arena: Self::Allocator, cmp: Self::Comparator)`](Self::open_from_allocator) method,
-    /// users must save the header to reconstruct the `SkipMap` by their own.
-    /// The header can be obtained by calling [`header`](Map::header) method.
-    #[inline]
-    pub fn create_from_allocator(arena: <Self as super::Map<K, V, C>>::Allocator, cmp: C) -> Result<Self, super::Error> {
-      <Self as List>::try_create_from_allocator(arena, cmp)
-    }
-
-    /// Try open a `SkipMap` from an allocator directly.
-    ///
-    /// See documentation for [`create_from_allocator`](Self::create_from_allocator) for more information.
-    ///
-    /// ## Safety
-    /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
-    /// - The `K` and `V` types must be the same as the types used to create the map.
-    #[inline]
-    pub unsafe fn open_from_allocator(header: super::Header, arena: <Self as super::Map<K, V, C>>::Allocator, cmp: C) -> Result<Self, super::Error> {
-      <Self as List>::try_open_from_allocator(arena, cmp, header)
-    }
-  }
 }
 
 /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
@@ -242,6 +227,35 @@ where
   type Allocator: Allocator;
   /// The reference counter type used in the map.
   type RefCounter: RefCounter;
+
+  /// Try creates from a `SkipMap` from an allocator directly.
+  ///
+  /// This method is not the ideal constructor, it is recommended to use [`Builder`](super::Builder) to create a `SkipMap`,
+  /// if you are not attempting to create multiple `SkipMap`s on the same allocator.
+  ///
+  /// Besides, the only way to reconstruct `SkipMap`s created by this method is to use the [`open_from_allocator(header: Header, arena: Self::Allocator, cmp: Self::Comparator)`](Map::open_from_allocator) method,
+  /// users must save the header to reconstruct the `SkipMap` by their own.
+  /// The header can be obtained by calling [`header`](Map::header) method.
+  #[inline]
+  fn create_from_allocator(arena: Self::Allocator, cmp: C) -> Result<Self, Error> {
+    Self::try_create_from_allocator(arena, cmp)
+  }
+
+  /// Try open a `SkipMap` from an allocator directly.
+  ///
+  /// See documentation for [`create_from_allocator`](Map::create_from_allocator) for more information.
+  ///
+  /// ## Safety
+  /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
+  /// - The `K` and `V` types must be the same as the types used to create the map.
+  #[inline]
+  unsafe fn open_from_allocator(
+    header: Header,
+    arena: Self::Allocator,
+    cmp: C,
+  ) -> Result<Self, Error> {
+    Self::try_open_from_allocator(arena, cmp, header)
+  }
 
   /// Returns the header of the `SkipMap`, which can be used to reconstruct the `SkipMap`.
   ///

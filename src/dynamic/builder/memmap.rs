@@ -1,6 +1,6 @@
 use core::mem;
 
-use dbutils::equivalentor::Comparator;
+use dbutils::equivalentor::DynComparator;
 use either::Either;
 
 use super::Builder;
@@ -12,7 +12,7 @@ use crate::{
   Arena,
 };
 
-impl<C: Comparator> Builder<C> {
+impl<C: DynComparator<[u8], [u8]>> Builder<C> {
   /// Create a new map which is backed by a anonymous memory map.
   ///
   /// **What the difference between this method and [`Builder::alloc`]?**

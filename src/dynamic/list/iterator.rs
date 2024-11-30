@@ -4,7 +4,7 @@ use core::{
   borrow::Borrow,
   ops::{Bound, RangeBounds},
 };
-use dbutils::equivalentor::{Comparator, RangeComparator};
+use dbutils::equivalentor::{DynComparator, DynRangeComparator};
 
 /// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
@@ -145,7 +145,7 @@ where
 impl<'a, V, A, RC, C, Q, R> Iter<'a, V, A, RC, C, Q, R>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
@@ -373,7 +373,7 @@ where
 impl<'a, V, A, RC, C, Q, R> Iter<'a, V, A, RC, C, Q, R>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
@@ -592,7 +592,7 @@ where
 impl<'a, V, A, RC, C, Q, R> Iterator for Iter<'a, V, A, RC, C, Q, R>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
@@ -639,7 +639,7 @@ where
 impl<'a, V, A, RC, C, Q, R> DoubleEndedIterator for Iter<'a, V, A, RC, C, Q, R>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
@@ -656,7 +656,11 @@ where
 }
 
 /// Helper function to check if a value is above a lower bound
-fn above_lower_bound_compare<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) -> bool {
+fn above_lower_bound_compare<C: DynComparator<[u8], [u8]>>(
+  cmp: &C,
+  bound: Bound<&[u8]>,
+  other: &[u8],
+) -> bool {
   match bound {
     Bound::Unbounded => true,
     Bound::Included(key) => cmp.compare(key, other).is_le(),
@@ -665,7 +669,11 @@ fn above_lower_bound_compare<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other:
 }
 
 /// Helper function to check if a value is above a lower bound
-fn above_lower_bound<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) -> bool {
+fn above_lower_bound<C: DynComparator<[u8], [u8]>>(
+  cmp: &C,
+  bound: Bound<&[u8]>,
+  other: &[u8],
+) -> bool {
   match bound {
     Bound::Unbounded => true,
     Bound::Included(key) => cmp.compare(key, other).is_le(),
@@ -674,7 +682,11 @@ fn above_lower_bound<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) 
 }
 
 /// Helper function to check if a value is below an upper bound
-fn below_upper_bound_compare<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) -> bool {
+fn below_upper_bound_compare<C: DynComparator<[u8], [u8]>>(
+  cmp: &C,
+  bound: Bound<&[u8]>,
+  other: &[u8],
+) -> bool {
   match bound {
     Bound::Unbounded => true,
     Bound::Included(key) => cmp.compare(key, other).is_ge(),
@@ -683,7 +695,11 @@ fn below_upper_bound_compare<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other:
 }
 
 /// Helper function to check if a value is below an upper bound
-fn below_upper_bound<C: Comparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) -> bool {
+fn below_upper_bound<C: DynComparator<[u8], [u8]>>(
+  cmp: &C,
+  bound: Bound<&[u8]>,
+  other: &[u8],
+) -> bool {
   match bound {
     Bound::Unbounded => true,
     Bound::Included(key) => cmp.compare(key, other).is_ge(),

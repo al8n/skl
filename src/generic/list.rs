@@ -2,7 +2,10 @@ use core::{cmp, marker::PhantomData, ptr::NonNull, sync::atomic::Ordering};
 
 use among::Among;
 use dbutils::{
-  buffer::VacantBuffer, equivalent::Comparable, equivalentor::Comparator, types::{KeyRef, LazyRef, MaybeStructured, Type}
+  buffer::VacantBuffer,
+  equivalent::Comparable,
+  equivalentor::Comparator,
+  types::{KeyRef, LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -596,7 +599,11 @@ where
 
       // let next_node = next.as_ref(&self.arena);
       let next_key = ty_ref::<K>(next.get_key(&self.arena));
-      let cmp = self.cmp.compare(&next_key, key).reverse().then_with(|| next.version().cmp(&version));
+      let cmp = self
+        .cmp
+        .compare(&next_key, key)
+        .reverse()
+        .then_with(|| next.version().cmp(&version));
 
       match cmp {
         cmp::Ordering::Greater => {

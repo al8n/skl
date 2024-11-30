@@ -1,4 +1,7 @@
-use dbutils::{equivalentor::Comparator, types::{KeyRef, LazyRef, Type}};
+use dbutils::{
+  equivalentor::Comparator,
+  types::{KeyRef, LazyRef, Type},
+};
 
 use super::{RefCounter, SkipList};
 use crate::{

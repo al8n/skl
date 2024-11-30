@@ -5,7 +5,10 @@ use core::{
 
 use among::Among;
 use dbutils::{
-  buffer::VacantBuffer, equivalent::Comparable, equivalentor::Comparator, types::{KeyRef, LazyRef, MaybeStructured, Type}
+  buffer::VacantBuffer,
+  equivalent::Comparable,
+  equivalentor::Comparator,
+  types::{KeyRef, LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 
@@ -16,7 +19,10 @@ use crate::{
   Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
-use super::{list::{iterator::Iter, EntryRef}, DefaultComparator};
+use super::{
+  list::{iterator::Iter, EntryRef},
+  DefaultComparator,
+};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
@@ -30,10 +36,12 @@ pub mod unsync {
     crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V, C = DefaultComparator> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = DefaultComparator> =
+    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = DefaultComparator> = super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, V, C = DefaultComparator> =
+    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, K, V, Q, R, C = DefaultComparator> =
@@ -100,7 +108,7 @@ pub mod sync {
   use dbutils::types::LazyRef;
 
   use crate::generic::DefaultComparator;
-pub use crate::sync::{map::Allocator, RefCounter};
+  pub use crate::sync::{map::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
   mod tests {
@@ -130,10 +138,12 @@ pub use crate::sync::{map::Allocator, RefCounter};
     crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V, C = DefaultComparator> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = DefaultComparator> =
+    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = DefaultComparator> = super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, V, C = DefaultComparator> =
+    super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, K, V, Q, R, C = DefaultComparator> =
@@ -222,8 +232,8 @@ where
   /// users must save the header to reconstruct the `SkipMap` by their own.
   /// The header can be obtained by calling [`header`](Map::header) method.
   #[inline]
-  fn create_from_allocator(arena: Self::Allocator) -> Result<Self, Error> {
-    Self::try_create_from_allocator(arena, ())
+  fn create_from_allocator(arena: Self::Allocator, cmp: C) -> Result<Self, Error> {
+    Self::try_create_from_allocator(arena, cmp)
   }
 
   /// Try open a `SkipMap` from an allocator directly.
@@ -234,8 +244,12 @@ where
   /// - The `header` must be the same as the one obtained from `SkipMap` when it was created.
   /// - The `K` and `V` types must be the same as the types used to create the map.
   #[inline]
-  unsafe fn open_from_allocator(header: Header, arena: Self::Allocator) -> Result<Self, Error> {
-    Self::try_open_from_allocator(arena, (), header)
+  unsafe fn open_from_allocator(
+    header: Header,
+    arena: Self::Allocator,
+    cmp: C,
+  ) -> Result<Self, Error> {
+    Self::try_open_from_allocator(arena, cmp, header)
   }
 
   /// Returns the header of the `SkipMap`, which can be used to reconstruct the `SkipMap`.

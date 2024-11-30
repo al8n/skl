@@ -1,6 +1,6 @@
 use core::mem;
 
-use dbutils::equivalentor::{Ascend, Comparator};
+use dbutils::equivalentor::{Ascend, DynComparator};
 
 use crate::{
   allocator::Sealed,
@@ -143,7 +143,7 @@ impl<C> Builder<C> {
   crate::__builder_opts!(dynamic::Builder);
 }
 
-impl<C: Comparator> Builder<C> {
+impl<C: DynComparator<[u8], [u8]>> Builder<C> {
   /// Create a new map which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,

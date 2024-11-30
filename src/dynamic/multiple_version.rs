@@ -7,7 +7,7 @@ use core::{
 };
 
 use among::Among;
-use dbutils::{buffer::VacantBuffer, equivalentor::Comparator};
+use dbutils::{buffer::VacantBuffer, equivalentor::DynComparator};
 use either::Either;
 
 use crate::{
@@ -21,7 +21,7 @@ use super::list::{iterator::Iter, EntryRef};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
-  use dbutils::equivalentor::{Ascend, Comparator};
+  use dbutils::equivalentor::{Ascend, DynComparator};
 
   pub use crate::unsync::{multiple_version::Allocator, RefCounter};
 
@@ -83,7 +83,7 @@ pub mod unsync {
     }
   }
 
-  impl<C: Comparator> super::Map for SkipMap<C> {
+  impl<C: DynComparator<[u8], [u8]>> super::Map for SkipMap<C> {
     type Allocator = Allocator;
     type Comparator = C;
     type RefCounter = RefCounter;
@@ -92,7 +92,7 @@ pub mod unsync {
 
 /// Implementations for concurrent environments.
 pub mod sync {
-  use dbutils::equivalentor::{Ascend, Comparator};
+  use dbutils::equivalentor::{Ascend, DynComparator};
 
   pub use crate::sync::{multiple_version::Allocator, RefCounter};
 
@@ -181,7 +181,7 @@ pub mod sync {
     }
   }
 
-  impl<C: Comparator> super::Map for SkipMap<C> {
+  impl<C: DynComparator<[u8], [u8]>> super::Map for SkipMap<C> {
     type Allocator = Allocator;
     type RefCounter = RefCounter;
     type Comparator = C;
@@ -202,7 +202,7 @@ where
   /// The allocator type used to allocate nodes in the map.
   type Allocator: Allocator;
   /// The comparator type used to compare keys in the map.
-  type Comparator: Comparator;
+  type Comparator: DynComparator<[u8], [u8]>;
   /// The reference counter type of the map.
   type RefCounter: RefCounter;
 

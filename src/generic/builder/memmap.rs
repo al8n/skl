@@ -11,7 +11,7 @@ use crate::{
   Arena,
 };
 
-impl Builder {
+impl<C> Builder<C> {
   /// Create a new map which is backed by a anonymous memory map.
   ///
   /// **What the difference between this method and [`Builder::alloc`]?**
@@ -41,18 +41,18 @@ impl Builder {
   pub fn map_anon<T>(self) -> std::io::Result<T>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
   {
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
-    let Builder { options } = self;
+    let Self { options, cmp } = self;
 
     options
       .to_arena_options()
       .with_maximum_alignment(node_align)
       .map_anon::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
-      .and_then(|arena| T::construct(arena, options, false, ()).map_err(invalid_data))
+      .and_then(|arena| T::construct(arena, options, false, cmp).map_err(invalid_data))
   }
 
   /// Opens a read-only map which backed by file-backed memory map.
@@ -70,7 +70,7 @@ impl Builder {
   pub unsafe fn map<T, P>(self, path: P) -> std::io::Result<T>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
     P: AsRef<std::path::Path>,
   {
     self
@@ -96,7 +96,7 @@ impl Builder {
   ) -> Result<T, Either<E, std::io::Error>>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     use crate::allocator::Meta as _;
@@ -104,7 +104,7 @@ impl Builder {
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
 
-    let Builder { options } = self;
+    let Self { options, cmp } = self;
     let magic_version = options.magic_version();
 
     #[allow(clippy::bind_instead_of_map)]
@@ -120,7 +120,7 @@ impl Builder {
       .with_maximum_alignment(node_align)
       .map_with_path_builder::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator, _, _>(path_builder)
       .and_then(|arena| {
-        T::construct(arena, options, true, ())
+        T::construct(arena, options, true, cmp)
           .map_err(invalid_data)
           .and_then(|map| {
             let flags = map.meta().flags();
@@ -158,7 +158,7 @@ impl Builder {
   pub unsafe fn map_mut<T, P>(self, path: P) -> std::io::Result<T>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
     P: AsRef<std::path::Path>,
   {
     self
@@ -183,14 +183,14 @@ impl Builder {
   ) -> Result<T, Either<E, std::io::Error>>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
     PB: FnOnce() -> Result<std::path::PathBuf, E>,
   {
     use crate::allocator::Meta as _;
 
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
-    let Builder { options } = self;
+    let Self { options, cmp } = self;
     let magic_version = options.magic_version();
     let path = path_builder().map_err(Either::Left)?;
     let exist = path.exists();
@@ -203,7 +203,7 @@ impl Builder {
       .map_mut::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator, _>(path)
       .map_err(Either::Right)
       .and_then(|arena| {
-        T::construct(arena, options, exist, ())
+        T::construct(arena, options, exist, cmp)
           .map_err(invalid_data)
           .and_then(|map| {
             let flags = map.meta().flags();

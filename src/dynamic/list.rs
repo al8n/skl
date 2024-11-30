@@ -3,7 +3,7 @@ use core::{cmp, ptr::NonNull, sync::atomic::Ordering};
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
-  equivalentor::{Ascend, Comparator},
+  equivalentor::{Ascend, DynComparator},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -312,7 +312,7 @@ where
 impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
-  C: Comparator,
+  C: DynComparator<[u8], [u8]>,
   R: RefCounter,
 {
   unsafe fn move_to_prev<'a, V>(
@@ -1241,7 +1241,7 @@ where
   #[inline]
   fn compare<C>(this: Either<&'a [u8], &'b [u8]>, other: &'a [u8], cmp: &C) -> cmp::Ordering
   where
-    C: Comparator,
+    C: DynComparator<[u8], [u8]>,
   {
     match this {
       Either::Left(key) | Either::Right(key) => cmp.compare(key, other),

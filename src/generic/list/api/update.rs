@@ -2,7 +2,9 @@ use core::sync::atomic::Ordering;
 
 use among::Among;
 use dbutils::{
-  buffer::VacantBuffer, equivalentor::Comparator, types::{KeyRef, LazyRef, MaybeStructured, Type}
+  buffer::VacantBuffer,
+  equivalentor::Comparator,
+  types::{KeyRef, LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 

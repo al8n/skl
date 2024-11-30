@@ -1,6 +1,6 @@
 use core::mem;
 
-use super::super::Options;
+use super::{super::Options, DefaultComparator};
 use crate::{
   allocator::Sealed,
   error::Error,
@@ -16,8 +16,9 @@ mod memmap;
 
 /// A builder for creating a generic key-value `SkipMap`.
 #[derive(Debug, Clone)]
-pub struct Builder {
+pub struct Builder<C = DefaultComparator> {
   options: Options,
+  cmp: C,
 }
 
 impl Default for Builder {
@@ -27,16 +28,19 @@ impl Default for Builder {
   }
 }
 
-impl From<Options> for Builder {
+impl<C: Default> From<Options> for Builder<C> {
   #[inline]
   fn from(options: Options) -> Self {
-    Self { options }
+    Self {
+      options,
+      cmp: Default::default(),
+    }
   }
 }
 
-impl From<Builder> for Options {
+impl<C> From<Builder<C>> for Options {
   #[inline]
-  fn from(builder: Builder) -> Self {
+  fn from(builder: Builder<C>) -> Self {
     builder.options
   }
 }
@@ -55,6 +59,42 @@ impl Builder {
   pub const fn new() -> Self {
     Self {
       options: Options::new(),
+      cmp: DefaultComparator,
+    }
+  }
+}
+
+impl<C> Builder<C> {
+  /// Get the comparator of the builder.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::Builder;
+  ///
+  /// let builder = Builder::new().comparator();
+  /// ```
+  #[inline]
+  pub const fn comparator(&self) -> &C {
+    &self.cmp
+  }
+
+  /// Set the comparator for the builder.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::{Builder, DefaultComparator};
+  ///
+  /// let builder = Builder::new().with_comparator(DefaultComparator);
+  ///
+  /// assert_eq!(builder.comparator(), &DefaultComparator);
+  /// ```
+  #[inline]
+  pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC> {
+    Builder {
+      options: self.options,
+      cmp,
     }
   }
 
@@ -91,7 +131,7 @@ impl Builder {
   crate::__builder_opts!(generic::Builder);
 }
 
-impl Builder {
+impl<C> Builder<C> {
   /// Create a new map which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,
@@ -122,17 +162,17 @@ impl Builder {
   pub fn alloc<T>(self) -> Result<T, Error>
   where
     T: Arena,
-    T::Constructable: Constructable<Comparator = ()>,
+    T::Constructable: Constructable<Comparator = C>,
   {
     let node_align =
       mem::align_of::<<<T::Constructable as Constructable>::Allocator as Sealed>::Node>();
 
-    let Builder { options } = self;
+    let Builder { options, cmp } = self;
     options
       .to_arena_options()
       .with_maximum_alignment(node_align)
       .alloc::<<<T::Constructable as Constructable>::Allocator as Sealed>::Allocator>()
       .map_err(Into::into)
-      .and_then(|arena| T::construct(arena, options, false, ()))
+      .and_then(|arena| T::construct(arena, options, false, cmp))
   }
 }

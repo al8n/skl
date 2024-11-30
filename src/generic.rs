@@ -19,9 +19,11 @@ pub mod entry {
 
 pub use builder::Builder;
 
-use dbutils::equivalentor::{Comparator, Equivalentor};
-pub use dbutils::{equivalent::*, types::*};
-
+pub use dbutils::{
+  equivalent::*,
+  equivalentor::{Comparator, Equivalentor, RangeComparator},
+  types::*,
+};
 
 /// The default stateless comparator.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,18 +34,19 @@ impl Equivalentor for DefaultComparator {
   fn equivalent<A, B>(&self, a: &A, b: &B) -> bool
   where
     A: ?Sized,
-    B: ?Sized + Equivalent<A>
+    B: ?Sized + Equivalent<A>,
   {
-    b.equivalent(a)  
+    b.equivalent(a)
   }
 }
 
 impl Comparator for DefaultComparator {
   #[inline]
   fn compare<A, B>(&self, a: &A, b: &B) -> core::cmp::Ordering
-    where
-      A: ?Sized,
-      B: ?Sized + Comparable<A> {
+  where
+    A: ?Sized,
+    B: ?Sized + Comparable<A>,
+  {
     b.compare(a).reverse()
   }
 }

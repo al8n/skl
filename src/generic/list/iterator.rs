@@ -53,7 +53,6 @@ where
 impl<'a, K, L, A, RC, C> Iter<'a, K, L, A, RC, C>
 where
   K: ?Sized + Type,
-
   L: GenericValue<'a>,
   A: Allocator,
   RC: RefCounter,
@@ -71,6 +70,20 @@ where
       version,
       range: None,
       all_versions,
+      _phantom: core::marker::PhantomData,
+    }
+  }
+
+  /// Changes the `Q` type of the iterator to adapt to a different query type for the iterator.
+  #[inline]
+  pub fn map<Q: ?Sized>(&self) -> Iter<'a, K, L, A, RC, C, Q> {
+    Iter {
+      map: self.map,
+      head: None,
+      tail: None,
+      version: self.version,
+      range: None,
+      all_versions: self.all_versions,
       _phantom: core::marker::PhantomData,
     }
   }

@@ -22,8 +22,8 @@ pub use builder::Builder;
 pub use dbutils::{
   equivalent::{Comparable, Equivalent},
   equivalentor::{
-    TypeComparator, TypeEquivalentor, TypeRefComparator, TypeRefEquivalentor,
-    TypeRefQueryComparator, TypeRefQueryEquivalentor,
+    Comparator, Equivalentor, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
+    TypeRefQueryEquivalentor,
   },
   types::*,
 };
@@ -62,7 +62,7 @@ impl<K: ?Sized> core::fmt::Debug for DefaultComparator<K> {
   }
 }
 
-impl<K> TypeEquivalentor for DefaultComparator<K>
+impl<K> Equivalentor for DefaultComparator<K>
 where
   K: Type + Ord + ?Sized,
 {
@@ -74,7 +74,7 @@ where
   }
 }
 
-impl<K> TypeComparator for DefaultComparator<K>
+impl<K> Comparator for DefaultComparator<K>
 where
   K: Type + Ord + ?Sized,
 {

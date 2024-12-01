@@ -28,10 +28,10 @@ pub mod unsync {
   use crate::generic::DefaultComparator;
   pub use crate::unsync::{multiple_version::Allocator, RefCounter};
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
-  // mod tests {
-  //   crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
+  mod tests {
+    crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
+  }
 
   type SkipList<K, V, C = DefaultComparator<K>> =
     super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
@@ -106,37 +106,37 @@ pub mod sync {
   use crate::generic::DefaultComparator;
   pub use crate::sync::{multiple_version::Allocator, RefCounter};
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
-  // mod tests {
-  //   crate::__generic_multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
+  mod tests {
+    crate::__generic_multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_multiple_version_concurrent,
-  // ))]
-  // mod concurrent_tests {
-  //   crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+  ))]
+  mod concurrent_tests {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_optimistic_freelist {
-  //   crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  ))]
+  mod concurrent_tests_with_optimistic_freelist {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_pessimistic_freelist {
-  //   crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  ))]
+  mod concurrent_tests_with_pessimistic_freelist {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  }
 
   type SkipList<K, V, C = DefaultComparator<K>> =
     super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
@@ -611,9 +611,7 @@ where
       return None;
     }
 
-    self
-      .range_all_versions(version, (Bound::Unbounded, upper))
-      .next()
+    self.as_ref().upper_bound_versioned(version, upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -636,13 +634,7 @@ where
       return None;
     }
 
-    self
-      .range_all_versions(version, (lower, Bound::Unbounded))
-      .next()
-    // self
-    //   .as_ref()
-    //   .iter_all_versions(version)
-    //   .seek_lower_bound(lower)
+    self.as_ref().lower_bound_versioned(version, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.

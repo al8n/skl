@@ -332,7 +332,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
-    self.range(version, (Bound::Unbounded, upper)).next()
+    self.iter(version).map().seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -346,7 +346,41 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
-    self.range(version, (lower, Bound::Unbounded)).next()
+    self.iter(version).map().seek_lower_bound(lower)
+  }
+
+  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn upper_bound_versioned<'a, Q>(
+    &'a self,
+    version: Version,
+    upper: Bound<&Q>,
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  where
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
+  {
+    self
+      .iter_all_versions(version)
+      .map()
+      .seek_upper_bound(upper)
+  }
+
+  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  pub fn lower_bound_versioned<'a, Q>(
+    &'a self,
+    version: Version,
+    lower: Bound<&Q>,
+  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  where
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, Q, Type = K>,
+  {
+    self
+      .iter_all_versions(version)
+      .map()
+      .seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.

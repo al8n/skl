@@ -82,7 +82,7 @@ impl<C> Builder<C> {
   /// ```rust
   /// use skl::dynamic::{Builder, Descend};
   ///
-  /// let builder = Builder::with(Descend);
+  /// let builder = Builder::with(Descend::new());
   /// ```
   #[inline]
   pub const fn with(cmp: C) -> Self {
@@ -145,7 +145,7 @@ impl<C> Builder<C> {
   /// ```rust
   /// use skl::dynamic::{Builder, Descend};
   ///
-  /// let builder = Builder::new().with_comparator(Descend);
+  /// let builder = Builder::new().with_comparator(Descend::new());
   ///
   /// assert_eq!(builder.comparator(), &Descend);
   /// ```

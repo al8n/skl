@@ -147,7 +147,7 @@ impl<C> Builder<C> {
   ///
   /// let builder = Builder::new().with_comparator(Descend::new());
   ///
-  /// assert_eq!(builder.comparator(), &Descend);
+  /// assert_eq!(builder.comparator(), &Descend::new());
   /// ```
   #[inline]
   pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC> {

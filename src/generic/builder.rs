@@ -111,7 +111,7 @@ impl<C> Builder<C> {
   /// ```rust
   /// use skl::generic::{Builder, Ascend};
   ///
-  /// let builder = Builder::new().with_comparator(Ascend::<Vec<u8>>::new());
+  /// let builder = Builder::<Ascend<[u8]>>::new().with_comparator(Ascend::<Vec<u8>>::new());
   ///
   /// assert_eq!(builder.comparator(), &Ascend::<Vec<u8>>::new());
   /// ```

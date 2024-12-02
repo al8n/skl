@@ -9,25 +9,25 @@ use crate::{
 
 use core::sync::atomic::Ordering;
 
-use dbutils::{buffer::VacantBuffer, equivalentor::Ascend};
+use dbutils::buffer::VacantBuffer;
 
-use crate::{allocator::WithoutVersion, dynamic::unique::Map, KeyBuilder, ValueBuilder};
+use crate::{allocator::WithoutVersion, dynamic::{unique::Map, Ascend}, KeyBuilder, ValueBuilder};
 
 use super::*;
 
 pub(crate) fn empty<M>(l: M)
 where
-  M: Map<Comparator = Ascend>,
+  M: Map,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let mut it = l.iter();
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
-  assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
+  assert!(it.seek_lower_bound::<[u8]>(Bound::Included(b"aaa")).is_none());
+  assert!(it.seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa")).is_none());
+  assert!(it.seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa")).is_none());
+  assert!(it.seek_upper_bound::<[u8]>(Bound::Included(b"aaa")).is_none());
   assert!(l.first().is_none());
   assert!(l.last().is_none());
 
@@ -40,7 +40,7 @@ where
 
 pub(crate) fn full<M>(l: M)
 where
-  M: Map<Comparator = Ascend>,
+  M: Map,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let mut found_arena_full = false;
@@ -61,7 +61,7 @@ where
 
 pub(crate) fn basic<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   // Try adding values.
@@ -137,7 +137,7 @@ where
 
 pub(crate) fn get<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
@@ -182,7 +182,7 @@ where
 
 pub(crate) fn gt<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
@@ -192,7 +192,7 @@ where
   l.get_or_insert(b"c".as_slice(), b"c3".as_slice()).unwrap();
 
   assert!(l.lower_bound(Bound::Excluded(b"a")).is_some());
-  assert!(l.lower_bound(Bound::Excluded(b"b")).is_some());
+  assert!(l.lower_bound(Bound::Excluded(b"b".as_slice())).is_some());
   assert!(l.lower_bound(Bound::Excluded(b"c")).is_none());
 
   let ent = l.lower_bound(Bound::Excluded(b"")).unwrap();
@@ -207,11 +207,11 @@ where
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
 
-  let ent = l.lower_bound(Bound::Excluded(b"b")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
 
-  let ent = l.lower_bound(Bound::Excluded(b"b")).unwrap();
+  let ent = l.lower_bound(Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
 
@@ -220,7 +220,7 @@ where
 
 pub(crate) fn ge<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
@@ -267,7 +267,7 @@ where
 
 pub(crate) fn le<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
@@ -298,7 +298,7 @@ where
 
 pub(crate) fn lt<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   l.get_or_insert(b"a".as_slice(), b"a1".as_slice()).unwrap();
@@ -307,10 +307,10 @@ where
   l.get_or_insert(b"c".as_slice(), b"c2".as_slice()).unwrap();
 
   assert!(l.upper_bound(Bound::Excluded(b"a")).is_none());
-  assert!(l.upper_bound(Bound::Excluded(b"b")).is_some());
+  assert!(l.upper_bound(Bound::Excluded(b"b".as_slice())).is_some());
   assert!(l.upper_bound(Bound::Excluded(b"c")).is_some());
 
-  let ent = l.upper_bound(Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
 
@@ -318,7 +318,7 @@ where
   assert_eq!(ent.key(), b"a");
   assert_eq!(ent.value(), b"a1");
 
-  let ent = l.upper_bound(Bound::Excluded(b"d")).unwrap();
+  let ent = l.upper_bound(Bound::Excluded(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c");
   assert_eq!(ent.value(), b"c1");
 }
@@ -326,7 +326,7 @@ where
 #[cfg(not(miri))]
 pub(crate) fn basic_large<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let n = 1000;
@@ -359,7 +359,7 @@ where
 ))]
 pub(crate) fn concurrent_basic_two_maps<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
@@ -367,7 +367,7 @@ where
   #[cfg(miri)]
   const N: usize = 100;
 
-  let l2 = M::create_from_allocator(l.allocator().clone(), Ascend).unwrap();
+  let l2 = M::create_from_allocator(l.allocator().clone(), Ascend::new()).unwrap();
 
   for i in (0..N / 2).rev() {
     let l = l.clone();
@@ -421,7 +421,7 @@ where
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
@@ -467,7 +467,7 @@ where
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
@@ -523,7 +523,7 @@ where
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   #[cfg(not(miri))]
@@ -570,7 +570,7 @@ where
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use std::sync::Arc;
@@ -631,7 +631,7 @@ where
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use std::sync::Arc;
@@ -657,13 +657,13 @@ where
     let l = l.clone();
     let saw_value = saw_value.clone();
     std::thread::spawn(move || {
-      let ent = l.get(b"thekey").unwrap();
+      let ent = l.get::<[u8]>(b"thekey").unwrap();
       let val = ent.value();
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
 
       let mut it = l.iter();
-      let ent = it.seek_lower_bound(Bound::Included(b"thekey")).unwrap();
+      let ent = it.seek_lower_bound(Bound::Included(b"thekey".as_slice())).unwrap();
       let val = ent.value();
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
@@ -682,7 +682,7 @@ where
 
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -707,7 +707,7 @@ where
 
 pub(crate) fn range_next<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -731,7 +731,7 @@ where
 
 pub(crate) fn iter_all_versions_prev<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -756,7 +756,7 @@ where
 
 pub(crate) fn range_prev<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -778,7 +778,7 @@ where
 
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -833,7 +833,7 @@ where
 
 pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -874,7 +874,7 @@ where
 
 pub(crate) fn range<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 1..10 {
@@ -969,7 +969,7 @@ where
 
 pub(crate) fn iter_latest<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -1003,7 +1003,7 @@ where
 
 pub(crate) fn range_latest<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   const N: usize = 100;
@@ -1038,7 +1038,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::dynamic::Builder;
@@ -1081,7 +1081,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::dynamic::Builder;
@@ -1137,7 +1137,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap3<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::dynamic::Builder;
@@ -1180,7 +1180,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap4<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + Sync + 'static,
+  M: Map + Clone + Send + Sync + 'static,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   use crate::dynamic::Builder;
@@ -1196,7 +1196,7 @@ where
         .with_capacity(ARENA_SIZE as u32)
         .map_mut::<M, _>(&p)
         .unwrap();
-      let l2 = M::create_from_allocator(l.allocator().clone(), Ascend).unwrap();
+      let l2 = M::create_from_allocator(l.allocator().clone(), Ascend::new()).unwrap();
       let h2 = l2.header().copied().unwrap();
       let t1 = std::thread::spawn(move || {
         for i in 0..500 {
@@ -1226,7 +1226,7 @@ where
       .with_capacity((ARENA_SIZE * 2) as u32)
       .map_mut::<M, _>(&p)
       .unwrap();
-    let l2 = M::open_from_allocator(header, l.allocator().clone(), Ascend).unwrap();
+    let l2 = M::open_from_allocator(header, l.allocator().clone(), Ascend::new()).unwrap();
     assert_eq!(500, l.len());
     assert_eq!(500, l2.len());
 
@@ -1259,7 +1259,7 @@ impl Person {
 
 pub(crate) fn get_or_insert_with_value<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
@@ -1294,7 +1294,7 @@ where
 
 pub(crate) fn get_or_insert_with<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
@@ -1333,7 +1333,7 @@ where
 
 pub(crate) fn insert<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let k = 0u64.to_le_bytes();
@@ -1353,7 +1353,7 @@ where
 
 pub(crate) fn insert_with_value<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
@@ -1424,7 +1424,7 @@ where
 
 pub(crate) fn insert_with<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let alice = Person {
@@ -1495,7 +1495,7 @@ where
 
 pub(crate) fn get_or_remove<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 0..100 {
@@ -1524,7 +1524,7 @@ where
 
 pub(crate) fn remove<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 0..100 {
@@ -1552,7 +1552,7 @@ where
 
 pub(crate) fn remove2<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   for i in 0..100 {

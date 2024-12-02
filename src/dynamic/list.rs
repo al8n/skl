@@ -3,7 +3,7 @@ use core::{cmp, ptr::NonNull, sync::atomic::Ordering};
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
-  equivalentor::{Ascend, DynComparator},
+  equivalentor::{Ascend, BytesComparator},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -36,7 +36,7 @@ type UpdateOk<'a, 'b, A, RC, C> = Either<
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<A, R, C = Ascend>
+pub struct SkipList<A, R, C = Ascend<[u8]>>
 where
   A: Allocator,
   R: RefCounter,
@@ -312,7 +312,7 @@ where
 impl<A, R, C> SkipList<A, R, C>
 where
   A: Allocator,
-  C: DynComparator<[u8], [u8]>,
+  C: BytesComparator,
   R: RefCounter,
 {
   unsafe fn move_to_prev<'a, V>(
@@ -1241,7 +1241,7 @@ where
   #[inline]
   fn compare<C>(this: Either<&'a [u8], &'b [u8]>, other: &'a [u8], cmp: &C) -> cmp::Ordering
   where
-    C: DynComparator<[u8], [u8]>,
+    C: BytesComparator,
   {
     match this {
       Either::Left(key) | Either::Right(key) => cmp.compare(key, other),

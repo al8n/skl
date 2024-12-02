@@ -369,7 +369,7 @@ where
 
   let l2 = M::create_from_allocator(
     l.allocator().clone(),
-    crate::generic::DefaultComparator::new(),
+    crate::generic::Ascend::new(),
   )
   .unwrap();
 
@@ -1201,7 +1201,7 @@ where
         .unwrap();
       let l2 = M::create_from_allocator(
         l.allocator().clone(),
-        crate::generic::DefaultComparator::new(),
+        crate::generic::Ascend::new(),
       )
       .unwrap();
       let h2 = l2.header().copied().unwrap();
@@ -1237,7 +1237,7 @@ where
     let l2 = M::open_from_allocator(
       header,
       l.allocator().clone(),
-      crate::generic::DefaultComparator::new(),
+      crate::generic::Ascend::new(),
     )
     .unwrap();
     assert_eq!(500, l.len());

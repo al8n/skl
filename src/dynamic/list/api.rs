@@ -4,7 +4,7 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::{buffer::VacantBuffer, equivalentor::DynComparator};
+use dbutils::{buffer::VacantBuffer, equivalentor::BytesComparator};
 use rarena_allocator::Allocator as _;
 
 use crate::{
@@ -155,8 +155,8 @@ where
 impl<A, RC, C> SkipList<A, RC, C>
 where
   A: Allocator,
-  C: DynComparator<[u8], [u8]>,
   RC: RefCounter,
+  C: BytesComparator,
 {
   /// Returns `true` if the key exists in the map.
   ///
@@ -285,7 +285,13 @@ where
   ) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
     self.iter(version).seek_lower_bound(lower)
   }
+}
 
+impl<A, RC, C> SkipList<A, RC, C>
+where
+  A: Allocator,
+  RC: RefCounter,
+{
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
   pub fn iter(&self, version: Version) -> iterator::Iter<'_, &[u8], A, RC, C> {

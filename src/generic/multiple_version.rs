@@ -20,12 +20,12 @@ use crate::{
 
 use super::{
   list::{iterator::Iter, EntryRef},
-  DefaultComparator,
+  Ascend,
 };
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
-  use crate::generic::DefaultComparator;
+  use crate::generic::Ascend;
   pub use crate::unsync::{multiple_version::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
@@ -33,26 +33,26 @@ pub mod unsync {
     crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V, C = DefaultComparator<K>> =
+  type SkipList<K, V, C = Ascend<K>> =
     super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = DefaultComparator<K>> =
+  pub type Iter<'a, K, L, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = DefaultComparator<K>> =
+  pub type Range<'a, K, L, Q, R, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = DefaultComparator<K>> =
+  pub type Entry<'a, K, L, C = Ascend<K>> =
     super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
   /// If you want to use in concurrent environment, you can use [`multiple_version::sync::SkipMap`](crate::generic::multiple_version::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
@@ -103,7 +103,7 @@ pub mod unsync {
 
 /// Implementations for concurrent environments.
 pub mod sync {
-  use crate::generic::DefaultComparator;
+  use crate::generic::Ascend;
   pub use crate::sync::{multiple_version::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
@@ -138,26 +138,26 @@ pub mod sync {
     crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V, C = DefaultComparator<K>> =
+  type SkipList<K, V, C = Ascend<K>> =
     super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = DefaultComparator<K>> =
+  pub type Iter<'a, K, L, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = DefaultComparator<K>> =
+  pub type Range<'a, K, L, Q, R, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = DefaultComparator<K>> =
+  pub type Entry<'a, K, L, C = Ascend<K>> =
     super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
   /// If you want to use in non-concurrent environment, you can use [`multiple_version::unsync::SkipMap`](crate::generic::multiple_version::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
@@ -210,7 +210,7 @@ pub mod sync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<K, V, C = DefaultComparator<K>>
+pub trait Map<K, V, C = Ascend<K>>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,

@@ -92,7 +92,6 @@ where
 impl<'a, K, L, A, RC, C, Q, R> Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
-
   L: GenericValue<'a>,
   A: Allocator,
   RC: RefCounter,
@@ -120,7 +119,6 @@ where
 impl<'a, K, L, A, RC, C, Q, R> Iter<'a, K, L, A, RC, C, Q, R>
 where
   K: ?Sized + Type,
-
   L: GenericValue<'a>,
   A: Allocator,
   RC: RefCounter,

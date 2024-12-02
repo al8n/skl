@@ -1,7 +1,7 @@
 use skl::{
   generic::{
     unique::{sync::SkipMap, Map},
-    Builder, DefaultComparator,
+    Builder, Ascend,
   },
   Arena,
 };
@@ -27,7 +27,7 @@ fn main() {
         .unwrap();
       let l2 = SkipMap::<[u8], [u8]>::create_from_allocator(
         l.allocator().clone(),
-        DefaultComparator::new(),
+        Ascend::new(),
       )
       .unwrap();
       let h2 = l2.header().copied().unwrap();
@@ -63,7 +63,7 @@ fn main() {
     let l2 = SkipMap::<[u8], [u8]>::open_from_allocator(
       header,
       l.allocator().clone(),
-      DefaultComparator::new(),
+      Ascend::new(),
     )
     .unwrap();
     assert_eq!(500, l.len());

@@ -4,7 +4,7 @@ use crate::{
   ref_counter::RefCounter,
   Version,
 };
-use dbutils::equivalentor::DynComparator;
+use dbutils::equivalentor::BytesComparator;
 
 /// An entry reference of the `SkipMap`.
 pub struct EntryRef<'a, V, C, A, R>
@@ -121,7 +121,7 @@ where
 
 impl<'a, V, C, A, R> EntryRef<'a, V, C, A, R>
 where
-  C: DynComparator<[u8], [u8]>,
+  C: BytesComparator,
   A: Allocator,
   R: RefCounter,
   V: Value<'a> + 'a,

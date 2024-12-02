@@ -1,6 +1,6 @@
 use core::mem;
 
-use dbutils::equivalentor::{Ascend, DynComparator};
+use dbutils::equivalentor::{Ascend, BytesComparator};
 
 use crate::{
   allocator::Sealed,
@@ -17,7 +17,7 @@ mod memmap;
 
 /// A builder for creating a dynamic key-value `SkipMap`.
 #[derive(Debug, Clone)]
-pub struct Builder<C = Ascend> {
+pub struct Builder<C = Ascend<[u8]>> {
   options: Options,
   cmp: C,
 }
@@ -69,7 +69,7 @@ impl Builder {
   pub const fn new() -> Self {
     Self {
       options: Options::new(),
-      cmp: Ascend,
+      cmp: Ascend::new(),
     }
   }
 }
@@ -160,7 +160,7 @@ impl<C> Builder<C> {
   crate::__builder_opts!(dynamic::Builder);
 }
 
-impl<C: DynComparator<[u8], [u8]>> Builder<C> {
+impl<C: BytesComparator> Builder<C> {
   /// Create a new map which is backed by a `AlignedVec`.
   ///
   /// **Note:** The capacity stands for how many memory allocated,

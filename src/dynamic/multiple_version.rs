@@ -17,7 +17,10 @@ use crate::{
   Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
 };
 
-use super::{list::{iterator::Iter, EntryRef}, Ascend};
+use super::{
+  list::{iterator::Iter, EntryRef},
+  Ascend,
+};
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
@@ -192,9 +195,7 @@ pub mod sync {
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait Map<C = Ascend>
 where
-  Self: Arena<
-    Constructable = super::list::SkipList<Self::Allocator, Self::RefCounter, C>,
-  >,
+  Self: Arena<Constructable = super::list::SkipList<Self::Allocator, Self::RefCounter, C>>,
   C: 'static,
   <Self::Allocator as Sealed>::Node: WithVersion,
 {
@@ -600,11 +601,7 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter(
-    &self,
-    version: Version,
-  ) -> Iter<'_, &[u8], Self::Allocator, Self::RefCounter, C>
-  {
+  fn iter(&self, version: Version) -> Iter<'_, &[u8], Self::Allocator, Self::RefCounter, C> {
     self.as_ref().iter(version)
   }
 
@@ -613,8 +610,7 @@ where
   fn iter_all_versions(
     &self,
     version: Version,
-  ) -> Iter<'_, Option<&[u8]>, Self::Allocator, Self::RefCounter, C>
-  {
+  ) -> Iter<'_, Option<&[u8]>, Self::Allocator, Self::RefCounter, C> {
     self.as_ref().iter_all_versions(version)
   }
 
@@ -657,10 +653,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -690,10 +683,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -753,10 +743,7 @@ where
     version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -823,10 +810,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -847,10 +831,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -872,10 +853,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -937,10 +915,7 @@ where
     version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -1008,10 +983,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -1322,10 +1294,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1348,10 +1317,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1371,10 +1337,7 @@ where
     &'a self,
     version: Version,
     key: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1406,10 +1369,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Error,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1465,10 +1425,7 @@ where
     &'a self,
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -1528,10 +1485,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
-    Either<E, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {

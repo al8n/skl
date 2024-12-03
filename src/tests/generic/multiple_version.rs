@@ -748,11 +748,7 @@ where
   #[cfg(miri)]
   const N: usize = 100;
 
-  let l2 = M::create_from_allocator(
-    l.allocator().clone(),
-    crate::generic::Ascend::new(),
-  )
-  .unwrap();
+  let l2 = M::create_from_allocator(l.allocator().clone(), crate::generic::Ascend::new()).unwrap();
 
   for i in (0..N / 2).rev() {
     let l = l.clone();
@@ -1818,11 +1814,8 @@ where
         .with_capacity(ARENA_SIZE as u32)
         .map_mut::<M, _>(&p)
         .unwrap();
-      let l2 = M::create_from_allocator(
-        l.allocator().clone(),
-        crate::generic::Ascend::new(),
-      )
-      .unwrap();
+      let l2 =
+        M::create_from_allocator(l.allocator().clone(), crate::generic::Ascend::new()).unwrap();
       let h2 = l2.header().copied().unwrap();
 
       let t1 = std::thread::spawn(move || {
@@ -1853,12 +1846,8 @@ where
       .with_capacity((ARENA_SIZE * 2) as u32)
       .map_mut::<M, _>(&p)
       .unwrap();
-    let l2 = M::open_from_allocator(
-      header,
-      l.allocator().clone(),
-      crate::generic::Ascend::new(),
-    )
-    .unwrap();
+    let l2 =
+      M::open_from_allocator(header, l.allocator().clone(), crate::generic::Ascend::new()).unwrap();
     assert_eq!(500, l.len());
     assert_eq!(500, l2.len());
 

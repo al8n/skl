@@ -20,7 +20,7 @@ pub(crate) mod map;
 ))]
 pub(crate) mod multiple_version;
 
-use crate::generic::{Builder, Ascend};
+use crate::generic::{Ascend, Builder};
 
 use super::*;
 

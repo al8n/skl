@@ -669,11 +669,7 @@ fn above_lower_bound_compare<C: BytesComparator>(
 }
 
 /// Helper function to check if a value is above a lower bound
-fn above_lower_bound<C: BytesComparator>(
-  cmp: &C,
-  bound: Bound<&[u8]>,
-  other: &[u8],
-) -> bool {
+fn above_lower_bound<C: BytesComparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) -> bool {
   match bound {
     Bound::Unbounded => true,
     Bound::Included(key) => cmp.compare(key, other).is_le(),
@@ -695,11 +691,7 @@ fn below_upper_bound_compare<C: BytesComparator>(
 }
 
 /// Helper function to check if a value is below an upper bound
-fn below_upper_bound<C: BytesComparator>(
-  cmp: &C,
-  bound: Bound<&[u8]>,
-  other: &[u8],
-) -> bool {
+fn below_upper_bound<C: BytesComparator>(cmp: &C, bound: Bound<&[u8]>, other: &[u8]) -> bool {
   match bound {
     Bound::Unbounded => true,
     Bound::Included(key) => cmp.compare(key, other).is_ge(),

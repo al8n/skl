@@ -22,12 +22,11 @@ pub use builder::Builder;
 pub use dbutils::{
   equivalent::{Comparable, Equivalent},
   equivalentor::{
-    Comparator, Equivalentor, TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator,
-    TypeRefQueryEquivalentor, Ascend, Descend,
+    Ascend, Comparator, Descend, Equivalentor, TypeRefComparator, TypeRefEquivalentor,
+    TypeRefQueryComparator, TypeRefQueryEquivalentor,
   },
   types::*,
 };
-
 
 /// Value that can be converted from a byte slice.
 pub trait GenericValue<'a>: sealed::Sealed<'a> {}

@@ -33,8 +33,7 @@ pub mod unsync {
     crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V, C = Ascend<K>> =
-    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
   pub type Iter<'a, K, L, C = Ascend<K>> =
@@ -138,8 +137,7 @@ pub mod sync {
     crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V, C = Ascend<K>> =
-    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
   pub type Iter<'a, K, L, C = Ascend<K>> =

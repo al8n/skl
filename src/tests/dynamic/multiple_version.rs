@@ -12,7 +12,9 @@ use core::sync::atomic::Ordering;
 use dbutils::buffer::VacantBuffer;
 
 use crate::{
-  allocator::WithVersion, dynamic::{multiple_version::Map, Ascend}, KeyBuilder, ValueBuilder, MIN_VERSION,
+  allocator::WithVersion,
+  dynamic::{multiple_version::Map, Ascend},
+  KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
 use super::*;
@@ -26,10 +28,18 @@ where
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  assert!(it.seek_lower_bound::<[u8]>(Bound::Included(b"aaa")).is_none());
-  assert!(it.seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_upper_bound::<[u8]>(Bound::Included(b"aaa")).is_none());
+  assert!(it
+    .seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
+    .is_none());
   assert!(l.first(MIN_VERSION,).is_none());
   assert!(l.last(MIN_VERSION,).is_none());
 
@@ -80,7 +90,9 @@ where
 
   {
     let mut it = l.iter_all_versions(0);
-    let ent = it.seek_lower_bound::<[u8]>(Bound::Included(b"key1")).unwrap();
+    let ent = it
+      .seek_lower_bound::<[u8]>(Bound::Included(b"key1"))
+      .unwrap();
     assert_eq!(ent.key(), b"key1".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(1).as_slice());
     assert_eq!(ent.version(), 0);
@@ -123,7 +135,9 @@ where
 
   {
     let mut it = l.iter_all_versions(2);
-    let ent = it.seek_lower_bound::<[u8]>(Bound::Included(b"b".as_slice())).unwrap();
+    let ent = it
+      .seek_lower_bound::<[u8]>(Bound::Included(b"b".as_slice()))
+      .unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
     assert_eq!(ent.version(), 2);
@@ -225,7 +239,9 @@ where
 
   let mut it = l.iter_all_versions(3);
 
-  let ent = it.seek_upper_bound::<[u8]>(Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value().unwrap(), b"a1".as_slice(),);
   assert_eq!(ent.version(), 1);
@@ -247,7 +263,9 @@ where
   assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = it.seek_lower_bound::<[u8]>(Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound::<[u8]>(Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -373,32 +391,44 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound::<[u8]>(1, Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(1, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound::<[u8]>(2, Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(2, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound::<[u8]>(3, Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(3, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound::<[u8]>(4, Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(4, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound::<[u8]>(5, Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(5, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c3".as_slice());
   assert_eq!(ent.version(), 5);
 
-  let ent = l.lower_bound::<[u8]>(6, Bound::Excluded(b"b".as_slice())).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(6, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c3".as_slice());
   assert_eq!(ent.version(), 5);
@@ -428,7 +458,9 @@ where
   assert!(l
     .lower_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
     .is_none());
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"b".as_slice())).is_none());
+  assert!(l
+    .lower_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
+    .is_none());
   assert!(l
     .lower_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
     .is_none());
@@ -493,7 +525,9 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"d".as_slice())).is_none());
+  assert!(l
+    .lower_bound(MIN_VERSION, Bound::Included(b"d".as_slice()))
+    .is_none());
   assert!(l.lower_bound(1, Bound::Included(b"d".as_slice())).is_none());
   assert!(l.lower_bound(2, Bound::Included(b"d".as_slice())).is_none());
   assert!(l.lower_bound(3, Bound::Included(b"d".as_slice())).is_none());
@@ -517,7 +551,9 @@ where
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
     .is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"b".as_slice())).is_none());
+  assert!(l
+    .upper_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
+    .is_none());
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
     .is_none());
@@ -620,7 +656,9 @@ where
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Excluded(b"a".as_slice()))
     .is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"b".as_slice())).is_none());
+  assert!(l
+    .upper_bound(MIN_VERSION, Bound::Excluded(b"b".as_slice()))
+    .is_none());
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Excluded(b"c".as_slice()))
     .is_none());
@@ -1333,31 +1371,45 @@ where
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
-  let ent = it.seek_lower_bound(Bound::Included(b"".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01000".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01000".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01005".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01005".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1010).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1010).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01010".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01010".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1010).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1010).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01020".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01020".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1020).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1020).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01200".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01200".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1200).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1200).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01100".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01100".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1100).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1100).as_slice());
 
@@ -1366,11 +1418,15 @@ where
 
   l.get_or_insert(MIN_VERSION, [].as_slice(), [].as_slice())
     .unwrap();
-  let ent = it.seek_lower_bound(Bound::Included(b"".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
 
-  let ent = it.seek_lower_bound(Bound::Included(b"".as_slice())).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
 }
@@ -1393,20 +1449,28 @@ where
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
-  assert!(it.seek_upper_bound(Bound::Excluded(b"".as_slice())).is_none());
+  assert!(it
+    .seek_upper_bound(Bound::Excluded(b"".as_slice()))
+    .is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01000".as_slice()));
   assert!(ent.is_none());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"01001".as_slice())).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(b"01001".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"01991".as_slice())).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(b"01991".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1990).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1990).as_slice());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"99999".as_slice())).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(b"99999".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1990).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1990).as_slice());
 
@@ -1420,7 +1484,9 @@ where
   let ent = it.seek_upper_bound::<[u8]>(Bound::Excluded(b""));
   assert!(ent.is_none());
 
-  let ent = it.seek_upper_bound::<[u8]>(Bound::Excluded(b"\x01")).unwrap();
+  let ent = it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"\x01"))
+    .unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
 }

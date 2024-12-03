@@ -11,7 +11,11 @@ use core::sync::atomic::Ordering;
 
 use dbutils::buffer::VacantBuffer;
 
-use crate::{allocator::WithoutVersion, dynamic::{unique::Map, Ascend}, KeyBuilder, ValueBuilder};
+use crate::{
+  allocator::WithoutVersion,
+  dynamic::{unique::Map, Ascend},
+  KeyBuilder, ValueBuilder,
+};
 
 use super::*;
 
@@ -24,10 +28,18 @@ where
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  assert!(it.seek_lower_bound::<[u8]>(Bound::Included(b"aaa")).is_none());
-  assert!(it.seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_upper_bound::<[u8]>(Bound::Included(b"aaa")).is_none());
+  assert!(it
+    .seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
+    .is_none());
   assert!(l.first().is_none());
   assert!(l.last().is_none());
 
@@ -663,7 +675,9 @@ where
       assert!((0..N).contains(&num));
 
       let mut it = l.iter();
-      let ent = it.seek_lower_bound(Bound::Included(b"thekey".as_slice())).unwrap();
+      let ent = it
+        .seek_lower_bound(Bound::Included(b"thekey".as_slice()))
+        .unwrap();
       let val = ent.value();
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));

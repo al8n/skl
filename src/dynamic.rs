@@ -19,7 +19,7 @@ pub mod entry {
   pub use super::list::EntryRef;
 }
 
-pub use dbutils::equivalentor::{BytesComparator, BytesRangeComparator};
+pub use dbutils::equivalentor::{BytesComparator, BytesEquivalentor, BytesRangeComparator};
 
 /// Ascend is a comparator that compares byte slices in ascending order.
 pub type Ascend = dbutils::equivalentor::Ascend<[u8]>;

@@ -117,6 +117,11 @@ where
   pub(crate) fn meta(&self) -> &A::Meta {
     &self.meta
   }
+
+  #[inline]
+  pub(crate) const fn comparator(&self) -> &C {
+    &self.cmp
+  }
 }
 
 impl<K, V, A, R, C> Constructable for SkipList<K, V, A, R, C>

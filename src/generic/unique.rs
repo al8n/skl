@@ -20,41 +20,40 @@ use crate::{
 
 use super::{
   list::{iterator::Iter, EntryRef},
-  DefaultComparator,
+  Ascend,
 };
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
   use dbutils::types::LazyRef;
 
-  use crate::generic::DefaultComparator;
+  use crate::generic::Ascend;
   pub use crate::unsync::{map::Allocator, RefCounter};
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
-  // mod tests {
-  //   crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
+  mod tests {
+    crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
+  }
 
-  type SkipList<K, V, C = DefaultComparator<K>> =
-    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = DefaultComparator<K>> =
+  pub type Iter<'a, K, V, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R, C = DefaultComparator<K>> =
+  pub type Range<'a, K, V, Q, R, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, Q, R, C>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V, C = DefaultComparator<K>> =
+  pub type Entry<'a, K, V, C = Ascend<K>> =
     super::super::entry::EntryRef<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
   /// If you want to use in concurrent environment, you can use [`unique::sync::SkipMap`](crate::generic::unique::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
     #[inline]
@@ -106,57 +105,56 @@ pub mod unsync {
 pub mod sync {
   use dbutils::types::LazyRef;
 
-  use crate::generic::DefaultComparator;
+  use crate::generic::Ascend;
   pub use crate::sync::{map::Allocator, RefCounter};
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
-  // mod tests {
-  //   crate::__generic_map_tests!("sync_map": super::SkipMap<[u8], [u8]>);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
+  mod tests {
+    crate::__generic_map_tests!("sync_map": super::SkipMap<[u8], [u8]>);
+  }
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map_concurrent,))]
-  // mod concurrent_tests {
-  //   crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map_concurrent,))]
+  mod concurrent_tests {
+    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_map_concurrent_with_optimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_optimistic_freelist {
-  //   crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_map_concurrent_with_optimistic_freelist,
+  ))]
+  mod concurrent_tests_with_optimistic_freelist {
+    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_map_concurrent_with_pessimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_pessimistic_freelist {
-  //   crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_map_concurrent_with_pessimistic_freelist,
+  ))]
+  mod concurrent_tests_with_pessimistic_freelist {
+    crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  }
 
-  type SkipList<K, V, C = DefaultComparator<K>> =
-    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = DefaultComparator<K>> =
+  pub type Iter<'a, K, V, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R, C = DefaultComparator<K>> =
+  pub type Range<'a, K, V, Q, R, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, LazyRef<'a, V>, Allocator, RefCounter, Q, R, C>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V, C = DefaultComparator<K>> =
+  pub type Entry<'a, K, V, C = Ascend<K>> =
     super::super::entry::EntryRef<'a, K, LazyRef<'a, V>, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
   /// If you want to use in non-concurrent environment, you can use [`unique::unsync::SkipMap`](crate::generic::unique::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
@@ -209,7 +207,7 @@ pub mod sync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<K, V, C = DefaultComparator<K>>
+pub trait Map<K, V, C = Ascend<K>>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,

@@ -29,11 +29,11 @@ impl<C> Builder<C> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{unique::sync, multiple_version::unsync, Builder, DefaultComparator};
+  /// use skl::generic::{unique::sync, multiple_version::unsync, Builder, Ascend};
   ///
-  /// let map = Builder::<DefaultComparator<[u8]>>::new().with_capacity(1024).map_anon::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::<Ascend<[u8]>>::new().with_capacity(1024).map_anon::<sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// let arena = Builder::<DefaultComparator<[u8]>>::new().with_capacity(1024).map_anon::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Builder::<Ascend<[u8]>>::new().with_capacity(1024).map_anon::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[cfg(all(feature = "memmap", not(target_family = "wasm")))]
   #[cfg_attr(docsrs, doc(cfg(all(feature = "memmap", not(target_family = "wasm")))))]

@@ -9,27 +9,37 @@ use crate::{
 
 use core::sync::atomic::Ordering;
 
-use dbutils::{buffer::VacantBuffer, equivalentor::Ascend};
+use dbutils::buffer::VacantBuffer;
 
 use crate::{
-  allocator::WithVersion, dynamic::multiple_version::Map, KeyBuilder, ValueBuilder, MIN_VERSION,
+  allocator::WithVersion,
+  dynamic::{multiple_version::Map, Ascend},
+  KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
 use super::*;
 
 pub(crate) fn empty<M>(l: M)
 where
-  M: Map<Comparator = Ascend>,
+  M: Map,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let mut it = l.iter(MIN_VERSION);
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  assert!(it.seek_lower_bound(Bound::Included(b"aaa")).is_none());
-  assert!(it.seek_upper_bound(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_lower_bound(Bound::Excluded(b"aaa")).is_none());
-  assert!(it.seek_upper_bound(Bound::Included(b"aaa")).is_none());
+  assert!(it
+    .seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
+    .is_none());
+  assert!(it
+    .seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
+    .is_none());
   assert!(l.first(MIN_VERSION,).is_none());
   assert!(l.last(MIN_VERSION,).is_none());
 
@@ -42,7 +52,7 @@ where
 
 pub(crate) fn full<M>(l: M)
 where
-  M: Map<Comparator = Ascend>,
+  M: Map,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let mut found_arena_full = false;
@@ -67,7 +77,7 @@ where
 
 pub(crate) fn basic<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   // Try adding values.
@@ -80,7 +90,9 @@ where
 
   {
     let mut it = l.iter_all_versions(0);
-    let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
+    let ent = it
+      .seek_lower_bound::<[u8]>(Bound::Included(b"key1"))
+      .unwrap();
     assert_eq!(ent.key(), b"key1".as_slice());
     assert_eq!(ent.value().unwrap(), make_value(1).as_slice());
     assert_eq!(ent.version(), 0);
@@ -123,7 +135,9 @@ where
 
   {
     let mut it = l.iter_all_versions(2);
-    let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
+    let ent = it
+      .seek_lower_bound::<[u8]>(Bound::Included(b"b".as_slice()))
+      .unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.value().unwrap(), &[]);
     assert_eq!(ent.version(), 2);
@@ -157,7 +171,7 @@ where
 
 pub(crate) fn iter_all_versions_mvcc<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -225,7 +239,9 @@ where
 
   let mut it = l.iter_all_versions(3);
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
+  let ent = it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value().unwrap(), b"a1".as_slice(),);
   assert_eq!(ent.version(), 1);
@@ -247,7 +263,9 @@ where
   assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = it.seek_lower_bound(Bound::Excluded(b"b")).unwrap();
+  let ent = it
+    .seek_lower_bound::<[u8]>(Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value().unwrap(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -262,7 +280,7 @@ where
 
 pub(crate) fn get_mvcc<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -294,11 +312,11 @@ where
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  assert!(l.get(0, b"b").is_none());
-  assert!(l.get(1, b"b").is_none());
-  assert!(l.get(2, b"b").is_none());
-  assert!(l.get(3, b"b").is_none());
-  assert!(l.get(4, b"b").is_none());
+  assert!(l.get::<[u8]>(0, b"b").is_none());
+  assert!(l.get::<[u8]>(1, b"b").is_none());
+  assert!(l.get::<[u8]>(2, b"b").is_none());
+  assert!(l.get::<[u8]>(3, b"b").is_none());
+  assert!(l.get::<[u8]>(4, b"b").is_none());
 
   let ent = l.get(1, b"c".as_slice()).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
@@ -320,12 +338,12 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  assert!(l.get(5, b"d").is_none());
+  assert!(l.get::<[u8]>(5, b"d").is_none());
 }
 
 pub(crate) fn gt<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -340,20 +358,20 @@ where
     .unwrap();
 
   assert!(l.lower_bound(0, Bound::Excluded(b"a".as_slice())).is_none());
-  assert!(l.lower_bound(0, Bound::Excluded(b"b")).is_none());
+  assert!(l.lower_bound(0, Bound::Excluded(b"b".as_slice())).is_none());
   assert!(l.lower_bound(0, Bound::Excluded(b"c".as_slice())).is_none());
 
-  let ent = l.lower_bound(1, Bound::Excluded(b"")).unwrap();
+  let ent = l.lower_bound::<[u8]>(1, Bound::Excluded(b"")).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Excluded(b"")).unwrap();
+  let ent = l.lower_bound::<[u8]>(2, Bound::Excluded(b"")).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Excluded(b"")).unwrap();
+  let ent = l.lower_bound::<[u8]>(3, Bound::Excluded(b"")).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -373,32 +391,44 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound(1, Bound::Excluded(b"b")).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(1, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Excluded(b"b")).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(2, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Excluded(b"b")).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(3, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound(4, Bound::Excluded(b"b")).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(4, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound(5, Bound::Excluded(b"b")).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(5, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c3".as_slice());
   assert_eq!(ent.version(), 5);
 
-  let ent = l.lower_bound(6, Bound::Excluded(b"b")).unwrap();
+  let ent = l
+    .lower_bound::<[u8]>(6, Bound::Excluded(b"b".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c3".as_slice());
   assert_eq!(ent.version(), 5);
@@ -413,7 +443,7 @@ where
 
 pub(crate) fn ge<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -428,7 +458,9 @@ where
   assert!(l
     .lower_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
     .is_none());
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
+  assert!(l
+    .lower_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
+    .is_none());
   assert!(l
     .lower_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
     .is_none());
@@ -453,22 +485,22 @@ where
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound(1, Bound::Included(b"b")).unwrap();
+  let ent = l.lower_bound(1, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(2, Bound::Included(b"b")).unwrap();
+  let ent = l.lower_bound(2, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.lower_bound(3, Bound::Included(b"b")).unwrap();
+  let ent = l.lower_bound(3, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.lower_bound(4, Bound::Included(b"b")).unwrap();
+  let ent = l.lower_bound(4, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -493,16 +525,18 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  assert!(l.lower_bound(MIN_VERSION, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(1, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(2, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(3, Bound::Included(b"d")).is_none());
-  assert!(l.lower_bound(4, Bound::Included(b"d")).is_none());
+  assert!(l
+    .lower_bound(MIN_VERSION, Bound::Included(b"d".as_slice()))
+    .is_none());
+  assert!(l.lower_bound(1, Bound::Included(b"d".as_slice())).is_none());
+  assert!(l.lower_bound(2, Bound::Included(b"d".as_slice())).is_none());
+  assert!(l.lower_bound(3, Bound::Included(b"d".as_slice())).is_none());
+  assert!(l.lower_bound(4, Bound::Included(b"d".as_slice())).is_none());
 }
 
 pub(crate) fn le<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -517,7 +551,9 @@ where
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
     .is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Included(b"b")).is_none());
+  assert!(l
+    .upper_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
+    .is_none());
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
     .is_none());
@@ -542,22 +578,22 @@ where
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(1, Bound::Included(b"b")).unwrap();
+  let ent = l.upper_bound(1, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Included(b"b")).unwrap();
+  let ent = l.upper_bound(2, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(3, Bound::Included(b"b")).unwrap();
+  let ent = l.upper_bound(3, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(4, Bound::Included(b"b")).unwrap();
+  let ent = l.upper_bound(4, Bound::Included(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -582,22 +618,22 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(1, Bound::Included(b"d")).unwrap();
+  let ent = l.upper_bound(1, Bound::Included(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Included(b"d")).unwrap();
+  let ent = l.upper_bound(2, Bound::Included(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(3, Bound::Included(b"d")).unwrap();
+  let ent = l.upper_bound(3, Bound::Included(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(4, Bound::Included(b"d")).unwrap();
+  let ent = l.upper_bound(4, Bound::Included(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -605,7 +641,7 @@ where
 
 pub(crate) fn lt<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   l.get_or_insert(1, b"a".as_slice(), b"a1".as_slice())
@@ -620,29 +656,31 @@ where
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Excluded(b"a".as_slice()))
     .is_none());
-  assert!(l.upper_bound(MIN_VERSION, Bound::Excluded(b"b")).is_none());
+  assert!(l
+    .upper_bound(MIN_VERSION, Bound::Excluded(b"b".as_slice()))
+    .is_none());
   assert!(l
     .upper_bound(MIN_VERSION, Bound::Excluded(b"c".as_slice()))
     .is_none());
   assert!(l.upper_bound(1, Bound::Excluded(b"a".as_slice())).is_none());
   assert!(l.upper_bound(2, Bound::Excluded(b"a".as_slice())).is_none());
 
-  let ent = l.upper_bound(1, Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(1, Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(2, Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(3, Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(3, Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(4, Bound::Excluded(b"b")).unwrap();
+  let ent = l.upper_bound(4, Bound::Excluded(b"b".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -667,22 +705,22 @@ where
   assert_eq!(ent.value(), b"a2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(1, Bound::Excluded(b"d")).unwrap();
+  let ent = l.upper_bound(1, Bound::Excluded(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(2, Bound::Excluded(b"d")).unwrap();
+  let ent = l.upper_bound(2, Bound::Excluded(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let ent = l.upper_bound(3, Bound::Excluded(b"d")).unwrap();
+  let ent = l.upper_bound(3, Bound::Excluded(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  let ent = l.upper_bound(4, Bound::Excluded(b"d")).unwrap();
+  let ent = l.upper_bound(4, Bound::Excluded(b"d".as_slice())).unwrap();
   assert_eq!(ent.key(), b"c".as_slice());
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
@@ -691,7 +729,7 @@ where
 #[cfg(not(miri))]
 pub(crate) fn basic_large<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let n = 1000;
@@ -724,7 +762,7 @@ where
 ))]
 pub(crate) fn concurrent_basic_two_maps<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(miri))]
@@ -732,7 +770,7 @@ where
   #[cfg(miri)]
   const N: usize = 100;
 
-  let l2 = M::create_from_allocator(l.allocator().clone(), Ascend).unwrap();
+  let l2 = M::create_from_allocator(l.allocator().clone(), Ascend::new()).unwrap();
 
   for i in (0..N / 2).rev() {
     let l = l.clone();
@@ -790,7 +828,7 @@ where
 ))]
 pub(crate) fn concurrent_basic<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(miri))]
@@ -836,7 +874,7 @@ where
 ))]
 pub(crate) fn concurrent_basic2<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(miri))]
@@ -892,7 +930,7 @@ where
 ))]
 pub(crate) fn concurrent_basic_big_values<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   #[cfg(not(any(miri, feature = "loom")))]
@@ -939,7 +977,7 @@ where
 ))]
 pub(crate) fn concurrent_one_key<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use core::sync::atomic::Ordering;
@@ -1003,7 +1041,7 @@ where
 ))]
 pub(crate) fn concurrent_one_key2<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + 'static,
+  M: Map + Clone + Send + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use core::sync::atomic::Ordering;
@@ -1057,7 +1095,7 @@ where
 
 pub(crate) fn iter_all_versions_next<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1086,7 +1124,7 @@ where
 
 pub(crate) fn iter_all_versions_next_by_entry<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1114,7 +1152,7 @@ where
 
 pub(crate) fn iter_all_versions_next_by_multiple_version_entry<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1160,7 +1198,7 @@ where
 
 pub(crate) fn range_next<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1188,7 +1226,7 @@ where
 
 pub(crate) fn iter_all_versions_prev<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1217,7 +1255,7 @@ where
 
 pub(crate) fn iter_all_versions_prev_by_entry<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1245,7 +1283,7 @@ where
 
 pub(crate) fn iter_all_versions_prev_by_multiple_version_entry<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1291,7 +1329,7 @@ where
 
 pub(crate) fn range_prev<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1317,7 +1355,7 @@ where
 
 pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1333,51 +1371,69 @@ where
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
-  let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01000")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01000".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01005")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01005".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1010).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1010).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01010")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01010".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1010).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1010).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01020")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01020".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1020).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1020).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01200")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01200".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1200).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1200).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"01100")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"01100".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1100).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1100).as_slice());
 
-  let ent = it.seek_lower_bound(Bound::Included(b"99999"));
+  let ent = it.seek_lower_bound(Bound::Included(b"99999".as_slice()));
   assert!(ent.is_none());
 
   l.get_or_insert(MIN_VERSION, [].as_slice(), [].as_slice())
     .unwrap();
-  let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
 
-  let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
+  let ent = it
+    .seek_lower_bound(Bound::Included(b"".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
 }
 
 pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1393,20 +1449,28 @@ where
   }
 
   let mut it = l.iter_all_versions(MIN_VERSION);
-  assert!(it.seek_upper_bound(Bound::Excluded(b"")).is_none());
+  assert!(it
+    .seek_upper_bound(Bound::Excluded(b"".as_slice()))
+    .is_none());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"01000"));
+  let ent = it.seek_upper_bound(Bound::Excluded(b"01000".as_slice()));
   assert!(ent.is_none());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"01001")).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(b"01001".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"01991")).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(b"01991".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1990).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1990).as_slice());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"99999")).unwrap();
+  let ent = it
+    .seek_upper_bound(Bound::Excluded(b"99999".as_slice()))
+    .unwrap();
   assert_eq!(ent.key(), make_int_key(1990).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1990).as_slice());
 
@@ -1417,17 +1481,19 @@ where
     .upper_bound(MIN_VERSION, Bound::Excluded(&[]))
     .is_none());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b""));
+  let ent = it.seek_upper_bound::<[u8]>(Bound::Excluded(b""));
   assert!(ent.is_none());
 
-  let ent = it.seek_upper_bound(Bound::Excluded(b"\x01")).unwrap();
+  let ent = it
+    .seek_upper_bound::<[u8]>(Bound::Excluded(b"\x01"))
+    .unwrap();
   assert_eq!(ent.key(), &[]);
   assert_eq!(ent.value().unwrap(), &[]);
 }
 
 pub(crate) fn range<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 1..10 {
@@ -1526,7 +1592,7 @@ where
 
 pub(crate) fn iter_latest<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1586,7 +1652,7 @@ where
 
 pub(crate) fn range_latest<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   const N: usize = 100;
@@ -1633,7 +1699,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use crate::dynamic::Builder;
@@ -1676,7 +1742,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap2<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use crate::dynamic::Builder;
@@ -1738,7 +1804,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap3<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use crate::dynamic::Builder;
@@ -1782,7 +1848,7 @@ where
 #[cfg(feature = "memmap")]
 pub(crate) fn reopen_mmap4<M>(prefix: &str)
 where
-  M: Map<Comparator = Ascend> + Clone + Send + Sync + 'static,
+  M: Map + Clone + Send + Sync + 'static,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   use crate::dynamic::Builder;
@@ -1798,7 +1864,7 @@ where
         .with_capacity(ARENA_SIZE as u32)
         .map_mut::<M, _>(&p)
         .unwrap();
-      let l2 = M::create_from_allocator(l.allocator().clone(), Ascend).unwrap();
+      let l2 = M::create_from_allocator(l.allocator().clone(), Ascend::new()).unwrap();
       let h2 = l2.header().copied().unwrap();
 
       let t1 = std::thread::spawn(move || {
@@ -1829,7 +1895,7 @@ where
       .with_capacity((ARENA_SIZE * 2) as u32)
       .map_mut::<M, _>(&p)
       .unwrap();
-    let l2 = M::open_from_allocator(header, l.allocator().clone(), Ascend).unwrap();
+    let l2 = M::open_from_allocator(header, l.allocator().clone(), Ascend::new()).unwrap();
     assert_eq!(500, l.len());
     assert_eq!(500, l2.len());
 
@@ -1862,7 +1928,7 @@ impl Person {
 
 pub(crate) fn get_or_insert_with_value<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -1897,7 +1963,7 @@ where
 
 pub(crate) fn get_or_insert_with<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -1936,7 +2002,7 @@ where
 
 pub(crate) fn insert<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let k = 0u64.to_le_bytes();
@@ -1956,7 +2022,7 @@ where
 
 pub(crate) fn insert_with_value<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -2020,14 +2086,14 @@ where
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
 
-  let ent = l.get(1, b"alice").unwrap();
+  let ent = l.get::<[u8]>(1, b"alice").unwrap();
   assert_eq!(ent.key(), b"alice");
   assert!(ent.value().starts_with(&alice2.id.to_be_bytes()));
 }
 
 pub(crate) fn insert_with<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   let alice = Person {
@@ -2094,14 +2160,14 @@ where
   assert_eq!(old.key(), b"alice");
   assert!(old.value().starts_with(&alice.id.to_be_bytes()));
 
-  let ent = l.get(1, b"alice").unwrap();
+  let ent = l.get(1, b"alice".as_slice()).unwrap();
   assert_eq!(ent.key(), b"alice");
   assert!(ent.value().starts_with(&alice2.id.to_be_bytes()));
 }
 
 pub(crate) fn get_or_remove<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 0..100 {
@@ -2131,7 +2197,7 @@ where
 
 pub(crate) fn remove<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 0..100 {
@@ -2194,7 +2260,7 @@ where
 
 pub(crate) fn remove2<M>(l: M)
 where
-  M: Map<Comparator = Ascend> + Clone,
+  M: Map + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
 {
   for i in 0..100 {

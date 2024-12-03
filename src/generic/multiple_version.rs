@@ -20,39 +20,38 @@ use crate::{
 
 use super::{
   list::{iterator::Iter, EntryRef},
-  DefaultComparator,
+  Ascend,
 };
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
-  use crate::generic::DefaultComparator;
+  use crate::generic::Ascend;
   pub use crate::unsync::{multiple_version::Allocator, RefCounter};
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
-  // mod tests {
-  //   crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_versioned,))]
+  mod tests {
+    crate::__generic_multiple_version_map_tests!("unsync_multiple_version_map": super::SkipMap<[u8], [u8]>);
+  }
 
-  type SkipList<K, V, C = DefaultComparator<K>> =
-    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = DefaultComparator<K>> =
+  pub type Iter<'a, K, L, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = DefaultComparator<K>> =
+  pub type Range<'a, K, L, Q, R, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = DefaultComparator<K>> =
+  pub type Entry<'a, K, L, C = Ascend<K>> =
     super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
   /// If you want to use in concurrent environment, you can use [`multiple_version::sync::SkipMap`](crate::generic::multiple_version::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
@@ -103,61 +102,60 @@ pub mod unsync {
 
 /// Implementations for concurrent environments.
 pub mod sync {
-  use crate::generic::DefaultComparator;
+  use crate::generic::Ascend;
   pub use crate::sync::{multiple_version::Allocator, RefCounter};
 
-  // #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
-  // mod tests {
-  //   crate::__generic_multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
-  // }
+  #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_versioned,))]
+  mod tests {
+    crate::__generic_multiple_version_map_tests!("sync_multiple_version_map": super::SkipMap<[u8], [u8]>);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_multiple_version_concurrent,
-  // ))]
-  // mod concurrent_tests {
-  //   crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent,
+  ))]
+  mod concurrent_tests {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_optimistic_freelist {
-  //   crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent_with_optimistic_freelist,
+  ))]
+  mod concurrent_tests_with_optimistic_freelist {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST);
+  }
 
-  // #[cfg(any(
-  //   all(test, not(miri)),
-  //   all_skl_tests,
-  //   test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
-  // ))]
-  // mod concurrent_tests_with_pessimistic_freelist {
-  //   crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
-  // }
+  #[cfg(any(
+    all(test, not(miri)),
+    all_skl_tests,
+    test_generic_sync_multiple_version_concurrent_with_pessimistic_freelist,
+  ))]
+  mod concurrent_tests_with_pessimistic_freelist {
+    crate::__generic_multiple_version_map_tests!(go "sync_multiple_version_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
+  }
 
-  type SkipList<K, V, C = DefaultComparator<K>> =
-    super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = DefaultComparator<K>> =
+  pub type Iter<'a, K, L, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = DefaultComparator<K>> =
+  pub type Range<'a, K, L, Q, R, C = Ascend<K>> =
     super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = DefaultComparator<K>> =
+  pub type Entry<'a, K, L, C = Ascend<K>> =
     super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
   /// If you want to use in non-concurrent environment, you can use [`multiple_version::unsync::SkipMap`](crate::generic::multiple_version::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = DefaultComparator<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
@@ -210,7 +208,7 @@ pub mod sync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<K, V, C = DefaultComparator<K>>
+pub trait Map<K, V, C = Ascend<K>>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
@@ -611,9 +609,7 @@ where
       return None;
     }
 
-    self
-      .range_all_versions(version, (Bound::Unbounded, upper))
-      .next()
+    self.as_ref().upper_bound_versioned(version, upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -636,13 +632,7 @@ where
       return None;
     }
 
-    self
-      .range_all_versions(version, (lower, Bound::Unbounded))
-      .next()
-    // self
-    //   .as_ref()
-    //   .iter_all_versions(version)
-    //   .seek_lower_bound(lower)
+    self.as_ref().lower_bound_versioned(version, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.

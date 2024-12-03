@@ -1,20 +1,20 @@
 # CHANGELOG
 
-## 0.22.0
+## 0.22
 
 - Improve the flexibility of generic version `SkipMap`
 
-## 0.21.0
+## 0.21
 
 - Use state pattern for `EntryRef`
 
-## 0.20.0
+## 0.20
 
 - Add dynamic `SkipMap`s
 - Support create multiple `SkipMap`s on the same `Allocator`
 - Improve docs on some constructor methods
 
-## 0.19.0
+## 0.19
 
 - Cleanup structures and remove `Trailer`, `TrailedMap` and `FullMap`
 - Add `version` guard for query APIs
@@ -23,35 +23,35 @@
 - Add `data_offset` and `data_offset_unify` method for `Options`
 - Renaming types
 
-## 0.17.0
+## 0.17
 
 - Refactor to support generic key-value types
 - Fix `DoubleEndIterator` implementation
 - Lazy init the `V::Ref<'a>` and `K::Ref<'a>` in `EntryRef`
 
-## 0.15.0
+## 0.15
 
 - Extract different kinds of `SkipMap` to traits to improve flexibility
 - Implementing a builder pattern to construct `SkipMap`s
 - Make the crate compatible with [Tree Borrows](https://www.ralfj.de/blog/2023/06/02/tree-borrows.html)
 
-## 0.14.0
+## 0.14
 
 - Supports unsync version `SkipMap`s
 - Fix: dealloc potential in-unsed memory chunk
 - Add `CompressionPolicy` as a configuration
 - Increase the discarded tracker when find new version of a key
 
-## 0.13.0
+## 0.13
 
 - Remove `Comparator` generic on `Entry*`
 
-## 0.12.0
+## 0.12
 
 - Bump `rarena-allocator`'s version
 - Change value callback from `impl FnOnce + Copy` to `impl Fn`
 
-## 0.11.0
+## 0.11
 
 - Refactor and extract lock-free ARENA allocator implementation to [`rarena-allocator`](https://github.com/al8n/rarena) crate.
   - Add an ordered linked list to track segments.
@@ -62,7 +62,7 @@
   - Support specify max key size and max value size
   - Support set the max height
 
-## 0.10.0
+## 0.10
 
 - Remove `SkipSet`
 - Add `insert`, `insert_with`, `insert_with_value`, `get_or_insert`, `get_or_insert` and `get_or_insert_with_value` methods
@@ -73,7 +73,7 @@
 - Add `tracing`
 - Add `SkipMap::refs` API to allow users get how many references.
 
-## 0.9.0
+## 0.9
 
 - Make file backed mmap `SkipMap` and `SkipSet` still can be reopened even last time the program was aborted.
 - Remove checksum validation, users should take care of data integrity by themselves.
@@ -109,17 +109,17 @@
 
 - Add `entry` method for `MapIterator` and `SetIterator` to support access the last yield entry of the iterator.
 
-## 0.8.0
+## 0.8
 
 - Make `SkipMap::insert` and `SkipSet::insert` return the current value if the key and trailer already exist.
 - Add the `SkipMap::insert_with` method to support inserting an vacant key first, then write the value in the closure semantic.
 
-## 0.7.0
+## 0.7
 
 - Implement `Iterator` for `MapIterator` and `SetIterator`.
 - Optimize `Arena::alloc` logic.
 
-## 0.6.0
+## 0.6
 
 - Change mmap related API
 - Support open exist `SkipMap` and `SkipSet` file in read only mode.

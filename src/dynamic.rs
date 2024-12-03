@@ -19,10 +19,13 @@ pub mod entry {
   pub use super::list::EntryRef;
 }
 
-pub use dbutils::equivalentor::{
-  Ascend, Descend, DynComparator, DynEquivalentor, DynRangeComparator, StaticComparator,
-  StaticEquivalentor, StaticRangeComparator,
-};
+pub use dbutils::equivalentor::{BytesComparator, BytesEquivalentor, BytesRangeComparator};
+
+/// Ascend is a comparator that compares byte slices in ascending order.
+pub type Ascend = dbutils::equivalentor::Ascend<[u8]>;
+
+/// Ascend is a comparator that compares byte slices in ascending order.
+pub type Descend = dbutils::equivalentor::Descend<[u8]>;
 
 /// Value that can be converted from a byte slice.
 pub trait Value<'a>: sealed::Sealed<'a> {}

@@ -20,20 +20,20 @@ pub(crate) mod map;
 ))]
 pub(crate) mod multiple_version;
 
-use crate::generic::{Builder, DefaultComparator};
+use crate::generic::{Ascend, Builder};
 
 use super::*;
 
-pub(crate) const TEST_OPTIONS: Builder<DefaultComparator<[u8]>> =
-  Builder::with(DefaultComparator::new()).with_capacity(ARENA_SIZE as u32);
-pub(crate) const TEST_FULL_OPTIONS: Builder<DefaultComparator<[u8]>> =
-  Builder::with(DefaultComparator::new()).with_capacity(1024);
-pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Builder<DefaultComparator<[u8]>> =
-  Builder::with(DefaultComparator::new())
+pub(crate) const TEST_OPTIONS: Builder<Ascend<[u8]>> =
+  Builder::with(Ascend::new()).with_capacity(ARENA_SIZE as u32);
+pub(crate) const TEST_FULL_OPTIONS: Builder<Ascend<[u8]>> =
+  Builder::with(Ascend::new()).with_capacity(1024);
+pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Builder<Ascend<[u8]>> =
+  Builder::with(Ascend::new())
     .with_capacity(ARENA_SIZE as u32)
     .with_freelist(rarena_allocator::Freelist::Optimistic);
-pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Builder<DefaultComparator<[u8]>> =
-  Builder::with(DefaultComparator::new())
+pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Builder<Ascend<[u8]>> =
+  Builder::with(Ascend::new())
     .with_capacity(ARENA_SIZE as u32)
     .with_freelist(rarena_allocator::Freelist::Pessimistic);
 // pub(crate) const TEST_HIGH_COMPRESSION_OPTIONS: Options = Options::new()
@@ -63,5 +63,5 @@ const BIG_ARENA_SIZE: usize = 120 << 20;
     test_generic_sync_versioned,
   )
 ))]
-pub(crate) const BIG_TEST_OPTIONS: Builder<DefaultComparator<[u8]>> =
-  Builder::with(DefaultComparator::new()).with_capacity(BIG_ARENA_SIZE as u32);
+pub(crate) const BIG_TEST_OPTIONS: Builder<Ascend<[u8]>> =
+  Builder::with(Ascend::new()).with_capacity(BIG_ARENA_SIZE as u32);

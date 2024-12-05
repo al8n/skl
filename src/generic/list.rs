@@ -4,7 +4,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalentor::{TypeRefComparator, TypeRefQueryComparator},
-  types::{LazyRef, MaybeStructured, Type},
+  types::{MaybeStructured, Type},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -13,6 +13,7 @@ use crate::{
   allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
+  generic::{MaybeTombstone, State},
   internal::RefMeta,
   options::CompressionPolicy,
   random_height,
@@ -26,17 +27,12 @@ use crate::{
 mod entry;
 pub use entry::EntryRef;
 
-use super::GenericValue;
-
 mod api;
 pub(super) mod iterator;
 
 type UpdateOk<'a, 'b, K, V, A, R, C> = Either<
-  Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>>,
-  Result<
-    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
-    EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
-  >,
+  Option<EntryRef<'a, K, V, MaybeTombstone, A, R, C>>,
+  Result<EntryRef<'a, K, V, MaybeTombstone, A, R, C>, EntryRef<'a, K, V, MaybeTombstone, A, R, C>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -354,14 +350,14 @@ where
   A: Allocator,
   R: RefCounter,
 {
-  unsafe fn move_to_prev<'a, L>(
+  unsafe fn move_to_prev<'a, S>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
   where
-    L: GenericValue<'a, Value = V> + 'a,
+    S: State<'a>,
   {
     loop {
       unsafe {
@@ -388,14 +384,14 @@ where
     }
   }
 
-  unsafe fn move_to_prev_maximum_version<'a, L>(
+  unsafe fn move_to_prev_maximum_version<'a, S>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
   where
-    L: GenericValue<'a, Value = V> + 'a,
+    S: State<'a>,
   {
     loop {
       unsafe {
@@ -412,7 +408,7 @@ where
 
         if prev.is_null() || prev.offset() == self.head.offset() {
           // prev is null or the head, we should try to see if we can return the current node.
-          if !nd.is_removed() {
+          if !nd.is_tombstone() {
             // the current node is valid, we should return it.
             let raw_key = nd.get_key(&self.arena);
             let nk = ty_ref::<K>(raw_key);
@@ -441,7 +437,7 @@ where
           let raw_key = nd.get_key(&self.arena);
           let nk = ty_ref::<K>(raw_key);
 
-          if !nd.is_removed() && contains_key(&nk) {
+          if !nd.is_tombstone() && contains_key(&nk) {
             let pointer = nd.get_value_pointer::<A>();
             let ent = EntryRef::from_node_with_pointer(
               version,
@@ -460,14 +456,14 @@ where
     }
   }
 
-  unsafe fn move_to_next<'a, L>(
+  unsafe fn move_to_next<'a, S>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
   where
-    L: GenericValue<'a, Value = V> + 'a,
+    S: State<'a>,
   {
     loop {
       unsafe {
@@ -494,14 +490,14 @@ where
     }
   }
 
-  unsafe fn move_to_next_maximum_version<'a, L>(
+  unsafe fn move_to_next_maximum_version<'a, S>(
     &'a self,
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, L, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
   where
-    L: GenericValue<'a, Value = V> + 'a,
+    S: State<'a>,
   {
     loop {
       unsafe {
@@ -517,7 +513,7 @@ where
         }
 
         // if the entry with largest version is removed, we should skip this key.
-        if nd.is_removed() {
+        if nd.is_tombstone() {
           let mut next = self.get_next(*nd, 0);
           let curr_key = nd.get_key(&self.arena);
           loop {
@@ -947,7 +943,7 @@ where
             .map_err(Among::from_either_to_middle_right);
         }
 
-        return Ok(Either::Left(if old.is_removed() {
+        return Ok(Either::Left(if old.is_tombstone() {
           None
         } else {
           Some(old)
@@ -982,7 +978,7 @@ where
         k.on_fail(&self.arena);
       })?;
 
-    let is_removed = unsafe { unlinked_node.get_value(&self.arena).is_none() };
+    let is_tombstone = unsafe { unlinked_node.get_value(&self.arena).is_none() };
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -1115,7 +1111,7 @@ where
                       version,
                       old,
                       node_ptr,
-                      &if is_removed {
+                      &if is_tombstone {
                         Key::<K, _>::remove_pointer(&self.arena, fr.found_key.unwrap())
                       } else {
                         Key::<K, _>::pointer(&self.arena, fr.found_key.unwrap())
@@ -1129,7 +1125,7 @@ where
                 }
 
                 deallocator.dealloc(&self.arena);
-                return Ok(Either::Left(if old.is_removed() {
+                return Ok(Either::Left(if old.is_tombstone() {
                   None
                 } else {
                   Some(old)
@@ -1180,7 +1176,7 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
+    old: EntryRef<'a, K, V, MaybeTombstone, A, R, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_offset: u32,
@@ -1192,7 +1188,7 @@ where
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
 
-        Ok(Either::Left(if old.is_removed() {
+        Ok(Either::Left(if old.is_tombstone() {
           None
         } else {
           Some(old)
@@ -1219,7 +1215,7 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>,
+    old: EntryRef<'a, K, V, MaybeTombstone, A, R, C>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
@@ -1230,7 +1226,7 @@ where
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena
         .allocate_and_update_value(&old_node, value_builder.unwrap())
-        .map(|_| Either::Left(if old.is_removed() { None } else { Some(old) })),
+        .map(|_| Either::Left(if old.is_tombstone() { None } else { Some(old) })),
       Key::RemoveStructured(_)
       | Key::Remove(_)
       | Key::RemoveVacant { .. }

@@ -680,7 +680,7 @@ where
   assert_eq!(l.len(), 1);
 }
 
-pub(crate) fn iter_all_versions_next<M>(l: M)
+pub(crate) fn iter_with_tombstone_next<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
@@ -729,7 +729,7 @@ where
   assert_eq!(i, 51);
 }
 
-pub(crate) fn iter_all_versions_prev<M>(l: M)
+pub(crate) fn iter_with_tombstone_prev<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
@@ -776,7 +776,7 @@ where
   }
 }
 
-pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
+pub(crate) fn iter_with_tombstone_seek_ge<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
@@ -831,7 +831,7 @@ where
   assert_eq!(ent.value(), &[]);
 }
 
-pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
+pub(crate) fn iter_with_tombstone_seek_lt<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithoutVersion,
@@ -1590,12 +1590,12 @@ macro_rules! __generic_map_tests {
       #[cfg(not(miri))]
       basic_large,
       get,
-      iter_all_versions_next,
+      iter_with_tombstone_next,
       range_next,
-      iter_all_versions_prev,
+      iter_with_tombstone_prev,
       range_prev,
-      iter_all_versions_seek_ge,
-      iter_all_versions_seek_lt,
+      iter_with_tombstone_seek_ge,
+      iter_with_tombstone_seek_lt,
       range,
       iter_latest,
       range_latest,

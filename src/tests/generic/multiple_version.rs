@@ -79,7 +79,7 @@ where
     .unwrap();
 
   {
-    let mut it = l.iter_all_versions(0);
+    let mut it = l.iter_with_tombstone(0);
     let ent = it.seek_lower_bound(Bound::Included(b"key1")).unwrap();
     assert_eq!(ent.key(), b"key1".as_slice());
     assert_eq!(ent.raw_key(), b"key1".as_slice());
@@ -110,7 +110,7 @@ where
   l.get_or_insert(2, "a".as_bytes(), [].as_slice()).unwrap();
 
   {
-    let mut it = l.iter_all_versions(2);
+    let mut it = l.iter_with_tombstone(2);
     let ent = it
       .seek_lower_bound(Bound::Included(b"a".as_slice()))
       .unwrap();
@@ -132,7 +132,7 @@ where
   l.get_or_insert(1, "b".as_bytes(), [].as_slice()).unwrap();
 
   {
-    let mut it = l.iter_all_versions(2);
+    let mut it = l.iter_with_tombstone(2);
     let ent = it.seek_lower_bound(Bound::Included(b"b")).unwrap();
     assert_eq!(ent.key(), b"b");
     assert_eq!(ent.raw_key(), b"b");
@@ -171,7 +171,7 @@ where
   l.flush_async().unwrap();
 }
 
-pub(crate) fn iter_all_versions_mvcc<M>(l: M)
+pub(crate) fn iter_with_tombstone_mvcc<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -185,39 +185,39 @@ where
   l.get_or_insert(3, b"c".as_slice(), b"c2".as_slice())
     .unwrap();
 
-  let mut it = l.iter_all_versions(0);
+  let mut it = l.iter_with_tombstone(0);
   let mut num = 0;
   while it.next().is_some() {
     num += 1;
   }
   assert_eq!(num, 0);
 
-  let mut it = l.iter_all_versions(1);
+  let mut it = l.iter_with_tombstone(1);
   let mut num = 0;
   while it.next().is_some() {
     num += 1;
   }
   assert_eq!(num, 2);
 
-  let mut it = l.iter_all_versions(2);
+  let mut it = l.iter_with_tombstone(2);
   let mut num = 0;
   while it.next().is_some() {
     num += 1;
   }
   assert_eq!(num, 2);
 
-  let mut it = l.iter_all_versions(3);
+  let mut it = l.iter_with_tombstone(3);
   let mut num = 0;
   while it.next().is_some() {
     num += 1;
   }
   assert_eq!(num, 4);
 
-  let mut it = l.iter_all_versions(0);
+  let mut it = l.iter_with_tombstone(0);
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
 
-  let mut it = l.iter_all_versions(1);
+  let mut it = l.iter_with_tombstone(1);
   let ent = it.seek_lower_bound::<[u8]>(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value().unwrap(), b"a1".as_slice());
@@ -228,7 +228,7 @@ where
   assert_eq!(ent.value().unwrap(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let mut it = l.iter_all_versions(2);
+  let mut it = l.iter_with_tombstone(2);
   let ent = it.seek_lower_bound::<[u8]>(Bound::Unbounded).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
   assert_eq!(ent.value().unwrap(), b"a1".as_slice());
@@ -239,7 +239,7 @@ where
   assert_eq!(ent.value().unwrap(), b"c1".as_slice());
   assert_eq!(ent.version(), 1);
 
-  let mut it = l.iter_all_versions(3);
+  let mut it = l.iter_with_tombstone(3);
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"b")).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
@@ -987,7 +987,7 @@ where
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
 
-      let mut it = l.iter_all_versions(MIN_VERSION);
+      let mut it = l.iter_with_tombstone(MIN_VERSION);
       let ent = it
         .seek_lower_bound(Bound::Included(b"thekey".as_slice()))
         .unwrap();
@@ -1051,7 +1051,7 @@ where
       let num: usize = core::str::from_utf8(&val[1..]).unwrap().parse().unwrap();
       assert!((0..N).contains(&num));
 
-      let mut it = l.iter_all_versions(MIN_VERSION);
+      let mut it = l.iter_with_tombstone(MIN_VERSION);
       let ent = it
         .seek_lower_bound(Bound::Included(b"thekey".as_slice()))
         .unwrap();
@@ -1071,7 +1071,7 @@ where
   assert_eq!(l.len(), 1);
 }
 
-pub(crate) fn iter_all_versions_next<M>(l: M)
+pub(crate) fn iter_with_tombstone_next<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1087,7 +1087,7 @@ where
     .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter_with_tombstone(MIN_VERSION);
   let mut ent = it.seek_lower_bound::<[u8]>(Bound::Unbounded).unwrap();
   for i in 0..N {
     assert_eq!(ent.key(), make_int_key(i).as_slice());
@@ -1100,7 +1100,7 @@ where
   assert!(it.next().is_none());
 }
 
-pub(crate) fn iter_all_versions_next_by_entry<M>(l: M)
+pub(crate) fn iter_with_tombstone_next_by_entry<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1128,7 +1128,7 @@ where
   assert_eq!(i, N);
 }
 
-pub(crate) fn iter_all_versions_next_by_multiple_version_entry<M>(l: M)
+pub(crate) fn iter_with_tombstone_next_by_multiple_version_entry<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1153,7 +1153,7 @@ where
   }
   assert_eq!(i, N);
 
-  let mut ent = l.first_versioned(MIN_VERSION + 1);
+  let mut ent = l.first_with_tombstone(MIN_VERSION + 1);
   let mut i = 0;
   while let Some(ref entry) = ent {
     if i % 2 == 1 {
@@ -1202,7 +1202,7 @@ where
   assert_eq!(i, 51);
 }
 
-pub(crate) fn iter_all_versions_prev<M>(l: M)
+pub(crate) fn iter_with_tombstone_prev<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1218,7 +1218,7 @@ where
     .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter_with_tombstone(MIN_VERSION);
   let mut ent = it.seek_upper_bound::<[u8]>(Bound::Unbounded).unwrap();
   for i in (0..N).rev() {
     assert_eq!(ent.key(), make_int_key(i).as_slice());
@@ -1231,7 +1231,7 @@ where
   assert!(it.next_back().is_none());
 }
 
-pub(crate) fn iter_all_versions_prev_by_entry<M>(l: M)
+pub(crate) fn iter_with_tombstone_prev_by_entry<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1259,7 +1259,7 @@ where
   assert_eq!(i, N);
 }
 
-pub(crate) fn iter_all_versions_prev_by_multiple_version_entry<M>(l: M)
+pub(crate) fn iter_with_tombstone_prev_by_multiple_version_entry<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1284,7 +1284,7 @@ where
   }
   assert_eq!(i, N);
 
-  let mut ent = l.last_versioned(MIN_VERSION + 1);
+  let mut ent = l.last_with_tombstone(MIN_VERSION + 1);
   let mut i = 0;
   while let Some(ref entry) = ent {
     if i % 2 == 0 {
@@ -1331,7 +1331,7 @@ where
   }
 }
 
-pub(crate) fn iter_all_versions_seek_ge<M>(l: M)
+pub(crate) fn iter_with_tombstone_seek_ge<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1348,7 +1348,7 @@ where
     .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter_with_tombstone(MIN_VERSION);
   let ent = it.seek_lower_bound(Bound::Included(b"")).unwrap();
   assert_eq!(ent.key(), make_int_key(1000).as_slice());
   assert_eq!(ent.value().unwrap(), make_value(1000).as_slice());
@@ -1391,7 +1391,7 @@ where
   assert_eq!(ent.value().unwrap(), &[]);
 }
 
-pub(crate) fn iter_all_versions_seek_lt<M>(l: M)
+pub(crate) fn iter_with_tombstone_seek_lt<M>(l: M)
 where
   M: Map<[u8], [u8]> + Clone,
   <M::Allocator as Sealed>::Node: WithVersion,
@@ -1408,7 +1408,7 @@ where
     .unwrap();
   }
 
-  let mut it = l.iter_all_versions(MIN_VERSION);
+  let mut it = l.iter_with_tombstone(MIN_VERSION);
   assert!(it.seek_upper_bound(Bound::Excluded(b"")).is_none());
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01000"));
@@ -2204,7 +2204,7 @@ where
 
   for i in 100..150 {
     let k = key(i);
-    let ent = l.get_versioned(MIN_VERSION, k.as_slice()).unwrap();
+    let ent = l.get_with_tombstone(MIN_VERSION, k.as_slice()).unwrap();
     assert_eq!(ent.key(), k.as_slice());
     assert_eq!(ent.value(), None);
   }
@@ -2262,7 +2262,7 @@ where
 
   for i in 100..150 {
     let k = key(i);
-    let ent = l.get_versioned(MIN_VERSION, k.as_slice()).unwrap();
+    let ent = l.get_with_tombstone(MIN_VERSION, k.as_slice()).unwrap();
     assert_eq!(ent.key(), k.as_slice());
     assert_eq!(ent.value(), None);
   }
@@ -2277,17 +2277,17 @@ macro_rules! __generic_multiple_version_map_tests {
       basic,
       #[cfg(not(miri))]
       basic_large,
-      iter_all_versions_mvcc,
-      iter_all_versions_next,
-      iter_all_versions_next_by_entry,
-      iter_all_versions_next_by_multiple_version_entry,
+      iter_with_tombstone_mvcc,
+      iter_with_tombstone_next,
+      iter_with_tombstone_next_by_entry,
+      iter_with_tombstone_next_by_multiple_version_entry,
       range_next,
-      iter_all_versions_prev,
-      iter_all_versions_prev_by_entry,
-      iter_all_versions_prev_by_multiple_version_entry,
+      iter_with_tombstone_prev,
+      iter_with_tombstone_prev_by_entry,
+      iter_with_tombstone_prev_by_multiple_version_entry,
       range_prev,
-      iter_all_versions_seek_ge,
-      iter_all_versions_seek_lt,
+      iter_with_tombstone_seek_ge,
+      iter_with_tombstone_seek_lt,
       range,
       iter_latest,
       range_latest,

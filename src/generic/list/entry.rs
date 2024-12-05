@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 use dbutils::{
   equivalentor::TypeRefComparator,
   types::{LazyRef, Type},
@@ -6,35 +8,38 @@ use dbutils::{
 use super::{RefCounter, SkipList};
 use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
-  generic::GenericValue,
+  generic::{Active, MaybeTombstone, State},
   types::internal::ValuePointer,
   Version,
 };
 
 /// An entry reference of the `SkipMap`.
-pub struct EntryRef<'a, K, V, A, R, C>
+pub struct EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-  V: GenericValue<'a>,
+  V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
+  S: State<'a>,
 {
-  pub(super) list: &'a SkipList<K, V::Value, A, R, C>,
+  pub(super) list: &'a SkipList<K, V, A, R, C>,
   pub(super) key: LazyRef<'a, K>,
-  pub(super) value: V,
+  pub(super) value: S::Value<V>,
   pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
+  _m: PhantomData<S>,
 }
 
-impl<'a, K, V, A, R, C> core::fmt::Debug for EntryRef<'a, K, V, A, R, C>
+impl<'a, K, V, S, A, R, C> core::fmt::Debug for EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-  V: GenericValue<'a>,
-  V::Ref: core::fmt::Debug,
+  V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
+  S: State<'a>,
+  S::Output<V>: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -45,13 +50,13 @@ where
   }
 }
 
-impl<'a, K, V, A, R, C> Clone for EntryRef<'a, K, V, A, R, C>
+impl<'a, K, V, S, A, R, C> Clone for EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-  K::Ref<'a>: Clone,
-  V: GenericValue<'a> + Clone,
+  V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
+  S: State<'a>,
 {
   fn clone(&self) -> Self {
     Self {
@@ -62,41 +67,40 @@ where
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
+      _m: PhantomData,
     }
   }
 }
 
-impl<'a, K, V, A, R, C> EntryRef<'a, K, Option<LazyRef<'a, V>>, A, R, C>
+impl<'a, K, V, A, R, C> EntryRef<'a, K, V, MaybeTombstone, A, R, C>
 where
   K: ?Sized + Type,
-  K::Ref<'a>: Clone,
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn map<NV>(self) -> EntryRef<'a, K, NV, A, R, C>
-  where
-    NV: GenericValue<'a, Value = V> + 'a,
-  {
+  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active, A, R, C> {
     EntryRef {
       list: self.list,
       key: self.key,
-      value: NV::from_lazy_ref(self.value),
+      value: self.value.expect("try convert a tombstone to active"),
       value_part_pointer: self.value_part_pointer,
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
+      _m: PhantomData,
     }
   }
 }
 
-impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
+impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-  V: GenericValue<'a>,
+  V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
+  S: State<'a>,
 {
   /// Returns the comparator.
   #[inline]
@@ -118,28 +122,28 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> V::Ref {
-    self.value.as_ref()
+  pub fn value(&self) -> S::Output<V> {
+    S::output(&self.value)
   }
 
   /// Returns the value in raw bytes
   #[inline]
   pub fn raw_value(&self) -> Option<&'a [u8]> {
-    self.value.raw()
+    S::raw(&self.value)
   }
 
   /// Returns if the entry is marked as removed
   #[inline]
-  pub fn is_removed(&self) -> bool {
-    self.value.is_removed()
+  pub fn is_tombstone(&self) -> bool {
+    S::is_tombstone(&self.value)
   }
 }
 
-impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
+impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-
-  V: GenericValue<'a> + 'a,
+  V: ?Sized + Type,
+  S: State<'a>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<'a, Type = K>,
@@ -147,13 +151,13 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(self.value.all_versions())
+    self.next_in(S::ALL_VERSIONS)
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(self.value.all_versions())
+    self.prev_in(S::ALL_VERSIONS)
   }
 
   fn next_in(&self, all_versions: bool) -> Option<Self> {
@@ -195,10 +199,11 @@ where
   }
 }
 
-impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
+impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-  V: GenericValue<'a>,
+  V: ?Sized + Type,
+  S: State<'a>,
   A: Allocator,
   A::Node: WithVersion,
   R: RefCounter,
@@ -210,10 +215,11 @@ where
   }
 }
 
-impl<'a, K, V, A, R, C> EntryRef<'a, K, V, A, R, C>
+impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
 where
   K: ?Sized + Type,
-  V: GenericValue<'a> + 'a,
+  V: ?Sized + Type,
+  S: State<'a>,
   A: Allocator,
   R: RefCounter,
 {
@@ -221,7 +227,7 @@ where
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V::Value, A, R, C>,
+    list: &'a SkipList<K, V, A, R, C>,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
   ) -> Self {
@@ -245,11 +251,12 @@ where
       Self {
         list,
         key,
-        value: V::from_bytes(raw_value),
+        value: S::from_bytes_to_value(raw_value),
         value_part_pointer: vp,
         version: node.version(),
         query_version,
         ptr: node,
+        _m: PhantomData,
       }
     }
   }
@@ -258,7 +265,7 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V::Value, A, R, C>,
+    list: &'a SkipList<K, V, A, R, C>,
     pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
@@ -284,11 +291,12 @@ where
       Self {
         list,
         key,
-        value: V::from_bytes(raw_value),
+        value: S::from_bytes_to_value(raw_value),
         value_part_pointer: pointer,
         version: node.version(),
         query_version,
         ptr: node,
+        _m: PhantomData,
       }
     }
   }

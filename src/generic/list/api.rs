@@ -3,16 +3,13 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalentor::TypeRefQueryComparator,
-  types::{LazyRef, Type},
-};
+use dbutils::{buffer::VacantBuffer, equivalentor::TypeRefQueryComparator, types::Type};
 use rarena_allocator::Allocator as _;
 
 use crate::{
   allocator::{Allocator, Meta, Node, NodePointer},
   error::Error,
+  generic::{Active, MaybeTombstone},
   random_height, ty_ref,
   types::{Height, ValueBuilder},
   Header, Version,
@@ -167,7 +164,7 @@ where
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](SkipList::contains_key_versioned).
+  /// you can use [`contains_key_with_tombstone`](SkipList::contains_key_with_tombstone).
   #[inline]
   pub fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
@@ -179,16 +176,16 @@ where
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
   #[inline]
-  pub fn contains_key_versioned<'a, Q>(&'a self, version: Version, key: &Q) -> bool
+  pub fn contains_key_with_tombstone<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
-    self.get_versioned(version, key).is_some()
+    self.get_with_tombstone(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
+  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
@@ -196,7 +193,7 @@ where
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
+  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
@@ -204,36 +201,36 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned<'a>(
+  pub fn first_with_tombstone<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
-    self.iter_all_versions(version).next()
+    self.iter_with_tombstone(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned<'a>(
+  pub fn last_with_tombstone<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
   {
-    self.iter_all_versions(version).last()
+    self.iter_with_tombstone(version).last()
   }
 
   /// Returns the value associated with the given key, if it exists.
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
-  /// you can use [`get_versioned`](SkipList::get_versioned).
+  /// you can use [`get_with_tombstone`](SkipList::get_with_tombstone).
   pub fn get<'a, Q>(
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
@@ -274,12 +271,12 @@ where
 
   /// Returns the value associated with the given key, if it exists.
   ///
-  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  pub fn get_versioned<'a, Q>(
+  /// The difference between `get` and `get_with_tombstone` is that `get_with_tombstone` will return the value even if the entry is removed.
+  pub fn get_with_tombstone<'a, Q>(
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
@@ -327,7 +324,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
@@ -341,7 +338,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
@@ -351,50 +348,50 @@ where
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn upper_bound_versioned<'a, Q>(
+  pub fn upper_bound_with_tombstone<'a, Q>(
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self
-      .iter_all_versions(version)
+      .iter_with_tombstone(version)
       .map()
       .seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
-  pub fn lower_bound_versioned<'a, Q>(
+  pub fn lower_bound_with_tombstone<'a, Q>(
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, Q, Type = K>,
   {
     self
-      .iter_all_versions(version)
+      .iter_with_tombstone(version)
       .map()
       .seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, K, LazyRef<'_, V>, A, RC, C> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, K, V, Active, A, RC, C> {
     iterator::Iter::new(version, self, false)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(
+  pub fn iter_with_tombstone(
     &self,
     version: Version,
-  ) -> iterator::Iter<'_, K, Option<LazyRef<'_, V>>, A, RC, C>
+  ) -> iterator::Iter<'_, K, V, MaybeTombstone, A, RC, C>
 where {
     iterator::Iter::new(version, self, true)
   }
@@ -405,7 +402,7 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, K, LazyRef<'_, V>, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, K, V, Active, A, RC, C, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,
@@ -415,11 +412,11 @@ where {
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range_all_versions<Q, R>(
+  pub fn range_with_tombstone<Q, R>(
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, K, Option<LazyRef<'_, V>>, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, K, V, MaybeTombstone, A, RC, C, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,

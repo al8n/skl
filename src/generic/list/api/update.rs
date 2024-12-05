@@ -4,7 +4,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalentor::TypeRefComparator,
-  types::{LazyRef, MaybeStructured, Type},
+  types::{MaybeStructured, Type},
 };
 use either::Either;
 
@@ -12,7 +12,7 @@ use crate::KeyBuilder;
 
 use super::{
   super::{Inserter, Key, RefCounter},
-  Allocator, EntryRef, Error, Height, RemoveValueBuilder, SkipList, ValueBuilder, Version,
+  Active, Allocator, EntryRef, Error, Height, RemoveValueBuilder, SkipList, ValueBuilder, Version,
 };
 
 impl<K, V, A, R, C> SkipList<K, V, A, R, C>
@@ -33,7 +33,7 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<K::Error, V::Error, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -51,7 +51,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<K::Error, V::Error, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -78,10 +78,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -105,7 +105,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -127,10 +127,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -148,7 +148,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<K::Error, V::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<K::Error, V::Error, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -174,10 +174,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -202,7 +202,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -224,10 +224,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -250,7 +250,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<KE, VE, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -277,10 +277,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -306,7 +306,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Among<KE, VE, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -333,10 +333,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -363,7 +363,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Either<K::Error, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -387,17 +387,17 @@ where
         Either::Left(_) => None,
         Either::Right(res) => match res {
           Ok(old) => {
-            if old.is_removed() {
+            if old.is_tombstone() {
               None
             } else {
-              Some(old.map())
+              Some(old.into_active())
             }
           }
           Err(current) => {
-            if current.is_removed() {
+            if current.is_tombstone() {
               None
             } else {
-              Some(current.map())
+              Some(current.into_active())
             }
           }
         },
@@ -416,7 +416,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Either<K::Error, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -439,10 +439,10 @@ where
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            if old.is_removed() {
+            if old.is_tombstone() {
               None
             } else {
-              Some(old.map())
+              Some(old.into_active())
             }
           }
           None => None,
@@ -468,7 +468,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, LazyRef<'a, V>, A, R, C>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, A, R, C>>, Either<E, Error>>
   where
     C: TypeRefComparator<'a, Type = K>,
   {
@@ -493,10 +493,10 @@ where
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            if old.is_removed() {
+            if old.is_tombstone() {
               None
             } else {
-              Some(old.map())
+              Some(old.into_active())
             }
           }
           None => None,

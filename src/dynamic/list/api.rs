@@ -12,7 +12,7 @@ use crate::{
   error::Error,
   random_height,
   types::{Height, ValueBuilder},
-  Header, Version,
+  Active, Header, MaybeTombstone, Version,
 };
 
 use super::{iterator, EntryRef, RefCounter, SkipList};
@@ -161,7 +161,7 @@ where
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](SkipList::contains_key_versioned).
+  /// you can use [`contains_key_with_tombstone`](SkipList::contains_key_with_tombstone).
   #[inline]
   pub fn contains_key(&self, version: Version, key: &[u8]) -> bool {
     self.get(version, key).is_some()
@@ -169,35 +169,41 @@ where
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
   #[inline]
-  pub fn contains_key_versioned(&self, version: Version, key: &[u8]) -> bool {
-    self.get_versioned(version, key).is_some()
+  pub fn contains_key_with_tombstone(&self, version: Version, key: &[u8]) -> bool {
+    self.get_with_tombstone(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
-  pub fn first_versioned(&self, version: Version) -> Option<EntryRef<'_, Option<&[u8]>, C, A, RC>> {
-    self.iter_all_versions(version).next()
+  pub fn first_with_tombstone(
+    &self,
+    version: Version,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
+    self.iter_with_tombstone(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_versioned(&self, version: Version) -> Option<EntryRef<'_, Option<&[u8]>, C, A, RC>> {
-    self.iter_all_versions(version).last()
+  pub fn last_with_tombstone(
+    &self,
+    version: Version,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
+    self.iter_with_tombstone(version).last()
   }
 
   /// Returns the value associated with the given key, if it exists.
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
-  /// you can use [`get_versioned`](SkipList::get_versioned).
-  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
+  /// you can use [`get_with_tombstone`](SkipList::get_with_tombstone).
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, Active, C, A, RC>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -226,12 +232,12 @@ where
 
   /// Returns the value associated with the given key, if it exists.
   ///
-  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
-  pub fn get_versioned(
+  /// The difference between `get` and `get_with_tombstone` is that `get_with_tombstone` will return the value even if the entry is removed.
+  pub fn get_with_tombstone(
     &self,
     version: Version,
     key: &[u8],
-  ) -> Option<EntryRef<'_, Option<&[u8]>, C, A, RC>> {
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -272,7 +278,7 @@ where
     &self,
     version: Version,
     upper: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
+  ) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
@@ -282,7 +288,7 @@ where
     &self,
     version: Version,
     lower: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, &[u8], C, A, RC>> {
+  ) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).seek_lower_bound(lower)
   }
 }
@@ -294,19 +300,26 @@ where
 {
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, &[u8], A, RC, C> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, Active, A, RC, C> {
     iterator::Iter::new(version, self, false)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all_versions(&self, version: Version) -> iterator::Iter<'_, Option<&[u8]>, A, RC, C> {
+  pub fn iter_with_tombstone(
+    &self,
+    version: Version,
+  ) -> iterator::Iter<'_, MaybeTombstone, A, RC, C> {
     iterator::Iter::new(version, self, true)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range<Q, R>(&self, version: Version, range: R) -> iterator::Iter<'_, &[u8], A, RC, C, Q, R>
+  pub fn range<Q, R>(
+    &self,
+    version: Version,
+    range: R,
+  ) -> iterator::Iter<'_, Active, A, RC, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -316,11 +329,11 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range_all_versions<Q, R>(
+  pub fn range_with_tombstone<Q, R>(
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, Option<&[u8]>, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, MaybeTombstone, A, RC, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,

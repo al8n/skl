@@ -1,5 +1,5 @@
-use super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Value, Version};
-use crate::allocator::Node;
+use super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
+use crate::{allocator::Node, State};
 use core::{
   borrow::Borrow,
   ops::{Bound, RangeBounds},
@@ -8,34 +8,35 @@ use dbutils::equivalentor::{BytesComparator, BytesRangeComparator};
 
 /// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct Iter<'a, V, A, RC, C, Q = [u8], R = core::ops::RangeFull>
+pub struct Iter<'a, S, A, RC, C, Q = [u8], R = core::ops::RangeFull>
 where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
+  S: State<'a>,
 {
   pub(super) map: &'a SkipList<A, RC, C>,
   pub(super) version: Version,
   pub(super) range: Option<R>,
   pub(super) all_versions: bool,
-  pub(super) head: Option<EntryRef<'a, V, C, A, RC>>,
-  pub(super) tail: Option<EntryRef<'a, V, C, A, RC>>,
+  pub(super) head: Option<EntryRef<'a, S, C, A, RC>>,
+  pub(super) tail: Option<EntryRef<'a, S, C, A, RC>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<V, A, RC, C, Q, R> Clone for Iter<'_, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Clone for Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
   R: Clone,
-  V: Clone,
+  S: State<'a>,
 {
   fn clone(&self) -> Self {
     Self {
       map: self.map,
-      head: self.head.clone(),
-      tail: self.tail.clone(),
+      head: self.head,
+      tail: self.tail,
       version: self.version,
       range: self.range.clone(),
       all_versions: self.all_versions,
@@ -44,20 +45,21 @@ where
   }
 }
 
-impl<V, A, RC, C, Q, R> Copy for Iter<'_, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Copy for Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
   R: Copy,
-  V: Copy,
+  S: State<'a>,
 {
 }
 
-impl<'a, V, A, RC, C> Iter<'a, V, A, RC, C>
+impl<'a, S, A, RC, C> Iter<'a, S, A, RC, C>
 where
   A: Allocator,
   RC: RefCounter,
+  S: State<'a>,
 {
   #[inline]
   pub(crate) const fn new(
@@ -77,11 +79,12 @@ where
   }
 }
 
-impl<'a, V, A, RC, C, Q, R> Iter<'a, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
+  S: State<'a>,
 {
   #[inline]
   pub(crate) fn range(
@@ -102,12 +105,13 @@ where
   }
 }
 
-impl<'a, V, A, RC, C, Q, R> Iter<'a, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
   R: RangeBounds<Q>,
   Q: ?Sized,
+  S: State<'a>,
 {
   /// Returns the start bound of the iterator.
   #[inline]
@@ -131,29 +135,29 @@ where
 
   /// Returns the entry at the current head position of the iterator.
   #[inline]
-  pub const fn head(&self) -> Option<&EntryRef<'a, V, C, A, RC>> {
+  pub const fn head(&self) -> Option<&EntryRef<'a, S, C, A, RC>> {
     self.head.as_ref()
   }
 
   /// Returns the entry at the current tail position of the iterator.
   #[inline]
-  pub const fn tail(&self) -> Option<&EntryRef<'a, V, C, A, RC>> {
+  pub const fn tail(&self) -> Option<&EntryRef<'a, S, C, A, RC>> {
     self.tail.as_ref()
   }
 }
 
-impl<'a, V, A, RC, C, Q, R> Iter<'a, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  V: Value<'a> + 'a + Copy,
+  S: State<'a>,
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn next_in(&mut self) -> Option<EntryRef<'a, V, C, A, RC>> {
+  fn next_in(&mut self) -> Option<EntryRef<'a, S, C, A, RC>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
         Some(head) => self.map.get_next(head.ptr, 0),
@@ -201,7 +205,7 @@ where
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn prev(&mut self) -> Option<EntryRef<'a, V, C, A, RC>> {
+  fn prev(&mut self) -> Option<EntryRef<'a, S, C, A, RC>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
         Some(tail) => self.map.get_prev(tail.ptr, 0),
@@ -248,7 +252,7 @@ where
     }
   }
 
-  fn range_next_in(&mut self) -> Option<EntryRef<'a, V, C, A, RC>> {
+  fn range_next_in(&mut self) -> Option<EntryRef<'a, S, C, A, RC>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
         Some(head) => self.map.get_next(head.ptr, 0),
@@ -306,7 +310,7 @@ where
     }
   }
 
-  fn range_prev(&mut self) -> Option<EntryRef<'a, V, C, A, RC>> {
+  fn range_prev(&mut self) -> Option<EntryRef<'a, S, C, A, RC>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
         Some(tail) => self.map.get_prev(tail.ptr, 0),
@@ -370,20 +374,20 @@ where
   }
 }
 
-impl<'a, V, A, RC, C, Q, R> Iter<'a, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  V: Value<'a> + Copy + 'a,
+  S: State<'a>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   ///
   /// **Note:** This method will clear the current state of the iterator.
-  pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, V, C, A, RC>>
+  pub fn seek_upper_bound<QR>(&mut self, upper: Bound<&QR>) -> Option<EntryRef<'a, S, C, A, RC>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -405,7 +409,7 @@ where
   /// If no such element is found then `None` is returned.
   ///
   /// **Note:** This method will clear the current state of the iterator.
-  pub fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, V, C, A, RC>>
+  pub fn seek_lower_bound<QR>(&mut self, lower: Bound<&QR>) -> Option<EntryRef<'a, S, C, A, RC>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -426,7 +430,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, V, C, A, RC>>
+  fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, S, C, A, RC>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -463,7 +467,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, V, C, A, RC>>
+  fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, S, C, A, RC>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -500,7 +504,7 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, V, C, A, RC>>
+  fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, S, C, A, RC>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -537,7 +541,7 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, V, C, A, RC>>
+  fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, S, C, A, RC>>
   where
     QR: ?Sized + Borrow<[u8]>,
   {
@@ -566,14 +570,14 @@ where
   }
 
   #[inline]
-  fn first(&mut self) -> Option<EntryRef<'a, V, C, A, RC>> {
+  fn first(&mut self) -> Option<EntryRef<'a, S, C, A, RC>> {
     self.head = None;
     self.tail = None;
     self.next()
   }
 
   #[inline]
-  fn last(&mut self) -> Option<EntryRef<'a, V, C, A, RC>> {
+  fn last(&mut self) -> Option<EntryRef<'a, S, C, A, RC>> {
     self.tail = None;
     self.head = None;
     self.prev()
@@ -589,16 +593,16 @@ where
   }
 }
 
-impl<'a, V, A, RC, C, Q, R> Iterator for Iter<'a, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> Iterator for Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  V: Value<'a> + Copy + 'a,
+  S: State<'a>,
 {
-  type Item = EntryRef<'a, V, C, A, RC>;
+  type Item = EntryRef<'a, S, C, A, RC>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -636,14 +640,14 @@ where
   }
 }
 
-impl<'a, V, A, RC, C, Q, R> DoubleEndedIterator for Iter<'a, V, A, RC, C, Q, R>
+impl<'a, S, A, RC, C, Q, R> DoubleEndedIterator for Iter<'a, S, A, RC, C, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  V: Value<'a> + Copy + 'a,
+  S: State<'a>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

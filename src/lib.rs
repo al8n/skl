@@ -367,3 +367,188 @@ mod ref_counter;
 fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
   unsafe { <T::Ref<'a> as dbutils::types::TypeRef<'a>>::from_slice(src) }
 }
+
+/// A marker trait for the state of the entry.
+pub trait State<'a>: sealed::Sealed<'a> {}
+
+impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
+
+/// A state for the entry that is active.
+pub struct Active;
+
+/// A state for the entry that may be a tombstone.
+pub struct MaybeTombstone;
+
+mod sealed {
+  use dbutils::types::{LazyRef, Type};
+
+  pub trait Sealed<'a> {
+    const ALL_VERSIONS: bool;
+
+    type Value<V>: Clone
+    where
+      V: ?Sized + Type;
+    type Output<V>: Copy
+    where
+      V: ?Sized + Type;
+
+    type BytesValue: Copy;
+    type BytesValueOutput: Copy;
+
+    fn raw<V>(val: &Self::Value<V>) -> Option<&'a [u8]>
+    where
+      V: ?Sized + Type;
+
+    fn is_tombstone<V>(val: &Self::Value<V>) -> bool
+    where
+      V: ?Sized + Type;
+
+    fn is_tombstone_bytes(val: &Self::BytesValue) -> bool;
+
+    fn output<V>(val: &Self::Value<V>) -> Self::Output<V>
+    where
+      V: ?Sized + Type;
+
+    fn bytes_output(val: &Self::BytesValue) -> Self::BytesValueOutput;
+
+    fn from_bytes(src: Option<&'a [u8]>) -> Self::BytesValue;
+
+    fn from_bytes_to_value<V>(src: Option<&'a [u8]>) -> Self::Value<V>
+    where
+      V: ?Sized + Type;
+  }
+
+  impl<'a> Sealed<'a> for super::Active {
+    const ALL_VERSIONS: bool = false;
+
+    type Value<V>
+      = LazyRef<'a, V>
+    where
+      V: ?Sized + Type;
+    type Output<V>
+      = V::Ref<'a>
+    where
+      V: ?Sized + Type;
+
+    type BytesValue = &'a [u8];
+    type BytesValueOutput = &'a [u8];
+
+    #[inline]
+    fn raw<V>(val: &Self::Value<V>) -> Option<&'a [u8]>
+    where
+      V: ?Sized + Type,
+    {
+      val.raw()
+    }
+
+    #[inline]
+    fn is_tombstone<V>(_: &Self::Value<V>) -> bool
+    where
+      V: ?Sized + Type,
+    {
+      false
+    }
+
+    #[inline]
+    fn is_tombstone_bytes(_: &Self::BytesValue) -> bool {
+      false
+    }
+
+    #[inline]
+    fn output<V>(val: &Self::Value<V>) -> Self::Output<V>
+    where
+      V: ?Sized + Type,
+    {
+      *val.get()
+    }
+
+    #[inline]
+    fn bytes_output(val: &Self::BytesValue) -> Self::BytesValueOutput {
+      val
+    }
+
+    #[inline]
+    fn from_bytes_to_value<V>(src: Option<&'a [u8]>) -> Self::Value<V>
+    where
+      V: ?Sized + Type,
+    {
+      match src {
+        Some(v) => unsafe { LazyRef::from_raw(v) },
+        None => panic!("entry in Active state must have value"),
+      }
+    }
+
+    #[inline]
+    fn from_bytes(src: Option<&'a [u8]>) -> Self::BytesValue {
+      match src {
+        Some(v) => v,
+        None => panic!("entry in Active state must have value"),
+      }
+    }
+  }
+
+  impl<'a> Sealed<'a> for super::MaybeTombstone {
+    const ALL_VERSIONS: bool = true;
+
+    type Value<V>
+      = Option<LazyRef<'a, V>>
+    where
+      V: ?Sized + Type;
+    type Output<V>
+      = Option<V::Ref<'a>>
+    where
+      V: ?Sized + Type;
+
+    type BytesValue = Option<&'a [u8]>;
+    type BytesValueOutput = Option<&'a [u8]>;
+
+    #[inline]
+    fn raw<V>(val: &Self::Value<V>) -> Option<&'a [u8]>
+    where
+      V: ?Sized + Type,
+    {
+      val
+        .as_ref()
+        .map(|v| v.raw().expect("raw value must be available"))
+    }
+
+    #[inline]
+    fn is_tombstone<V>(val: &Self::Value<V>) -> bool
+    where
+      V: ?Sized + Type,
+    {
+      val.is_none()
+    }
+
+    #[inline]
+    fn is_tombstone_bytes(val: &Self::BytesValue) -> bool {
+      val.is_none()
+    }
+
+    #[inline]
+    fn output<V>(val: &Self::Value<V>) -> Self::Output<V>
+    where
+      V: ?Sized + Type,
+    {
+      val.as_ref().map(|v| *v.get())
+    }
+
+    #[inline]
+    fn bytes_output(val: &Self::BytesValue) -> Self::BytesValueOutput {
+      *val
+    }
+
+    #[inline]
+    fn from_bytes_to_value<V>(src: Option<&'a [u8]>) -> Self::Value<V>
+    where
+      V: ?Sized + Type,
+    {
+      src.map(|v| unsafe { LazyRef::from_raw(v) })
+    }
+
+    #[inline]
+    fn from_bytes(src: Option<&'a [u8]>) -> Self::BytesValue {
+      src
+    }
+  }
+}

@@ -108,7 +108,7 @@ mod sealed {
     ) -> Result<(u32, u32), (u32, u32)>;
 
     #[inline]
-    fn is_removed(&self) -> bool {
+    fn is_tombstone(&self) -> bool {
       self.load().1 == Self::REMOVE
     }
   }
@@ -342,8 +342,8 @@ mod sealed {
     }
 
     #[inline]
-    fn is_removed(&self) -> bool {
-      self.value_pointer().is_removed()
+    fn is_tombstone(&self) -> bool {
+      self.value_pointer().is_tombstone()
     }
 
     #[allow(dead_code)]

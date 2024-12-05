@@ -12,7 +12,7 @@ use crate::{
   allocator::{Allocator, Sealed, WithoutVersion},
   error::Error,
   ref_counter::RefCounter,
-  Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
+  Active, Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
 };
 
 use super::{
@@ -25,6 +25,7 @@ pub mod unsync {
   use dbutils::equivalentor::Ascend;
 
   pub use crate::unsync::{map::Allocator, RefCounter};
+  use crate::Active;
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_unsync_map,))]
   mod tests {
@@ -34,14 +35,14 @@ pub mod unsync {
   type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, C> = super::super::iter::Iter<'a, &'a [u8], Allocator, RefCounter, C>;
+  pub type Iter<'a, C> = super::super::iter::Iter<'a, Active, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, C, Q, R> =
-    super::super::iter::Iter<'a, &'a [u8], Allocator, RefCounter, C, Q, R>;
+    super::super::iter::Iter<'a, Active, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, &'a [u8], C, Allocator, RefCounter>;
+  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Active, C, Allocator, RefCounter>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -96,6 +97,7 @@ pub mod sync {
   use dbutils::equivalentor::Ascend;
 
   pub use crate::sync::{map::Allocator, RefCounter};
+  use crate::Active;
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_sync_map,))]
   mod tests {
@@ -128,14 +130,14 @@ pub mod sync {
   type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, C> = super::super::iter::Iter<'a, &'a [u8], Allocator, RefCounter, C>;
+  pub type Iter<'a, C> = super::super::iter::Iter<'a, Active, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, C, Q, R> =
-    super::super::iter::Iter<'a, &'a [u8], Allocator, RefCounter, C, Q, R>;
+    super::super::iter::Iter<'a, Active, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, &'a [u8], C, Allocator, RefCounter>;
+  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Active, C, Allocator, RefCounter>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -304,7 +306,7 @@ where
 
   /// Returns the first entry in the map.
   #[inline]
-  fn first(&self) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  fn first(&self) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     C: BytesComparator,
   {
@@ -313,7 +315,7 @@ where
 
   /// Returns the last entry in the map.
   #[inline]
-  fn last(&self) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  fn last(&self) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     C: BytesComparator,
   {
@@ -339,7 +341,7 @@ where
   /// assert!(map.get(b"hello").is_none());
   /// ```
   #[inline]
-  fn get<Q>(&self, key: &Q) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  fn get<Q>(&self, key: &Q) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -353,7 +355,7 @@ where
   fn upper_bound<Q>(
     &self,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -367,7 +369,7 @@ where
   fn lower_bound<Q>(
     &self,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -377,13 +379,13 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter(&self) -> Iter<'_, &[u8], Self::Allocator, Self::RefCounter, C> {
+  fn iter(&self) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C> {
     self.as_ref().iter(MIN_VERSION)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
   #[inline]
-  fn range<Q, R>(&self, range: R) -> Iter<'_, &[u8], Self::Allocator, Self::RefCounter, C, Q, R>
+  fn range<Q, R>(&self, range: R) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -401,7 +403,7 @@ where
     &'a self,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -430,7 +432,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -492,7 +494,7 @@ where
     &'a self,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -554,7 +556,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -574,7 +576,7 @@ where
     &'a self,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -593,7 +595,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -655,7 +657,7 @@ where
     &'a self,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -718,7 +720,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -788,7 +790,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -858,7 +860,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -925,7 +927,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -992,7 +994,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1019,7 +1021,7 @@ where
   fn remove<'a, 'b: 'a>(
     &'a self,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1040,7 +1042,7 @@ where
     &'a self,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1064,7 +1066,7 @@ where
   fn get_or_remove<'a, 'b: 'a>(
     &'a self,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1096,7 +1098,7 @@ where
     &'a self,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1153,7 +1155,7 @@ where
   fn get_or_remove_with_builder<'a, 'b: 'a, E>(
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -1210,7 +1212,7 @@ where
     &'a self,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {

@@ -7,13 +7,14 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalentor::{TypeRefComparator, TypeRefQueryComparator},
-  types::{LazyRef, MaybeStructured, Type},
+  types::{MaybeStructured, Type},
 };
 use either::Either;
 
 use crate::{
   allocator::{Allocator, Sealed, WithVersion},
   error::Error,
+  generic::{Active, MaybeTombstone},
   ref_counter::RefCounter,
   Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
 };
@@ -36,16 +37,16 @@ pub mod unsync {
   type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = Ascend<K>> =
-    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, V, S, C = Ascend<K>> =
+    super::super::iter::Iter<'a, K, V, S, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = Ascend<K>> =
-    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, K, V, S, Q, R, C = Ascend<K>> =
+    super::super::iter::Iter<'a, K, V, S, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = Ascend<K>> =
-    super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
+  pub type Entry<'a, K, V, S, C = Ascend<K>> =
+    super::super::entry::EntryRef<'a, K, V, S, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -140,16 +141,16 @@ pub mod sync {
   type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, L, C = Ascend<K>> =
-    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, V, S, C = Ascend<K>> =
+    super::super::iter::Iter<'a, K, V, S, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, L, Q, R, C = Ascend<K>> =
-    super::super::iter::Iter<'a, K, L, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, K, V, S, Q, R, C = Ascend<K>> =
+    super::super::iter::Iter<'a, K, V, S, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, L, C = Ascend<K>> =
-    super::super::entry::EntryRef<'a, K, L, Allocator, RefCounter, C>;
+  pub type Entry<'a, K, V, S, C = Ascend<K>> =
+    super::super::entry::EntryRef<'a, K, V, S, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -326,7 +327,7 @@ where
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](Map::contains_key_versioned).
+  /// you can use [`contains_key_with_tombstone`](Map::contains_key_with_tombstone).
   ///
   /// ## Example
   ///
@@ -340,7 +341,7 @@ where
   /// map.get_or_remove(1, "hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, "hello"));
-  /// assert!(map.contains_key_versioned(1, "hello"));
+  /// assert!(map.contains_key_with_tombstone(1, "hello"));
   /// ```
   #[inline]
   fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
@@ -371,10 +372,10 @@ where
   /// map.get_or_remove(1, "hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, "hello"));
-  /// assert!(map.contains_key_versioned(1, "hello"));
+  /// assert!(map.contains_key_with_tombstone(1, "hello"));
   /// ```
   #[inline]
-  fn contains_key_versioned<'a, Q>(&'a self, version: Version, key: &Q) -> bool
+  fn contains_key_with_tombstone<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
     K: Type,
     V: Type,
@@ -385,7 +386,7 @@ where
       return false;
     }
 
-    self.as_ref().contains_key_versioned(version, key)
+    self.as_ref().contains_key_with_tombstone(version, key)
   }
 
   /// Returns the first entry in the map.
@@ -393,7 +394,7 @@ where
   fn first<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -411,7 +412,7 @@ where
   fn last<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -426,13 +427,13 @@ where
 
   /// Returns the first entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
   ///
-  /// The difference between [`first`](Map::first) and `first_versioned` is that `first_versioned` will return the value even if
+  /// The difference between [`first`](Map::first) and `first_with_tombstone` is that `first_with_tombstone` will return the value even if
   /// the entry is removed or not in a valid state.
   #[inline]
-  fn first_versioned<'a>(
+  fn first_with_tombstone<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -442,18 +443,18 @@ where
       return None;
     }
 
-    self.as_ref().first_versioned(version)
+    self.as_ref().first_with_tombstone(version)
   }
 
   /// Returns the last entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
   ///
-  /// The difference between [`last`](Map::last) and `last_versioned` is that `last_versioned` will return the value even if
+  /// The difference between [`last`](Map::last) and `last_with_tombstone` is that `last_with_tombstone` will return the value even if
   /// the entry is removed or not in a valid state.
   #[inline]
-  fn last_versioned<'a>(
+  fn last_with_tombstone<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -463,13 +464,13 @@ where
       return None;
     }
 
-    self.as_ref().last_versioned(version)
+    self.as_ref().last_with_tombstone(version)
   }
 
   /// Returns the value associated with the given key, if it exists.
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
-  /// you can use [`get_versioned`](Map::get_versioned).
+  /// you can use [`get_with_tombstone`](Map::get_with_tombstone).
   ///
   /// ## Example
   ///
@@ -492,7 +493,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -508,7 +509,7 @@ where
 
   /// Returns the value associated with the given key, if it exists.
   ///
-  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
+  /// The difference between `get` and `get_with_tombstone` is that `get_with_tombstone` will return the value even if the entry is removed.
   ///
   /// ## Example
   ///
@@ -523,16 +524,16 @@ where
   ///
   /// assert!(map.get(1, "hello").is_none());
   ///
-  /// let ent = map.get_versioned(1, "hello").unwrap();
+  /// let ent = map.get_with_tombstone(1, "hello").unwrap();
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```
   #[inline]
-  fn get_versioned<'a, Q>(
+  fn get_with_tombstone<'a, Q>(
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -543,7 +544,7 @@ where
       return None;
     }
 
-    self.as_ref().get_versioned(version, key)
+    self.as_ref().get_with_tombstone(version, key)
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
@@ -553,7 +554,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -574,7 +575,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -591,13 +592,13 @@ where
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// The difference between [`upper_bound`](Map::upper_bound) and `upper_bound_versioned` is that `upper_bound_versioned` will return the value even if the entry is removed.
+  /// The difference between [`upper_bound`](Map::upper_bound) and `upper_bound_with_tombstone` is that `upper_bound_with_tombstone` will return the value even if the entry is removed.
   #[inline]
-  fn upper_bound_versioned<'a, Q>(
+  fn upper_bound_with_tombstone<'a, Q>(
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
 
@@ -609,19 +610,19 @@ where
       return None;
     }
 
-    self.as_ref().upper_bound_versioned(version, upper)
+    self.as_ref().upper_bound_with_tombstone(version, upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// The difference between [`lower_bound`](Map::lower_bound) and `lower_bound_versioned` is that `lower_bound_versioned` will return the value even if the entry is removed.
+  /// The difference between [`lower_bound`](Map::lower_bound) and `lower_bound_with_tombstone` is that `lower_bound_with_tombstone` will return the value even if the entry is removed.
   #[inline]
-  fn lower_bound_versioned<'a, Q>(
+  fn lower_bound_with_tombstone<'a, Q>(
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, Option<LazyRef<'a, V>>, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C>>
   where
     K: Type,
     V: Type,
@@ -632,15 +633,12 @@ where
       return None;
     }
 
-    self.as_ref().lower_bound_versioned(version, lower)
+    self.as_ref().lower_bound_with_tombstone(version, lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter(
-    &self,
-    version: Version,
-  ) -> Iter<'_, K, LazyRef<'_, V>, Self::Allocator, Self::RefCounter, C>
+  fn iter(&self, version: Version) -> Iter<'_, K, V, Active, Self::Allocator, Self::RefCounter, C>
   where
     K: Type,
     V: Type,
@@ -650,15 +648,15 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  fn iter_all_versions(
+  fn iter_with_tombstone(
     &self,
     version: Version,
-  ) -> Iter<'_, K, Option<LazyRef<'_, V>>, Self::Allocator, Self::RefCounter, C>
+  ) -> Iter<'_, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C>
   where
     K: Type,
     V: Type,
   {
-    self.as_ref().iter_all_versions(version)
+    self.as_ref().iter_with_tombstone(version)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
@@ -667,7 +665,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, K, LazyRef<'_, V>, Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, K, V, Active, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     K: Type,
     V: Type,
@@ -679,18 +677,18 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  fn range_all_versions<Q, R>(
+  fn range_with_tombstone<Q, R>(
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, K, Option<LazyRef<'_, V>>, Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, K, V, MaybeTombstone, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     K: Type,
     V: Type,
     Q: ?Sized,
     R: RangeBounds<Q>,
   {
-    self.as_ref().range_all_versions(version, range)
+    self.as_ref().range_with_tombstone(version, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -705,7 +703,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -740,7 +738,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -805,7 +803,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -877,7 +875,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -903,7 +901,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -930,7 +928,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -997,7 +995,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -1070,7 +1068,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -1142,7 +1140,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1220,7 +1218,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1290,7 +1288,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1365,7 +1363,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1394,7 +1392,7 @@ where
     success: Ordering,
     failure: Ordering,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
@@ -1422,7 +1420,7 @@ where
     success: Ordering,
     failure: Ordering,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
@@ -1447,7 +1445,7 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
@@ -1484,7 +1482,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Either<K::Error, Error>,
   >
   where
@@ -1545,7 +1543,7 @@ where
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Either<E, Error>,
   >
   where
@@ -1610,7 +1608,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, LazyRef<'a, V>, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
     Either<E, Error>,
   >
   where

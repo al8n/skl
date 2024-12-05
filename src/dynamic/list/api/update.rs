@@ -2,7 +2,7 @@ use super::{
   super::{Inserter, Key, RefCounter},
   Allocator, EntryRef, Error, Height, RemoveValueBuilder, SkipList, ValueBuilder, Version,
 };
-use crate::KeyBuilder;
+use crate::{Active, KeyBuilder};
 use among::Among;
 use core::sync::atomic::Ordering;
 use dbutils::{buffer::VacantBuffer, equivalentor::BytesComparator};
@@ -25,7 +25,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
     self.insert_at_height(version, self.random_height(), key, value)
   }
 
@@ -40,7 +40,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -62,10 +62,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -90,7 +90,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -108,10 +108,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -129,7 +129,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -151,10 +151,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -180,7 +180,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -198,10 +198,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -224,7 +224,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -248,10 +248,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -273,7 +273,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -297,10 +297,10 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_removed() {
+          if old.is_tombstone() {
             None
           } else {
-            Some(old.map())
+            Some(old.into_active())
           }
         })
       })
@@ -323,7 +323,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -341,17 +341,17 @@ where
         Either::Left(_) => None,
         Either::Right(res) => match res {
           Ok(old) => {
-            if old.is_removed() {
+            if old.is_tombstone() {
               None
             } else {
-              Some(old.map())
+              Some(old.into_active())
             }
           }
           Err(current) => {
-            if current.is_removed() {
+            if current.is_tombstone() {
               None
             } else {
-              Some(current.map())
+              Some(current.into_active())
             }
           }
         },
@@ -370,7 +370,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -387,10 +387,10 @@ where
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            if old.is_removed() {
+            if old.is_tombstone() {
               None
             } else {
-              Some(old.map())
+              Some(old.into_active())
             }
           }
           None => None,
@@ -416,7 +416,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, A, R>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key_builder.size(), 0)
       .map_err(Either::Right)?;
@@ -438,10 +438,10 @@ where
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            if old.is_removed() {
+            if old.is_tombstone() {
               None
             } else {
-              Some(old.map())
+              Some(old.into_active())
             }
           }
           None => None,

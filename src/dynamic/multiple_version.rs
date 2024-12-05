@@ -14,7 +14,7 @@ use crate::{
   allocator::{Allocator, Sealed, WithVersion},
   error::Error,
   ref_counter::RefCounter,
-  Arena, Header, Height, KeyBuilder, ValueBuilder, Version,
+  Active, Arena, Header, Height, KeyBuilder, MaybeTombstone, ValueBuilder, Version,
 };
 
 use super::{
@@ -309,7 +309,7 @@ where
   /// Returns `true` if the key exists in the map.
   ///
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
-  /// you can use [`contains_key_versioned`](Map::contains_key_versioned).
+  /// you can use [`contains_key_with_tombstone`](Map::contains_key_with_tombstone).
   ///
   /// ## Example
   ///
@@ -323,7 +323,7 @@ where
   /// map.get_or_remove(1, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, b"hello"));
-  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// assert!(map.contains_key_with_tombstone(1, b"hello"));
   /// ```
   #[inline]
   fn contains_key<Q>(&self, version: Version, key: &Q) -> bool
@@ -352,10 +352,10 @@ where
   /// map.get_or_remove(1, b"hello").unwrap();
   ///
   /// assert!(!map.contains_key(1, b"hello"));
-  /// assert!(map.contains_key_versioned(1, b"hello"));
+  /// assert!(map.contains_key_with_tombstone(1, b"hello"));
   /// ```
   #[inline]
-  fn contains_key_versioned<Q>(&self, version: Version, key: &Q) -> bool
+  fn contains_key_with_tombstone<Q>(&self, version: Version, key: &Q) -> bool
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -364,7 +364,9 @@ where
       return false;
     }
 
-    self.as_ref().contains_key_versioned(version, key.borrow())
+    self
+      .as_ref()
+      .contains_key_with_tombstone(version, key.borrow())
   }
 
   /// Returns the first entry in the map.
@@ -372,7 +374,7 @@ where
   fn first(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     C: BytesComparator,
   {
@@ -388,7 +390,7 @@ where
   fn last(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     C: BytesComparator,
   {
@@ -401,13 +403,13 @@ where
 
   /// Returns the first entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
   ///
-  /// The difference between [`first`](Map::first) and `first_versioned` is that `first_versioned` will return the value even if
+  /// The difference between [`first`](Map::first) and `first_with_tombstone` is that `first_with_tombstone` will return the value even if
   /// the entry is removed or not in a valid state.
   #[inline]
-  fn first_versioned(
+  fn first_with_tombstone(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, Option<&[u8]>, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     C: BytesComparator,
   {
@@ -415,18 +417,18 @@ where
       return None;
     }
 
-    self.as_ref().first_versioned(version)
+    self.as_ref().first_with_tombstone(version)
   }
 
   /// Returns the last entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
   ///
-  /// The difference between [`last`](Map::last) and `last_versioned` is that `last_versioned` will return the value even if
+  /// The difference between [`last`](Map::last) and `last_with_tombstone` is that `last_with_tombstone` will return the value even if
   /// the entry is removed or not in a valid state.
   #[inline]
-  fn last_versioned(
+  fn last_with_tombstone(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, Option<&[u8]>, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     C: BytesComparator,
   {
@@ -434,13 +436,13 @@ where
       return None;
     }
 
-    self.as_ref().last_versioned(version)
+    self.as_ref().last_with_tombstone(version)
   }
 
   /// Returns the value associated with the given key, if it exists.
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
-  /// you can use [`get_versioned`](Map::get_versioned).
+  /// you can use [`get_with_tombstone`](Map::get_with_tombstone).
   ///
   /// ## Example
   ///
@@ -463,7 +465,7 @@ where
     &self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -477,7 +479,7 @@ where
 
   /// Returns the value associated with the given key, if it exists.
   ///
-  /// The difference between `get` and `get_versioned` is that `get_versioned` will return the value even if the entry is removed.
+  /// The difference between `get` and `get_with_tombstone` is that `get_with_tombstone` will return the value even if the entry is removed.
   ///
   /// ## Example
   ///
@@ -492,16 +494,16 @@ where
   ///
   /// assert!(map.get(1, b"hello").is_none());
   ///
-  /// let ent = map.get_versioned(1, b"hello").unwrap();
+  /// let ent = map.get_with_tombstone(1, b"hello").unwrap();
   /// // value is None because the entry is marked as removed.
   /// assert!(ent.value().is_none());
   /// ```
   #[inline]
-  fn get_versioned<Q>(
+  fn get_with_tombstone<Q>(
     &self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'_, Option<&[u8]>, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -510,7 +512,7 @@ where
       return None;
     }
 
-    self.as_ref().get_versioned(version, key.borrow())
+    self.as_ref().get_with_tombstone(version, key.borrow())
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
@@ -520,7 +522,7 @@ where
     &self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -539,7 +541,7 @@ where
     &self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'_, &[u8], C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -554,13 +556,13 @@ where
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// The difference between [`upper_bound`](Map::upper_bound) and `upper_bound_versioned` is that `upper_bound_versioned` will return the value even if the entry is removed.
+  /// The difference between [`upper_bound`](Map::upper_bound) and `upper_bound_with_tombstone` is that `upper_bound_with_tombstone` will return the value even if the entry is removed.
   #[inline]
-  fn upper_bound_versioned<Q>(
+  fn upper_bound_with_tombstone<Q>(
     &self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'_, Option<&[u8]>, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -571,20 +573,20 @@ where
 
     self
       .as_ref()
-      .iter_all_versions(version)
+      .iter_with_tombstone(version)
       .seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
   /// If no such element is found then `None` is returned.
   ///
-  /// The difference between [`lower_bound`](Map::lower_bound) and `lower_bound_versioned` is that `lower_bound_versioned` will return the value even if the entry is removed.
+  /// The difference between [`lower_bound`](Map::lower_bound) and `lower_bound_with_tombstone` is that `lower_bound_with_tombstone` will return the value even if the entry is removed.
   #[inline]
-  fn lower_bound_versioned<Q>(
+  fn lower_bound_with_tombstone<Q>(
     &self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'_, Option<&[u8]>, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
@@ -595,23 +597,23 @@ where
 
     self
       .as_ref()
-      .iter_all_versions(version)
+      .iter_with_tombstone(version)
       .seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter(&self, version: Version) -> Iter<'_, &[u8], Self::Allocator, Self::RefCounter, C> {
+  fn iter(&self, version: Version) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C> {
     self.as_ref().iter(version)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  fn iter_all_versions(
+  fn iter_with_tombstone(
     &self,
     version: Version,
-  ) -> Iter<'_, Option<&[u8]>, Self::Allocator, Self::RefCounter, C> {
-    self.as_ref().iter_all_versions(version)
+  ) -> Iter<'_, MaybeTombstone, Self::Allocator, Self::RefCounter, C> {
+    self.as_ref().iter_with_tombstone(version)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
@@ -620,7 +622,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, &[u8], Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -630,16 +632,16 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  fn range_all_versions<Q, R>(
+  fn range_with_tombstone<Q, R>(
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, Option<&[u8]>, Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, MaybeTombstone, Self::Allocator, Self::RefCounter, C, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
-    self.as_ref().range_all_versions(version, range)
+    self.as_ref().range_with_tombstone(version, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -653,7 +655,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -683,7 +685,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -743,7 +745,7 @@ where
     version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -810,7 +812,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -831,7 +833,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -853,7 +855,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -915,7 +917,7 @@ where
     version: Version,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -983,7 +985,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -1051,7 +1053,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1127,7 +1129,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1195,7 +1197,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1268,7 +1270,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>,
+    Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1294,7 +1296,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1317,7 +1319,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1337,7 +1339,7 @@ where
     &'a self,
     version: Version,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1369,7 +1371,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Error>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Error>
   where
     C: BytesComparator,
   {
@@ -1425,7 +1427,7 @@ where
     &'a self,
     version: Version,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {
@@ -1485,7 +1487,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, &'a [u8], C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, Active, C, Self::Allocator, Self::RefCounter>>, Either<E, Error>>
   where
     C: BytesComparator,
   {

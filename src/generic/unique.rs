@@ -42,7 +42,7 @@ pub mod unsync {
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, K, V, Q, R, C = Ascend<K>> =
-    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, Q, R, C>;
+    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
   pub type Entry<'a, K, V, C = Ascend<K>> =
@@ -141,7 +141,7 @@ pub mod sync {
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, K, V, Q, R, C = Ascend<K>> =
-    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, Q, R, C>;
+    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
   pub type Entry<'a, K, V, C = Ascend<K>> =

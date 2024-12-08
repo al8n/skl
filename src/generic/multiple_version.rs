@@ -275,13 +275,15 @@ where
     self.as_ref().height()
   }
 
-  /// Returns the number of entries in the skipmap.
+  /// Returns the number of entries in the map, this `len` includes all entry versions.
+  ///
+  /// If the map only contains tombstones, this method will not return `0` but the number of tombstones.
   #[inline]
   fn len(&self) -> usize {
     self.as_ref().len()
   }
 
-  /// Returns true if the skipmap is empty.
+  /// Returns `true` if the map is empty, if the map only contains tombstones, this method will also return `false`.
   #[inline]
   fn is_empty(&self) -> bool {
     self.len() == 0

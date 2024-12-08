@@ -33,16 +33,16 @@ pub mod unsync {
     crate::__dynamic_multiple_version_map_tests!("dynamic_unsync_multiple_version_map": super::SkipMap);
   }
 
-  type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
+  type SkipList<C> = super::super::list::SkipList<C, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, V, C> = super::super::iter::Iter<'a, V, Allocator, RefCounter, C>;
+  pub type Iter<'a, S, C> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, V, C> = super::super::entry::EntryRef<'a, V, C, Allocator, RefCounter>;
+  pub type Entry<'a, S, C> = super::super::entry::EntryRef<'a, S, C, Allocator, RefCounter>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, V, C, Q, R> = super::super::iter::Iter<'a, V, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, S, C, Q, R> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter, Q, R>;
 
   /// A fast, ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -130,16 +130,16 @@ pub mod sync {
     crate::__dynamic_multiple_version_map_tests!(go "dynamic_sync_multiple_version_map": super::SkipMap => crate::tests::dynamic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
+  type SkipList<C> = super::super::list::SkipList<C, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, V, C> = super::super::iter::Iter<'a, V, Allocator, RefCounter, C>;
+  pub type Iter<'a, S, C> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, V, C, Q, R> = super::super::iter::Iter<'a, V, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, S, C, Q, R> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, V, C> = super::super::entry::EntryRef<'a, V, C, Allocator, RefCounter>;
+  pub type Entry<'a, S, C> = super::super::entry::EntryRef<'a, S, C, Allocator, RefCounter>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports multiple versions, forward and backward iteration.
   ///
@@ -195,7 +195,7 @@ pub mod sync {
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait Map<C = Ascend>
 where
-  Self: Arena<Constructable = super::list::SkipList<Self::Allocator, Self::RefCounter, C>>,
+  Self: Arena<Constructable = super::list::SkipList<C, Self::Allocator, Self::RefCounter>>,
   C: 'static,
   <Self::Allocator as Sealed>::Node: WithVersion,
 {
@@ -605,7 +605,7 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  fn iter(&self, version: Version) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C> {
+  fn iter(&self, version: Version) -> Iter<'_, Active, C, Self::Allocator, Self::RefCounter> {
     self.as_ref().iter(version)
   }
 
@@ -614,7 +614,7 @@ where
   fn iter_with_tombstone(
     &self,
     version: Version,
-  ) -> Iter<'_, MaybeTombstone, Self::Allocator, Self::RefCounter, C> {
+  ) -> Iter<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter> {
     self.as_ref().iter_with_tombstone(version)
   }
 
@@ -624,7 +624,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, Active, C, Self::Allocator, Self::RefCounter, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -638,7 +638,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, MaybeTombstone, Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,

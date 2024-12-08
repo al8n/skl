@@ -13,7 +13,7 @@ where
   R: RefCounter,
   S: State<'a>,
 {
-  pub(super) list: &'a SkipList<A, R, C>,
+  pub(super) list: &'a SkipList<C, A, R>,
   pub(super) key: &'a [u8],
   pub(super) value: S::BytesValue,
   pub(super) version: Version,
@@ -57,7 +57,7 @@ where
 {
 }
 
-impl<'a, A, R, C> EntryRef<'a, MaybeTombstone, C, A, R>
+impl<'a, C, A, R> EntryRef<'a, MaybeTombstone, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -188,7 +188,7 @@ where
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<A, R, C>,
+    list: &'a SkipList<C, A, R>,
     key: Option<&'a [u8]>,
     value: S::BytesValue,
   ) -> Self {
@@ -213,7 +213,7 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<A, R, C>,
+    list: &'a SkipList<C, A, R>,
     key: Option<&'a [u8]>,
     value: S::BytesValue,
   ) -> Self {

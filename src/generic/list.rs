@@ -30,15 +30,15 @@ pub use entry::EntryRef;
 mod api;
 pub(super) mod iterator;
 
-type UpdateOk<'a, 'b, K, V, A, R, C> = Either<
-  Option<EntryRef<'a, K, V, MaybeTombstone, A, R, C>>,
-  Result<EntryRef<'a, K, V, MaybeTombstone, A, R, C>, EntryRef<'a, K, V, MaybeTombstone, A, R, C>>,
+type UpdateOk<'a, 'b, K, V, C, A, R> = Either<
+  Option<EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
+  Result<EntryRef<'a, K, V, MaybeTombstone, C, A, R>, EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<K: ?Sized, V: ?Sized, A: Allocator, R: RefCounter, C> {
+pub struct SkipList<K: ?Sized, V: ?Sized, C, A: Allocator, R: RefCounter> {
   pub(crate) arena: A,
   meta: RefMeta<A::Meta, R>,
   head: <A::Node as Node>::Pointer,
@@ -56,7 +56,7 @@ pub struct SkipList<K: ?Sized, V: ?Sized, A: Allocator, R: RefCounter, C> {
   _m: PhantomData<(fn() -> K, fn() -> V)>,
 }
 
-unsafe impl<K, V, A, R, C> Send for SkipList<K, V, A, R, C>
+unsafe impl<K, V, C, A, R> Send for SkipList<K, V, C, A, R>
 where
   K: ?Sized,
   V: ?Sized,
@@ -66,7 +66,7 @@ where
 {
 }
 
-unsafe impl<K, V, A, R, C> Sync for SkipList<K, V, A, R, C>
+unsafe impl<K, V, C, A, R> Sync for SkipList<K, V, C, A, R>
 where
   K: ?Sized,
   V: ?Sized,
@@ -76,7 +76,7 @@ where
 {
 }
 
-impl<K, V, A, R, C> Clone for SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> Clone for SkipList<K, V, C, A, R>
 where
   K: ?Sized,
   V: ?Sized,
@@ -102,7 +102,7 @@ where
   }
 }
 
-impl<K, V, A, R, C> SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> SkipList<K, V, C, A, R>
 where
   K: ?Sized,
   V: ?Sized,
@@ -120,7 +120,7 @@ where
   }
 }
 
-impl<K, V, A, R, C> Constructable for SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> Constructable for SkipList<K, V, C, A, R>
 where
   K: ?Sized,
   V: ?Sized,
@@ -190,7 +190,7 @@ where
   }
 }
 
-impl<K, V, A, R, C> SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> SkipList<K, V, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -289,7 +289,7 @@ where
   }
 }
 
-impl<K, V, A, R, C> SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> SkipList<K, V, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -343,7 +343,7 @@ where
   }
 }
 
-impl<K, V, A, R, C> SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> SkipList<K, V, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -355,7 +355,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
   {
@@ -389,7 +389,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
   {
@@ -461,7 +461,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
   {
@@ -495,7 +495,7 @@ where
     nd: &mut <A::Node as Node>::Pointer,
     version: Version,
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
-  ) -> Option<EntryRef<'a, K, V, S, A, R, C>>
+  ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
   {
@@ -907,7 +907,7 @@ where
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Among<K::Error, E, Error>>
+  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<'a, K>,
   {
@@ -1176,14 +1176,14 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone, A, R, C>,
+    old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Error> {
+  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Error> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
@@ -1215,13 +1215,13 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone, A, R, C>,
+    old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Either<E, Error>> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena

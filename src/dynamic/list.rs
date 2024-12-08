@@ -1,10 +1,7 @@
 use core::{cmp, ptr::NonNull, sync::atomic::Ordering};
 
 use among::Among;
-use dbutils::{
-  buffer::VacantBuffer,
-  equivalentor::{Ascend, BytesComparator},
-};
+use dbutils::{buffer::VacantBuffer, equivalentor::BytesComparator};
 use either::Either;
 use rarena_allocator::Allocator as _;
 
@@ -27,7 +24,7 @@ pub use entry::EntryRef;
 mod api;
 pub(super) mod iterator;
 
-type UpdateOk<'a, 'b, A, RC, C> = Either<
+type UpdateOk<'a, 'b, C, A, RC> = Either<
   Option<EntryRef<'a, MaybeTombstone, C, A, RC>>,
   Result<EntryRef<'a, MaybeTombstone, C, A, RC>, EntryRef<'a, MaybeTombstone, C, A, RC>>,
 >;
@@ -35,7 +32,7 @@ type UpdateOk<'a, 'b, A, RC, C> = Either<
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<A, R, C = Ascend>
+pub struct SkipList<C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -55,7 +52,7 @@ where
   cmp: C,
 }
 
-unsafe impl<A, R, C> Send for SkipList<A, R, C>
+unsafe impl<C, A, R> Send for SkipList<C, A, R>
 where
   C: Send,
   A: Allocator + Send,
@@ -63,7 +60,7 @@ where
 {
 }
 
-unsafe impl<A, R, C> Sync for SkipList<A, R, C>
+unsafe impl<C, A, R> Sync for SkipList<C, A, R>
 where
   C: Sync,
   A: Allocator + Sync,
@@ -71,7 +68,7 @@ where
 {
 }
 
-impl<A, R, C> Clone for SkipList<A, R, C>
+impl<C, A, R> Clone for SkipList<C, A, R>
 where
   C: Clone,
   A: Allocator,
@@ -93,7 +90,7 @@ where
   }
 }
 
-impl<A, R, C> SkipList<A, R, C>
+impl<C, A, R> SkipList<C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -104,7 +101,7 @@ where
   }
 }
 
-impl<A, R, C> Constructable for SkipList<A, R, C>
+impl<C, A, R> Constructable for SkipList<C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -171,7 +168,7 @@ where
   }
 }
 
-impl<A, R, C> SkipList<A, R, C>
+impl<C, A, R> SkipList<C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -256,7 +253,7 @@ where
   }
 }
 
-impl<A, R, C> SkipList<A, R, C>
+impl<C, A, R> SkipList<C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -308,7 +305,7 @@ where
   }
 }
 
-impl<A, R, C> SkipList<A, R, C>
+impl<C, A, R> SkipList<C, A, R>
 where
   A: Allocator,
   C: BytesComparator,
@@ -855,7 +852,7 @@ where
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, A, R, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, C, A, R>, Either<E, Error>> {
     let is_remove = key.is_remove();
 
     // Safety: a fresh new Inserter, so safe here
@@ -1128,7 +1125,7 @@ where
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, A, R, C>, Error> {
+  ) -> Result<UpdateOk<'a, 'b, C, A, R>, Error> {
     match key {
       Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
@@ -1168,7 +1165,7 @@ where
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, A, R, C>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, 'b, C, A, R>, Either<E, Error>> {
     match key {
       Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena

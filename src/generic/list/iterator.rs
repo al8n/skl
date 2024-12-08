@@ -11,7 +11,7 @@ use super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
 /// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct Iter<'a, K, V, S, A, RC, C, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
+pub struct Iter<'a, K, V, S, C, A, RC, Q = <K as Type>::Ref<'a>, R = core::ops::RangeFull>
 where
   A: Allocator,
   K: ?Sized + Type,
@@ -20,16 +20,16 @@ where
   Q: ?Sized,
   RC: RefCounter,
 {
-  pub(super) map: &'a SkipList<K, V, A, RC, C>,
+  pub(super) map: &'a SkipList<K, V, C, A, RC>,
   pub(super) version: Version,
   pub(super) range: Option<R>,
   pub(super) all_versions: bool,
-  pub(super) head: Option<EntryRef<'a, K, V, S, A, RC, C>>,
-  pub(super) tail: Option<EntryRef<'a, K, V, S, A, RC, C>>,
+  pub(super) head: Option<EntryRef<'a, K, V, S, C, A, RC>>,
+  pub(super) tail: Option<EntryRef<'a, K, V, S, C, A, RC>>,
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R: Clone> Clone for Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R: Clone> Clone for Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -51,7 +51,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, RC, C> Iter<'a, K, V, S, A, RC, C>
+impl<'a, K, V, S, C, A, RC> Iter<'a, K, V, S, C, A, RC>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -62,7 +62,7 @@ where
   #[inline]
   pub(crate) const fn new(
     version: Version,
-    map: &'a SkipList<K, V, A, RC, C>,
+    map: &'a SkipList<K, V, C, A, RC>,
     all_versions: bool,
   ) -> Self {
     Self {
@@ -78,7 +78,7 @@ where
 
   /// Changes the `Q` type of the iterator to adapt to a different query type for the iterator.
   #[inline]
-  pub fn map<Q: ?Sized>(&self) -> Iter<'a, K, V, S, A, RC, C, Q> {
+  pub fn map<Q: ?Sized>(&self) -> Iter<'a, K, V, S, C, A, RC, Q> {
     Iter {
       map: self.map,
       head: None,
@@ -91,7 +91,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R> Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R> Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -103,7 +103,7 @@ where
   #[inline]
   pub(crate) fn range(
     version: Version,
-    map: &'a SkipList<K, V, A, RC, C>,
+    map: &'a SkipList<K, V, C, A, RC>,
     r: R,
     all_versions: bool,
   ) -> Self {
@@ -119,7 +119,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R> Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R> Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -151,18 +151,18 @@ where
 
   /// Returns the entry at the current head position of the iterator.
   #[inline]
-  pub const fn head(&self) -> Option<&EntryRef<'a, K, V, S, A, RC, C>> {
+  pub const fn head(&self) -> Option<&EntryRef<'a, K, V, S, C, A, RC>> {
     self.head.as_ref()
   }
 
   /// Returns the entry at the current tail position of the iterator.
   #[inline]
-  pub const fn tail(&self) -> Option<&EntryRef<'a, K, V, S, A, RC, C>> {
+  pub const fn tail(&self) -> Option<&EntryRef<'a, K, V, S, C, A, RC>> {
     self.tail.as_ref()
   }
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R> Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R> Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -175,7 +175,7 @@ where
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn next_in(&mut self) -> Option<EntryRef<'a, K, V, S, A, RC, C>> {
+  fn next_in(&mut self) -> Option<EntryRef<'a, K, V, S, C, A, RC>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
         Some(head) => self.map.get_next(head.ptr, 0),
@@ -224,7 +224,7 @@ where
 
   /// Advances to the prev position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
-  fn prev(&mut self) -> Option<EntryRef<'a, K, V, S, A, RC, C>> {
+  fn prev(&mut self) -> Option<EntryRef<'a, K, V, S, C, A, RC>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
         Some(tail) => self.map.get_prev(tail.ptr, 0),
@@ -272,7 +272,7 @@ where
     }
   }
 
-  fn range_next_in(&mut self) -> Option<EntryRef<'a, K, V, S, A, RC, C>> {
+  fn range_next_in(&mut self) -> Option<EntryRef<'a, K, V, S, C, A, RC>> {
     unsafe {
       let mut next_head = match self.head.as_ref() {
         Some(head) => self.map.get_next(head.ptr, 0),
@@ -330,7 +330,7 @@ where
     }
   }
 
-  fn range_prev(&mut self) -> Option<EntryRef<'a, K, V, S, A, RC, C>> {
+  fn range_prev(&mut self) -> Option<EntryRef<'a, K, V, S, C, A, RC>> {
     unsafe {
       let mut next_tail = match self.tail.as_ref() {
         Some(tail) => self.map.get_prev(tail.ptr, 0),
@@ -389,7 +389,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R> Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R> Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -407,7 +407,7 @@ where
   pub fn seek_upper_bound<QR>(
     &mut self,
     upper: Bound<&QR>,
-  ) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, S, C, A, RC>>
   where
     QR: ?Sized,
     C: TypeRefQueryComparator<'a, K, QR>,
@@ -433,7 +433,7 @@ where
   pub fn seek_lower_bound<QR>(
     &mut self,
     lower: Bound<&QR>,
-  ) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, S, C, A, RC>>
   where
     QR: ?Sized,
     C: TypeRefQueryComparator<'a, K, QR>,
@@ -455,7 +455,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
+  fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, RC>>
   where
     QR: ?Sized,
     C: TypeRefQueryComparator<'a, K, QR>,
@@ -493,7 +493,7 @@ where
   /// Moves the iterator to the first entry whose key is greater than
   /// the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
+  fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, RC>>
   where
     QR: ?Sized,
     C: TypeRefQueryComparator<'a, K, QR>,
@@ -531,7 +531,7 @@ where
   /// Moves the iterator to the first entry whose key is less than or
   /// equal to the given key. Returns the key and value if the iterator is
   /// pointing at a valid entry, and `None` otherwise.
-  fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
+  fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, RC>>
   where
     QR: ?Sized,
     C: TypeRefQueryComparator<'a, K, QR>,
@@ -569,7 +569,7 @@ where
   /// Moves the iterator to the last entry whose key is less than the given
   /// key. Returns the key and value if the iterator is pointing at a valid entry,
   /// and `None` otherwise.
-  fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
+  fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, RC>>
   where
     QR: ?Sized,
     C: TypeRefQueryComparator<'a, K, QR>,
@@ -599,14 +599,14 @@ where
   }
 
   #[inline]
-  fn first(&mut self) -> Option<EntryRef<'a, K, V, S, A, RC, C>> {
+  fn first(&mut self) -> Option<EntryRef<'a, K, V, S, C, A, RC>> {
     self.head = None;
     self.tail = None;
     self.next()
   }
 
   #[inline]
-  fn last(&mut self) -> Option<EntryRef<'a, K, V, S, A, RC, C>> {
+  fn last(&mut self) -> Option<EntryRef<'a, K, V, S, C, A, RC>> {
     self.tail = None;
     self.head = None;
     self.prev()
@@ -622,7 +622,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R> Iterator for Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R> Iterator for Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -633,7 +633,7 @@ where
   R: RangeBounds<Q>,
   C: TypeRefQueryComparator<'a, K, Q>,
 {
-  type Item = EntryRef<'a, K, V, S, A, RC, C>;
+  type Item = EntryRef<'a, K, V, S, C, A, RC>;
 
   #[inline]
   fn next(&mut self) -> Option<Self::Item> {
@@ -671,7 +671,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, RC, C, Q, R> DoubleEndedIterator for Iter<'a, K, V, S, A, RC, C, Q, R>
+impl<'a, K, V, S, C, A, RC, Q, R> DoubleEndedIterator for Iter<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,

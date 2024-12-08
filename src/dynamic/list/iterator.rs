@@ -8,14 +8,14 @@ use dbutils::equivalentor::{BytesComparator, BytesRangeComparator};
 
 /// An iterator over the skipmap (this iterator will yields all versions). The current state of the iterator can be cloned by
 /// simply value copying the struct.
-pub struct Iter<'a, S, A, RC, C, Q = [u8], R = core::ops::RangeFull>
+pub struct Iter<'a, S, C, A, RC, Q = [u8], R = core::ops::RangeFull>
 where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
   S: State<'a>,
 {
-  pub(super) map: &'a SkipList<A, RC, C>,
+  pub(super) map: &'a SkipList<C, A, RC>,
   pub(super) version: Version,
   pub(super) range: Option<R>,
   pub(super) all_versions: bool,
@@ -24,7 +24,7 @@ where
   pub(super) _phantom: core::marker::PhantomData<Q>,
 }
 
-impl<'a, S, A, RC, C, Q, R> Clone for Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Clone for Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
@@ -45,7 +45,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> Copy for Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Copy for Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
@@ -55,7 +55,7 @@ where
 {
 }
 
-impl<'a, S, A, RC, C> Iter<'a, S, A, RC, C>
+impl<'a, S, C, A, RC> Iter<'a, S, C, A, RC>
 where
   A: Allocator,
   RC: RefCounter,
@@ -64,7 +64,7 @@ where
   #[inline]
   pub(crate) const fn new(
     version: Version,
-    map: &'a SkipList<A, RC, C>,
+    map: &'a SkipList<C, A, RC>,
     all_versions: bool,
   ) -> Self {
     Self {
@@ -79,7 +79,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
@@ -89,7 +89,7 @@ where
   #[inline]
   pub(crate) fn range(
     version: Version,
-    map: &'a SkipList<A, RC, C>,
+    map: &'a SkipList<C, A, RC>,
     r: R,
     all_versions: bool,
   ) -> Self {
@@ -105,7 +105,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   RC: RefCounter,
@@ -146,7 +146,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
@@ -374,7 +374,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
@@ -593,7 +593,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> Iterator for Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> Iterator for Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   C: BytesComparator,
@@ -640,7 +640,7 @@ where
   }
 }
 
-impl<'a, S, A, RC, C, Q, R> DoubleEndedIterator for Iter<'a, S, A, RC, C, Q, R>
+impl<'a, S, C, A, RC, Q, R> DoubleEndedIterator for Iter<'a, S, C, A, RC, Q, R>
 where
   A: Allocator,
   C: BytesComparator,

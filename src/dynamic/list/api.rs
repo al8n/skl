@@ -22,7 +22,7 @@ mod update;
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<usize, E>>>;
 
-impl<A, R, C> SkipList<A, R, C>
+impl<C, A, R> SkipList<C, A, R>
 where
   A: Allocator,
   R: RefCounter,
@@ -152,7 +152,7 @@ where
   }
 }
 
-impl<A, RC, C> SkipList<A, RC, C>
+impl<C, A, RC> SkipList<C, A, RC>
 where
   A: Allocator,
   RC: RefCounter,
@@ -293,14 +293,14 @@ where
   }
 }
 
-impl<A, RC, C> SkipList<A, RC, C>
+impl<C, A, RC> SkipList<C, A, RC>
 where
   A: Allocator,
   RC: RefCounter,
 {
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, Active, A, RC, C> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, Active, C, A, RC> {
     iterator::Iter::new(version, self, false)
   }
 
@@ -309,7 +309,7 @@ where
   pub fn iter_with_tombstone(
     &self,
     version: Version,
-  ) -> iterator::Iter<'_, MaybeTombstone, A, RC, C> {
+  ) -> iterator::Iter<'_, MaybeTombstone, C, A, RC> {
     iterator::Iter::new(version, self, true)
   }
 
@@ -319,7 +319,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, Active, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, Active, C, A, RC, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -333,7 +333,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, MaybeTombstone, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, MaybeTombstone, C, A, RC, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,

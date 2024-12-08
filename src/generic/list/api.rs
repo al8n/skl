@@ -22,7 +22,7 @@ mod update;
 type RemoveValueBuilder<E> =
   ValueBuilder<std::boxed::Box<dyn Fn(&mut VacantBuffer<'_>) -> Result<usize, E>>>;
 
-impl<K, V, A, R, C> SkipList<K, V, A, R, C>
+impl<K, V, C, A, R> SkipList<K, V, C, A, R>
 where
   K: ?Sized,
   V: ?Sized,
@@ -154,7 +154,7 @@ where
   }
 }
 
-impl<K, V, A, RC, C> SkipList<K, V, A, RC, C>
+impl<K, V, C, A, RC> SkipList<K, V, C, A, RC>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -185,7 +185,7 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
+  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
@@ -193,7 +193,7 @@ where
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
+  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
@@ -204,7 +204,7 @@ where
   pub fn first_with_tombstone<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
@@ -215,7 +215,7 @@ where
   pub fn last_with_tombstone<'a>(
     &'a self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
@@ -230,7 +230,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
@@ -276,7 +276,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
@@ -324,7 +324,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
@@ -338,7 +338,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
@@ -352,7 +352,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
@@ -369,7 +369,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
@@ -382,7 +382,7 @@ where
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, K, V, Active, A, RC, C> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, K, V, Active, C, A, RC> {
     iterator::Iter::new(version, self, false)
   }
 
@@ -391,7 +391,7 @@ where
   pub fn iter_with_tombstone(
     &self,
     version: Version,
-  ) -> iterator::Iter<'_, K, V, MaybeTombstone, A, RC, C>
+  ) -> iterator::Iter<'_, K, V, MaybeTombstone, C, A, RC>
 where {
     iterator::Iter::new(version, self, true)
   }
@@ -402,7 +402,7 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, K, V, Active, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, K, V, Active, C, A, RC, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,
@@ -416,7 +416,7 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, K, V, MaybeTombstone, A, RC, C, Q, R>
+  ) -> iterator::Iter<'_, K, V, MaybeTombstone, C, A, RC, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,

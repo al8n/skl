@@ -12,7 +12,7 @@ use crate::{
   allocator::{Allocator, Sealed, WithoutVersion},
   error::Error,
   ref_counter::RefCounter,
-  Active, Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
+  Active, Arena, Header, Height, KeyBuilder, MaybeTombstone, ValueBuilder, MIN_VERSION,
 };
 
 use super::{
@@ -25,24 +25,22 @@ pub mod unsync {
   use dbutils::equivalentor::Ascend;
 
   pub use crate::unsync::{map::Allocator, RefCounter};
-  use crate::Active;
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_unsync_map,))]
   mod tests {
     crate::__dynamic_map_tests!("dynamic_unsync_map": super::SkipMap);
   }
 
-  type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
+  type SkipList<C> = super::super::list::SkipList<C, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, C> = super::super::iter::Iter<'a, Active, Allocator, RefCounter, C>;
-
-  /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, C, Q, R> =
-    super::super::iter::Iter<'a, Active, Allocator, RefCounter, C, Q, R>;
+  pub type Iter<'a, S, C> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Active, C, Allocator, RefCounter>;
+  pub type Entry<'a, S, C> = super::super::entry::EntryRef<'a, S, C, Allocator, RefCounter>;
+
+  /// Iterator over a subset of the [`SkipMap`].
+  pub type Range<'a, S, C, Q, R> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter, Q, R>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -97,7 +95,6 @@ pub mod sync {
   use dbutils::equivalentor::Ascend;
 
   pub use crate::sync::{map::Allocator, RefCounter};
-  use crate::Active;
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_sync_map,))]
   mod tests {
@@ -127,17 +124,16 @@ pub mod sync {
     crate::__dynamic_map_tests!(go "sync_map": super::SkipMap => crate::tests::dynamic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<C> = super::super::list::SkipList<Allocator, RefCounter, C>;
+  type SkipList<C> = super::super::list::SkipList<C, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, C> = super::super::iter::Iter<'a, Active, Allocator, RefCounter, C>;
-
-  /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, C, Q, R> =
-    super::super::iter::Iter<'a, Active, Allocator, RefCounter, C, Q, R>;
+  pub type Iter<'a, S, C> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, C> = super::super::entry::EntryRef<'a, Active, C, Allocator, RefCounter>;
+  pub type Entry<'a, S, C> = super::super::entry::EntryRef<'a, S, C, Allocator, RefCounter>;
+
+  /// Iterator over a subset of the [`SkipMap`].
+  pub type Range<'a, S, C, Q, R> = super::super::iter::Iter<'a, S, C, Allocator, RefCounter, Q, R>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -193,7 +189,7 @@ pub mod sync {
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
 pub trait Map<C = Ascend>
 where
-  Self: Arena<Constructable = super::list::SkipList<Self::Allocator, Self::RefCounter, C>>,
+  Self: Arena<Constructable = super::list::SkipList<C, Self::Allocator, Self::RefCounter>>,
   <Self::Allocator as Sealed>::Node: WithoutVersion,
   C: 'static,
 {
@@ -249,13 +245,15 @@ where
     self.as_ref().height()
   }
 
-  /// Returns the number of entries in the skipmap.
+  /// Returns the number of entries in the map, this `len` includes all tombstones.
+  ///
+  /// If the map only contains tombstones, this method will not return `0` but the number of tombstones.
   #[inline]
   fn len(&self) -> usize {
     self.as_ref().len()
   }
 
-  /// Returns true if the skipmap is empty.
+  /// Returns `true` if the map is empty, if the map only contains tombstones, this method will also return `false`.
   #[inline]
   fn is_empty(&self) -> bool {
     self.len() == 0
@@ -304,6 +302,33 @@ where
     self.as_ref().contains_key(MIN_VERSION, key.borrow())
   }
 
+  /// Returns `true` if the key exists in the map, even if it is marked as removed.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::dynamic::{unique::{sync::SkipMap, Map}, Builder};
+  ///
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  ///
+  /// map.insert(b"hello", b"world").unwrap();
+  ///
+  /// map.remove(b"hello").unwrap();
+  ///
+  /// assert!(!map.contains_key(b"hello"));
+  /// assert!(map.contains_key_with_tombstone(b"hello"));
+  /// ```
+  #[inline]
+  fn contains_key_with_tombstone<Q>(&self, key: &Q) -> bool
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    C: BytesComparator,
+  {
+    self
+      .as_ref()
+      .contains_key_with_tombstone(MIN_VERSION, key.borrow())
+  }
+
   /// Returns the first entry in the map.
   #[inline]
   fn first(&self) -> Option<EntryRef<'_, Active, C, Self::Allocator, Self::RefCounter>>
@@ -320,6 +345,34 @@ where
     C: BytesComparator,
   {
     self.as_ref().last(MIN_VERSION)
+  }
+
+  /// Returns the first entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
+  ///
+  /// The difference between [`first`](Map::first) and `first_with_tombstone` is that `first_with_tombstone` will return the value even if
+  /// the entry is removed or not in a valid state.
+  #[inline]
+  fn first_with_tombstone(
+    &self,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    C: BytesComparator,
+  {
+    self.as_ref().first_with_tombstone(0)
+  }
+
+  /// Returns the last entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
+  ///
+  /// The difference between [`last`](Map::last) and `last_with_tombstone` is that `last_with_tombstone` will return the value even if
+  /// the entry is removed or not in a valid state.
+  #[inline]
+  fn last_with_tombstone(
+    &self,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    C: BytesComparator,
+  {
+    self.as_ref().last_with_tombstone(0)
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -347,6 +400,39 @@ where
     C: BytesComparator,
   {
     self.as_ref().get(MIN_VERSION, key.borrow())
+  }
+
+  /// Returns the value associated with the given key, if it exists.
+  ///
+  /// The difference between `get` and `get_with_tombstone` is that `get_with_tombstone` will return the value even if the entry is removed.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::dynamic::{unique::{sync::SkipMap, Map}, Builder};
+  ///
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap>().unwrap();
+  ///
+  /// map.insert(b"hello", b"world").unwrap();
+  ///
+  /// map.remove(b"hello").unwrap();
+  ///
+  /// assert!(map.get(b"hello").is_none());
+  ///
+  /// let ent = map.get_with_tombstone(b"hello").unwrap();
+  /// // value is None because the entry is marked as removed.
+  /// assert!(ent.value().is_none());
+  /// ```
+  #[inline]
+  fn get_with_tombstone<Q>(
+    &self,
+    key: &Q,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    C: BytesComparator,
+  {
+    self.as_ref().get_with_tombstone(MIN_VERSION, key.borrow())
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
@@ -377,20 +463,71 @@ where
     self.as_ref().iter(MIN_VERSION).seek_lower_bound(lower)
   }
 
-  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
+  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// The difference between [`upper_bound`](Map::upper_bound) and `upper_bound_with_tombstone` is that `upper_bound_with_tombstone` will return the value even if the entry is removed.
   #[inline]
-  fn iter(&self) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C> {
+  fn upper_bound_with_tombstone<Q>(
+    &self,
+    upper: Bound<&Q>,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    C: BytesComparator,
+  {
+    self.as_ref().iter_with_tombstone(0).seek_upper_bound(upper)
+  }
+
+  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// The difference between [`lower_bound`](Map::lower_bound) and `lower_bound_with_tombstone` is that `lower_bound_with_tombstone` will return the value even if the entry is removed.
+  #[inline]
+  fn lower_bound_with_tombstone<Q>(
+    &self,
+    lower: Bound<&Q>,
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    C: BytesComparator,
+  {
+    self.as_ref().iter_with_tombstone(0).seek_lower_bound(lower)
+  }
+
+  /// Returns a new iterator, this iterator will yield only active entries of all entries in the map less or equal to the given version.
+  #[inline]
+  fn iter(&self) -> Iter<'_, Active, C, Self::Allocator, Self::RefCounter> {
     self.as_ref().iter(MIN_VERSION)
   }
 
-  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
+  /// Returns a new iterator, this iterator will yield with tombstones for all entries in the map less or equal to the given version.
   #[inline]
-  fn range<Q, R>(&self, range: R) -> Iter<'_, Active, Self::Allocator, Self::RefCounter, C, Q, R>
+  fn iter_with_tombstone(&self) -> Iter<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter> {
+    self.as_ref().iter_with_tombstone(0)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield only active entries of all entries in the range less or equal to the given version.
+  #[inline]
+  fn range<Q, R>(&self, range: R) -> Iter<'_, Active, C, Self::Allocator, Self::RefCounter, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
     self.as_ref().range(MIN_VERSION, range)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield with tombstones for all entries in the range less or equal to the given version.
+  #[inline]
+  fn range_with_tombstone<Q, R>(
+    &self,
+    range: R,
+  ) -> Iter<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter, Q, R>
+  where
+    Q: ?Sized + Borrow<[u8]>,
+    R: RangeBounds<Q>,
+  {
+    self.as_ref().range_with_tombstone(MIN_VERSION, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.

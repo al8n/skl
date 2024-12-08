@@ -16,7 +16,7 @@ use crate::{
   error::Error,
   generic::Active,
   ref_counter::RefCounter,
-  Arena, Header, Height, KeyBuilder, ValueBuilder, MIN_VERSION,
+  Arena, Header, Height, KeyBuilder, MaybeTombstone, ValueBuilder, MIN_VERSION,
 };
 
 use super::{
@@ -26,7 +26,7 @@ use super::{
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
-  use crate::generic::{Active, Ascend};
+  use crate::generic::Ascend;
   pub use crate::unsync::{map::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
@@ -34,19 +34,19 @@ pub mod unsync {
     crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V, C = Ascend> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend> = super::super::list::SkipList<K, V, C, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = Ascend> =
-    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, V, S, C = Ascend> =
+    super::super::iter::Iter<'a, K, V, S, C, Allocator, RefCounter>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R, C = Ascend> =
-    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, K, V, S, Q, R, C = Ascend> =
+    super::super::iter::Iter<'a, K, V, S, C, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V, C = Ascend> =
-    super::super::entry::EntryRef<'a, K, V, Active, Allocator, RefCounter, C>;
+  pub type Entry<'a, K, V, S, C = Ascend> =
+    super::super::entry::EntryRef<'a, K, V, S, C, Allocator, RefCounter>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -102,7 +102,7 @@ pub mod unsync {
 
 /// Implementations for concurrent environments.
 pub mod sync {
-  use crate::generic::{Active, Ascend};
+  use crate::generic::Ascend;
   pub use crate::sync::{map::Allocator, RefCounter};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
@@ -133,19 +133,19 @@ pub mod sync {
     crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V, C = Ascend> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend> = super::super::list::SkipList<K, V, C, Allocator, RefCounter>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = Ascend> =
-    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C>;
+  pub type Iter<'a, K, V, S, C = Ascend> =
+    super::super::iter::Iter<'a, K, V, S, C, Allocator, RefCounter>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R, C = Ascend> =
-    super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C, Q, R>;
+  pub type Range<'a, K, V, S, Q, R, C = Ascend> =
+    super::super::iter::Iter<'a, K, V, S, C, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V, C = Ascend> =
-    super::super::entry::EntryRef<'a, K, V, Active, Allocator, RefCounter, C>;
+  pub type Entry<'a, K, V, S, C = Ascend> =
+    super::super::entry::EntryRef<'a, K, V, S, C, Allocator, RefCounter>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
@@ -209,7 +209,7 @@ where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
   C: 'static,
-  Self: Arena<Constructable = super::list::SkipList<K, V, Self::Allocator, Self::RefCounter, C>>,
+  Self: Arena<Constructable = super::list::SkipList<K, V, C, Self::Allocator, Self::RefCounter>>,
   <Self::Allocator as Sealed>::Node: WithoutVersion,
 {
   /// The allocator used to allocate nodes in the `SkipMap`.
@@ -264,13 +264,15 @@ where
     self.as_ref().height()
   }
 
-  /// Returns the number of entries in the skipmap.
+  /// Returns the number of entries in the map, this `len` includes all tombstones.
+  ///
+  /// If the map only contains tombstones, this method will not return `0` but the number of tombstones.
   #[inline]
   fn len(&self) -> usize {
     self.as_ref().len()
   }
 
-  /// Returns true if the skipmap is empty.
+  /// Returns `true` if the map is empty, if the map only contains tombstones, this method will also return `false`.
   #[inline]
   fn is_empty(&self) -> bool {
     self.len() == 0
@@ -321,9 +323,36 @@ where
     self.as_ref().contains_key(MIN_VERSION, key)
   }
 
+  /// Returns `true` if the key exists in the map, even if it is marked as removed.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::{unique::{sync::SkipMap, Map}, Builder};
+  ///
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  ///
+  /// map.insert("hello", "world").unwrap();
+  ///
+  /// map.remove("hello").unwrap();
+  ///
+  /// assert!(!map.contains_key("hello"));
+  /// assert!(map.contains_key_with_tombstone("hello"));
+  /// ```
+  #[inline]
+  fn contains_key_with_tombstone<'a, Q>(&'a self, key: &Q) -> bool
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, K, Q>,
+  {
+    self.as_ref().contains_key_with_tombstone(MIN_VERSION, key)
+  }
+
   /// Returns the first entry in the map.
   #[inline]
-  fn first<'a>(&'a self) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
+  fn first<'a>(&'a self) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
@@ -334,13 +363,45 @@ where
 
   /// Returns the last entry in the map.
   #[inline]
-  fn last<'a>(&'a self) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
+  fn last<'a>(&'a self) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.as_ref().last(MIN_VERSION)
+  }
+
+  /// Returns the first entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
+  ///
+  /// The difference between [`first`](Map::first) and `first_with_tombstone` is that `first_with_tombstone` will return the value even if
+  /// the entry is removed or not in a valid state.
+  #[inline]
+  fn first_with_tombstone<'a>(
+    &'a self,
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    K: Type,
+    V: Type,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+  {
+    self.as_ref().first_with_tombstone(0)
+  }
+
+  /// Returns the last entry in the map. The returned entry may not be in valid state. (i.e. the entry is removed)
+  ///
+  /// The difference between [`last`](Map::last) and `last_with_tombstone` is that `last_with_tombstone` will return the value even if
+  /// the entry is removed or not in a valid state.
+  #[inline]
+  fn last_with_tombstone<'a>(
+    &'a self,
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    K: Type,
+    V: Type,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+  {
+    self.as_ref().last_with_tombstone(0)
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -365,7 +426,7 @@ where
   fn get<'a, Q>(
     &'a self,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
@@ -375,13 +436,48 @@ where
     self.as_ref().get(MIN_VERSION, key)
   }
 
+  /// Returns the value associated with the given key, if it exists.
+  ///
+  /// The difference between `get` and `get_with_tombstone` is that `get_with_tombstone` will return the value even if the entry is removed.
+  ///
+  /// ## Example
+  ///
+  /// ```rust
+  /// use skl::generic::{unique::{sync::SkipMap, Map}, Builder};
+  ///
+  /// let map = Builder::new().with_capacity(1024).alloc::<SkipMap<str, str>>().unwrap();
+  ///
+  /// map.insert("hello", "world").unwrap();
+  ///
+  /// map.remove("hello").unwrap();
+  ///
+  /// assert!(map.get("hello").is_none());
+  ///
+  /// let ent = map.get_with_tombstone("hello").unwrap();
+  /// // value is None because the entry is marked as removed.
+  /// assert!(ent.value().is_none());
+  /// ```
+  #[inline]
+  fn get_with_tombstone<'a, Q>(
+    &'a self,
+    key: &Q,
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, K, Q>,
+  {
+    self.as_ref().get_with_tombstone(MIN_VERSION, key)
+  }
+
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
   #[inline]
   fn upper_bound<'a, Q>(
     &'a self,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
@@ -397,7 +493,7 @@ where
   fn lower_bound<'a, Q>(
     &'a self,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>
+  ) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
@@ -407,9 +503,45 @@ where
     self.as_ref().lower_bound(MIN_VERSION, lower)
   }
 
-  /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
+  /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// The difference between [`upper_bound`](Map::upper_bound) and `upper_bound_with_tombstone` is that `upper_bound_with_tombstone` will return the value even if the entry is removed.
   #[inline]
-  fn iter(&self) -> Iter<'_, K, V, Active, Self::Allocator, Self::RefCounter, C>
+  fn upper_bound_with_tombstone<'a, Q>(
+    &'a self,
+    upper: Bound<&Q>,
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, K, Q>,
+  {
+    self.as_ref().upper_bound_with_tombstone(MIN_VERSION, upper)
+  }
+
+  /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
+  /// If no such element is found then `None` is returned.
+  ///
+  /// The difference between [`lower_bound`](Map::lower_bound) and `lower_bound_with_tombstone` is that `lower_bound_with_tombstone` will return the value even if the entry is removed.
+  #[inline]
+  fn lower_bound_with_tombstone<'a, Q>(
+    &'a self,
+    lower: Bound<&Q>,
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized,
+    C: TypeRefQueryComparator<'a, K, Q>,
+  {
+    self.as_ref().lower_bound_with_tombstone(MIN_VERSION, lower)
+  }
+
+  /// Returns a new iterator, this iterator will yield only active entries of all entries in the map less or equal to the given version.
+  #[inline]
+  fn iter(&self) -> Iter<'_, K, V, Active, C, Self::Allocator, Self::RefCounter>
   where
     K: Type,
     V: Type,
@@ -417,12 +549,24 @@ where
     self.as_ref().iter(MIN_VERSION)
   }
 
-  /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
+  /// Returns a new iterator, this iterator will yield with tombstones for all entries in the map less or equal to the given version.
+  #[inline]
+  fn iter_with_tombstone(
+    &self,
+  ) -> Iter<'_, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>
+  where
+    K: Type,
+    V: Type,
+  {
+    self.as_ref().iter_with_tombstone(0)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield only active entries of all entries in the range less or equal to the given version.
   #[inline]
   fn range<Q, R>(
     &self,
     range: R,
-  ) -> Iter<'_, K, V, Active, Self::Allocator, Self::RefCounter, C, Q, R>
+  ) -> Iter<'_, K, V, Active, C, Self::Allocator, Self::RefCounter, Q, R>
   where
     K: Type,
     V: Type,
@@ -430,6 +574,21 @@ where
     R: RangeBounds<Q>,
   {
     self.as_ref().range(MIN_VERSION, range)
+  }
+
+  /// Returns a iterator that within the range, this iterator will yield with tombstones for all entries in the range less or equal to the given version.
+  #[inline]
+  fn range_with_tombstone<Q, R>(
+    &self,
+    range: R,
+  ) -> Iter<'_, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter, Q, R>
+  where
+    K: Type,
+    V: Type,
+    Q: ?Sized,
+    R: RangeBounds<Q>,
+  {
+    self.as_ref().range_with_tombstone(MIN_VERSION, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.
@@ -443,7 +602,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -477,7 +636,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -544,7 +703,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -611,7 +770,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -636,7 +795,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -660,7 +819,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, V::Error, Error>,
   >
   where
@@ -727,7 +886,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -795,7 +954,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<K::Error, E, Error>,
   >
   where
@@ -869,7 +1028,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -941,7 +1100,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1010,7 +1169,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1079,7 +1238,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Among<KE, VE, Error>,
   >
   where
@@ -1108,7 +1267,7 @@ where
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Either<K::Error, Error>,
   >
   where
@@ -1134,7 +1293,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Either<K::Error, Error>,
   >
   where
@@ -1162,7 +1321,7 @@ where
     &'a self,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Either<K::Error, Error>,
   >
   where
@@ -1199,7 +1358,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Either<K::Error, Error>,
   >
   where
@@ -1261,7 +1420,7 @@ where
     &'a self,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   >
   where
@@ -1323,7 +1482,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<
-    Option<EntryRef<'a, K, V, Active, Self::Allocator, Self::RefCounter, C>>,
+    Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>,
     Either<E, Error>,
   >
   where

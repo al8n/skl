@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// An entry reference of the `SkipMap`.
-pub struct EntryRef<'a, K, V, S, A, R, C>
+pub struct EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -22,7 +22,7 @@ where
   R: RefCounter,
   S: State<'a>,
 {
-  pub(super) list: &'a SkipList<K, V, A, R, C>,
+  pub(super) list: &'a SkipList<K, V, C, A, R>,
   pub(super) key: LazyRef<'a, K>,
   pub(super) value: S::Value<V>,
   pub(super) value_part_pointer: ValuePointer,
@@ -32,7 +32,7 @@ where
   _m: PhantomData<S>,
 }
 
-impl<'a, K, V, S, A, R, C> core::fmt::Debug for EntryRef<'a, K, V, S, A, R, C>
+impl<'a, K, V, S, C, A, R> core::fmt::Debug for EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -50,7 +50,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, R, C> Clone for EntryRef<'a, K, V, S, A, R, C>
+impl<'a, K, V, S, C, A, R> Clone for EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -72,7 +72,7 @@ where
   }
 }
 
-impl<'a, K, V, A, R, C> EntryRef<'a, K, V, MaybeTombstone, A, R, C>
+impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -80,7 +80,7 @@ where
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active, A, R, C> {
+  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active, C, A, R> {
     EntryRef {
       list: self.list,
       key: self.key,
@@ -94,7 +94,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
+impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -139,7 +139,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
+impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -199,7 +199,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
+impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -215,7 +215,7 @@ where
   }
 }
 
-impl<'a, K, V, S, A, R, C> EntryRef<'a, K, V, S, A, R, C>
+impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -227,7 +227,7 @@ where
   pub(crate) fn from_node(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V, A, R, C>,
+    list: &'a SkipList<K, V, C, A, R>,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,
   ) -> Self {
@@ -265,7 +265,7 @@ where
   pub(crate) fn from_node_with_pointer(
     query_version: Version,
     node: <A::Node as Node>::Pointer,
-    list: &'a SkipList<K, V, A, R, C>,
+    list: &'a SkipList<K, V, C, A, R>,
     pointer: ValuePointer,
     raw_key: Option<&'a [u8]>,
     key: Option<K::Ref<'a>>,

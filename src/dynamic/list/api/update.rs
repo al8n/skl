@@ -8,7 +8,7 @@ use core::sync::atomic::Ordering;
 use dbutils::{buffer::VacantBuffer, equivalentor::BytesComparator};
 use either::Either;
 
-impl<A, R, C> SkipList<A, R, C>
+impl<C, A, R> SkipList<C, A, R>
 where
   A: Allocator,
   C: BytesComparator,

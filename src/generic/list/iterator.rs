@@ -171,7 +171,7 @@ where
   RC: RefCounter,
   Q: ?Sized,
   R: RangeBounds<Q>,
-  C: TypeRefQueryComparator<'a, Q, Type = K>,
+  C: TypeRefQueryComparator<'a, K, Q>,
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
@@ -398,7 +398,7 @@ where
   RC: RefCounter,
   Q: ?Sized,
   R: RangeBounds<Q>,
-  C: TypeRefQueryComparator<'a, Q, Type = K>,
+  C: TypeRefQueryComparator<'a, K, Q>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
@@ -410,7 +410,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<'a, QR, Type = K>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     self.head = None;
     self.tail = None;
@@ -436,7 +436,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<'a, QR, Type = K>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     self.head = None;
     self.tail = None;
@@ -458,7 +458,7 @@ where
   fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<'a, QR, Type = K>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(self.version, key, false, true);
@@ -496,7 +496,7 @@ where
   fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<'a, QR, Type = K>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(Version::MIN, key, false, false);
@@ -534,7 +534,7 @@ where
   fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<'a, QR, Type = K>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(Version::MIN, key, true, true); // find less or equal.
@@ -572,7 +572,7 @@ where
   fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, A, RC, C>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<'a, QR, Type = K>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(self.version, key, true, false); // find less or equal.
@@ -631,7 +631,7 @@ where
   RC: RefCounter,
   Q: ?Sized,
   R: RangeBounds<Q>,
-  C: TypeRefQueryComparator<'a, Q, Type = K>,
+  C: TypeRefQueryComparator<'a, K, Q>,
 {
   type Item = EntryRef<'a, K, V, S, A, RC, C>;
 
@@ -680,7 +680,7 @@ where
   RC: RefCounter,
   Q: ?Sized,
   R: RangeBounds<Q>,
-  C: TypeRefQueryComparator<'a, Q, Type = K>,
+  C: TypeRefQueryComparator<'a, K, Q>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
@@ -697,7 +697,7 @@ fn above_lower_bound_compare<'a, C, V, T>(cmp: &C, bound: &Bound<&T>, other: &V:
 where
   V: ?Sized + Type,
   T: ?Sized,
-  C: TypeRefQueryComparator<'a, T, Type = V>,
+  C: TypeRefQueryComparator<'a, V, T>,
 {
   match *bound {
     Bound::Unbounded => true,
@@ -709,7 +709,7 @@ where
 /// Helper function to check if a value is above a lower bound
 fn above_lower_bound<'a, C, K>(cmp: &C, bound: &Bound<&K::Ref<'a>>, other: &K::Ref<'a>) -> bool
 where
-  C: TypeRefComparator<'a, Type = K>,
+  C: TypeRefComparator<'a, K>,
   K: ?Sized + Type,
 {
   match *bound {
@@ -724,7 +724,7 @@ fn below_upper_bound_compare<'a, C, V, T>(cmp: &C, bound: &Bound<&T>, other: &V:
 where
   V: ?Sized + Type,
   T: ?Sized,
-  C: TypeRefQueryComparator<'a, T, Type = V>,
+  C: TypeRefQueryComparator<'a, V, T>,
 {
   match *bound {
     Bound::Unbounded => true,
@@ -736,7 +736,7 @@ where
 /// Helper function to check if a value is below an upper bound
 fn below_upper_bound<'a, C, K>(cmp: &C, bound: &Bound<&K::Ref<'a>>, other: &K::Ref<'a>) -> bool
 where
-  C: TypeRefComparator<'a, Type = K>,
+  C: TypeRefComparator<'a, K>,
   K: ?Sized + Type,
 {
   match *bound {

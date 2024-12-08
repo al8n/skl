@@ -35,7 +35,7 @@ type UpdateOk<'a, 'b, A, RC, C> = Either<
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
 #[derive(Debug)]
-pub struct SkipList<A, R, C = Ascend<[u8]>>
+pub struct SkipList<A, R, C = Ascend>
 where
   A: Allocator,
   R: RefCounter,

@@ -146,7 +146,7 @@ where
   S: State<'a>,
   A: Allocator,
   R: RefCounter,
-  C: TypeRefComparator<'a, Type = K>,
+  C: TypeRefComparator<'a, K>,
 {
   /// Returns the next entry in the map.
   #[inline]

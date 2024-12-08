@@ -24,15 +24,15 @@ use crate::generic::{Ascend, Builder};
 
 use super::*;
 
-pub(crate) const TEST_OPTIONS: Builder<Ascend<[u8]>> =
+pub(crate) const TEST_OPTIONS: Builder<Ascend> =
   Builder::with(Ascend::new()).with_capacity(ARENA_SIZE as u32);
-pub(crate) const TEST_FULL_OPTIONS: Builder<Ascend<[u8]>> =
+pub(crate) const TEST_FULL_OPTIONS: Builder<Ascend> =
   Builder::with(Ascend::new()).with_capacity(1024);
-pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Builder<Ascend<[u8]>> =
+pub(crate) const TEST_OPTIONS_WITH_OPTIMISTIC_FREELIST: Builder<Ascend> =
   Builder::with(Ascend::new())
     .with_capacity(ARENA_SIZE as u32)
     .with_freelist(rarena_allocator::Freelist::Optimistic);
-pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Builder<Ascend<[u8]>> =
+pub(crate) const TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST: Builder<Ascend> =
   Builder::with(Ascend::new())
     .with_capacity(ARENA_SIZE as u32)
     .with_freelist(rarena_allocator::Freelist::Pessimistic);
@@ -63,5 +63,5 @@ const BIG_ARENA_SIZE: usize = 120 << 20;
     test_generic_sync_versioned,
   )
 ))]
-pub(crate) const BIG_TEST_OPTIONS: Builder<Ascend<[u8]>> =
+pub(crate) const BIG_TEST_OPTIONS: Builder<Ascend> =
   Builder::with(Ascend::new()).with_capacity(BIG_ARENA_SIZE as u32);

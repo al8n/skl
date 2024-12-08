@@ -16,7 +16,7 @@ mod memmap;
 
 /// A builder for creating a generic key-value `SkipMap`.
 #[derive(Debug)]
-pub struct Builder<C = Ascend<[u8]>> {
+pub struct Builder<C = Ascend> {
   options: Options,
   cmp: C,
 }
@@ -57,9 +57,9 @@ impl<C> Builder<C> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{Builder, Ascend};
+  /// use skl::generic::{Builder, Descend};
   ///
-  /// let builder = Builder::with(Ascend::<[u8]>::new());
+  /// let builder = Builder::with(Descend::new());
   /// ```
   #[inline]
   pub const fn with(cmp: C) -> Self {
@@ -78,7 +78,7 @@ impl<C: Default> Builder<C> {
   /// ```rust
   /// use skl::generic::{Builder, Ascend};
   ///
-  /// let builder = Builder::<Ascend<str>>::new();
+  /// let builder = Builder::<Ascend>::new();
   /// ```
   #[inline]
   pub fn new() -> Self {
@@ -97,7 +97,7 @@ impl<C> Builder<C> {
   /// ```rust
   /// use skl::generic::{Builder, Ascend};
   ///
-  /// let builder = Builder::<Ascend<str>>::new().comparator();
+  /// let builder = Builder::<Ascend>::new().comparator();
   /// ```
   #[inline]
   pub const fn comparator(&self) -> &C {
@@ -109,11 +109,11 @@ impl<C> Builder<C> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{Builder, Ascend};
+  /// use skl::generic::{Builder, Ascend, Descend};
   ///
-  /// let builder = Builder::<Ascend<[u8]>>::new().with_comparator(Ascend::<Vec<u8>>::new());
+  /// let builder = Builder::<Ascend>::new().with_comparator(Descend::new());
   ///
-  /// assert_eq!(builder.comparator(), &Ascend::<Vec<u8>>::new());
+  /// assert_eq!(builder.comparator(), &Descend::new());
   /// ```
   #[inline]
   pub fn with_comparator<NC>(self, cmp: NC) -> Builder<NC> {
@@ -128,9 +128,9 @@ impl<C> Builder<C> {
   /// ## Example
   ///
   /// ```rust
-  /// use skl::generic::{Builder, Ascend};
+  /// use skl::generic::{Builder, Descend};
   ///
-  /// let builder = Builder::<Ascend<str>>::new();
+  /// let builder = Builder::<Descend>::new();
   /// let options = builder.options();
   /// ```
   #[inline]
@@ -179,9 +179,9 @@ impl<C> Builder<C> {
   /// ```rust
   /// use skl::generic::{unique::sync, multiple_version::unsync, Builder, Ascend};
   ///
-  /// let map = Builder::<Ascend<[u8]>>::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let map = Builder::<Ascend>::new().with_capacity(1024).alloc::<sync::SkipMap<[u8], [u8]>>().unwrap();
   ///
-  /// let arena = Builder::<Ascend<[u8]>>::new().with_capacity(1024).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
+  /// let arena = Builder::<Ascend>::new().with_capacity(1024).alloc::<unsync::SkipMap<[u8], [u8]>>().unwrap();
   /// ```
   #[inline]
   pub fn alloc<T>(self) -> Result<T, Error>

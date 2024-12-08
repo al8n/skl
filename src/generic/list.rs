@@ -562,7 +562,7 @@ where
   ) -> (Option<<A::Node as Node>::Pointer>, bool)
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     let mut x = self.head;
     let mut level = self.meta().height() as usize - 1;
@@ -662,7 +662,7 @@ where
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>)
   where
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     let list_height = self.meta().height() as u32;
     let mut level = 0;
@@ -741,7 +741,7 @@ where
     start: <A::Node as Node>::Pointer,
   ) -> FindResult<<A::Node as Node>::Pointer>
   where
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     let mut prev = start;
 
@@ -847,7 +847,7 @@ where
     key: Among<&'a [u8], &'b [u8], &'b K>,
   ) -> bool
   where
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     let nd_key = self
       .arena
@@ -909,7 +909,7 @@ where
     upsert: bool,
   ) -> Result<UpdateOk<'a, 'b, K, V, A, R, C>, Among<K::Error, E, Error>>
   where
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     let is_remove = key.is_remove();
 
@@ -1334,7 +1334,7 @@ where
     other: Either<&'a [u8], &K::Ref<'a>>,
   ) -> cmp::Ordering
   where
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     match this {
       Among::Right(key) => match other {

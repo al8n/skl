@@ -34,25 +34,25 @@ pub mod unsync {
     crate::__generic_map_tests!("unsync_map": super::SkipMap<[u8], [u8]>);
   }
 
-  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = Ascend<K>> =
+  pub type Iter<'a, K, V, C = Ascend> =
     super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R, C = Ascend<K>> =
+  pub type Range<'a, K, V, Q, R, C = Ascend> =
     super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V, C = Ascend<K>> =
+  pub type Entry<'a, K, V, C = Ascend> =
     super::super::entry::EntryRef<'a, K, V, Active, Allocator, RefCounter, C>;
 
   /// A fast, ARENA based `SkipMap` that supports forward and backward iteration.
   ///
   /// If you want to use in concurrent environment, you can use [`unique::sync::SkipMap`](crate::generic::unique::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized> Clone for SkipMap<K, V> {
     #[inline]
@@ -133,25 +133,25 @@ pub mod sync {
     crate::__generic_map_tests!(go "sync_map": super::SkipMap<[u8], [u8]> => crate::tests::generic::TEST_OPTIONS_WITH_PESSIMISTIC_FREELIST);
   }
 
-  type SkipList<K, V, C = Ascend<K>> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
+  type SkipList<K, V, C = Ascend> = super::super::list::SkipList<K, V, Allocator, RefCounter, C>;
 
   /// Iterator over the [`SkipMap`].
-  pub type Iter<'a, K, V, C = Ascend<K>> =
+  pub type Iter<'a, K, V, C = Ascend> =
     super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C>;
 
   /// Iterator over a subset of the [`SkipMap`].
-  pub type Range<'a, K, V, Q, R, C = Ascend<K>> =
+  pub type Range<'a, K, V, Q, R, C = Ascend> =
     super::super::iter::Iter<'a, K, V, Active, Allocator, RefCounter, C, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
-  pub type Entry<'a, K, V, C = Ascend<K>> =
+  pub type Entry<'a, K, V, C = Ascend> =
     super::super::entry::EntryRef<'a, K, V, Active, Allocator, RefCounter, C>;
 
   /// A fast, lock-free, thread-safe ARENA based `SkipMap` that supports forward and backward iteration.
   ///
   /// If you want to use in non-concurrent environment, you can use [`unique::unsync::SkipMap`](crate::generic::unique::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend<K>>(SkipList<K, V, C>);
+  pub struct SkipMap<K: ?Sized, V: ?Sized, C = Ascend>(SkipList<K, V, C>);
 
   impl<K: ?Sized, V: ?Sized, C: Clone> Clone for SkipMap<K, V, C> {
     #[inline]
@@ -204,7 +204,7 @@ pub mod sync {
 ///
 /// - For concurrent environment, use [`sync::SkipMap`].
 /// - For non-concurrent environment, use [`unsync::SkipMap`].
-pub trait Map<K, V, C = Ascend<K>>
+pub trait Map<K, V, C = Ascend>
 where
   K: ?Sized + 'static,
   V: ?Sized + 'static,
@@ -316,7 +316,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.as_ref().contains_key(MIN_VERSION, key)
   }
@@ -327,7 +327,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.as_ref().first(MIN_VERSION)
   }
@@ -338,7 +338,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.as_ref().last(MIN_VERSION)
   }
@@ -370,7 +370,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.as_ref().get(MIN_VERSION, key)
   }
@@ -386,7 +386,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.as_ref().upper_bound(MIN_VERSION, upper)
   }
@@ -402,7 +402,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.as_ref().lower_bound(MIN_VERSION, lower)
   }
@@ -449,7 +449,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.insert_at_height(self.random_height(), key, value)
   }
@@ -483,7 +483,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self
       .as_ref()
@@ -550,7 +550,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.insert_at_height_with_value_builder(self.random_height(), key, value_builder)
   }
@@ -617,7 +617,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self
       .as_ref()
@@ -642,7 +642,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.get_or_insert_at_height(self.random_height(), key, value)
   }
@@ -666,7 +666,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self
       .as_ref()
@@ -733,7 +733,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.get_or_insert_at_height_with_value_builder(self.random_height(), key, value_builder)
   }
@@ -801,7 +801,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.as_ref().get_or_insert_at_height_with_value_builder(
       MIN_VERSION,
@@ -875,7 +875,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
   }
@@ -947,7 +947,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self
       .as_ref()
@@ -1016,7 +1016,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.get_or_insert_at_height_with_builders(self.random_height(), key_builder, value_builder)
   }
@@ -1085,7 +1085,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.as_ref().get_or_insert_at_height_with_builders(
       MIN_VERSION,
@@ -1114,7 +1114,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.remove_at_height(self.random_height(), key)
   }
@@ -1140,7 +1140,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.as_ref().compare_remove_at_height(
       MIN_VERSION,
@@ -1168,7 +1168,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.get_or_remove_at_height(self.random_height(), key)
   }
@@ -1205,7 +1205,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self
       .as_ref()
@@ -1267,7 +1267,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self.get_or_remove_at_height_with_builder(self.random_height(), key_builder)
   }
@@ -1329,7 +1329,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, Type = K>,
+    C: TypeRefComparator<'a, K>,
   {
     self
       .as_ref()

@@ -17,7 +17,7 @@ mod memmap;
 
 /// A builder for creating a dynamic key-value `SkipMap`.
 #[derive(Debug, Clone)]
-pub struct Builder<C = Ascend<[u8]>> {
+pub struct Builder<C = Ascend> {
   options: Options,
   cmp: C,
 }

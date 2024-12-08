@@ -48,7 +48,7 @@ pub mod unsync {
   ///
   /// If you want to use in concurrent environment, you can use [`multiple_version::sync::SkipMap`](crate::dynamic::multiple_version::sync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<C = Ascend<[u8]>>(SkipList<C>);
+  pub struct SkipMap<C = Ascend>(SkipList<C>);
 
   impl<C: Clone> Clone for SkipMap<C> {
     #[inline]
@@ -145,7 +145,7 @@ pub mod sync {
   ///
   /// If you want to use in non-concurrent environment, you can use [`multiple_version::unsync::SkipMap`](crate::dynamic::multiple_version::unsync::SkipMap).
   #[repr(transparent)]
-  pub struct SkipMap<C = Ascend<[u8]>>(SkipList<C>);
+  pub struct SkipMap<C = Ascend>(SkipList<C>);
 
   impl<C: Clone> Clone for SkipMap<C> {
     #[inline]

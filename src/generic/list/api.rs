@@ -169,7 +169,7 @@ where
   pub fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.get(version, key).is_some()
   }
@@ -179,7 +179,7 @@ where
   pub fn contains_key_with_tombstone<'a, Q>(&'a self, version: Version, key: &Q) -> bool
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.get_with_tombstone(version, key).is_some()
   }
@@ -187,7 +187,7 @@ where
   /// Returns the first entry in the map.
   pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
-    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.iter(version).next()
   }
@@ -195,7 +195,7 @@ where
   /// Returns the last entry in the map.
   pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
-    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.iter(version).last()
   }
@@ -206,7 +206,7 @@ where
     version: Version,
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
-    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.iter_with_tombstone(version).next()
   }
@@ -217,7 +217,7 @@ where
     version: Version,
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
-    C: TypeRefQueryComparator<'a, K::Ref<'a>, Type = K>,
+    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
     self.iter_with_tombstone(version).last()
   }
@@ -233,7 +233,7 @@ where
   ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -279,7 +279,7 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -327,7 +327,7 @@ where
   ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.iter(version).map().seek_upper_bound(upper)
   }
@@ -341,7 +341,7 @@ where
   ) -> Option<EntryRef<'a, K, V, Active, A, RC, C>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self.iter(version).map().seek_lower_bound(lower)
   }
@@ -355,7 +355,7 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self
       .iter_with_tombstone(version)
@@ -372,7 +372,7 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, A, RC, C>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, Q, Type = K>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     self
       .iter_with_tombstone(version)

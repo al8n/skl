@@ -208,7 +208,7 @@ where
   where
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
-    self.iter_with_tombstone(version).next()
+    self.iter_all(version).next()
   }
 
   /// Returns the last entry in the map.
@@ -219,7 +219,7 @@ where
   where
     C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
   {
-    self.iter_with_tombstone(version).last()
+    self.iter_all(version).last()
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -357,10 +357,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
   {
-    self
-      .iter_with_tombstone(version)
-      .map()
-      .seek_upper_bound(upper)
+    self.iter_all(version).map().seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -374,10 +371,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
   {
-    self
-      .iter_with_tombstone(version)
-      .map()
-      .seek_lower_bound(lower)
+    self.iter_all(version).map().seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -388,10 +382,7 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_with_tombstone(
-    &self,
-    version: Version,
-  ) -> iterator::Iter<'_, K, V, MaybeTombstone, C, A, RC>
+  pub fn iter_all(&self, version: Version) -> iterator::Iter<'_, K, V, MaybeTombstone, C, A, RC>
 where {
     iterator::Iter::new(version, self, true)
   }
@@ -412,7 +403,7 @@ where {
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range_with_tombstone<Q, R>(
+  pub fn range_all<Q, R>(
     &self,
     version: Version,
     range: R,

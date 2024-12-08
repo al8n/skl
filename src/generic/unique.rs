@@ -558,7 +558,7 @@ where
     K: Type,
     V: Type,
   {
-    self.as_ref().iter_with_tombstone(0)
+    self.as_ref().iter_all(0)
   }
 
   /// Returns a iterator that within the range, this iterator will yield only active entries of all entries in the range less or equal to the given version.
@@ -588,7 +588,7 @@ where
     Q: ?Sized,
     R: RangeBounds<Q>,
   {
-    self.as_ref().range_with_tombstone(MIN_VERSION, range)
+    self.as_ref().range_all(MIN_VERSION, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.

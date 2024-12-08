@@ -188,7 +188,7 @@ where
     &self,
     version: Version,
   ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
-    self.iter_with_tombstone(version).next()
+    self.iter_all(version).next()
   }
 
   /// Returns the last entry in the map.
@@ -196,7 +196,7 @@ where
     &self,
     version: Version,
   ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
-    self.iter_with_tombstone(version).last()
+    self.iter_all(version).last()
   }
 
   /// Returns the value associated with the given key, if it exists.
@@ -306,10 +306,7 @@ where
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_with_tombstone(
-    &self,
-    version: Version,
-  ) -> iterator::Iter<'_, MaybeTombstone, C, A, RC> {
+  pub fn iter_all(&self, version: Version) -> iterator::Iter<'_, MaybeTombstone, C, A, RC> {
     iterator::Iter::new(version, self, true)
   }
 
@@ -329,7 +326,7 @@ where
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
   #[inline]
-  pub fn range_with_tombstone<Q, R>(
+  pub fn range_all<Q, R>(
     &self,
     version: Version,
     range: R,

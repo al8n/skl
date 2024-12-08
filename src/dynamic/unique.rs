@@ -476,7 +476,7 @@ where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
   {
-    self.as_ref().iter_with_tombstone(0).seek_upper_bound(upper)
+    self.as_ref().iter_all(0).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -492,7 +492,7 @@ where
     Q: ?Sized + Borrow<[u8]>,
     C: BytesComparator,
   {
-    self.as_ref().iter_with_tombstone(0).seek_lower_bound(lower)
+    self.as_ref().iter_all(0).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield only active entries of all entries in the map less or equal to the given version.
@@ -504,7 +504,7 @@ where
   /// Returns a new iterator, this iterator will yield with tombstones for all entries in the map less or equal to the given version.
   #[inline]
   fn iter_with_tombstone(&self) -> Iter<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter> {
-    self.as_ref().iter_with_tombstone(0)
+    self.as_ref().iter_all(0)
   }
 
   /// Returns a iterator that within the range, this iterator will yield only active entries of all entries in the range less or equal to the given version.
@@ -527,7 +527,7 @@ where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
-    self.as_ref().range_with_tombstone(MIN_VERSION, range)
+    self.as_ref().range_all(MIN_VERSION, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.

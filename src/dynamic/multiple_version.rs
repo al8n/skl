@@ -573,10 +573,7 @@ where
       return None;
     }
 
-    self
-      .as_ref()
-      .iter_with_tombstone(version)
-      .seek_upper_bound(upper)
+    self.as_ref().iter_all(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -597,10 +594,7 @@ where
       return None;
     }
 
-    self
-      .as_ref()
-      .iter_with_tombstone(version)
-      .seek_lower_bound(lower)
+    self.as_ref().iter_all(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -609,13 +603,13 @@ where
     self.as_ref().iter(version)
   }
 
-  /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
+  /// Returns a new iterator, this iterator will yield all versions and tombstones for all entries in the map less or equal to the given version.
   #[inline]
-  fn iter_with_tombstone(
+  fn iter_all(
     &self,
     version: Version,
   ) -> Iter<'_, MaybeTombstone, C, Self::Allocator, Self::RefCounter> {
-    self.as_ref().iter_with_tombstone(version)
+    self.as_ref().iter_all(version)
   }
 
   /// Returns a iterator that within the range, this iterator will yield the latest version of all entries in the range less or equal to the given version.
@@ -632,9 +626,9 @@ where
     self.as_ref().range(version, range)
   }
 
-  /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
+  /// Returns a iterator that within the range, this iterator will yield all versions and tombstones for all entries in the range less or equal to the given version.
   #[inline]
-  fn range_with_tombstone<Q, R>(
+  fn range_all<Q, R>(
     &self,
     version: Version,
     range: R,
@@ -643,7 +637,7 @@ where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
   {
-    self.as_ref().range_with_tombstone(version, range)
+    self.as_ref().range_all(version, range)
   }
 
   /// Upserts a new key-value pair if it does not yet exist, if the key with the given version already exists, it will update the value.

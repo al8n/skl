@@ -9,7 +9,7 @@ pub mod unique;
 
 /// Iterators for the skipmaps.
 pub mod iter {
-  pub use super::list::iterator::Iter;
+  pub use super::list::iterator::{Iter, Range};
 }
 
 /// Entry references for the skipmaps.

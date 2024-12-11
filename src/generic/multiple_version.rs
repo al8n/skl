@@ -20,7 +20,10 @@ use crate::{
 };
 
 use super::{
-  list::{iterator::Iter, EntryRef},
+  list::{
+    iterator::{Iter, Range},
+    EntryRef,
+  },
   Ascend,
 };
 
@@ -42,7 +45,7 @@ pub mod unsync {
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, K, V, S, Q, R, C = Ascend> =
-    super::super::iter::Iter<'a, K, V, S, C, Allocator, RefCounter, Q, R>;
+    super::super::iter::Range<'a, K, V, S, C, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
   pub type Entry<'a, K, V, S, C = Ascend> =
@@ -146,7 +149,7 @@ pub mod sync {
 
   /// Iterator over a subset of the [`SkipMap`].
   pub type Range<'a, K, V, S, Q, R, C = Ascend> =
-    super::super::iter::Iter<'a, K, V, S, C, Allocator, RefCounter, Q, R>;
+    super::super::iter::Range<'a, K, V, S, C, Allocator, RefCounter, Q, R>;
 
   /// The entry reference of the [`SkipMap`].
   pub type Entry<'a, K, V, S, C = Ascend> =
@@ -667,7 +670,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, K, V, Active, C, Self::Allocator, Self::RefCounter, Q, R>
+  ) -> Range<'_, K, V, Active, C, Self::Allocator, Self::RefCounter, Q, R>
   where
     K: Type,
     V: Type,
@@ -683,7 +686,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> Iter<'_, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter, Q, R>
+  ) -> Range<'_, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter, Q, R>
   where
     K: Type,
     V: Type,

@@ -329,7 +329,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
   {
-    self.iter(version).map().seek_upper_bound(upper)
+    self.iter(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -343,7 +343,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
   {
-    self.iter(version).map().seek_lower_bound(lower)
+    self.iter(version).seek_lower_bound(lower)
   }
 
   /// Returns an `EntryRef` pointing to the highest element whose key is below the given bound.
@@ -357,7 +357,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
   {
-    self.iter_all(version).map().seek_upper_bound(upper)
+    self.iter_all(version).seek_upper_bound(upper)
   }
 
   /// Returns an `EntryRef` pointing to the lowest element whose key is above the given bound.
@@ -371,7 +371,7 @@ where
     Q: ?Sized,
     C: TypeRefQueryComparator<'a, K, Q>,
   {
-    self.iter_all(version).map().seek_lower_bound(lower)
+    self.iter_all(version).seek_lower_bound(lower)
   }
 
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
@@ -393,12 +393,12 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, K, V, Active, C, A, RC, Q, R>
+  ) -> iterator::Range<'_, K, V, Active, C, A, RC, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,
   {
-    iterator::Iter::range(version, self, range, false)
+    iterator::Range::new(version, self, range, false)
   }
 
   /// Returns a iterator that within the range, this iterator will yield all versions for all entries in the range less or equal to the given version.
@@ -407,11 +407,11 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, K, V, MaybeTombstone, C, A, RC, Q, R>
+  ) -> iterator::Range<'_, K, V, MaybeTombstone, C, A, RC, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,
   {
-    iterator::Iter::range(version, self, range, true)
+    iterator::Range::new(version, self, range, true)
   }
 }

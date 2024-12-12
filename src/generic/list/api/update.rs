@@ -35,7 +35,7 @@ where
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, V::Error, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.insert_at_height(version, self.random_height(), key, value)
   }
@@ -53,7 +53,7 @@ where
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, V::Error, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     let key: MaybeStructured<'_, K> = key.into();
     let value: MaybeStructured<'_, V> = value.into();
@@ -107,7 +107,7 @@ where
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, E, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     let key: MaybeStructured<'_, K> = key.into();
     self
@@ -150,7 +150,7 @@ where
     value: impl Into<MaybeStructured<'b, V>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, V::Error, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     let key: MaybeStructured<'_, K> = key.into();
     let value: MaybeStructured<'_, V> = value.into();
@@ -204,7 +204,7 @@ where
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, E, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     let key: MaybeStructured<'_, K> = key.into();
     self
@@ -252,7 +252,7 @@ where
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<KE, VE, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .validate(height, key_builder.size(), value_builder.size())
@@ -308,7 +308,7 @@ where
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<KE, VE, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .validate(height, key_builder.size(), value_builder.size())
@@ -365,7 +365,7 @@ where
     failure: Ordering,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Either<K::Error, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     let key: MaybeStructured<'_, K> = key.into();
     self
@@ -418,7 +418,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Either<K::Error, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     let key: MaybeStructured<'_, K> = key.into();
     self
@@ -470,7 +470,7 @@ where
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
   ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Either<E, Error>>
   where
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .validate(height, key_builder.size(), 0)

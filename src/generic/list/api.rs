@@ -3,7 +3,11 @@ use core::{
   ops::{Bound, RangeBounds},
 };
 
-use dbutils::{buffer::VacantBuffer, equivalentor::TypeRefQueryComparator, types::Type};
+use dbutils::{
+  buffer::VacantBuffer,
+  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  types::Type,
+};
 use rarena_allocator::Allocator as _;
 
 use crate::{
@@ -166,58 +170,58 @@ where
   /// This method will return `false` if the entry is marked as removed. If you want to check if the key exists even if it is marked as removed,
   /// you can use [`contains_key_with_tombstone`](SkipList::contains_key_with_tombstone).
   #[inline]
-  pub fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
+  pub fn contains_key<Q>(&self, version: Version, key: &Q) -> bool
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     self.get(version, key).is_some()
   }
 
   /// Returns `true` if the key exists in the map, even if it is marked as removed.
   #[inline]
-  pub fn contains_key_with_tombstone<'a, Q>(&'a self, version: Version, key: &Q) -> bool
+  pub fn contains_key_with_tombstone<Q>(&self, version: Version, key: &Q) -> bool
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     self.get_with_tombstone(version, key).is_some()
   }
 
   /// Returns the first entry in the map.
-  pub fn first<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, K, V, Active, C, A, RC>>
   where
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last<'a>(&'a self, version: Version) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, K, V, Active, C, A, RC>>
   where
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     self.iter(version).last()
   }
 
   /// Returns the first entry in the map.
-  pub fn first_with_tombstone<'a>(
-    &'a self,
+  pub fn first_with_tombstone(
+    &self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
+  ) -> Option<EntryRef<'_, K, V, MaybeTombstone, C, A, RC>>
   where
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     self.iter_all(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last_with_tombstone<'a>(
-    &'a self,
+  pub fn last_with_tombstone(
+    &self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
+  ) -> Option<EntryRef<'_, K, V, MaybeTombstone, C, A, RC>>
   where
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     self.iter_all(version).last()
   }
@@ -233,7 +237,7 @@ where
   ) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -279,7 +283,7 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
@@ -327,7 +331,7 @@ where
   ) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     self.iter(version).seek_upper_bound(upper)
   }
@@ -341,7 +345,7 @@ where
   ) -> Option<EntryRef<'a, K, V, Active, C, A, RC>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     self.iter(version).seek_lower_bound(lower)
   }
@@ -355,7 +359,7 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     self.iter_all(version).seek_upper_bound(upper)
   }
@@ -369,7 +373,7 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, A, RC>>
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     self.iter_all(version).seek_lower_bound(lower)
   }

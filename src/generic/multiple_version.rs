@@ -349,12 +349,12 @@ where
   /// assert!(map.contains_key_with_tombstone(1, "hello"));
   /// ```
   #[inline]
-  fn contains_key<'a, Q>(&'a self, version: Version, key: &Q) -> bool
+  fn contains_key<Q>(&self, version: Version, key: &Q) -> bool
   where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return false;
@@ -380,12 +380,12 @@ where
   /// assert!(map.contains_key_with_tombstone(1, "hello"));
   /// ```
   #[inline]
-  fn contains_key_with_tombstone<'a, Q>(&'a self, version: Version, key: &Q) -> bool
+  fn contains_key_with_tombstone<Q>(&self, version: Version, key: &Q) -> bool
   where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return false;
@@ -396,14 +396,14 @@ where
 
   /// Returns the first entry in the map.
   #[inline]
-  fn first<'a>(
-    &'a self,
+  fn first(
+    &self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -414,14 +414,14 @@ where
 
   /// Returns the last entry in the map.
   #[inline]
-  fn last<'a>(
-    &'a self,
+  fn last(
+    &self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, Active, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, K, V, Active, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -435,14 +435,14 @@ where
   /// The difference between [`first`](Map::first) and `first_with_tombstone` is that `first_with_tombstone` will return the value even if
   /// the entry is removed or not in a valid state.
   #[inline]
-  fn first_with_tombstone<'a>(
-    &'a self,
+  fn first_with_tombstone(
+    &self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -456,14 +456,14 @@ where
   /// The difference between [`last`](Map::last) and `last_with_tombstone` is that `last_with_tombstone` will return the value even if
   /// the entry is removed or not in a valid state.
   #[inline]
-  fn last_with_tombstone<'a>(
-    &'a self,
+  fn last_with_tombstone(
+    &self,
     version: Version,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
+  ) -> Option<EntryRef<'_, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
     V: Type,
-    C: TypeRefQueryComparator<'a, K, K::Ref<'a>>,
+    C: TypeRefComparator<K>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -503,7 +503,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -543,7 +543,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -564,7 +564,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -585,7 +585,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -606,10 +606,9 @@ where
   ) -> Option<EntryRef<'a, K, V, MaybeTombstone, C, Self::Allocator, Self::RefCounter>>
   where
     K: Type,
-
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -632,7 +631,7 @@ where
     K: Type,
     V: Type,
     Q: ?Sized,
-    C: TypeRefQueryComparator<'a, K, Q>,
+    C: TypeRefQueryComparator<K, Q>,
   {
     if !self.may_contain_version(version) {
       return None;
@@ -714,7 +713,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.as_ref().insert(version, key, value)
   }
@@ -749,7 +748,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.as_ref().insert_at_height(version, height, key, value)
   }
@@ -814,7 +813,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.as_ref().insert_at_height_with_value_builder(
       version,
@@ -886,7 +885,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -912,7 +911,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -939,7 +938,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -1006,7 +1005,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.get_or_insert_at_height_with_value_builder(
       version,
@@ -1079,7 +1078,7 @@ where
   where
     K: Type + 'b,
     V: Type + 'b,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -1151,7 +1150,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.as_ref().insert_at_height_with_builders(
       version,
@@ -1229,7 +1228,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -1299,7 +1298,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.as_ref().get_or_insert_at_height_with_builders(
       version,
@@ -1374,7 +1373,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -1403,7 +1402,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.compare_remove_at_height(version, self.random_height(), key, success, failure)
   }
@@ -1431,7 +1430,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -1456,7 +1455,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.get_or_remove_at_height(version, self.random_height(), key)
   }
@@ -1493,7 +1492,7 @@ where
   where
     K: Type + 'b,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self.as_ref().get_or_remove_at_height(version, height, key)
   }
@@ -1554,7 +1553,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()
@@ -1619,7 +1618,7 @@ where
   where
     K: Type,
     V: Type,
-    C: TypeRefComparator<'a, K>,
+    C: TypeRefComparator<K>,
   {
     self
       .as_ref()

@@ -784,7 +784,16 @@ where
           return FindResult {
             splice: Splice { prev, next },
             found: false,
-            found_key,
+            found_key: found_key.and_then(|p| {
+              if matches!(
+                self.arena.options().compression_policy(),
+                CompressionPolicy::None
+              ) {
+                None
+              } else {
+                Some(p)
+              }
+            }),
             curr: None,
           };
         }
@@ -810,6 +819,7 @@ where
   ) -> Option<Pointer> {
     if let Among::Left(key) | Among::Middle(key) = key {
       match self.arena.options().compression_policy() {
+        CompressionPolicy::None => return None,
         CompressionPolicy::Fast => {
           if next_key.starts_with(key) {
             return Some(Pointer {
@@ -966,7 +976,6 @@ where
         } else {
           Key::pointer(&self.arena, k)
         }
-        // key
       }
     };
 
@@ -1075,8 +1084,6 @@ where
               break;
             }
             Err(_) => {
-              // let unlinked_node = nd;
-
               // CAS failed. We need to recompute prev and next. It is unlikely to
               // be helpful to try to use a different level as we redo the search,
               // because it is unlikely that lots of nodes are inserted between prev

@@ -736,7 +736,16 @@ where
           return FindResult {
             splice: Splice { prev, next },
             found: false,
-            found_key,
+            found_key: found_key.and_then(|p| {
+              if matches!(
+                self.arena.options().compression_policy(),
+                CompressionPolicy::None
+              ) {
+                None
+              } else {
+                Some(p)
+              }
+            }),
             curr: None,
           };
         }
@@ -762,6 +771,7 @@ where
   ) -> Option<Pointer> {
     match key {
       Either::Left(key) | Either::Right(key) => match self.arena.options().compression_policy() {
+        CompressionPolicy::None => return None,
         CompressionPolicy::Fast => {
           if next_key.starts_with(key) {
             return Some(Pointer {

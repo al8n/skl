@@ -13,14 +13,17 @@ mod open_options;
 /// Configuration for the compression policy of the key in [`Arena`](crate::traits::Arena).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
+#[repr(u8)]
 pub enum CompressionPolicy {
-  /// Fast compression policy, which only checks if the key is a prefix of the next key.
+  /// Do not apply any compression policy.
   #[default]
-  Fast,
-  /// High compression policy, which checks if the key is a substring of the next key.
+  None = 0,
+  /// Fast compression policy, which only checks if the key is a prefix of the next key.
+  Fast = 1,
+  /// High compression policy, which checks if the key is a subslice of the next key.
   #[cfg(feature = "experimental")]
   #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
-  High,
+  High = 2,
 }
 
 /// Options for [`Arena`](crate::traits::Arena).
@@ -79,7 +82,7 @@ impl Options {
       unify: false,
       magic_version: 0,
       freelist: Freelist::None,
-      policy: CompressionPolicy::Fast,
+      policy: CompressionPolicy::None,
       reserved: 0,
       lock_meta: false,
 

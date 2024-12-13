@@ -28,6 +28,7 @@ mod sealed {
 
   use super::*;
 
+  #[derive(Debug)]
   pub struct Pointer {
     pub(crate) offset: u32,
     pub(crate) size: u32,

@@ -395,17 +395,18 @@ where
         // At this point, prev is not null and not the head.
         // if the prev's version is greater than the query version or the prev's key is different from the current key,
         // we should try to return the current node.
-        if prev.version() > version || nd.get_key(&self.arena).ne(prev.get_key(&self.arena)) {
-          let nk = nd.get_key(&self.arena);
-
-          if !nd.is_tombstone() && contains_key(nk) {
-            let pointer = nd.get_value_pointer::<A>();
-            let value =
-              nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-            let ent =
-              EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_bytes(value));
-            return Some(ent);
-          }
+        let nk = nd.get_key(&self.arena);
+        let prev_key = prev.get_key(&self.arena);
+        if (prev.version() > version || !self.cmp.equivalent(nk, prev_key))
+          && !nd.is_tombstone()
+          && contains_key(nk)
+        {
+          let pointer = nd.get_value_pointer::<A>();
+          let value =
+            nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_bytes(value));
+          return Some(ent);
         }
 
         *nd = prev;
@@ -480,7 +481,8 @@ where
             }
 
             // if next's key is different from the current key, we should break the loop
-            if next.get_key(&self.arena) != curr_key {
+            let next_key = next.get_key(&self.arena);
+            if !self.cmp.equivalent(curr_key, next_key) {
               *nd = next;
               break;
             }

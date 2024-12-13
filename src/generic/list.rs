@@ -3,7 +3,7 @@ use core::{cmp, marker::PhantomData, ptr::NonNull, sync::atomic::Ordering};
 use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
-  equivalentor::{TypeRefComparator, TypeRefQueryComparator},
+  equivalentor::{TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator},
   types::{MaybeStructured, Type},
 };
 use either::Either;
@@ -392,6 +392,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
+    C: TypeRefEquivalentor<K>,
   {
     loop {
       unsafe {
@@ -433,22 +434,17 @@ where
         // At this point, prev is not null and not the head.
         // if the prev's version is greater than the query version or the prev's key is different from the current key,
         // we should try to return the current node.
-        if prev.version() > version || nd.get_key(&self.arena).ne(prev.get_key(&self.arena)) {
-          let raw_key = nd.get_key(&self.arena);
-          let nk = ty_ref::<K>(raw_key);
-
-          if !nd.is_tombstone() && contains_key(&nk) {
-            let pointer = nd.get_value_pointer::<A>();
-            let ent = EntryRef::from_node_with_pointer(
-              version,
-              *nd,
-              self,
-              pointer,
-              Some(raw_key),
-              Some(nk),
-            );
-            return Some(ent);
-          }
+        let raw_key = nd.get_key(&self.arena);
+        let nk = ty_ref::<K>(raw_key);
+        let prev_key = ty_ref::<K>(prev.get_key(&self.arena));
+        if (prev.version() > version || !self.cmp.equivalent_refs(&nk, &prev_key))
+          && !nd.is_tombstone()
+          && contains_key(&nk)
+        {
+          let pointer = nd.get_value_pointer::<A>();
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, pointer, Some(raw_key), Some(nk));
+          return Some(ent);
         }
 
         *nd = prev;
@@ -498,6 +494,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
+    C: TypeRefEquivalentor<K>,
   {
     loop {
       unsafe {
@@ -515,14 +512,16 @@ where
         // if the entry with largest version is removed, we should skip this key.
         if nd.is_tombstone() {
           let mut next = self.get_next(*nd, 0);
-          let curr_key = nd.get_key(&self.arena);
+          let curr_key = ty_ref::<K>(nd.get_key(&self.arena));
+
           loop {
             if next.is_null() || next.offset() == self.tail.offset() {
               return None;
             }
 
             // if next's key is different from the current key, we should break the loop
-            if next.get_key(&self.arena) != curr_key {
+            let next_key = ty_ref::<K>(next.get_key(&self.arena));
+            if !self.cmp.equivalent_refs(&curr_key, &next_key) {
               *nd = next;
               break;
             }
@@ -759,7 +758,6 @@ where
       }
 
       // offset is not zero, so we can safely dereference the next node ptr.
-      // let next_node = next.as_ref(&self.arena);
       let next_key = next.get_key(&self.arena);
 
       let cmp = Key::<'a, '_, K, A>::compare(&self.cmp, key, Either::Left(next_key));
@@ -912,7 +910,6 @@ where
     C: TypeRefComparator<K>,
   {
     let is_remove = key.is_remove();
-
     // Safety: a fresh new Inserter, so safe here
     let found_key = unsafe {
       let (found, found_key, ptr) = self.find_splice(version, key.as_slice(), &mut ins, true);
@@ -969,6 +966,7 @@ where
         } else {
           Key::pointer(&self.arena, k)
         }
+        // key
       }
     };
 
@@ -1074,10 +1072,8 @@ where
                 Ordering::SeqCst,
                 Ordering::Acquire,
               );
-
               break;
             }
-
             Err(_) => {
               // let unlinked_node = nd;
 

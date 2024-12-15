@@ -1,5 +1,3 @@
-use core::marker::PhantomData;
-
 use dbutils::{
   equivalentor::TypeRefComparator,
   types::{LazyRef, Type},
@@ -10,7 +8,7 @@ use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
   generic::{Active, MaybeTombstone, State},
   types::internal::ValuePointer,
-  Version,
+  Transformable, Version,
 };
 
 /// An entry reference of the `SkipMap`.
@@ -21,15 +19,15 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized,
 {
   pub(super) list: &'a SkipList<K, V, C, A, R>,
-  pub(super) key: LazyRef<'a, K>,
-  pub(super) value: S::Value<V>,
+  pub(super) key: LazyRef<'a, K::Ref<'a>>,
+  pub(super) value: S::Data,
   pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
-  _m: PhantomData<S>,
 }
 
 impl<'a, K, V, S, C, A, R> core::fmt::Debug for EntryRef<'a, K, V, S, C, A, R>
@@ -39,7 +37,8 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
-  S::Output<V>: core::fmt::Debug,
+  S::Data: Sized + Transformable,
+  <S::Data as Transformable>::Output: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -57,6 +56,7 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized + Clone,
 {
   fn clone(&self) -> Self {
     Self {
@@ -67,12 +67,11 @@ where
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
-      _m: PhantomData,
     }
   }
 }
 
-impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone, C, A, R>
+impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -80,16 +79,15 @@ where
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active, C, A, R> {
+  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active<LazyRef<'a, V::Ref<'a>>>, C, A, R> {
     EntryRef {
       list: self.list,
       key: self.key,
-      value: self.value.expect("try convert a tombstone to active"),
+      value: self.value.expect("entry in Active state must have value"),
       value_part_pointer: self.value_part_pointer,
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
-      _m: PhantomData,
     }
   }
 }
@@ -101,6 +99,7 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized,
 {
   /// Returns the comparator.
   #[inline]
@@ -122,20 +121,29 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> S::Output<V> {
-    S::output(&self.value)
+  pub fn value(&self) -> <S::Data as Transformable>::Output
+  where
+    S::Data: Transformable,
+  {
+    self.value.transform()
   }
 
   /// Returns the value in raw bytes
   #[inline]
-  pub fn raw_value(&self) -> Option<&'a [u8]> {
-    S::raw(&self.value)
+  pub fn raw_value(&self) -> <S::Data as Transformable>::Input
+  where
+    S::Data: Transformable,
+  {
+    self.value.input()
   }
 
   /// Returns if the entry is marked as removed
   #[inline]
-  pub fn is_tombstone(&self) -> bool {
-    S::is_tombstone(&self.value)
+  pub fn is_tombstone(&self) -> bool
+  where
+    S::Data: Transformable,
+  {
+    self.value.validate()
   }
 }
 
@@ -144,6 +152,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,
@@ -151,13 +160,13 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(S::ALL_VERSIONS)
+    self.next_in(<S::Data as Transformable>::always_valid())
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(S::ALL_VERSIONS)
+    self.prev_in(<S::Data as Transformable>::always_valid())
   }
 
   fn next_in(&self, all_versions: bool) -> Option<Self> {
@@ -204,6 +213,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized,
   A: Allocator,
   A::Node: WithVersion,
   R: RefCounter,
@@ -220,6 +230,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
 {
@@ -251,12 +262,11 @@ where
       Self {
         list,
         key,
-        value: S::from_bytes_to_value(raw_value),
+        value: <S::Data as Transformable>::from_input(raw_value),
         value_part_pointer: vp,
         version: node.version(),
         query_version,
         ptr: node,
-        _m: PhantomData,
       }
     }
   }
@@ -291,12 +301,11 @@ where
       Self {
         list,
         key,
-        value: S::from_bytes_to_value(raw_value),
+        value: <S::Data as Transformable>::from_input(raw_value),
         value_part_pointer: pointer,
         version: node.version(),
         query_version,
         ptr: node,
-        _m: PhantomData,
       }
     }
   }

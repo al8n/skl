@@ -4,7 +4,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalentor::{TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator},
-  types::{MaybeStructured, Type},
+  types::{LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -21,7 +21,7 @@ use crate::{
   traits::Constructable,
   ty_ref,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Header, Inserter, Splice, Version,
+  FindResult, Header, Inserter, Splice, Transformable, Version,
 };
 
 mod entry;
@@ -30,10 +30,19 @@ pub use entry::EntryRef;
 mod api;
 pub(super) mod iterator;
 
-type UpdateOk<'a, 'b, K, V, C, A, R> = Either<
-  Option<EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
-  Result<EntryRef<'a, K, V, MaybeTombstone, C, A, R>, EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
->;
+macro_rules! update_ok {
+  () => {
+    Either<
+      Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
+      Result<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>, EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
+    >
+  };
+}
+
+// type update_ok!() = Either<
+//   Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
+//   Result<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>, EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
+// >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
@@ -358,6 +367,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
+    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -392,6 +402,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
+    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
     C: TypeRefEquivalentor<K>,
   {
     loop {
@@ -460,6 +471,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
+    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -494,6 +506,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     S: State<'a>,
+    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
     C: TypeRefEquivalentor<K>,
   {
     loop {
@@ -905,17 +918,17 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  fn update<'a, 'b: 'a, E>(
+  fn update<'a, E>(
     &'a self,
     version: Version,
     height: u32,
-    key: Key<'a, 'b, K, A>,
+    key: Key<'a, '_, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Among<K::Error, E, Error>>
+  ) -> Result<update_ok!(), Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -1176,17 +1189,17 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  unsafe fn upsert_value<'a, 'b: 'a>(
+  unsafe fn upsert_value<'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
+    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
-    key: &Key<'a, 'b, K, A>,
+    key: &Key<'a, '_, K, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Error> {
+  ) -> Result<update_ok!(), Error> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
@@ -1215,16 +1228,16 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  unsafe fn upsert<'a, 'b: 'a, E>(
+  unsafe fn upsert<'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
+    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
-    key: &Key<'a, 'b, K, A>,
+    key: &Key<'a, '_, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Either<E, Error>> {
+  ) -> Result<update_ok!(), Either<E, Error>> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena

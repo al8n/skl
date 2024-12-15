@@ -5,7 +5,7 @@ use dbutils::{
   types::Type,
 };
 
-use crate::{allocator::Node, generic::State};
+use crate::{allocator::Node, generic::State, Transformable};
 
 use super::super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
@@ -17,6 +17,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized,
   Q: ?Sized,
   RC: RefCounter,
 {
@@ -34,6 +35,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Clone,
   A: Allocator,
   Q: ?Sized,
   RC: RefCounter,
@@ -56,6 +58,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -84,6 +87,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized,
   A: Allocator,
   RC: RefCounter,
   R: RangeBounds<Q>,
@@ -119,6 +123,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -249,6 +254,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -447,6 +453,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -492,6 +499,7 @@ where
   K: ?Sized + Type,
   V: ?Sized + Type,
   S: State<'a>,
+  S::Data: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,

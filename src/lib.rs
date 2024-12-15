@@ -17,6 +17,8 @@ extern crate alloc as std;
 extern crate std;
 
 mod allocator;
+use core::marker::PhantomData;
+
 pub use allocator::GenericAllocator;
 
 /// The dynamic key-value type `SkipMap`s.
@@ -31,6 +33,7 @@ pub mod error;
 /// Options for the `SkipMap`s.
 #[macro_use]
 pub mod options;
+use dbutils::types::{LazyRef, TypeRef};
 pub use options::Options;
 
 mod traits;
@@ -368,187 +371,277 @@ fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
   unsafe { <T::Ref<'a> as dbutils::types::TypeRef<'a>>::from_slice(src) }
 }
 
-/// A marker trait for the state of the entry.
-pub trait State<'a>: sealed::Sealed<'a> {}
+// /// A marker trait for the state of the entry.
+// pub trait State<'a>: sealed::Sealed<'a> {}
 
-impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
+// impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
 
-/// A state for the entry that is active.
-pub struct Active;
+pub use dbutils::state::{Active, MaybeTombstone, State};
 
-/// A state for the entry that may be a tombstone.
-pub struct MaybeTombstone;
+trait Data {
+  type Active: ?Sized;
+  type MaybeTombstone: ?Sized;
+}
 
-mod sealed {
-  use dbutils::types::{LazyRef, Type};
+impl<T> Data for T {
+  type Active = T;
+  type MaybeTombstone = Option<T>;
+}
 
-  pub trait Sealed<'a> {
-    const ALL_VERSIONS: bool;
+trait Transformer<'a> {
+  type Output;
 
-    type Value<V>: Clone
-    where
-      V: ?Sized + Type;
-    type Output<V>: Copy
-    where
-      V: ?Sized + Type;
+  fn from_bytes(src: Option<&'a [u8]>) -> Self;
 
-    type BytesValue: Copy;
-    type BytesValueOutput: Copy;
+  fn transform(&self) -> Self::Output;
+}
 
-    fn raw<V>(val: &Self::Value<V>) -> Option<&'a [u8]>
-    where
-      V: ?Sized + Type;
+/// Transformable
+pub trait Transformable {
+  /// The output type of this transform.
+  type Output;
 
-    fn is_tombstone<V>(val: &Self::Value<V>) -> bool
-    where
-      V: ?Sized + Type;
+  /// The input type of this transform.
+  type Input;
 
-    fn is_tombstone_bytes(val: &Self::BytesValue) -> bool;
+  /// Returns the input state.
+  fn input(&self) -> Self::Input;
 
-    fn output<V>(val: &Self::Value<V>) -> Self::Output<V>
-    where
-      V: ?Sized + Type;
+  /// Converts the input state to the state.
+  fn from_input(input: Self::Input) -> Self
+  where
+    Self: Sized;
 
-    fn bytes_output(val: &Self::BytesValue) -> Self::BytesValueOutput;
+  /// Returns the output after transformring.
+  fn transform(&self) -> Self::Output;
 
-    fn from_bytes(src: Option<&'a [u8]>) -> Self::BytesValue;
+  /// Returns `true` the state is valid or not.
+  fn validate(&self) -> bool;
 
-    fn from_bytes_to_value<V>(src: Option<&'a [u8]>) -> Self::Value<V>
-    where
-      V: ?Sized + Type;
+  /// Returns `true` if this state will never be invalid.
+  fn always_valid() -> bool;
+}
+
+impl Transformable for &[u8] {
+  type Output = Self;
+  type Input = Option<Self>;
+
+  #[inline]
+  fn input(&self) -> Self::Input {
+    Some(self)
   }
 
-  impl<'a> Sealed<'a> for super::Active {
-    const ALL_VERSIONS: bool = false;
+  #[inline]
+  fn from_input(input: Self::Input) -> Self {
+    input.expect("entry in Active state must have value")
+  }
 
-    type Value<V>
-      = LazyRef<'a, V>
-    where
-      V: ?Sized + Type;
-    type Output<V>
-      = V::Ref<'a>
-    where
-      V: ?Sized + Type;
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    self
+  }
 
-    type BytesValue = &'a [u8];
-    type BytesValueOutput = &'a [u8];
+  #[inline]
+  fn validate(&self) -> bool {
+    true
+  }
 
-    #[inline]
-    fn raw<V>(val: &Self::Value<V>) -> Option<&'a [u8]>
-    where
-      V: ?Sized + Type,
-    {
-      val.raw()
+  #[inline]
+  fn always_valid() -> bool {
+    true
+  }
+}
+
+impl<'a, T> Transformable for LazyRef<'a, T>
+where
+  T: TypeRef<'a>,
+{
+  type Input = Option<&'a [u8]>;
+  type Output = T;
+
+  #[inline]
+  fn input(&self) -> Self::Input {
+    Some(self.raw().expect("entry in Active state must have value"))
+  }
+
+  #[inline]
+  fn from_input(input: Self::Input) -> Self {
+    unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
+  }
+
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    *self.get()
+  }
+
+  #[inline]
+  fn validate(&self) -> bool {
+    true
+  }
+
+  #[inline]
+  fn always_valid() -> bool {
+    true
+  }
+}
+
+impl<'a> Transformable for Option<&'a [u8]> {
+  type Output = Option<&'a [u8]>;
+  type Input = Option<&'a [u8]>;
+
+  #[inline]
+  fn input(&self) -> Self::Input {
+    *self
+  }
+
+  #[inline]
+  fn from_input(input: Self::Input) -> Self {
+    input
+  }
+
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    self.as_ref().copied()
+  }
+
+  #[inline]
+  fn validate(&self) -> bool {
+    self.is_some()
+  }
+
+  #[inline]
+  fn always_valid() -> bool {
+    false
+  }
+}
+
+impl<'a, T> Transformable for Option<LazyRef<'a, T>>
+where
+  T: TypeRef<'a>,
+{
+  type Output = Option<T>;
+  type Input = Option<&'a [u8]>;
+
+  #[inline]
+  fn input(&self) -> Self::Input {
+    self
+      .as_ref()
+      .map(|v| v.raw().expect("entry must have a raw value"))
+  }
+
+  #[inline]
+  fn from_input(input: Self::Input) -> Self {
+    input.map(|v| unsafe { LazyRef::from_raw(v) })
+  }
+
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    self.as_ref().map(|v| *v.get())
+  }
+
+  #[inline]
+  fn validate(&self) -> bool {
+    self.is_some()
+  }
+
+  #[inline]
+  fn always_valid() -> bool {
+    false
+  }
+}
+
+/// a
+#[repr(transparent)]
+struct TypeState<'a, S>
+where
+  S: ?Sized + State<'a>,
+{
+  _m: PhantomData<&'a S>,
+  data: S::Data,
+}
+
+impl<'a, S> Clone for TypeState<'a, S>
+where
+  S: ?Sized + State<'a>,
+  S::Data: Clone,
+{
+  fn clone(&self) -> Self {
+    Self {
+      _m: PhantomData,
+      data: self.data.clone(),
     }
+  }
+}
 
-    #[inline]
-    fn is_tombstone<V>(_: &Self::Value<V>) -> bool
-    where
-      V: ?Sized + Type,
-    {
-      false
-    }
+impl<'a> Transformer<'a> for TypeState<'a, Active<&'a [u8]>> {
+  type Output = &'a [u8];
 
-    #[inline]
-    fn is_tombstone_bytes(_: &Self::BytesValue) -> bool {
-      false
-    }
-
-    #[inline]
-    fn output<V>(val: &Self::Value<V>) -> Self::Output<V>
-    where
-      V: ?Sized + Type,
-    {
-      *val.get()
-    }
-
-    #[inline]
-    fn bytes_output(val: &Self::BytesValue) -> Self::BytesValueOutput {
-      val
-    }
-
-    #[inline]
-    fn from_bytes_to_value<V>(src: Option<&'a [u8]>) -> Self::Value<V>
-    where
-      V: ?Sized + Type,
-    {
-      match src {
-        Some(v) => unsafe { LazyRef::from_raw(v) },
-        None => panic!("entry in Active state must have value"),
-      }
-    }
-
-    #[inline]
-    fn from_bytes(src: Option<&'a [u8]>) -> Self::BytesValue {
-      match src {
-        Some(v) => v,
-        None => panic!("entry in Active state must have value"),
-      }
+  fn from_bytes(src: Option<&'a [u8]>) -> Self {
+    Self {
+      _m: PhantomData,
+      data: src.expect("entry in Active state must have value"),
     }
   }
 
-  impl<'a> Sealed<'a> for super::MaybeTombstone {
-    const ALL_VERSIONS: bool = true;
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    self.data
+  }
+}
 
-    type Value<V>
-      = Option<LazyRef<'a, V>>
-    where
-      V: ?Sized + Type;
-    type Output<V>
-      = Option<V::Ref<'a>>
-    where
-      V: ?Sized + Type;
+impl<'a, T> Transformer<'a> for TypeState<'a, Active<LazyRef<'a, T>>>
+where
+  T: TypeRef<'a>,
+{
+  type Output = T;
 
-    type BytesValue = Option<&'a [u8]>;
-    type BytesValueOutput = Option<&'a [u8]>;
-
-    #[inline]
-    fn raw<V>(val: &Self::Value<V>) -> Option<&'a [u8]>
-    where
-      V: ?Sized + Type,
-    {
-      val
-        .as_ref()
-        .map(|v| v.raw().expect("raw value must be available"))
+  #[inline]
+  fn from_bytes(src: Option<&'a [u8]>) -> Self {
+    Self {
+      _m: PhantomData,
+      data: unsafe { LazyRef::from_raw(src.expect("entry in Active state must have value")) },
     }
+  }
 
-    #[inline]
-    fn is_tombstone<V>(val: &Self::Value<V>) -> bool
-    where
-      V: ?Sized + Type,
-    {
-      val.is_none()
-    }
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    *self.data.get()
+  }
+}
 
-    #[inline]
-    fn is_tombstone_bytes(val: &Self::BytesValue) -> bool {
-      val.is_none()
-    }
+impl<'a> Transformer<'a> for TypeState<'a, MaybeTombstone<&'a [u8]>> {
+  type Output = Option<&'a [u8]>;
 
-    #[inline]
-    fn output<V>(val: &Self::Value<V>) -> Self::Output<V>
-    where
-      V: ?Sized + Type,
-    {
-      val.as_ref().map(|v| *v.get())
+  #[inline]
+  fn from_bytes(src: Option<&'a [u8]>) -> Self {
+    Self {
+      _m: PhantomData,
+      data: src,
     }
+  }
 
-    #[inline]
-    fn bytes_output(val: &Self::BytesValue) -> Self::BytesValueOutput {
-      *val
-    }
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    self.data.as_ref().copied()
+  }
+}
 
-    #[inline]
-    fn from_bytes_to_value<V>(src: Option<&'a [u8]>) -> Self::Value<V>
-    where
-      V: ?Sized + Type,
-    {
-      src.map(|v| unsafe { LazyRef::from_raw(v) })
-    }
+impl<'a, T> Transformer<'a> for TypeState<'a, MaybeTombstone<LazyRef<'a, T>>>
+where
+  T: TypeRef<'a>,
+{
+  type Output = Option<T>;
 
-    #[inline]
-    fn from_bytes(src: Option<&'a [u8]>) -> Self::BytesValue {
-      src
+  #[inline]
+  fn from_bytes(src: Option<&'a [u8]>) -> Self {
+    Self {
+      _m: PhantomData,
+      data: src.map(|v| unsafe { LazyRef::from_raw(v) }),
     }
+  }
+
+  #[inline]
+  fn transform(&self) -> Self::Output {
+    self.data.as_ref().map(|v| *v.get())
   }
 }

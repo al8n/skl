@@ -30,19 +30,13 @@ pub use entry::EntryRef;
 mod api;
 pub(super) mod iterator;
 
-macro_rules! update_ok {
-  () => {
-    Either<
-      Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
-      Result<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>, EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
-    >
-  };
-}
 
-// type update_ok!() = Either<
-//   Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
-//   Result<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>, EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>>,
-// >;
+
+type UpdateOk<'a, K, V, C, A, R> = Either<
+  Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>>,
+  Result<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>, EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>>,
+>;
+
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.
@@ -928,7 +922,7 @@ where
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<update_ok!(), Among<K::Error, E, Error>>
+  ) -> Result<UpdateOk<'a, K, V, C, A, R>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -1192,14 +1186,14 @@ where
   unsafe fn upsert_value<'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>,
+    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, '_, K, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<update_ok!(), Error> {
+  ) -> Result<UpdateOk<'a, K, V, C, A, R>, Error> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
@@ -1231,13 +1225,13 @@ where
   unsafe fn upsert<'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>,
+    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, '_, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<update_ok!(), Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, K, V, C, A, R>, Either<E, Error>> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena

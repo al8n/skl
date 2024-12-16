@@ -17,7 +17,6 @@ extern crate alloc as std;
 extern crate std;
 
 mod allocator;
-use core::marker::PhantomData;
 
 pub use allocator::GenericAllocator;
 
@@ -33,7 +32,7 @@ pub mod error;
 /// Options for the `SkipMap`s.
 #[macro_use]
 pub mod options;
-use dbutils::types::{LazyRef, TypeRef};
+use dbutils::types::{LazyRef, Type};
 pub use options::Options;
 
 mod traits;
@@ -454,10 +453,10 @@ impl Transformable for &[u8] {
 
 impl<'a, T> Transformable for LazyRef<'a, T>
 where
-  T: TypeRef<'a>,
+  T: Type + ?Sized,
 {
   type Input = Option<&'a [u8]>;
-  type Output = T;
+  type Output = T::Ref<'a>;
 
   #[inline]
   fn input(&self) -> Self::Input {
@@ -517,9 +516,9 @@ impl<'a> Transformable for Option<&'a [u8]> {
 
 impl<'a, T> Transformable for Option<LazyRef<'a, T>>
 where
-  T: TypeRef<'a>,
+  T: Type + ?Sized,
 {
-  type Output = Option<T>;
+  type Output = Option<T::Ref<'a>>;
   type Input = Option<&'a [u8]>;
 
   #[inline]
@@ -547,101 +546,5 @@ where
   #[inline]
   fn always_valid() -> bool {
     false
-  }
-}
-
-/// a
-#[repr(transparent)]
-struct TypeState<'a, S>
-where
-  S: ?Sized + State<'a>,
-{
-  _m: PhantomData<&'a S>,
-  data: S::Data,
-}
-
-impl<'a, S> Clone for TypeState<'a, S>
-where
-  S: ?Sized + State<'a>,
-  S::Data: Clone,
-{
-  fn clone(&self) -> Self {
-    Self {
-      _m: PhantomData,
-      data: self.data.clone(),
-    }
-  }
-}
-
-impl<'a> Transformer<'a> for TypeState<'a, Active<&'a [u8]>> {
-  type Output = &'a [u8];
-
-  fn from_bytes(src: Option<&'a [u8]>) -> Self {
-    Self {
-      _m: PhantomData,
-      data: src.expect("entry in Active state must have value"),
-    }
-  }
-
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    self.data
-  }
-}
-
-impl<'a, T> Transformer<'a> for TypeState<'a, Active<LazyRef<'a, T>>>
-where
-  T: TypeRef<'a>,
-{
-  type Output = T;
-
-  #[inline]
-  fn from_bytes(src: Option<&'a [u8]>) -> Self {
-    Self {
-      _m: PhantomData,
-      data: unsafe { LazyRef::from_raw(src.expect("entry in Active state must have value")) },
-    }
-  }
-
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    *self.data.get()
-  }
-}
-
-impl<'a> Transformer<'a> for TypeState<'a, MaybeTombstone<&'a [u8]>> {
-  type Output = Option<&'a [u8]>;
-
-  #[inline]
-  fn from_bytes(src: Option<&'a [u8]>) -> Self {
-    Self {
-      _m: PhantomData,
-      data: src,
-    }
-  }
-
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    self.data.as_ref().copied()
-  }
-}
-
-impl<'a, T> Transformer<'a> for TypeState<'a, MaybeTombstone<LazyRef<'a, T>>>
-where
-  T: TypeRef<'a>,
-{
-  type Output = Option<T>;
-
-  #[inline]
-  fn from_bytes(src: Option<&'a [u8]>) -> Self {
-    Self {
-      _m: PhantomData,
-      data: src.map(|v| unsafe { LazyRef::from_raw(v) }),
-    }
-  }
-
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    self.data.as_ref().map(|v| *v.get())
   }
 }

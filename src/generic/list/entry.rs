@@ -22,7 +22,7 @@ where
   S::Data: Sized,
 {
   pub(super) list: &'a SkipList<K, V, C, A, R>,
-  pub(super) key: LazyRef<'a, K::Ref<'a>>,
+  pub(super) key: LazyRef<'a, K>,
   pub(super) value: S::Data,
   pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
@@ -71,7 +71,7 @@ where
   }
 }
 
-impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, R>
+impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -79,7 +79,7 @@ where
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active<LazyRef<'a, V::Ref<'a>>>, C, A, R> {
+  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R> {
     EntryRef {
       list: self.list,
       key: self.key,

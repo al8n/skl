@@ -192,7 +192,7 @@ where
   pub fn first(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, K, V, Active<LazyRef<'_, V::Ref<'_>>>, C, A, RC>>
+  ) -> Option<EntryRef<'_, K, V, Active<LazyRef<'_, V>>, C, A, RC>>
   where
     C: TypeRefComparator<K>,
   {
@@ -203,7 +203,7 @@ where
   pub fn last(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, K, V, Active<LazyRef<'_, V::Ref<'_>>>, C, A, RC>>
+  ) -> Option<EntryRef<'_, K, V, Active<LazyRef<'_, V>>, C, A, RC>>
   where
     C: TypeRefComparator<K>,
   {
@@ -214,7 +214,7 @@ where
   pub fn first_with_tombstone(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, K, V, MaybeTombstone<LazyRef<'_, V::Ref<'_>>>, C, A, RC>>
+  ) -> Option<EntryRef<'_, K, V, MaybeTombstone<LazyRef<'_, V>>, C, A, RC>>
   where
     C: TypeRefComparator<K>,
   {
@@ -225,7 +225,7 @@ where
   pub fn last_with_tombstone(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, K, V, MaybeTombstone<LazyRef<'_, V::Ref<'_>>>, C, A, RC>>
+  ) -> Option<EntryRef<'_, K, V, MaybeTombstone<LazyRef<'_, V>>, C, A, RC>>
   where
     C: TypeRefComparator<K>,
   {
@@ -240,7 +240,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, V, Active<LazyRef<'a, V::Ref<'a>>>, C, A, RC>>
+  ) -> Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<K, Q>,
@@ -286,7 +286,7 @@ where
     &'a self,
     version: Version,
     key: &Q,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, RC>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<K, Q>,
@@ -334,7 +334,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, Active<LazyRef<'a, V::Ref<'a>>>, C, A, RC>>
+  ) -> Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<K, Q>,
@@ -348,7 +348,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, Active<LazyRef<'a, V::Ref<'a>>>, C, A, RC>>
+  ) -> Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<K, Q>,
@@ -362,7 +362,7 @@ where
     &'a self,
     version: Version,
     upper: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, RC>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<K, Q>,
@@ -376,7 +376,7 @@ where
     &'a self,
     version: Version,
     lower: Bound<&Q>,
-  ) -> Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V::Ref<'a>>>, C, A, RC>>
+  ) -> Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, RC>>
   where
     Q: ?Sized,
     C: TypeRefQueryComparator<K, Q>,
@@ -389,7 +389,7 @@ where
   pub fn iter(
     &self,
     version: Version,
-  ) -> iterator::Iter<'_, K, V, Active<LazyRef<'_, V::Ref<'_>>>, C, A, RC> {
+  ) -> iterator::Iter<'_, K, V, Active<LazyRef<'_, V>>, C, A, RC> {
     iterator::Iter::new(version, self, false)
   }
 
@@ -398,7 +398,7 @@ where
   pub fn iter_all(
     &self,
     version: Version,
-  ) -> iterator::Iter<'_, K, V, MaybeTombstone<LazyRef<'_, V::Ref<'_>>>, C, A, RC>
+  ) -> iterator::Iter<'_, K, V, MaybeTombstone<LazyRef<'_, V>>, C, A, RC>
 where {
     iterator::Iter::new(version, self, true)
   }
@@ -409,7 +409,7 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Range<'_, K, V, Active<LazyRef<'_, V::Ref<'_>>>, C, A, RC, Q, R>
+  ) -> iterator::Range<'_, K, V, Active<LazyRef<'_, V>>, C, A, RC, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,
@@ -423,7 +423,7 @@ where {
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Range<'_, K, V, MaybeTombstone<LazyRef<'_, V::Ref<'_>>>, C, A, RC, Q, R>
+  ) -> iterator::Range<'_, K, V, MaybeTombstone<LazyRef<'_, V>>, C, A, RC, Q, R>
   where
     Q: ?Sized,
     R: RangeBounds<Q>,

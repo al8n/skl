@@ -143,9 +143,9 @@ where
     self.prev_in(<S::Data as Transformable>::always_valid())
   }
 
-  fn next_in(&self, all_versions: bool) -> Option<Self> {
+  fn next_in(&self, always_valid: bool) -> Option<Self> {
     let mut nd = self.ptr;
-    if all_versions {
+    if !always_valid {
       unsafe {
         nd = self.list.get_next(nd, 0);
         self
@@ -162,9 +162,9 @@ where
     }
   }
 
-  fn prev_in(&self, all_versions: bool) -> Option<Self> {
+  fn prev_in(&self, always_valid: bool) -> Option<Self> {
     let mut nd = self.ptr;
-    if all_versions {
+    if !always_valid {
       unsafe {
         nd = self.list.get_prev(nd, 0);
         self

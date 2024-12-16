@@ -479,6 +479,7 @@ where
         }
 
         let raw_key = nd.get_key(&self.arena);
+
         let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();

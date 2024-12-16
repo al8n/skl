@@ -30,13 +30,13 @@ pub use entry::EntryRef;
 mod api;
 pub(super) mod iterator;
 
-
-
 type UpdateOk<'a, K, V, C, A, R> = Either<
   Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>>,
-  Result<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>, EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>>,
+  Result<
+    EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
+    EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
+  >,
 >;
-
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
 /// and backward iteration.

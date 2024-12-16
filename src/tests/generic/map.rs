@@ -21,7 +21,6 @@ where
   <M::Allocator as Sealed>::Node: WithoutVersion,
 {
   let mut it = l.iter();
-  
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());

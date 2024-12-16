@@ -370,30 +370,7 @@ fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
   unsafe { <T::Ref<'a> as dbutils::types::TypeRef<'a>>::from_slice(src) }
 }
 
-// /// A marker trait for the state of the entry.
-// pub trait State<'a>: sealed::Sealed<'a> {}
-
-// impl<'a, T: sealed::Sealed<'a>> State<'a> for T {}
-
 pub use dbutils::state::{Active, MaybeTombstone, State};
-
-trait Data {
-  type Active: ?Sized;
-  type MaybeTombstone: ?Sized;
-}
-
-impl<T> Data for T {
-  type Active = T;
-  type MaybeTombstone = Option<T>;
-}
-
-trait Transformer<'a> {
-  type Output;
-
-  fn from_bytes(src: Option<&'a [u8]>) -> Self;
-
-  fn transform(&self) -> Self::Output;
-}
 
 /// Transformable
 pub trait Transformable {

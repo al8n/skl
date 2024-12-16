@@ -25,7 +25,7 @@ where
     version: Version,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Error> {
     self.insert_at_height(version, self.random_height(), key, value)
   }
 
@@ -40,7 +40,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -90,7 +90,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -129,7 +129,7 @@ where
     height: Height,
     key: &'b [u8],
     value: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Error> {
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
@@ -180,7 +180,7 @@ where
     height: Height,
     key: &'b [u8],
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key.len(), value_builder.size())
       .map_err(Either::Right)?;
@@ -224,7 +224,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -273,7 +273,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Among<KE, VE, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Among<KE, VE, Error>> {
     self
       .validate(height, key_builder.size(), value_builder.size())
       .map_err(Among::Right)?;
@@ -323,7 +323,7 @@ where
     key: &'b [u8],
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -370,7 +370,7 @@ where
     version: Version,
     height: Height,
     key: &'b [u8],
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Error> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Error> {
     self.validate(height, key.len(), 0)?;
 
     self
@@ -416,7 +416,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, Active, C, A, R>>, Either<E, Error>> {
+  ) -> Result<Option<EntryRef<'a, Active<&'a [u8]>, C, A, R>>, Either<E, Error>> {
     self
       .validate(height, key_builder.size(), 0)
       .map_err(Either::Right)?;

@@ -2,7 +2,7 @@ use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
   dynamic::list::SkipList,
   ref_counter::RefCounter,
-  Active, MaybeTombstone, State, Version,
+  Active, MaybeTombstone, State, Transformable, Version,
 };
 use dbutils::equivalentor::BytesComparator;
 
@@ -12,10 +12,11 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized,
 {
   pub(super) list: &'a SkipList<C, A, R>,
   pub(super) key: &'a [u8],
-  pub(super) value: S::BytesValue,
+  pub(super) value: S::Data,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
@@ -26,7 +27,7 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
-  S::BytesValue: core::fmt::Debug,
+  S::Data: Sized + core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -42,10 +43,18 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized + Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
-    *self
+    Self {
+      list: self.list,
+      key: self.key,
+      value: self.value.clone(),
+      version: self.version,
+      query_version: self.query_version,
+      ptr: self.ptr,
+    }
   }
 }
 
@@ -54,16 +63,17 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized + Copy,
 {
 }
 
-impl<'a, C, A, R> EntryRef<'a, MaybeTombstone, C, A, R>
+impl<'a, C, A, R> EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn into_active(self) -> EntryRef<'a, Active, C, A, R> {
+  pub(super) fn into_active(self) -> EntryRef<'a, Active<&'a [u8]>, C, A, R> {
     EntryRef {
       list: self.list,
       key: self.key,
@@ -80,6 +90,7 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized,
 {
   /// Returns the comparator.
   #[inline]
@@ -95,14 +106,20 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> S::BytesValueOutput {
-    S::bytes_output(&self.value)
+  pub fn value(&self) -> <S::Data as Transformable>::Output
+  where
+    S::Data: Transformable,
+  {
+    self.value.transform()
   }
 
   /// Returns if the entry is marked as removed
   #[inline]
-  pub fn is_tombstone(&self) -> bool {
-    S::is_tombstone_bytes(&self.value)
+  pub fn is_tombstone(&self) -> bool
+  where
+    S::Data: Transformable,
+  {
+    self.value.validate()
   }
 }
 
@@ -112,17 +129,18 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
 {
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(S::ALL_VERSIONS)
+    self.next_in(<S::Data as Transformable>::always_valid())
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(S::ALL_VERSIONS)
+    self.prev_in(<S::Data as Transformable>::always_valid())
   }
 
   fn next_in(&self, all_versions: bool) -> Option<Self> {
@@ -170,6 +188,7 @@ where
   A::Node: WithVersion,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized,
 {
   /// Returns the version of the entry
   #[inline]
@@ -183,6 +202,7 @@ where
   A: Allocator,
   R: RefCounter,
   S: State<'a>,
+  S::Data: Sized,
 {
   #[inline]
   pub(crate) fn from_node(
@@ -190,7 +210,7 @@ where
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<C, A, R>,
     key: Option<&'a [u8]>,
-    value: S::BytesValue,
+    value: S::Data,
   ) -> Self {
     unsafe {
       let key = match key {
@@ -215,7 +235,7 @@ where
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<C, A, R>,
     key: Option<&'a [u8]>,
-    value: S::BytesValue,
+    value: S::Data,
   ) -> Self {
     unsafe {
       let key = match key {

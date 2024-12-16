@@ -113,13 +113,13 @@ where
     self.value.transform()
   }
 
-  /// Returns if the entry is marked as removed
+  /// Returns `true` if the entry is marked as removed
   #[inline]
-  pub fn is_tombstone(&self) -> bool
+  pub fn tombstone(&self) -> bool
   where
     S::Data: Transformable,
   {
-    self.value.validate()
+    !self.value.validate()
   }
 }
 

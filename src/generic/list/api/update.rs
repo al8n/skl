@@ -84,7 +84,7 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_tombstone() {
+          if old.tombstone() {
             None
           } else {
             Some(old.into_active())
@@ -133,7 +133,7 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_tombstone() {
+          if old.tombstone() {
             None
           } else {
             Some(old.into_active())
@@ -183,7 +183,7 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_tombstone() {
+          if old.tombstone() {
             None
           } else {
             Some(old.into_active())
@@ -233,7 +233,7 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_tombstone() {
+          if old.tombstone() {
             None
           } else {
             Some(old.into_active())
@@ -286,7 +286,7 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_tombstone() {
+          if old.tombstone() {
             None
           } else {
             Some(old.into_active())
@@ -342,7 +342,7 @@ where
       )
       .map(|old| {
         old.expect_left("insert must get InsertOk").and_then(|old| {
-          if old.is_tombstone() {
+          if old.tombstone() {
             None
           } else {
             Some(old.into_active())
@@ -396,14 +396,14 @@ where
         Either::Left(_) => None,
         Either::Right(res) => match res {
           Ok(old) => {
-            if old.is_tombstone() {
+            if old.tombstone() {
               None
             } else {
               Some(old.into_active())
             }
           }
           Err(current) => {
-            if current.is_tombstone() {
+            if current.tombstone() {
               None
             } else {
               Some(current.into_active())
@@ -448,7 +448,7 @@ where
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            if old.is_tombstone() {
+            if old.tombstone() {
               None
             } else {
               Some(old.into_active())
@@ -502,7 +502,7 @@ where
       .map(|res| match res {
         Either::Left(old) => match old {
           Some(old) => {
-            if old.is_tombstone() {
+            if old.tombstone() {
               None
             } else {
               Some(old.into_active())

@@ -137,13 +137,13 @@ where
     self.value.input()
   }
 
-  /// Returns if the entry is marked as removed
+  /// Returns `true` if the entry is marked as removed
   #[inline]
-  pub fn is_tombstone(&self) -> bool
+  pub fn tombstone(&self) -> bool
   where
     S::Data: Transformable,
   {
-    self.value.validate()
+    !self.value.validate()
   }
 }
 
@@ -244,7 +244,6 @@ where
   ) -> Self {
     unsafe {
       let (raw_value, vp) = node.get_value_with_pointer(&list.arena);
-
       let key = match key {
         Some(key) => LazyRef::with_raw(
           key,

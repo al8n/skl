@@ -392,7 +392,7 @@ pub trait Transformable {
   /// Returns the output after transformring.
   fn transform(&self) -> Self::Output;
 
-  /// Returns `true` the state is valid or not.
+  /// Returns `true` the state is valid.
   fn validate(&self) -> bool;
 
   /// Returns `true` if this state will never be invalid.

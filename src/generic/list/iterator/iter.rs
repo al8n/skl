@@ -2,10 +2,10 @@ use core::ops::Bound;
 
 use dbutils::{
   equivalentor::{TypeRefComparator, TypeRefQueryComparator},
-  types::Type,
+  types::{LazyRef, Type},
 };
 
-use crate::generic::State;
+use crate::{generic::State, Transformable};
 
 use super::super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
@@ -16,7 +16,7 @@ where
   A: Allocator,
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   R: RefCounter,
 {
   pub(super) map: &'a SkipList<K, V, C, A, R>,
@@ -30,7 +30,8 @@ impl<'a, K, V, S, C, A, R> Clone for Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone,
   A: Allocator,
   R: RefCounter,
 {
@@ -49,7 +50,7 @@ impl<'a, K, V, S, C, A, R> Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   A: Allocator,
   R: RefCounter,
 {
@@ -73,7 +74,7 @@ impl<'a, K, V, S, C, A, R> Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   A: Allocator,
   R: RefCounter,
 {
@@ -94,7 +95,8 @@ impl<'a, K, V, S, C, A, R> Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,
@@ -203,7 +205,8 @@ impl<'a, K, V, S, C, A, R> Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,
@@ -383,7 +386,8 @@ impl<'a, K, V, S, C, A, R> Iterator for Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,
@@ -426,7 +430,8 @@ impl<'a, K, V, S, C, A, R> DoubleEndedIterator for Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,

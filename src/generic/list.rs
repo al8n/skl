@@ -4,7 +4,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalentor::{TypeRefComparator, TypeRefEquivalentor, TypeRefQueryComparator},
-  types::{MaybeStructured, Type},
+  types::{LazyRef, MaybeStructured, Type},
 };
 use either::Either;
 use rarena_allocator::Allocator as _;
@@ -21,7 +21,7 @@ use crate::{
   traits::Constructable,
   ty_ref,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Header, Inserter, Splice, Version,
+  FindResult, Header, Inserter, Splice, Transformable, Version,
 };
 
 mod entry;
@@ -30,7 +30,7 @@ pub use entry::EntryRef;
 mod api;
 pub(super) mod iterator;
 
-type UpdateOk<'a, 'b, K, V, C, A, R> = Either<
+type UpdateOk<'a, K, V, C, A, R> = Either<
   Option<EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
   Result<EntryRef<'a, K, V, MaybeTombstone, C, A, R>, EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
 >;
@@ -357,7 +357,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -391,7 +392,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
     C: TypeRefEquivalentor<K>,
   {
     loop {
@@ -409,7 +411,7 @@ where
 
         if prev.is_null() || prev.offset() == self.head.offset() {
           // prev is null or the head, we should try to see if we can return the current node.
-          if !nd.is_tombstone() {
+          if !nd.tombstone() {
             // the current node is valid, we should return it.
             let raw_key = nd.get_key(&self.arena);
             let nk = ty_ref::<K>(raw_key);
@@ -438,7 +440,7 @@ where
         let nk = ty_ref::<K>(raw_key);
         let prev_key = ty_ref::<K>(prev.get_key(&self.arena));
         if (prev.version() > version || !self.cmp.equivalent_refs(&nk, &prev_key))
-          && !nd.is_tombstone()
+          && !nd.tombstone()
           && contains_key(&nk)
         {
           let pointer = nd.get_value_pointer::<A>();
@@ -459,7 +461,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -473,6 +476,7 @@ where
         }
 
         let raw_key = nd.get_key(&self.arena);
+
         let nk = ty_ref::<K>(raw_key);
         if contains_key(&nk) {
           let pointer = nd.get_value_pointer::<A>();
@@ -493,7 +497,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
     C: TypeRefEquivalentor<K>,
   {
     loop {
@@ -510,7 +515,7 @@ where
         }
 
         // if the entry with largest version is removed, we should skip this key.
-        if nd.is_tombstone() {
+        if nd.tombstone() {
           let mut next = self.get_next(*nd, 0);
           let curr_key = ty_ref::<K>(nd.get_key(&self.arena));
 
@@ -905,17 +910,17 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  fn update<'a, 'b: 'a, E>(
+  fn update<'a, E>(
     &'a self,
     version: Version,
     height: u32,
-    key: Key<'a, 'b, K, A>,
+    key: Key<'a, '_, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
     mut ins: Inserter<'a, <A::Node as Node>::Pointer>,
     upsert: bool,
-  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Among<K::Error, E, Error>>
+  ) -> Result<UpdateOk<'a, K, V, C, A, R>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -949,12 +954,7 @@ where
             )
             .map_err(Among::from_either_to_middle_right);
         }
-
-        return Ok(Either::Left(if old.is_tombstone() {
-          None
-        } else {
-          Some(old)
-        }));
+        return Ok(Either::Left(if old.tombstone() { None } else { Some(old) }));
       }
 
       found_key
@@ -985,7 +985,7 @@ where
         k.on_fail(&self.arena);
       })?;
 
-    let is_tombstone = unsafe { unlinked_node.get_value(&self.arena).is_none() };
+    let tombstone = unsafe { unlinked_node.get_value(&self.arena).is_none() };
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -1114,7 +1114,7 @@ where
                       version,
                       old,
                       node_ptr,
-                      &if is_tombstone {
+                      &if tombstone {
                         Key::<K, _>::remove_pointer(&self.arena, fr.found_key.unwrap())
                       } else {
                         Key::<K, _>::pointer(&self.arena, fr.found_key.unwrap())
@@ -1128,11 +1128,7 @@ where
                 }
 
                 deallocator.dealloc(&self.arena);
-                return Ok(Either::Left(if old.is_tombstone() {
-                  None
-                } else {
-                  Some(old)
-                }));
+                return Ok(Either::Left(if old.tombstone() { None } else { Some(old) }));
               }
 
               if let Some(p) = fr.found_key {
@@ -1176,26 +1172,22 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  unsafe fn upsert_value<'a, 'b: 'a>(
+  unsafe fn upsert_value<'a>(
     &'a self,
     version: Version,
     old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
-    key: &Key<'a, 'b, K, A>,
+    key: &Key<'a, '_, K, A>,
     value_offset: u32,
     value_size: u32,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Error> {
+  ) -> Result<UpdateOk<'a, K, V, C, A, R>, Error> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
 
-        Ok(Either::Left(if old.is_tombstone() {
-          None
-        } else {
-          Some(old)
-        }))
+        Ok(Either::Left(if old.tombstone() { None } else { Some(old) }))
       }
       Key::RemoveStructured(_)
       | Key::Remove(_)
@@ -1215,21 +1207,21 @@ where
   }
 
   #[allow(clippy::too_many_arguments)]
-  unsafe fn upsert<'a, 'b: 'a, E>(
+  unsafe fn upsert<'a, E>(
     &'a self,
     version: Version,
     old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
-    key: &Key<'a, 'b, K, A>,
+    key: &Key<'a, '_, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<UpdateOk<'a, 'b, K, V, C, A, R>, Either<E, Error>> {
+  ) -> Result<UpdateOk<'a, K, V, C, A, R>, Either<E, Error>> {
     match key {
       Key::Structured(_) | Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena
         .allocate_and_update_value(&old_node, value_builder.unwrap())
-        .map(|_| Either::Left(if old.is_tombstone() { None } else { Some(old) })),
+        .map(|_| Either::Left(if old.tombstone() { None } else { Some(old) })),
       Key::RemoveStructured(_)
       | Key::Remove(_)
       | Key::RemoveVacant { .. }

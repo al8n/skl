@@ -2,10 +2,10 @@ use core::ops::{Bound, RangeBounds};
 
 use dbutils::{
   equivalentor::{TypeRefComparator, TypeRefQueryComparator, TypeRefQueryRangeComparator},
-  types::Type,
+  types::{LazyRef, Type},
 };
 
-use crate::{allocator::Node, generic::State};
+use crate::{allocator::Node, generic::State, Transformable};
 
 use super::super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
@@ -16,7 +16,7 @@ where
   A: Allocator,
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   Q: ?Sized,
   RC: RefCounter,
 {
@@ -33,7 +33,8 @@ impl<'a, K, V, S, C, A, RC, Q, R: Clone> Clone for Range<'a, K, V, S, C, A, RC, 
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone,
   A: Allocator,
   Q: ?Sized,
   RC: RefCounter,
@@ -55,7 +56,7 @@ impl<'a, K, V, S, C, A, RC, Q, R> Range<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -83,7 +84,7 @@ impl<'a, K, V, S, C, A, RC, Q, R> Range<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   A: Allocator,
   RC: RefCounter,
   R: RangeBounds<Q>,
@@ -118,7 +119,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> Range<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -248,7 +250,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> Range<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -446,7 +449,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> Iterator for Range<'a, K, V, S, C, A, RC, Q, R
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -491,7 +495,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> DoubleEndedIterator for Range<'a, K, V, S, C, 
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,

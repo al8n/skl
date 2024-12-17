@@ -1,5 +1,3 @@
-use core::marker::PhantomData;
-
 use dbutils::{
   equivalentor::TypeRefComparator,
   types::{LazyRef, Type},
@@ -10,7 +8,7 @@ use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
   generic::{Active, MaybeTombstone, State},
   types::internal::ValuePointer,
-  Version,
+  Transformable, Version,
 };
 
 /// An entry reference of the `SkipMap`.
@@ -20,16 +18,15 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
+  S: State,
 {
   pub(super) list: &'a SkipList<K, V, C, A, R>,
   pub(super) key: LazyRef<'a, K>,
-  pub(super) value: S::Value<V>,
+  pub(super) value: S::Data<'a, LazyRef<'a, V>>,
   pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
-  _m: PhantomData<S>,
 }
 
 impl<'a, K, V, S, C, A, R> core::fmt::Debug for EntryRef<'a, K, V, S, C, A, R>
@@ -38,8 +35,9 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Output<V>: core::fmt::Debug,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Transformable,
+  <S::Data<'a, LazyRef<'a, V>> as Transformable>::Output: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -56,7 +54,8 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
 {
   fn clone(&self) -> Self {
     Self {
@@ -67,7 +66,6 @@ where
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
-      _m: PhantomData,
     }
   }
 }
@@ -84,12 +82,11 @@ where
     EntryRef {
       list: self.list,
       key: self.key,
-      value: self.value.expect("try convert a tombstone to active"),
+      value: self.value.expect("entry in Active state must have value"),
       value_part_pointer: self.value_part_pointer,
       version: self.version,
       query_version: self.query_version,
       ptr: self.ptr,
-      _m: PhantomData,
     }
   }
 }
@@ -100,7 +97,7 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
+  S: State,
 {
   /// Returns the comparator.
   #[inline]
@@ -122,20 +119,29 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> S::Output<V> {
-    S::output(&self.value)
+  pub fn value(&self) -> <S::Data<'a, LazyRef<'a, V>> as Transformable>::Output
+  where
+    S::Data<'a, LazyRef<'a, V>>: Transformable,
+  {
+    self.value.transform()
   }
 
   /// Returns the value in raw bytes
   #[inline]
-  pub fn raw_value(&self) -> Option<&'a [u8]> {
-    S::raw(&self.value)
+  pub fn raw_value(&self) -> <S::Data<'a, LazyRef<'a, V>> as Transformable>::Input
+  where
+    S::Data<'a, LazyRef<'a, V>>: Transformable,
+  {
+    self.value.input()
   }
 
-  /// Returns if the entry is marked as removed
+  /// Returns `true` if the entry is marked as removed
   #[inline]
-  pub fn is_tombstone(&self) -> bool {
-    S::is_tombstone(&self.value)
+  pub fn tombstone(&self) -> bool
+  where
+    S::Data<'a, LazyRef<'a, V>>: Transformable,
+  {
+    !self.value.validate()
   }
 }
 
@@ -143,7 +149,8 @@ impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,
@@ -151,18 +158,18 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(S::ALL_VERSIONS)
+    self.next_in(<S::Data<'a, LazyRef<'a, V>> as Transformable>::always_valid())
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(S::ALL_VERSIONS)
+    self.prev_in(<S::Data<'a, LazyRef<'a, V>> as Transformable>::always_valid())
   }
 
-  fn next_in(&self, all_versions: bool) -> Option<Self> {
+  fn next_in(&self, always_valid: bool) -> Option<Self> {
     let mut nd = self.ptr;
-    if all_versions {
+    if !always_valid {
       unsafe {
         nd = self.list.get_next(nd, 0);
         self
@@ -179,9 +186,9 @@ where
     }
   }
 
-  fn prev_in(&self, all_versions: bool) -> Option<Self> {
+  fn prev_in(&self, always_valid: bool) -> Option<Self> {
     let mut nd = self.ptr;
-    if all_versions {
+    if !always_valid {
       unsafe {
         nd = self.list.get_prev(nd, 0);
         self
@@ -199,11 +206,11 @@ where
   }
 }
 
-impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
+impl<K, V, S, C, A, R> EntryRef<'_, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
   A: Allocator,
   A::Node: WithVersion,
   R: RefCounter,
@@ -219,7 +226,8 @@ impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
 {
@@ -233,7 +241,6 @@ where
   ) -> Self {
     unsafe {
       let (raw_value, vp) = node.get_value_with_pointer(&list.arena);
-
       let key = match key {
         Some(key) => LazyRef::with_raw(
           key,
@@ -251,12 +258,11 @@ where
       Self {
         list,
         key,
-        value: S::from_bytes_to_value(raw_value),
+        value: <S::Data<'a, LazyRef<'a, V>> as Transformable>::from_input(raw_value),
         value_part_pointer: vp,
         version: node.version(),
         query_version,
         ptr: node,
-        _m: PhantomData,
       }
     }
   }
@@ -291,12 +297,11 @@ where
       Self {
         list,
         key,
-        value: S::from_bytes_to_value(raw_value),
+        value: <S::Data<'a, LazyRef<'a, V>> as Transformable>::from_input(raw_value),
         value_part_pointer: pointer,
         version: node.version(),
         query_version,
         ptr: node,
-        _m: PhantomData,
       }
     }
   }

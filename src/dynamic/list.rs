@@ -15,7 +15,7 @@ use crate::{
   ref_counter::RefCounter,
   traits::Constructable,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Header, Inserter, MaybeTombstone, Splice, State, Version,
+  FindResult, Header, Inserter, MaybeTombstone, Splice, State, Transformable, Version,
 };
 
 mod entry;
@@ -318,7 +318,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -336,8 +337,13 @@ where
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent =
-            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_bytes(value));
+          let ent = EntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            Some(nk),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
+          );
           return Some(ent);
         }
 
@@ -353,7 +359,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -370,7 +377,7 @@ where
 
         if prev.is_null() || prev.offset() == self.head.offset() {
           // prev is null or the head, we should try to see if we can return the current node.
-          if !nd.is_tombstone() {
+          if !nd.tombstone() {
             // the current node is valid, we should return it.
             let nk = nd.get_key(&self.arena);
 
@@ -383,7 +390,7 @@ where
                 *nd,
                 self,
                 Some(nk),
-                S::from_bytes(value),
+                <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
               );
               return Some(ent);
             }
@@ -398,14 +405,19 @@ where
         let nk = nd.get_key(&self.arena);
         let prev_key = prev.get_key(&self.arena);
         if (prev.version() > version || !self.cmp.equivalent(nk, prev_key))
-          && !nd.is_tombstone()
+          && !nd.tombstone()
           && contains_key(nk)
         {
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent =
-            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_bytes(value));
+          let ent = EntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            Some(nk),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
+          );
           return Some(ent);
         }
 
@@ -421,7 +433,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -439,8 +452,13 @@ where
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent =
-            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_bytes(value));
+          let ent = EntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            Some(nk),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
+          );
           return Some(ent);
         }
 
@@ -456,7 +474,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Sized + Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -472,7 +491,7 @@ where
         }
 
         // if the entry with largest version is removed, we should skip this key.
-        if nd.is_tombstone() {
+        if nd.tombstone() {
           let mut next = self.get_next(*nd, 0);
           let curr_key = nd.get_key(&self.arena);
           loop {
@@ -498,8 +517,13 @@ where
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent =
-            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_bytes(value));
+          let ent = EntryRef::from_node_with_pointer(
+            version,
+            *nd,
+            self,
+            Some(nk),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
+          );
           return Some(ent);
         }
 
@@ -896,11 +920,7 @@ where
           );
         }
 
-        return Ok(Either::Left(if old.is_tombstone() {
-          None
-        } else {
-          Some(old)
-        }));
+        return Ok(Either::Left(if old.tombstone() { None } else { Some(old) }));
       }
 
       found_key
@@ -931,7 +951,7 @@ where
         k.on_fail(&self.arena);
       })?;
 
-    let is_tombstone = unsafe { unlinked_node.get_value(&self.arena).is_none() };
+    let tombstone = unsafe { unlinked_node.get_value(&self.arena).is_none() };
 
     // We always insert from the base level and up. After you add a node in base
     // level, we cannot create a node in the level above because it would have
@@ -1065,7 +1085,7 @@ where
                       version,
                       old,
                       node_ptr,
-                      &if is_tombstone {
+                      &if tombstone {
                         Key::<A>::remove_pointer(&self.arena, fr.found_key.unwrap())
                       } else {
                         Key::<A>::pointer(&self.arena, fr.found_key.unwrap())
@@ -1079,11 +1099,7 @@ where
                 }
 
                 deallocator.dealloc(&self.arena);
-                return Ok(Either::Left(if old.is_tombstone() {
-                  None
-                } else {
-                  Some(old)
-                }));
+                return Ok(Either::Left(if old.tombstone() { None } else { Some(old) }));
               }
 
               if let Some(p) = fr.found_key {
@@ -1142,11 +1158,7 @@ where
       Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => {
         old_node.update_value(&self.arena, value_offset, value_size);
 
-        Ok(Either::Left(if old.is_tombstone() {
-          None
-        } else {
-          Some(old)
-        }))
+        Ok(Either::Left(if old.tombstone() { None } else { Some(old) }))
       }
       Key::Remove(_) | Key::RemoveVacant { .. } | Key::RemovePointer { .. } => {
         match old_node.clear_value(&self.arena, success, failure) {
@@ -1182,7 +1194,7 @@ where
       Key::Occupied(_) | Key::Vacant { .. } | Key::Pointer { .. } => self
         .arena
         .allocate_and_update_value(&old_node, value_builder.unwrap())
-        .map(|_| Either::Left(if old.is_tombstone() { None } else { Some(old) })),
+        .map(|_| Either::Left(if old.tombstone() { None } else { Some(old) })),
       Key::Remove(_) | Key::RemoveVacant { .. } | Key::RemovePointer { .. } => {
         match old_node.clear_value(&self.arena, success, failure) {
           Ok(_) => Ok(Either::Left(None)),

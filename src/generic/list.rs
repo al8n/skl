@@ -31,11 +31,8 @@ mod api;
 pub(super) mod iterator;
 
 type UpdateOk<'a, K, V, C, A, R> = Either<
-  Option<EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>>,
-  Result<
-    EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
-    EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
-  >,
+  Option<EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
+  Result<EntryRef<'a, K, V, MaybeTombstone, C, A, R>, EntryRef<'a, K, V, MaybeTombstone, C, A, R>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -360,8 +357,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -395,8 +392,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
     C: TypeRefEquivalentor<K>,
   {
     loop {
@@ -464,8 +461,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -500,8 +497,8 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
     C: TypeRefEquivalentor<K>,
   {
     loop {
@@ -1178,7 +1175,7 @@ where
   unsafe fn upsert_value<'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
+    old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, '_, K, A>,
     value_offset: u32,
@@ -1213,7 +1210,7 @@ where
   unsafe fn upsert<'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>,
+    old: EntryRef<'a, K, V, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, '_, K, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,

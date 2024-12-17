@@ -25,11 +25,8 @@ mod api;
 pub(super) mod iterator;
 
 type UpdateOk<'a, 'b, C, A, RC> = Either<
-  Option<EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, RC>>,
-  Result<
-    EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, RC>,
-    EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, RC>,
-  >,
+  Option<EntryRef<'a, MaybeTombstone, C, A, RC>>,
+  Result<EntryRef<'a, MaybeTombstone, C, A, RC>, EntryRef<'a, MaybeTombstone, C, A, RC>>,
 >;
 
 /// A fast, cocnurrent map implementation based on skiplist that supports forward
@@ -321,8 +318,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -345,7 +342,7 @@ where
             *nd,
             self,
             Some(nk),
-            <S::Data as Transformable>::from_input(value),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
           );
           return Some(ent);
         }
@@ -362,8 +359,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -393,7 +390,7 @@ where
                 *nd,
                 self,
                 Some(nk),
-                <S::Data as Transformable>::from_input(value),
+                <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
               );
               return Some(ent);
             }
@@ -419,7 +416,7 @@ where
             *nd,
             self,
             Some(nk),
-            <S::Data as Transformable>::from_input(value),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
           );
           return Some(ent);
         }
@@ -436,8 +433,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -460,7 +457,7 @@ where
             *nd,
             self,
             Some(nk),
-            <S::Data as Transformable>::from_input(value),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
           );
           return Some(ent);
         }
@@ -477,8 +474,8 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State<'a>,
-    S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: State,
+    S::Data<'a, &'a [u8]>: Sized + Transformable<Input = Option<&'a [u8]>>,
   {
     loop {
       unsafe {
@@ -525,7 +522,7 @@ where
             *nd,
             self,
             Some(nk),
-            <S::Data as Transformable>::from_input(value),
+            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
           );
           return Some(ent);
         }
@@ -1149,7 +1146,7 @@ where
   unsafe fn upsert_value<'a, 'b: 'a>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, R>,
+    old: EntryRef<'a, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_offset: u32,
@@ -1186,7 +1183,7 @@ where
   unsafe fn upsert<'a, 'b: 'a, E>(
     &'a self,
     version: Version,
-    old: EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, R>,
+    old: EntryRef<'a, MaybeTombstone, C, A, R>,
     old_node: <A::Node as Node>::Pointer,
     key: &Key<'a, 'b, A>,
     value_builder: Option<ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>>,

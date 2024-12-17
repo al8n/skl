@@ -4,7 +4,7 @@ use among::Among;
 use dbutils::{
   buffer::VacantBuffer,
   equivalentor::TypeRefComparator,
-  types::{LazyRef, MaybeStructured, Type},
+  types::{MaybeStructured, Type},
 };
 use either::Either;
 
@@ -33,10 +33,7 @@ where
     version: Version,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>,
-    Among<K::Error, V::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, V::Error, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -54,10 +51,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>,
-    Among<K::Error, V::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, V::Error, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -111,7 +105,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -154,10 +148,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value: impl Into<MaybeStructured<'b, V>>,
-  ) -> Result<
-    Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>,
-    Among<K::Error, V::Error, Error>,
-  >
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, V::Error, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -211,7 +202,7 @@ where
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Among<K::Error, E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<K::Error, E, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -259,7 +250,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<KE, VE, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -315,7 +306,7 @@ where
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, KE>>,
     value_builder: ValueBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, VE>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Among<KE, VE, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Among<KE, VE, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -372,7 +363,7 @@ where
     key: impl Into<MaybeStructured<'b, K>>,
     success: Ordering,
     failure: Ordering,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Either<K::Error, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -425,7 +416,7 @@ where
     version: Version,
     height: Height,
     key: impl Into<MaybeStructured<'b, K>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Either<K::Error, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Either<K::Error, Error>>
   where
     C: TypeRefComparator<K>,
   {
@@ -477,7 +468,7 @@ where
     version: Version,
     height: Height,
     key_builder: KeyBuilder<impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>>,
-  ) -> Result<Option<EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R>>, Either<E, Error>>
+  ) -> Result<Option<EntryRef<'a, K, V, Active, C, A, R>>, Either<E, Error>>
   where
     C: TypeRefComparator<K>,
   {

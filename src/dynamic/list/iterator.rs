@@ -13,8 +13,7 @@ where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   pub(super) map: &'a SkipList<C, A, RC>,
   pub(super) version: Version,
@@ -31,8 +30,8 @@ where
   RC: RefCounter,
   Q: ?Sized,
   R: Clone,
-  S: State<'a>,
-  S::Data: Sized + Clone,
+  S: State,
+  S::Data<'a, &'a [u8]>: Clone,
 {
   fn clone(&self) -> Self {
     Self {
@@ -53,8 +52,8 @@ where
   RC: RefCounter,
   Q: ?Sized,
   R: Copy,
-  S: State<'a>,
-  S::Data: Sized + Copy,
+  S: State,
+  S::Data<'a, &'a [u8]>: Copy,
 {
 }
 
@@ -62,8 +61,7 @@ impl<'a, S, C, A, RC> Iter<'a, S, C, A, RC>
 where
   A: Allocator,
   RC: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   #[inline]
   pub(crate) const fn new(
@@ -88,8 +86,7 @@ where
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   #[inline]
   pub(crate) fn range(
@@ -116,8 +113,7 @@ where
   RC: RefCounter,
   R: RangeBounds<Q>,
   Q: ?Sized,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   /// Returns the start bound of the iterator.
   #[inline]
@@ -159,8 +155,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State<'a>,
-  S::Data: Sized + Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
@@ -388,8 +384,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State<'a>,
-  S::Data: Sized + Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
@@ -608,8 +604,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State<'a>,
-  S::Data: Sized + Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
 {
   type Item = EntryRef<'a, S, C, A, RC>;
 
@@ -656,8 +652,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State<'a>,
-  S::Data: Sized + Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

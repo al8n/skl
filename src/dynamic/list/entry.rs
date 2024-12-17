@@ -11,12 +11,11 @@ pub struct EntryRef<'a, S, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   pub(super) list: &'a SkipList<C, A, R>,
   pub(super) key: &'a [u8],
-  pub(super) value: S::Data,
+  pub(super) value: S::Data<'a, &'a [u8]>,
   pub(super) version: Version,
   pub(super) query_version: Version,
   pub(super) ptr: <A::Node as Node>::Pointer,
@@ -26,8 +25,8 @@ impl<'a, S, C, A, R> core::fmt::Debug for EntryRef<'a, S, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized + core::fmt::Debug,
+  S: State,
+  S::Data<'a, &'a [u8]>: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -42,8 +41,8 @@ impl<'a, S, C, A, R> Clone for EntryRef<'a, S, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized + Clone,
+  S: State,
+  S::Data<'a, &'a [u8]>: Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -62,18 +61,18 @@ impl<'a, S, C, A, R> Copy for EntryRef<'a, S, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized + Copy,
+  S: State,
+  S::Data<'a, &'a [u8]>: Copy,
 {
 }
 
-impl<'a, C, A, R> EntryRef<'a, MaybeTombstone<&'a [u8]>, C, A, R>
+impl<'a, C, A, R> EntryRef<'a, MaybeTombstone, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn into_active(self) -> EntryRef<'a, Active<&'a [u8]>, C, A, R> {
+  pub(super) fn into_active(self) -> EntryRef<'a, Active, C, A, R> {
     EntryRef {
       list: self.list,
       key: self.key,
@@ -89,8 +88,7 @@ impl<'a, S, C, A, R> EntryRef<'a, S, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   /// Returns the comparator.
   #[inline]
@@ -106,9 +104,9 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> <S::Data as Transformable>::Output
+  pub fn value(&self) -> <S::Data<'a, &'a [u8]> as Transformable>::Output
   where
-    S::Data: Transformable,
+    S::Data<'a, &'a [u8]>: Transformable,
   {
     self.value.transform()
   }
@@ -117,7 +115,7 @@ where
   #[inline]
   pub fn tombstone(&self) -> bool
   where
-    S::Data: Transformable,
+    S::Data<'a, &'a [u8]>: Transformable,
   {
     !self.value.validate()
   }
@@ -128,19 +126,19 @@ where
   C: BytesComparator,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, &'a [u8]>: Sized + Transformable<Input = Option<&'a [u8]>>,
 {
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(<S::Data as Transformable>::always_valid())
+    self.next_in(<S::Data<'a, &'a [u8]> as Transformable>::always_valid())
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(<S::Data as Transformable>::always_valid())
+    self.prev_in(<S::Data<'a, &'a [u8]> as Transformable>::always_valid())
   }
 
   fn next_in(&self, always_valid: bool) -> Option<Self> {
@@ -182,13 +180,12 @@ where
   }
 }
 
-impl<'a, S, C, A, R> EntryRef<'a, S, C, A, R>
+impl<S, C, A, R> EntryRef<'_, S, C, A, R>
 where
   A: Allocator,
   A::Node: WithVersion,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   /// Returns the version of the entry
   #[inline]
@@ -201,8 +198,7 @@ impl<'a, S, C, A, R> EntryRef<'a, S, C, A, R>
 where
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   #[inline]
   pub(crate) fn from_node(
@@ -210,7 +206,7 @@ where
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<C, A, R>,
     key: Option<&'a [u8]>,
-    value: S::Data,
+    value: S::Data<'a, &'a [u8]>,
   ) -> Self {
     unsafe {
       let key = match key {
@@ -235,7 +231,7 @@ where
     node: <A::Node as Node>::Pointer,
     list: &'a SkipList<C, A, R>,
     key: Option<&'a [u8]>,
-    value: S::Data,
+    value: S::Data<'a, &'a [u8]>,
   ) -> Self {
     unsafe {
       let key = match key {

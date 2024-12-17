@@ -18,12 +18,11 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   pub(super) list: &'a SkipList<K, V, C, A, R>,
   pub(super) key: LazyRef<'a, K>,
-  pub(super) value: S::Data,
+  pub(super) value: S::Data<'a, LazyRef<'a, V>>,
   pub(super) value_part_pointer: ValuePointer,
   pub(super) version: Version,
   pub(super) query_version: Version,
@@ -36,9 +35,9 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized + Transformable,
-  <S::Data as Transformable>::Output: core::fmt::Debug,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Transformable,
+  <S::Data<'a, LazyRef<'a, V>> as Transformable>::Output: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -55,8 +54,8 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized + Clone,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
 {
   fn clone(&self) -> Self {
     Self {
@@ -71,7 +70,7 @@ where
   }
 }
 
-impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone<LazyRef<'a, V>>, C, A, R>
+impl<'a, K, V, C, A, R> EntryRef<'a, K, V, MaybeTombstone, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
@@ -79,7 +78,7 @@ where
   R: RefCounter,
 {
   #[inline]
-  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active<LazyRef<'a, V>>, C, A, R> {
+  pub(super) fn into_active(self) -> EntryRef<'a, K, V, Active, C, A, R> {
     EntryRef {
       list: self.list,
       key: self.key,
@@ -98,8 +97,7 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
 {
   /// Returns the comparator.
   #[inline]
@@ -121,18 +119,18 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> <S::Data as Transformable>::Output
+  pub fn value(&self) -> <S::Data<'a, LazyRef<'a, V>> as Transformable>::Output
   where
-    S::Data: Transformable,
+    S::Data<'a, LazyRef<'a, V>>: Transformable,
   {
     self.value.transform()
   }
 
   /// Returns the value in raw bytes
   #[inline]
-  pub fn raw_value(&self) -> <S::Data as Transformable>::Input
+  pub fn raw_value(&self) -> <S::Data<'a, LazyRef<'a, V>> as Transformable>::Input
   where
-    S::Data: Transformable,
+    S::Data<'a, LazyRef<'a, V>>: Transformable,
   {
     self.value.input()
   }
@@ -141,7 +139,7 @@ where
   #[inline]
   pub fn tombstone(&self) -> bool
   where
-    S::Data: Transformable,
+    S::Data<'a, LazyRef<'a, V>>: Transformable,
   {
     !self.value.validate()
   }
@@ -151,8 +149,8 @@ impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
-  S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<K>,
@@ -160,13 +158,13 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(<S::Data as Transformable>::always_valid())
+    self.next_in(<S::Data<'a, LazyRef<'a, V>> as Transformable>::always_valid())
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(<S::Data as Transformable>::always_valid())
+    self.prev_in(<S::Data<'a, LazyRef<'a, V>> as Transformable>::always_valid())
   }
 
   fn next_in(&self, always_valid: bool) -> Option<Self> {
@@ -208,12 +206,11 @@ where
   }
 }
 
-impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
+impl<K, V, S, C, A, R> EntryRef<'_, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
-  S::Data: Sized,
+  S: State,
   A: Allocator,
   A::Node: WithVersion,
   R: RefCounter,
@@ -229,8 +226,8 @@ impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State<'a>,
-  S::Data: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S: State,
+  S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
 {
@@ -261,7 +258,7 @@ where
       Self {
         list,
         key,
-        value: <S::Data as Transformable>::from_input(raw_value),
+        value: <S::Data<'a, LazyRef<'a, V>> as Transformable>::from_input(raw_value),
         value_part_pointer: vp,
         version: node.version(),
         query_version,
@@ -300,7 +297,7 @@ where
       Self {
         list,
         key,
-        value: <S::Data as Transformable>::from_input(raw_value),
+        value: <S::Data<'a, LazyRef<'a, V>> as Transformable>::from_input(raw_value),
         value_part_pointer: pointer,
         version: node.version(),
         query_version,

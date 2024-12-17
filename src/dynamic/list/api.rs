@@ -174,12 +174,12 @@ where
   }
 
   /// Returns the first entry in the map.
-  pub fn first(&self, version: Version) -> Option<EntryRef<'_, Active<&[u8]>, C, A, RC>> {
+  pub fn first(&self, version: Version) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).next()
   }
 
   /// Returns the last entry in the map.
-  pub fn last(&self, version: Version) -> Option<EntryRef<'_, Active<&[u8]>, C, A, RC>> {
+  pub fn last(&self, version: Version) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).last()
   }
 
@@ -187,7 +187,7 @@ where
   pub fn first_with_tombstone(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, MaybeTombstone<&[u8]>, C, A, RC>> {
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
     self.iter_all(version).next()
   }
 
@@ -195,7 +195,7 @@ where
   pub fn last_with_tombstone(
     &self,
     version: Version,
-  ) -> Option<EntryRef<'_, MaybeTombstone<&[u8]>, C, A, RC>> {
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
     self.iter_all(version).last()
   }
 
@@ -203,7 +203,7 @@ where
   ///
   /// This method will return `None` if the entry is marked as removed. If you want to get the entry even if it is marked as removed,
   /// you can use [`get_with_tombstone`](SkipList::get_with_tombstone).
-  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, Active<&[u8]>, C, A, RC>> {
+  pub fn get(&self, version: Version, key: &[u8]) -> Option<EntryRef<'_, Active, C, A, RC>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -237,7 +237,7 @@ where
     &self,
     version: Version,
     key: &[u8],
-  ) -> Option<EntryRef<'_, MaybeTombstone<&[u8]>, C, A, RC>> {
+  ) -> Option<EntryRef<'_, MaybeTombstone, C, A, RC>> {
     unsafe {
       let (n, eq) = self.find_near(version, key, false, true); // findLessOrEqual.
 
@@ -278,7 +278,7 @@ where
     &self,
     version: Version,
     upper: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, Active<&[u8]>, C, A, RC>> {
+  ) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).seek_upper_bound(upper)
   }
 
@@ -288,7 +288,7 @@ where
     &self,
     version: Version,
     lower: Bound<&[u8]>,
-  ) -> Option<EntryRef<'_, Active<&[u8]>, C, A, RC>> {
+  ) -> Option<EntryRef<'_, Active, C, A, RC>> {
     self.iter(version).seek_lower_bound(lower)
   }
 }
@@ -300,13 +300,13 @@ where
 {
   /// Returns a new iterator, this iterator will yield the latest version of all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter(&self, version: Version) -> iterator::Iter<'_, Active<&[u8]>, C, A, RC> {
+  pub fn iter(&self, version: Version) -> iterator::Iter<'_, Active, C, A, RC> {
     iterator::Iter::new(version, self, false)
   }
 
   /// Returns a new iterator, this iterator will yield all versions for all entries in the map less or equal to the given version.
   #[inline]
-  pub fn iter_all(&self, version: Version) -> iterator::Iter<'_, MaybeTombstone<&[u8]>, C, A, RC> {
+  pub fn iter_all(&self, version: Version) -> iterator::Iter<'_, MaybeTombstone, C, A, RC> {
     iterator::Iter::new(version, self, true)
   }
 
@@ -316,7 +316,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, Active<&[u8]>, C, A, RC, Q, R>
+  ) -> iterator::Iter<'_, Active, C, A, RC, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,
@@ -330,7 +330,7 @@ where
     &self,
     version: Version,
     range: R,
-  ) -> iterator::Iter<'_, MaybeTombstone<&[u8]>, C, A, RC, Q, R>
+  ) -> iterator::Iter<'_, MaybeTombstone, C, A, RC, Q, R>
   where
     Q: ?Sized + Borrow<[u8]>,
     R: RangeBounds<Q>,

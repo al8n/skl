@@ -141,7 +141,7 @@ where
   where
     S::Data<'a, LazyRef<'a, V>>: Transformable,
   {
-    !self.value.validate()
+    !S::validate_data(&self.value)
   }
 }
 
@@ -153,18 +153,18 @@ where
   S::Data<'a, LazyRef<'a, V>>: Sized + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
-  C: TypeRefComparator<K>,
+  C: TypeRefComparator<'a, K>,
 {
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(<S::Data<'a, LazyRef<'a, V>> as Transformable>::always_valid())
+    self.next_in(S::ALWAYS_VALID)
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(<S::Data<'a, LazyRef<'a, V>> as Transformable>::always_valid())
+    self.prev_in(S::ALWAYS_VALID)
   }
 
   fn next_in(&self, always_valid: bool) -> Option<Self> {

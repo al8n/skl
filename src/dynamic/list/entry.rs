@@ -117,7 +117,7 @@ where
   where
     S::Data<'a, &'a [u8]>: Transformable,
   {
-    !self.value.validate()
+    !S::validate_data(&self.value)
   }
 }
 
@@ -132,13 +132,13 @@ where
   /// Returns the next entry in the map.
   #[inline]
   pub fn next(&self) -> Option<Self> {
-    self.next_in(<S::Data<'a, &'a [u8]> as Transformable>::always_valid())
+    self.next_in(S::ALWAYS_VALID)
   }
 
   /// Returns the previous entry in the map.
   #[inline]
   pub fn prev(&self) -> Option<Self> {
-    self.prev_in(<S::Data<'a, &'a [u8]> as Transformable>::always_valid())
+    self.prev_in(S::ALWAYS_VALID)
   }
 
   fn next_in(&self, always_valid: bool) -> Option<Self> {

@@ -394,7 +394,7 @@ where
   where
     S: State,
     S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
-    C: TypeRefEquivalentor<K>,
+    C: TypeRefEquivalentor<'a, K>,
   {
     loop {
       unsafe {
@@ -499,7 +499,7 @@ where
   where
     S: State,
     S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
-    C: TypeRefEquivalentor<K>,
+    C: TypeRefEquivalentor<'a, K>,
   {
     loop {
       unsafe {
@@ -557,8 +557,8 @@ where
   /// If less=false, it finds leftmost node such that node.key > key (if allow_equal=false) or
   /// node.key >= key (if allow_equal=true).
   /// Returns the node found. The bool returned is true if the node has key equal to given key.
-  unsafe fn find_near<Q>(
-    &self,
+  unsafe fn find_near<'a, Q>(
+    &'a self,
     version: Version,
     key: &Q,
     less: bool,
@@ -566,7 +566,7 @@ where
   ) -> (Option<<A::Node as Node>::Pointer>, bool)
   where
     Q: ?Sized,
-    C: TypeRefQueryComparator<K, Q>,
+    C: TypeRefQueryComparator<'a, K, Q>,
   {
     let mut x = self.head;
     let mut level = self.meta().height() as usize - 1;
@@ -666,7 +666,7 @@ where
     returned_when_found: bool,
   ) -> (bool, Option<Pointer>, Option<<A::Node as Node>::Pointer>)
   where
-    C: TypeRefComparator<K>,
+    C: TypeRefComparator<'a, K>,
   {
     let list_height = self.meta().height() as u32;
     let mut level = 0;
@@ -745,7 +745,7 @@ where
     start: <A::Node as Node>::Pointer,
   ) -> FindResult<<A::Node as Node>::Pointer>
   where
-    C: TypeRefComparator<K>,
+    C: TypeRefComparator<'a, K>,
   {
     let mut prev = start;
 
@@ -860,7 +860,7 @@ where
     key: Among<&'a [u8], &'b [u8], &'b K>,
   ) -> bool
   where
-    C: TypeRefComparator<K>,
+    C: TypeRefComparator<'a, K>,
   {
     let nd_key = self
       .arena
@@ -922,7 +922,7 @@ where
     upsert: bool,
   ) -> Result<UpdateOk<'a, K, V, C, A, R>, Among<K::Error, E, Error>>
   where
-    C: TypeRefComparator<K>,
+    C: TypeRefComparator<'a, K>,
   {
     let is_remove = key.is_remove();
     // Safety: a fresh new Inserter, so safe here
@@ -1329,7 +1329,7 @@ where
     other: Either<&'a [u8], &K::Ref<'a>>,
   ) -> cmp::Ordering
   where
-    C: TypeRefComparator<K>,
+    C: TypeRefComparator<'a, K>,
   {
     match this {
       Among::Right(key) => match other {

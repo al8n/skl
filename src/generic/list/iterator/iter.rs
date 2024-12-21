@@ -99,7 +99,7 @@ where
   S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
-  C: TypeRefComparator<K>,
+  C: TypeRefComparator<'a, K>,
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
@@ -209,7 +209,7 @@ where
   S::Data<'a, LazyRef<'a, V>>: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
-  C: TypeRefComparator<K>,
+  C: TypeRefComparator<'a, K>,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
@@ -221,7 +221,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<K, QR>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     self.head = None;
     self.tail = None;
@@ -247,7 +247,7 @@ where
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<K, QR>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     self.head = None;
     self.tail = None;
@@ -269,7 +269,7 @@ where
   fn seek_ge<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<K, QR>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(self.version, key, false, true);
@@ -295,7 +295,7 @@ where
   fn seek_gt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<K, QR>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(Version::MIN, key, false, false);
@@ -321,7 +321,7 @@ where
   fn seek_le<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<K, QR>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(Version::MIN, key, true, true); // find less or equal.
@@ -347,7 +347,7 @@ where
   fn seek_lt<QR>(&self, key: &QR) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
     QR: ?Sized,
-    C: TypeRefQueryComparator<K, QR>,
+    C: TypeRefQueryComparator<'a, K, QR>,
   {
     unsafe {
       let (n, _) = self.map.find_near(self.version, key, true, false); // find less or equal.
@@ -390,7 +390,7 @@ where
   S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
-  C: TypeRefComparator<K>,
+  C: TypeRefComparator<'a, K>,
 {
   type Item = EntryRef<'a, K, V, S, C, A, R>;
 
@@ -434,7 +434,7 @@ where
   S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
   A: Allocator,
   R: RefCounter,
-  C: TypeRefComparator<K>,
+  C: TypeRefComparator<'a, K>,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

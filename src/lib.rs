@@ -390,12 +390,6 @@ pub trait Transformable {
 
   /// Returns the output after transformring.
   fn transform(&self) -> Self::Output;
-
-  /// Returns `true` the state is valid.
-  fn validate(&self) -> bool;
-
-  /// Returns `true` if this state will never be invalid.
-  fn always_valid() -> bool;
 }
 
 impl Transformable for &[u8] {
@@ -415,16 +409,6 @@ impl Transformable for &[u8] {
   #[inline]
   fn transform(&self) -> Self::Output {
     self
-  }
-
-  #[inline]
-  fn validate(&self) -> bool {
-    true
-  }
-
-  #[inline]
-  fn always_valid() -> bool {
-    true
   }
 }
 
@@ -449,16 +433,6 @@ where
   fn transform(&self) -> Self::Output {
     *self.get()
   }
-
-  #[inline]
-  fn validate(&self) -> bool {
-    true
-  }
-
-  #[inline]
-  fn always_valid() -> bool {
-    true
-  }
 }
 
 impl<'a> Transformable for Option<&'a [u8]> {
@@ -478,16 +452,6 @@ impl<'a> Transformable for Option<&'a [u8]> {
   #[inline]
   fn transform(&self) -> Self::Output {
     self.as_ref().copied()
-  }
-
-  #[inline]
-  fn validate(&self) -> bool {
-    self.is_some()
-  }
-
-  #[inline]
-  fn always_valid() -> bool {
-    false
   }
 }
 
@@ -513,15 +477,5 @@ where
   #[inline]
   fn transform(&self) -> Self::Output {
     self.as_ref().map(|v| *v.get())
-  }
-
-  #[inline]
-  fn validate(&self) -> bool {
-    self.is_some()
-  }
-
-  #[inline]
-  fn always_valid() -> bool {
-    false
   }
 }

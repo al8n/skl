@@ -1,5 +1,5 @@
 use super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
-use crate::{allocator::Node, State, Transformable};
+use crate::{allocator::Node, State, Transfer};
 use core::{
   borrow::Borrow,
   ops::{Bound, RangeBounds},
@@ -155,8 +155,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State,
-  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, &'a [u8]>,
+  S::Data<'a, &'a [u8]>: Copy,
 {
   /// Advances to the next position. Returns the key and value if the
   /// iterator is pointing at a valid entry, and `None` otherwise.
@@ -384,8 +384,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State,
-  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, &'a [u8]>,
+  S::Data<'a, &'a [u8]>: Copy,
 {
   /// Moves the iterator to the highest element whose key is below the given bound.
   /// If no such element is found then `None` is returned.
@@ -604,8 +604,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State,
-  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, &'a [u8]>,
+  S::Data<'a, &'a [u8]>: Copy,
 {
   type Item = EntryRef<'a, S, C, A, RC>;
 
@@ -652,8 +652,8 @@ where
   RC: RefCounter,
   Q: ?Sized + Borrow<[u8]>,
   R: RangeBounds<Q>,
-  S: State,
-  S::Data<'a, &'a [u8]>: Copy + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, &'a [u8]>,
+  S::Data<'a, &'a [u8]>: Copy,
 {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {

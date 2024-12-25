@@ -32,7 +32,6 @@ pub mod error;
 /// Options for the `SkipMap`s.
 #[macro_use]
 pub mod options;
-use dbutils::types::{LazyRef, Type};
 pub use options::Options;
 
 mod traits;
@@ -372,110 +371,124 @@ fn ty_ref<'a, T: dbutils::types::Type + ?Sized>(src: &'a [u8]) -> T::Ref<'a> {
 
 pub use dbutils::state::{Active, MaybeTombstone, State};
 
-/// Transformable
-pub trait Transformable {
-  /// The output type of this transform.
-  type Output;
+/// Transfer trait for converting between different states.
+pub trait Transfer<'a, D>: sealed::Sealed<'a, D> {}
 
-  /// The input type of this transform.
-  type Input;
+impl<'a, D, T> Transfer<'a, D> for T where T: sealed::Sealed<'a, D> {}
 
-  /// Returns the input state.
-  fn input(&self) -> Self::Input;
+mod sealed {
+  use dbutils::{
+    state::State,
+    types::{LazyRef, Type},
+  };
 
-  /// Converts the input state to the state.
-  fn from_input(input: Self::Input) -> Self
+  pub trait Sealed<'a, I>: State {
+    type To;
+
+    /// Returns the input state.
+    fn input(data: &Self::Data<'a, I>) -> Self::Data<'a, &'a [u8]>;
+
+    /// Converts the input state to the state.
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, I>
+    where
+      Self: Sized;
+
+    fn transfer(data: &Self::Data<'a, I>) -> Self::Data<'a, Self::To>;
+  }
+
+  impl<'a, I> Sealed<'a, LazyRef<'a, I>> for dbutils::state::Active
   where
-    Self: Sized;
+    I: Type + ?Sized,
+  {
+    type To = I::Ref<'a>;
 
-  /// Returns the output after transformring.
-  fn transform(&self) -> Self::Output;
-}
+    #[inline]
+    fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, &'a [u8]> {
+      data.raw().expect("entry in Active state must have value")
+    }
 
-impl Transformable for &[u8] {
-  type Output = Self;
-  type Input = Option<Self>;
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> LazyRef<'a, I>
+    where
+      Self: Sized,
+    {
+      unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
+    }
 
-  #[inline]
-  fn input(&self) -> Self::Input {
-    Some(self)
+    #[inline]
+    fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
+      *data.get()
+    }
   }
 
-  #[inline]
-  fn from_input(input: Self::Input) -> Self {
-    input.expect("entry in Active state must have value")
+  impl<'a, I> Sealed<'a, LazyRef<'a, I>> for dbutils::state::MaybeTombstone
+  where
+    I: Type + ?Sized,
+  {
+    type To = I::Ref<'a>;
+
+    #[inline]
+    fn input(data: &Self::Data<'a, LazyRef<'a, I>>) -> Option<&'a [u8]> {
+      data
+        .as_ref()
+        .map(|v| v.raw().expect("entry in Active state must have value"))
+    }
+
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Option<LazyRef<'a, I>>
+    where
+      Self: Sized,
+    {
+      unsafe { input.map(|v| LazyRef::from_raw(v)) }
+    }
+
+    #[inline]
+    fn transfer(data: &Self::Data<'a, LazyRef<'a, I>>) -> Self::Data<'a, I::Ref<'a>> {
+      data.as_ref().map(|v| *v.get())
+    }
   }
 
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    self
-  }
-}
+  impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::Active {
+    type To = &'a [u8];
 
-impl<'a, T> Transformable for LazyRef<'a, T>
-where
-  T: Type + ?Sized,
-{
-  type Input = Option<&'a [u8]>;
-  type Output = T::Ref<'a>;
+    #[inline]
+    fn input(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, &'a [u8]> {
+      *data
+    }
 
-  #[inline]
-  fn input(&self) -> Self::Input {
-    Some(self.raw().expect("entry in Active state must have value"))
-  }
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input.expect("entry in Active state must have value")
+    }
 
-  #[inline]
-  fn from_input(input: Self::Input) -> Self {
-    unsafe { LazyRef::from_raw(input.expect("entry in Active state must have value")) }
-  }
-
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    *self.get()
-  }
-}
-
-impl<'a> Transformable for Option<&'a [u8]> {
-  type Output = Option<&'a [u8]>;
-  type Input = Option<&'a [u8]>;
-
-  #[inline]
-  fn input(&self) -> Self::Input {
-    *self
+    #[inline]
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::To> {
+      *data
+    }
   }
 
-  #[inline]
-  fn from_input(input: Self::Input) -> Self {
-    input
-  }
+  impl<'a> Sealed<'a, &'a [u8]> for dbutils::state::MaybeTombstone {
+    type To = &'a [u8];
 
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    self.as_ref().copied()
-  }
-}
+    #[inline]
+    fn input(data: &Self::Data<'a, &'a [u8]>) -> Option<&'a [u8]> {
+      data.as_ref().copied()
+    }
 
-impl<'a, T> Transformable for Option<LazyRef<'a, T>>
-where
-  T: Type + ?Sized,
-{
-  type Output = Option<T::Ref<'a>>;
-  type Input = Option<&'a [u8]>;
+    #[inline]
+    fn from_input(input: Option<&'a [u8]>) -> Self::Data<'a, &'a [u8]>
+    where
+      Self: Sized,
+    {
+      input
+    }
 
-  #[inline]
-  fn input(&self) -> Self::Input {
-    self
-      .as_ref()
-      .map(|v| v.raw().expect("entry must have a raw value"))
-  }
-
-  #[inline]
-  fn from_input(input: Self::Input) -> Self {
-    input.map(|v| unsafe { LazyRef::from_raw(v) })
-  }
-
-  #[inline]
-  fn transform(&self) -> Self::Output {
-    self.as_ref().map(|v| *v.get())
+    #[inline]
+    fn transfer(data: &Self::Data<'a, &'a [u8]>) -> Self::Data<'a, Self::To> {
+      data.as_ref().copied()
+    }
   }
 }

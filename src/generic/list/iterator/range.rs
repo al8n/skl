@@ -5,7 +5,7 @@ use dbutils::{
   types::{LazyRef, Type},
 };
 
-use crate::{allocator::Node, generic::State, Transformable};
+use crate::{allocator::Node, generic::State, Transfer};
 
 use super::super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
@@ -119,8 +119,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> Range<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -250,8 +250,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> Range<'a, K, V, S, C, A, RC, Q, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -449,8 +449,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> Iterator for Range<'a, K, V, S, C, A, RC, Q, R
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,
@@ -495,8 +495,8 @@ impl<'a, K, V, S, C, A, RC, Q, R> DoubleEndedIterator for Range<'a, K, V, S, C, 
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   RC: RefCounter,
   Q: ?Sized,

@@ -15,7 +15,7 @@ use crate::{
   ref_counter::RefCounter,
   traits::Constructable,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Header, Inserter, MaybeTombstone, Splice, State, Transformable, Version,
+  FindResult, Header, Inserter, MaybeTombstone, Splice, Transfer, Version,
 };
 
 mod entry;
@@ -318,8 +318,7 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, &'a [u8]>,
   {
     loop {
       unsafe {
@@ -337,13 +336,8 @@ where
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent = EntryRef::from_node_with_pointer(
-            version,
-            *nd,
-            self,
-            Some(nk),
-            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
-          );
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_input(value));
           return Some(ent);
         }
 
@@ -359,8 +353,7 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, &'a [u8]>,
   {
     loop {
       unsafe {
@@ -390,7 +383,7 @@ where
                 *nd,
                 self,
                 Some(nk),
-                <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
+                S::from_input(value),
               );
               return Some(ent);
             }
@@ -411,13 +404,8 @@ where
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent = EntryRef::from_node_with_pointer(
-            version,
-            *nd,
-            self,
-            Some(nk),
-            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
-          );
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_input(value));
           return Some(ent);
         }
 
@@ -433,8 +421,7 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, &'a [u8]>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, &'a [u8]>,
   {
     loop {
       unsafe {
@@ -452,13 +439,8 @@ where
           let pointer = nd.get_value_pointer::<A>();
           let value =
             nd.get_value_by_value_offset(&self.arena, pointer.value_offset, pointer.value_len);
-          let ent = EntryRef::from_node_with_pointer(
-            version,
-            *nd,
-            self,
-            Some(nk),
-            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
-          );
+          let ent =
+            EntryRef::from_node_with_pointer(version, *nd, self, Some(nk), S::from_input(value));
           return Some(ent);
         }
 
@@ -474,8 +456,7 @@ where
     contains_key: impl Fn(&[u8]) -> bool,
   ) -> Option<EntryRef<'a, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, &'a [u8]>: Sized + Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, &'a [u8]>,
   {
     loop {
       unsafe {
@@ -522,7 +503,7 @@ where
             *nd,
             self,
             Some(nk),
-            <S::Data<'a, &'a [u8]> as Transformable>::from_input(value),
+            <S as crate::sealed::Sealed<'_, &[u8]>>::from_input(value),
           );
           return Some(ent);
         }

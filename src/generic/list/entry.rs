@@ -8,7 +8,7 @@ use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
   generic::{Active, MaybeTombstone, State},
   types::internal::ValuePointer,
-  Transformable, Version,
+  Transfer, Version,
 };
 
 /// An entry reference of the `SkipMap`.
@@ -35,9 +35,8 @@ where
   V: ?Sized + Type,
   A: Allocator,
   R: RefCounter,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Transformable,
-  <S::Data<'a, LazyRef<'a, V>> as Transformable>::Output: core::fmt::Debug,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, S::To>: core::fmt::Debug,
 {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     f.debug_struct("EntryRef")
@@ -119,27 +118,27 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> <S::Data<'a, LazyRef<'a, V>> as Transformable>::Output
+  pub fn value(&self) -> S::Data<'a, S::To>
   where
-    S::Data<'a, LazyRef<'a, V>>: Transformable,
+    S: Transfer<'a, LazyRef<'a, V>>,
   {
-    self.value.transform()
+    S::transfer(&self.value)
   }
 
   /// Returns the value in raw bytes
   #[inline]
-  pub fn raw_value(&self) -> <S::Data<'a, LazyRef<'a, V>> as Transformable>::Input
+  pub fn raw_value(&self) -> S::Data<'a, &'a [u8]>
   where
-    S::Data<'a, LazyRef<'a, V>>: Transformable,
+    S: Transfer<'a, LazyRef<'a, V>>,
   {
-    self.value.input()
+    S::input(&self.value)
   }
 
   /// Returns `true` if the entry is marked as removed
   #[inline]
   pub fn tombstone(&self) -> bool
   where
-    S::Data<'a, LazyRef<'a, V>>: Transformable,
+    S: Transfer<'a, LazyRef<'a, V>>,
   {
     !S::validate_data(&self.value)
   }
@@ -149,8 +148,7 @@ impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<'a, K>,
@@ -226,8 +224,7 @@ impl<'a, K, V, S, C, A, R> EntryRef<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
   A: Allocator,
   R: RefCounter,
 {
@@ -258,7 +255,7 @@ where
       Self {
         list,
         key,
-        value: <S::Data<'a, LazyRef<'a, V>> as Transformable>::from_input(raw_value),
+        value: S::from_input(raw_value),
         value_part_pointer: vp,
         version: node.version(),
         query_version,
@@ -297,7 +294,7 @@ where
       Self {
         list,
         key,
-        value: <S::Data<'a, LazyRef<'a, V>> as Transformable>::from_input(raw_value),
+        value: S::from_input(raw_value),
         value_part_pointer: pointer,
         version: node.version(),
         query_version,

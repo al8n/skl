@@ -5,7 +5,7 @@ use dbutils::{
   types::{LazyRef, Type},
 };
 
-use crate::{generic::State, Transformable};
+use crate::{generic::State, Transfer};
 
 use super::super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 
@@ -95,8 +95,8 @@ impl<'a, K, V, S, C, A, R> Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<'a, K>,
@@ -205,8 +205,8 @@ impl<'a, K, V, S, C, A, R> Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Sized + Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<'a, K>,
@@ -386,8 +386,8 @@ impl<'a, K, V, S, C, A, R> Iterator for Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<'a, K>,
@@ -430,8 +430,8 @@ impl<'a, K, V, S, C, A, R> DoubleEndedIterator for Iter<'a, K, V, S, C, A, R>
 where
   K: ?Sized + Type,
   V: ?Sized + Type,
-  S: State,
-  S::Data<'a, LazyRef<'a, V>>: Clone + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, LazyRef<'a, V>>,
+  S::Data<'a, LazyRef<'a, V>>: Sized + Clone,
   A: Allocator,
   R: RefCounter,
   C: TypeRefComparator<'a, K>,

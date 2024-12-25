@@ -13,7 +13,7 @@ use crate::{
   allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
-  generic::{MaybeTombstone, State},
+  generic::MaybeTombstone,
   internal::RefMeta,
   options::CompressionPolicy,
   random_height,
@@ -21,7 +21,7 @@ use crate::{
   traits::Constructable,
   ty_ref,
   types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Header, Inserter, Splice, Transformable, Version,
+  FindResult, Header, Inserter, Splice, Transfer, Version,
 };
 
 mod entry;
@@ -357,8 +357,7 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, LazyRef<'a, V>>,
   {
     loop {
       unsafe {
@@ -392,8 +391,7 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, LazyRef<'a, V>>,
     C: TypeRefEquivalentor<'a, K>,
   {
     loop {
@@ -461,8 +459,7 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, LazyRef<'a, V>>,
   {
     loop {
       unsafe {
@@ -497,8 +494,7 @@ where
     contains_key: impl Fn(&K::Ref<'a>) -> bool,
   ) -> Option<EntryRef<'a, K, V, S, C, A, R>>
   where
-    S: State,
-    S::Data<'a, LazyRef<'a, V>>: Transformable<Input = Option<&'a [u8]>>,
+    S: Transfer<'a, LazyRef<'a, V>>,
     C: TypeRefEquivalentor<'a, K>,
   {
     loop {

@@ -2,7 +2,7 @@ use crate::{
   allocator::{Allocator, Node, NodePointer, WithVersion},
   dynamic::list::SkipList,
   ref_counter::RefCounter,
-  Active, MaybeTombstone, State, Transformable, Version,
+  Active, MaybeTombstone, State, Transfer, Version,
 };
 use dbutils::equivalentor::BytesComparator;
 
@@ -104,18 +104,18 @@ where
 
   /// Returns the reference to the value, `None` means the entry is removed.
   #[inline]
-  pub fn value(&self) -> <S::Data<'a, &'a [u8]> as Transformable>::Output
+  pub fn value(&self) -> S::Data<'a, S::To>
   where
-    S::Data<'a, &'a [u8]>: Transformable,
+    S: Transfer<'a, &'a [u8]>,
   {
-    self.value.transform()
+    S::transfer(&self.value)
   }
 
   /// Returns `true` if the entry is marked as removed
   #[inline]
   pub fn tombstone(&self) -> bool
   where
-    S::Data<'a, &'a [u8]>: Transformable,
+    S: Transfer<'a, &'a [u8]>,
   {
     !S::validate_data(&self.value)
   }
@@ -126,8 +126,7 @@ where
   C: BytesComparator,
   A: Allocator,
   R: RefCounter,
-  S: State,
-  S::Data<'a, &'a [u8]>: Sized + Transformable<Input = Option<&'a [u8]>>,
+  S: Transfer<'a, &'a [u8]>,
 {
   /// Returns the next entry in the map.
   #[inline]

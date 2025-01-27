@@ -45,7 +45,7 @@ tracing = ["dep:tracing", "rarena-allocator/tracing"]
 experimental = ["memchr"]
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.3", features = ["js"] }
 
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }

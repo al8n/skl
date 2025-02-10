@@ -51,7 +51,7 @@ getrandom = { version = "0.2", features = ["js"] }
 among = { version = "0.1", default-features = false, features = ["either"] }
 arbitrary-int = { version = "1.2", default-features = false }
 bitflags = "2"
-dbutils = { version = "0.12", default-features = false }
+dbutils = { version = "0.13", default-features = false }
 # dbutils = { version = "0.12", path = "../layer0/dbutils", default-features = false }
 
 either = { version = "1", default-features = false }

@@ -107,6 +107,12 @@ jobs:
         run: |
           rustup target add ${{ matrix.target }}
           cargo build --target ${{ matrix.target }} --no-default-features --features std
+        if: ${{ matrix.target != 'wasm32-unknown-unknown' }}
+      - name: cargo build --target ${{ matrix.target }} wasm32-unknown-unknown
+        run: |
+          rustup target add ${{ matrix.target }}
+          RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo build --target ${{ matrix.target }} --no-default-features --features std
+        if: ${{ matrix.target == 'wasm32-unknown-unknown' }}
 
   build:
     name: build

@@ -44,12 +44,8 @@ tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
 experimental = ["memchr"]
 
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-rand = { version = "0.9", default-features = false }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
+[target.'cfg(target = "wasm32-unknown-unknown")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
-rand = { version = "0.9", features = ["os_rng"] }
 
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
@@ -58,6 +54,7 @@ bitflags = "2"
 dbutils = { version = "0.14", default-features = false }
 # dbutils = { version = "0.12", path = "../layer0/dbutils", default-features = false }
 
+rand = { version = "0.9", default-features = false, features = ["os_rng"] }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
 

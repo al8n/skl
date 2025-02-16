@@ -1114,7 +1114,7 @@ where
         .map_mut::<M, _>(&p)
         .unwrap();
       let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
-      data.shuffle(&mut rand::thread_rng());
+      data.shuffle(&mut rand::rng());
       for i in &data {
         let i = *i;
         l.get_or_insert(key(i).as_slice(), new_value(i).as_slice())
@@ -1138,7 +1138,7 @@ where
       .unwrap();
     assert_eq!(1000, l.len());
     let mut data = (0..1000).collect::<::std::vec::Vec<usize>>();
-    data.shuffle(&mut rand::thread_rng());
+    data.shuffle(&mut rand::rng());
     for i in data {
       let k = key(i);
       let ent = l.get(k.as_slice()).unwrap();

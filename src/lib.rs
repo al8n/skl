@@ -169,7 +169,7 @@ pub fn random_height(max_height: Height) -> Height {
 /// Utility function to generate a random height for a new node.
 #[cfg(not(feature = "std"))]
 pub fn random_height(max_height: Height) -> Height {
-  use rand::{rngs::OsRng, Rng, TryRngCore};
+  use rand::{rngs::OsRng, TryRngCore};
 
   let max_height = max_height.to_usize();
   let rnd: u32 = OsRng

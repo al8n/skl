@@ -44,8 +44,12 @@ tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
 experimental = ["memchr"]
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rand = { version = "0.9", default-features = false }
+
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
+rand = { version = "0.9", features = ["os_rng"] }
 
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
@@ -56,7 +60,7 @@ dbutils = { version = "0.14", default-features = false }
 
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
-rand = { version = "0.9", default-features = false }
+
 # rarena-allocator = { version = "0.5", default-features = false, path = "../arena/rarena-allocator" }
 rarena-allocator = { version = "0.5", default-features = false }
 viewit = "0.1.5"

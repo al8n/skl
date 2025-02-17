@@ -1,9 +1,6 @@
-use skl::{
-  generic::{
-    unique::{sync::SkipMap, Map},
-    Builder,
-  },
-  Arena,
+use skl::dynamic::{
+  unique::{sync::SkipMap, Map},
+  Builder,
 };
 
 pub fn key(i: usize) -> Vec<u8> {
@@ -19,7 +16,7 @@ fn main() {
 
   let l = Builder::new()
     .with_capacity(1 << 20)
-    .map_anon::<SkipMap<[u8], [u8]>>()
+    .map_anon::<SkipMap>()
     .unwrap();
 
   for i in 0..N {

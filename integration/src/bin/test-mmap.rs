@@ -1,10 +1,7 @@
 use integration::{key, new_value};
-use skl::{
-  generic::{
-    unique::{sync::SkipMap, Map},
-    Builder,
-  },
-  Arena,
+use skl::generic::{
+  unique::{sync::SkipMap, Map},
+  Builder,
 };
 
 fn main() {

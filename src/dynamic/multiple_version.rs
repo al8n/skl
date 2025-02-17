@@ -283,6 +283,12 @@ where
     self.as_ref().minimum_version()
   }
 
+  /// Returns the references for the `SkipMap`.
+  #[inline]
+  fn refs(&self) -> usize {
+    self.as_ref().refs()
+  }
+
   /// Returns a random generated height.
   ///
   /// This method is useful when you want to check if the underlying allocator can allocate a node.

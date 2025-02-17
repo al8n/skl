@@ -393,7 +393,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 2 {
+  while Map::refs(&l) > 2 {
     ::core::hint::spin_loop();
   }
   for i in 0..N / 2 {
@@ -416,7 +416,7 @@ where
       );
     });
   }
-  while l.refs() > 2 {
+  while Map::refs(&l) > 2 {
     ::core::hint::spin_loop();
   }
 }
@@ -448,7 +448,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   for i in 0..N {
@@ -462,7 +462,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -504,7 +504,7 @@ where
       })
       .unwrap();
   }
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   for i in 0..N {
@@ -518,7 +518,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -550,7 +550,7 @@ where
         .unwrap();
     });
   }
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
   // assert_eq!(N, l.len());
@@ -565,7 +565,7 @@ where
       );
     });
   }
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 }
@@ -599,7 +599,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -623,7 +623,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -660,7 +660,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 
@@ -686,7 +686,7 @@ where
     });
   }
 
-  while l.refs() > 1 {
+  while Map::refs(&l) > 1 {
     ::core::hint::spin_loop();
   }
 

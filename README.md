@@ -41,6 +41,8 @@
 ## Features
 
 - **MVCC and 3D access**: Builtin MVCC (multiple versioning concurrency control) and key-value-version access support.
+- **Customable Statefull Comparator**: Not limited by `Borrow` and the stateless comparator like `HashMap` or `BTreeMap`, `SkipMap` supports statefull custom comparators.
+- **Multiple Maps**: Users can create multiple `SkipMap`s on the same ARENA.
 - **Lock-free and Concurrent-Safe:** `SkipMap` provide lock-free operations, ensuring efficient concurrent access without the need for explicit locking mechanisms.
 - **Extensible for Key-Value Database Developers:** Designed as a low-level crate, `SkipMap` offer a flexible foundation for key-value database developers. You can easily build your own memtable or durable storage using these structures.
 - **Memory Efficiency:** These data structures are optimized for minimal memory overhead. They operate around references, avoiding unnecessary allocations and deep copies, which can be crucial for efficient memory usage.

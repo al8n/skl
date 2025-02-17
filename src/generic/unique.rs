@@ -300,6 +300,12 @@ where
     self.as_ref().random_height()
   }
 
+  /// Returns the references for the `SkipMap`.
+  #[inline]
+  fn refs(&self) -> usize {
+    self.as_ref().refs()
+  }
+
   /// Returns `true` if the key exists in the map.
   ///
   /// ## Example

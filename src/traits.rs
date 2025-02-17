@@ -291,7 +291,7 @@ pub trait Arena: List {
     self.as_ref().allocator().remaining()
   }
 
-  /// Gets the number of pointers to this `SkipMap` similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
+  /// Gets the number of pointers to this underlying ARENA similar to [`Arc::strong_count`](std::sync::Arc::strong_count).
   #[inline]
   fn refs(&self) -> usize {
     self.as_ref().allocator().refs()

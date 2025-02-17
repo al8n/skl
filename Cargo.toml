@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.22.16"
+version = "0.22.17"
 edition = "2021"
 rust-version = "1.81.0"
 repository = "https://github.com/al8n/skl"
@@ -37,28 +37,29 @@ required-features = ["memmap"]
 
 [features]
 default = ["std"]
-alloc = ["rarena-allocator/alloc", "dbutils/alloc"]
+alloc = ["rarena-allocator/alloc", "dbutils/alloc", "rand/os_rng"]
 memmap = ["rarena-allocator/memmap", "std"]
 std = ["rand/default", "either/default", "dbutils/default", "rarena-allocator/std", "memchr?/default", "among/default"]
 tracing = ["dep:tracing", "rarena-allocator/tracing"]
 
 experimental = ["memchr"]
 
-[target.'cfg(target_family = "wasm")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
+[target.'cfg(target = "wasm32-unknown-unknown")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dependencies]
 among = { version = "0.1", default-features = false, features = ["either"] }
-arbitrary-int = { version = "1.2", default-features = false }
+arbitrary-int = { version = "1", default-features = false }
 bitflags = "2"
-dbutils = { version = "0.12", default-features = false }
+dbutils = { version = "0.14", default-features = false }
 # dbutils = { version = "0.12", path = "../layer0/dbutils", default-features = false }
 
+rand = { version = "0.9", default-features = false, features = ["os_rng"] }
 either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
-rand = { version = "0.8", default-features = false, features = ["getrandom"] }
-# rarena-allocator = { version = "0.4", default-features = false, path = "../arena/rarena-allocator" }
-rarena-allocator = { version = "0.4", default-features = false }
+
+# rarena-allocator = { version = "0.5", default-features = false, path = "../arena/rarena-allocator" }
+rarena-allocator = { version = "0.5", default-features = false }
 viewit = "0.1.5"
 paste = "1"
 
@@ -68,7 +69,6 @@ tracing = { version = "0.1", optional = true }
 criterion = "0.5"
 tempfile = "3"
 parking_lot = "0.12"
-
 
 [profile.bench]
 opt-level = 3

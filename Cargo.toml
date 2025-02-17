@@ -1,6 +1,6 @@
 [package]
 name = "skl"
-version = "0.22.17"
+version = "0.22.18"
 edition = "2021"
 rust-version = "1.81.0"
 repository = "https://github.com/al8n/skl"
@@ -19,6 +19,14 @@ harness = false
 [[example]]
 name = "heap"
 path = "examples/heap.rs"
+
+[[example]]
+name = "generic"
+path = "examples/generic.rs"
+
+[[example]]
+name = "multiple-version"
+path = "examples/multiple_version.rs"
 
 [[example]]
 name = "mmap"

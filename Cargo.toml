@@ -67,7 +67,7 @@ either = { version = "1", default-features = false }
 memchr = { version = "2", default-features = false, optional = true }
 
 # rarena-allocator = { version = "0.5", default-features = false, path = "../arena/rarena-allocator" }
-rarena-allocator = { version = "0.5", default-features = false }
+rarena-allocator = { version = "0.6", default-features = false }
 viewit = "0.1.5"
 paste = "1"
 

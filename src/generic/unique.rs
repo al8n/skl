@@ -12,25 +12,25 @@ use dbutils::{
 use either::Either;
 
 use crate::{
+  Arena, Header, Height, KeyBuilder, MIN_VERSION, MaybeTombstone, ValueBuilder,
   allocator::{Allocator, Sealed, WithoutVersion},
   error::Error,
   generic::Active,
   ref_counter::RefCounter,
-  Arena, Header, Height, KeyBuilder, MaybeTombstone, ValueBuilder, MIN_VERSION,
 };
 
 use super::{
-  list::{
-    iterator::{Iter, Range},
-    EntryRef,
-  },
   Ascend,
+  list::{
+    EntryRef,
+    iterator::{Iter, Range},
+  },
 };
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
   use crate::generic::Ascend;
-  pub use crate::unsync::{map::Allocator, RefCounter};
+  pub use crate::unsync::{RefCounter, map::Allocator};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_unsync_map,))]
   mod tests {
@@ -106,7 +106,7 @@ pub mod unsync {
 /// Implementations for concurrent environments.
 pub mod sync {
   use crate::generic::Ascend;
-  pub use crate::sync::{map::Allocator, RefCounter};
+  pub use crate::sync::{RefCounter, map::Allocator};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_generic_sync_map,))]
   mod tests {

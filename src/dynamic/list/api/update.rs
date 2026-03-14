@@ -44,10 +44,7 @@ where
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
-    let copy = |buf: &mut VacantBuffer<'_>| {
-      buf.put_slice(value)?;
-      Result::<_, dbutils::error::InsufficientBuffer>::Ok(val_len)
-    };
+    let copy = |buf: &mut VacantBuffer<'_>| buf.put_slice(value);
 
     self
       .update(
@@ -133,10 +130,7 @@ where
     self.validate(height, key.len(), value.len())?;
 
     let val_len = value.len();
-    let copy = |buf: &mut VacantBuffer<'_>| {
-      buf.put_slice(value)?;
-      Result::<_, dbutils::error::InsufficientBuffer>::Ok(val_len)
-    };
+    let copy = |buf: &mut VacantBuffer<'_>| buf.put_slice(value);
 
     self
       .update(

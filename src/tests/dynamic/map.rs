@@ -12,9 +12,9 @@ use core::sync::atomic::Ordering;
 use dbutils::buffer::VacantBuffer;
 
 use crate::{
-  allocator::WithoutVersion,
-  dynamic::{unique::Map, Ascend},
   KeyBuilder, ValueBuilder,
+  allocator::WithoutVersion,
+  dynamic::{Ascend, unique::Map},
 };
 
 use super::*;
@@ -28,18 +28,22 @@ where
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  assert!(it
-    .seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
-    .is_none());
-  assert!(it
-    .seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
-    .is_none());
-  assert!(it
-    .seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
-    .is_none());
-  assert!(it
-    .seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
-    .is_none());
+  assert!(
+    it.seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
+      .is_none()
+  );
+  assert!(
+    it.seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
+      .is_none()
+  );
+  assert!(
+    it.seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
+      .is_none()
+  );
+  assert!(
+    it.seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
+      .is_none()
+  );
   assert!(l.first().is_none());
   assert!(l.last().is_none());
 
@@ -135,10 +139,11 @@ where
     .unwrap()
     .unwrap();
 
-  assert!(l
-    .get_or_insert(b"c".as_slice(), [].as_slice())
-    .unwrap()
-    .is_none());
+  assert!(
+    l.get_or_insert(b"c".as_slice(), [].as_slice())
+      .unwrap()
+      .is_none()
+  );
 
   #[cfg(feature = "memmap")]
   l.flush().unwrap();
@@ -1297,7 +1302,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -1337,7 +1342,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -1391,7 +1396,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -1418,7 +1423,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -1467,7 +1472,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -1493,7 +1498,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });

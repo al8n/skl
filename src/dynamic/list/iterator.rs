@@ -1,5 +1,5 @@
 use super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
-use crate::{allocator::Node, State, Transfer};
+use crate::{State, Transfer, allocator::Node};
 use core::{
   borrow::Borrow,
   ops::{Bound, RangeBounds},

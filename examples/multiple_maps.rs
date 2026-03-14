@@ -1,9 +1,9 @@
 use skl::{
-  dynamic::{
-    unique::{sync::SkipMap, Map},
-    Ascend, Builder,
-  },
   Arena,
+  dynamic::{
+    Ascend, Builder,
+    unique::{Map, sync::SkipMap},
+  },
 };
 
 pub fn key(i: usize) -> Vec<u8> {

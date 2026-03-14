@@ -226,7 +226,7 @@ pub trait Arena: List {
   /// let w = data[0]; // undefined behavior
   /// ```
   unsafe fn clear(&mut self) -> Result<(), Error> {
-    self.allocator_mut().clear().map_err(Into::into)
+    unsafe { self.allocator_mut().clear().map_err(Into::into) }
   }
 
   /// Returns the mutable reserved bytes of the allocator specified in the [`Options::with_reserved`].
@@ -239,7 +239,7 @@ pub trait Arena: List {
   #[allow(clippy::mut_from_ref)]
   #[inline]
   unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
-    self.as_ref().allocator().reserved_slice_mut()
+    unsafe { self.as_ref().allocator().reserved_slice_mut() }
   }
 
   /// Returns the path of the mmap file, only returns `Some` when the ARENA is backed by a mmap file.

@@ -3,11 +3,10 @@ use either::Either;
 use rarena_allocator::{Allocator as ArenaAllocator, Buffer, BytesRefMut};
 
 use super::{
-  decode_key_size_and_height, encode_key_size_and_height,
+  REMOVE, Version, decode_key_size_and_height, encode_key_size_and_height,
   error::{ArenaError, Error},
   options::Options,
-  types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  Version, REMOVE,
+  types::{Height, KeyBuilder, ValueBuilder, internal::ValuePointer as ValuePointerType},
 };
 
 use core::{marker::PhantomData, mem, ptr::NonNull, sync::atomic::Ordering};
@@ -24,7 +23,7 @@ mod sealed {
 
   use among::Among;
 
-  use crate::{internal::Flags, Header};
+  use crate::{Header, internal::Flags};
 
   use super::*;
 
@@ -188,7 +187,7 @@ mod sealed {
         return None;
       }
 
-      Some(arena.get_bytes(offset as usize, len as usize))
+      unsafe { Some(arena.get_bytes(offset as usize, len as usize)) }
     }
 
     /// ## Safety
@@ -205,7 +204,7 @@ mod sealed {
         return None;
       }
 
-      Some(arena.get_bytes(offset as usize, len as usize))
+      unsafe { Some(arena.get_bytes(offset as usize, len as usize)) }
     }
 
     /// ## Safety
@@ -223,7 +222,7 @@ mod sealed {
       }
 
       (
-        Some(arena.get_bytes(offset as usize, len as usize)),
+        unsafe { Some(arena.get_bytes(offset as usize, len as usize)) },
         ValuePointerType::new(offset, len),
       )
     }
@@ -248,8 +247,10 @@ mod sealed {
       let tower_ptr_offset = self.offset() as usize
         + mem::size_of::<Self::Node>()
         + idx * mem::size_of::<<Self::Node as Node>::Link>();
-      let tower_ptr = arena.get_pointer(tower_ptr_offset);
-      &*tower_ptr.cast()
+      unsafe {
+        let tower_ptr = arena.get_pointer(tower_ptr_offset);
+        &*tower_ptr.cast()
+      }
     }
 
     #[inline]
@@ -263,9 +264,11 @@ mod sealed {
       let tower_ptr_offset = self.offset() as usize
         + mem::size_of::<Self::Node>()
         + idx * mem::size_of::<<Self::Node as Node>::Link>();
-      let tower_ptr: *mut <Self::Node as Node>::Link =
-        arena.get_pointer_mut(tower_ptr_offset).cast();
-      *tower_ptr = Link::new(next_offset, prev_offset);
+      unsafe {
+        let tower_ptr: *mut <Self::Node as Node>::Link =
+          arena.get_pointer_mut(tower_ptr_offset).cast();
+        *tower_ptr = Link::new(next_offset, prev_offset);
+      }
     }
 
     /// ## Safety
@@ -374,7 +377,7 @@ mod sealed {
     /// - The caller must ensure that the node is allocated by the arena.
     #[inline]
     unsafe fn get_key<'a, 'b: 'a, A: Allocator>(&'a self, arena: &'b A) -> &'b [u8] {
-      arena.get_bytes(self.key_offset() as usize, self.key_size() as usize)
+      unsafe { arena.get_bytes(self.key_offset() as usize, self.key_size() as usize) }
     }
 
     /// ## Safety
@@ -388,7 +391,7 @@ mod sealed {
         return None;
       }
 
-      Some(arena.get_bytes(offset as usize, len as usize))
+      unsafe { Some(arena.get_bytes(offset as usize, len as usize)) }
     }
 
     /// ## Safety
@@ -405,7 +408,7 @@ mod sealed {
         return None;
       }
 
-      Some(arena.get_bytes(offset as usize, len as usize))
+      unsafe { Some(arena.get_bytes(offset as usize, len as usize)) }
     }
 
     /// ## Safety
@@ -422,7 +425,7 @@ mod sealed {
       }
 
       (
-        Some(arena.get_bytes(offset as usize, len as usize)),
+        unsafe { Some(arena.get_bytes(offset as usize, len as usize)) },
         ValuePointerType::new(offset, len),
       )
     }
@@ -563,7 +566,7 @@ mod sealed {
 
     #[inline]
     unsafe fn reserved_slice_mut(&self) -> &mut [u8] {
-      ArenaAllocator::reserved_slice_mut(Deref::deref(self))
+      unsafe { ArenaAllocator::reserved_slice_mut(Deref::deref(self)) }
     }
 
     #[inline]
@@ -624,10 +627,10 @@ mod sealed {
       offset: u32,
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, Pointer), E> {
-      let buf = self.get_pointer_mut(offset as usize);
-      let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
+      let buf = unsafe { self.get_pointer_mut(offset as usize) };
+      let mut oval = unsafe { VacantBuffer::new(size as usize, NonNull::new_unchecked(buf)) };
       if let Err(e) = f(&mut oval) {
-        self.dealloc(offset, size);
+        unsafe { self.dealloc(offset, size) };
         return Err(e);
       }
 
@@ -636,7 +639,7 @@ mod sealed {
       if remaining != 0 {
         #[cfg(feature = "tracing")]
         tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-        let deallocated = self.dealloc(offset + len as u32, remaining as u32);
+        let deallocated = unsafe { self.dealloc(offset + len as u32, remaining as u32) };
         if deallocated {
           return Ok((
             oval.len() as u32,
@@ -654,10 +657,10 @@ mod sealed {
       size: u32,
       f: impl FnOnce(&mut VacantBuffer<'a>) -> Result<usize, E>,
     ) -> Result<(u32, Pointer), E> {
-      let buf = self.get_pointer_mut(offset as usize);
-      let mut oval = VacantBuffer::new(size as usize, NonNull::new_unchecked(buf));
+      let buf = unsafe { self.get_pointer_mut(offset as usize) };
+      let mut oval = unsafe { VacantBuffer::new(size as usize, NonNull::new_unchecked(buf)) };
       if let Err(e) = f(&mut oval) {
-        self.dealloc(offset, size);
+        unsafe { self.dealloc(offset, size) };
         return Err(e);
       }
 
@@ -666,7 +669,7 @@ mod sealed {
       if remaining != 0 {
         #[cfg(feature = "tracing")]
         tracing::warn!("vacant value is not fully filled, remaining {remaining} bytes");
-        let deallocated = self.dealloc(offset + len as u32, remaining as u32);
+        let deallocated = unsafe { self.dealloc(offset + len as u32, remaining as u32) };
 
         if deallocated {
           return Ok((
@@ -699,9 +702,16 @@ mod sealed {
       &self,
       height: u32,
     ) -> Result<BytesRefMut<'_, Self::Allocator>, ArenaError> {
-      self.alloc_aligned_bytes::<Self::Node>(
+      let mut node = self.alloc_aligned_bytes::<Self::Node>(
         height * mem::size_of::<<Self::Node as Node>::Link>() as u32,
-      )
+      )?;
+      // Zero the tower links region so that next/prev offsets start as 0.
+      let tower_offset = mem::size_of::<Self::Node>();
+      let tower_size = height as usize * mem::size_of::<<Self::Node as Node>::Link>();
+      unsafe {
+        core::ptr::write_bytes(node.as_mut_ptr().add(tower_offset), 0, tower_size);
+      }
+      Ok(node)
     }
 
     /// Allocates a `Node`, key and value
@@ -774,9 +784,7 @@ mod sealed {
 
       unsafe {
         let mut node = self
-          .alloc_aligned_bytes::<Self::Node>(
-            height * mem::size_of::<<Self::Node as Node>::Link>() as u32,
-          )
+          .allocate_pure_node(height)
           .map_err(|e| Either::Right(e.into()))?;
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
@@ -818,9 +826,7 @@ mod sealed {
 
       unsafe {
         let mut node = self
-          .alloc_aligned_bytes::<Self::Node>(
-            height * mem::size_of::<<Self::Node as Node>::Link>() as u32,
-          )
+          .allocate_pure_node(height)
           .map_err(|e| Either::Right(e.into()))?;
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
@@ -877,9 +883,7 @@ mod sealed {
 
       unsafe {
         let mut node = self
-          .alloc_aligned_bytes::<Self::Node>(
-            height * mem::size_of::<<Self::Node as Node>::Link>() as u32,
-          )
+          .allocate_pure_node(height)
           .map_err(|e| Either::Right(e.into()))?;
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let node_offset = node.offset();
@@ -934,6 +938,11 @@ mod sealed {
         let node_ptr = node.as_mut_ptr().cast::<Self::Node>();
         let full_node = <Self::Node as Node>::full(value_offset as u32, max_height);
         ptr::write(node_ptr, full_node);
+
+        // Zero the tower links region so that next/prev offsets start as 0.
+        let tower_ptr = node.as_mut_ptr().add(mem::size_of::<Self::Node>());
+        let tower_size = max_height as usize * mem::size_of::<<Self::Node as Node>::Link>();
+        core::ptr::write_bytes(tower_ptr, 0, tower_size);
 
         Ok(NodePointer::new(
           node_offset as u32,

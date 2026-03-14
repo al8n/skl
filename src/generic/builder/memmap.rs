@@ -4,11 +4,11 @@ use either::Either;
 
 use super::Builder;
 use crate::{
+  Arena,
   allocator::{Node, Sealed},
   error::{bad_magic_version, bad_version, flags_mismtach, invalid_data},
   options::CURRENT_VERSION,
   traits::Constructable,
-  Arena,
 };
 
 impl<C> Builder<C> {

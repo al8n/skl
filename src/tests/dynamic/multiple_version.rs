@@ -12,9 +12,9 @@ use core::sync::atomic::Ordering;
 use dbutils::buffer::VacantBuffer;
 
 use crate::{
+  KeyBuilder, MIN_VERSION, ValueBuilder,
   allocator::WithVersion,
-  dynamic::{multiple_version::Map, Ascend},
-  KeyBuilder, ValueBuilder, MIN_VERSION,
+  dynamic::{Ascend, multiple_version::Map},
 };
 
 use super::*;
@@ -28,18 +28,22 @@ where
 
   assert!(it.seek_lower_bound::<[u8]>(Bound::Unbounded).is_none());
   assert!(it.seek_upper_bound::<[u8]>(Bound::Unbounded).is_none());
-  assert!(it
-    .seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
-    .is_none());
-  assert!(it
-    .seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
-    .is_none());
-  assert!(it
-    .seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
-    .is_none());
-  assert!(it
-    .seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
-    .is_none());
+  assert!(
+    it.seek_lower_bound::<[u8]>(Bound::Included(b"aaa"))
+      .is_none()
+  );
+  assert!(
+    it.seek_upper_bound::<[u8]>(Bound::Excluded(b"aaa"))
+      .is_none()
+  );
+  assert!(
+    it.seek_lower_bound::<[u8]>(Bound::Excluded(b"aaa"))
+      .is_none()
+  );
+  assert!(
+    it.seek_upper_bound::<[u8]>(Bound::Included(b"aaa"))
+      .is_none()
+  );
   assert!(l.first(MIN_VERSION,).is_none());
   assert!(l.last(MIN_VERSION,).is_none());
 
@@ -157,10 +161,11 @@ where
     .unwrap()
     .unwrap();
 
-  assert!(l
-    .get_or_insert(2, b"c".as_slice(), [].as_slice())
-    .unwrap()
-    .is_none());
+  assert!(
+    l.get_or_insert(2, b"c".as_slice(), [].as_slice())
+      .unwrap()
+      .is_none()
+  );
 
   #[cfg(feature = "memmap")]
   l.flush().unwrap();
@@ -455,15 +460,18 @@ where
   l.get_or_insert(3, b"c".as_slice(), b"c2".as_slice())
     .unwrap();
 
-  assert!(l
-    .lower_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
-    .is_none());
-  assert!(l
-    .lower_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
-    .is_none());
-  assert!(l
-    .lower_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
-    .is_none());
+  assert!(
+    l.lower_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
+      .is_none()
+  );
+  assert!(
+    l.lower_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
+      .is_none()
+  );
+  assert!(
+    l.lower_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
+      .is_none()
+  );
 
   let ent = l.lower_bound(1, Bound::Included(b"a".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
@@ -525,9 +533,10 @@ where
   assert_eq!(ent.value(), b"c2".as_slice());
   assert_eq!(ent.version(), 3);
 
-  assert!(l
-    .lower_bound(MIN_VERSION, Bound::Included(b"d".as_slice()))
-    .is_none());
+  assert!(
+    l.lower_bound(MIN_VERSION, Bound::Included(b"d".as_slice()))
+      .is_none()
+  );
   assert!(l.lower_bound(1, Bound::Included(b"d".as_slice())).is_none());
   assert!(l.lower_bound(2, Bound::Included(b"d".as_slice())).is_none());
   assert!(l.lower_bound(3, Bound::Included(b"d".as_slice())).is_none());
@@ -548,15 +557,18 @@ where
   l.get_or_insert(3, b"c".as_slice(), b"c2".as_slice())
     .unwrap();
 
-  assert!(l
-    .upper_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
-    .is_none());
-  assert!(l
-    .upper_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
-    .is_none());
-  assert!(l
-    .upper_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
-    .is_none());
+  assert!(
+    l.upper_bound(MIN_VERSION, Bound::Included(b"a".as_slice()))
+      .is_none()
+  );
+  assert!(
+    l.upper_bound(MIN_VERSION, Bound::Included(b"b".as_slice()))
+      .is_none()
+  );
+  assert!(
+    l.upper_bound(MIN_VERSION, Bound::Included(b"c".as_slice()))
+      .is_none()
+  );
 
   let ent = l.upper_bound(1, Bound::Included(b"a".as_slice())).unwrap();
   assert_eq!(ent.key(), b"a".as_slice());
@@ -653,15 +665,18 @@ where
   l.get_or_insert(3, b"c".as_slice(), b"c2".as_slice())
     .unwrap();
 
-  assert!(l
-    .upper_bound(MIN_VERSION, Bound::Excluded(b"a".as_slice()))
-    .is_none());
-  assert!(l
-    .upper_bound(MIN_VERSION, Bound::Excluded(b"b".as_slice()))
-    .is_none());
-  assert!(l
-    .upper_bound(MIN_VERSION, Bound::Excluded(b"c".as_slice()))
-    .is_none());
+  assert!(
+    l.upper_bound(MIN_VERSION, Bound::Excluded(b"a".as_slice()))
+      .is_none()
+  );
+  assert!(
+    l.upper_bound(MIN_VERSION, Bound::Excluded(b"b".as_slice()))
+      .is_none()
+  );
+  assert!(
+    l.upper_bound(MIN_VERSION, Bound::Excluded(b"c".as_slice()))
+      .is_none()
+  );
   assert!(l.upper_bound(1, Bound::Excluded(b"a".as_slice())).is_none());
   assert!(l.upper_bound(2, Bound::Excluded(b"a".as_slice())).is_none());
 
@@ -1449,9 +1464,10 @@ where
   }
 
   let mut it = l.iter_all(MIN_VERSION);
-  assert!(it
-    .seek_upper_bound(Bound::Excluded(b"".as_slice()))
-    .is_none());
+  assert!(
+    it.seek_upper_bound(Bound::Excluded(b"".as_slice()))
+      .is_none()
+  );
 
   let ent = it.seek_upper_bound(Bound::Excluded(b"01000".as_slice()));
   assert!(ent.is_none());
@@ -1476,10 +1492,11 @@ where
 
   l.get_or_insert(MIN_VERSION, [].as_slice(), [].as_slice())
     .unwrap();
-  assert!(l
-    .as_ref()
-    .upper_bound(MIN_VERSION, Bound::Excluded(&[]))
-    .is_none());
+  assert!(
+    l.as_ref()
+      .upper_bound(MIN_VERSION, Bound::Excluded(&[]))
+      .is_none()
+  );
 
   let ent = it.seek_upper_bound::<[u8]>(Bound::Excluded(b""));
   assert!(ent.is_none());
@@ -1952,7 +1969,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -1992,7 +2009,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -2046,7 +2063,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -2073,7 +2090,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -2122,7 +2139,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });
@@ -2148,7 +2165,7 @@ where
     let err = val.put_slice(&[1]).unwrap_err();
     assert_eq!(
       std::string::ToString::to_string(&err),
-      "incomplete buffer data: expected 0 bytes for decoding, but only 1 bytes were available"
+      "insufficient buffer: expected 0 bytes for encoding, but only 1 bytes were available"
     );
     Ok(encoded_size)
   });

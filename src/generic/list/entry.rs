@@ -5,10 +5,10 @@ use dbutils::{
 
 use super::{RefCounter, SkipList};
 use crate::{
+  Transfer, Version,
   allocator::{Allocator, Node, NodePointer, WithVersion},
   generic::{Active, MaybeTombstone, State},
   types::internal::ValuePointer,
-  Transfer, Version,
 };
 
 /// An entry reference of the `SkipMap`.

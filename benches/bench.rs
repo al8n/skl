@@ -2,8 +2,8 @@ use criterion::*;
 use parking_lot::Mutex;
 use rand::prelude::*;
 use skl::generic::{
-  unique::{sync::SkipMap, Map},
   Builder,
+  unique::{Map, sync::SkipMap},
 };
 use std::{
   collections::*,
@@ -57,13 +57,13 @@ fn bench_read_write_fixed_skiplist_frac(b: &mut Bencher<'_>, frac: &usize) {
     let mut rng = rand::rng();
     while !s.load(Ordering::SeqCst) {
       let key = random_key(&mut rng);
-      let case = (key, frac > rng.gen_range(0..11));
+      let case = (key, frac > rng.random_range(0..11));
       fixed_skiplist_round(&l, &case, &v);
     }
   });
   let mut rng = rand::rng();
   b.iter_batched_ref(
-    || (random_key(&mut rng), frac > rng.gen_range(0..11)),
+    || (random_key(&mut rng), frac > rng.random_range(0..11)),
     |case| fixed_skiplist_round(&list, case, &value),
     BatchSize::SmallInput,
   );
@@ -108,7 +108,7 @@ fn bench_read_write_fixed_map_frac(b: &mut Bencher<'_>, frac: &usize) {
   let h = thread::spawn(move || {
     let mut rng = rand::rng();
     while !s.load(Ordering::SeqCst) {
-      let f = rng.gen_range(0..11);
+      let f = rng.random_range(0..11);
       let case = (random_key(&mut rng), f < frac);
       map_round(&m, &case, &v);
     }
@@ -116,7 +116,7 @@ fn bench_read_write_fixed_map_frac(b: &mut Bencher<'_>, frac: &usize) {
   let mut rng = rand::rng();
   b.iter_batched_ref(
     || {
-      let f = rng.gen_range(0..11);
+      let f = rng.random_range(0..11);
       (random_key(&mut rng), f < frac)
     },
     |case| map_round(&map, case, &value),

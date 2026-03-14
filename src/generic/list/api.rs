@@ -11,15 +11,15 @@ use dbutils::{
 use rarena_allocator::Allocator as _;
 
 use crate::{
+  Header, Version,
   allocator::{Allocator, Meta, Node, NodePointer},
   error::Error,
   generic::{Active, MaybeTombstone},
   random_height, ty_ref,
   types::{Height, ValueBuilder},
-  Header, Version,
 };
 
-use super::{iterator, EntryRef, RefCounter, SkipList};
+use super::{EntryRef, RefCounter, SkipList, iterator};
 
 mod update;
 

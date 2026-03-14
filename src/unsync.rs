@@ -5,9 +5,10 @@ use core::{cell::UnsafeCell, ptr::NonNull};
 use crate::internal::Flags;
 
 use super::{
+  MIN_VERSION, REMOVE, Version,
   allocator::{Link as ContainerLink, *},
   common::*,
-  decode_value_pointer, encode_value_pointer, Version, MIN_VERSION, REMOVE,
+  decode_value_pointer, encode_value_pointer,
 };
 
 /// The reference counter type used in the unsync `SkipMap`.

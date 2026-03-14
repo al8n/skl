@@ -2,12 +2,12 @@ use core::mem;
 
 use super::{super::Options, Ascend};
 use crate::{
+  Arena,
   allocator::Sealed,
   error::Error,
   options::{CompressionPolicy, Freelist},
   traits::Constructable,
   types::{Height, KeySize},
-  Arena,
 };
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]

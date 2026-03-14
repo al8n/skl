@@ -1,8 +1,8 @@
 use crate::{
+  Active, MaybeTombstone, State, Transfer, Version,
   allocator::{Allocator, Node, NodePointer, WithVersion},
   dynamic::list::SkipList,
   ref_counter::RefCounter,
-  Active, MaybeTombstone, State, Transfer, Version,
 };
 use dbutils::equivalentor::BytesComparator;
 

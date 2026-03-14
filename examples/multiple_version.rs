@@ -1,6 +1,6 @@
 use skl::generic::{
-  multiple_version::{sync::SkipMap, Map},
   Builder,
+  multiple_version::{Map, sync::SkipMap},
 };
 
 pub fn key(i: usize) -> String {

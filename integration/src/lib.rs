@@ -5,7 +5,9 @@ pub fn key(i: usize) -> Vec<u8> {
 
 /// Only used for testing
 pub fn big_value(i: usize) -> Vec<u8> {
-  format!("{:01048576}", i).into_bytes()
+  let mut v = ::std::format!("{}", i).into_bytes();
+  v.resize(1048576, b'0');
+  v
 }
 
 /// Only used for testing

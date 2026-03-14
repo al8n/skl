@@ -4,7 +4,7 @@ use super::{
   Arena, GenericAllocator, Link, Node, Ordering, UnsyncValuePointer, ValuePointer, Version,
   VersionedMeta, WithVersion,
 };
-use crate::{internal::Flags, MIN_VERSION};
+use crate::{MIN_VERSION, internal::Flags};
 
 /// The allocator used to allocate nodes in the `SkipMap`.
 pub type Allocator = GenericAllocator<VersionedMeta, VersionedNode, Arena>;

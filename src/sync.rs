@@ -6,9 +6,10 @@ use std::sync::Arc;
 use crate::internal::Flags;
 
 use super::{
+  MIN_VERSION, REMOVE, Version,
   allocator::{Link as ContainerLink, *},
   common::*,
-  decode_value_pointer, encode_value_pointer, Version, MIN_VERSION, REMOVE,
+  decode_value_pointer, encode_value_pointer,
 };
 
 /// The reference counter type used in the `SkipMap`.
@@ -87,8 +88,8 @@ impl crate::allocator::Meta for VersionedMeta {
       match self.maximum_version.compare_exchange_weak(
         current,
         version,
-        Ordering::SeqCst,
-        Ordering::Acquire,
+        Ordering::Release,
+        Ordering::Relaxed,
       ) {
         Ok(_) => break,
         Err(v) => current = v,
@@ -106,8 +107,8 @@ impl crate::allocator::Meta for VersionedMeta {
       match self.minimum_version.compare_exchange_weak(
         current,
         version,
-        Ordering::SeqCst,
-        Ordering::Acquire,
+        Ordering::Release,
+        Ordering::Relaxed,
       ) {
         Ok(_) => break,
         Err(v) => current = v,
@@ -338,7 +339,7 @@ macro_rules! node_pointer {
       /// - The caller must ensure that the node is allocated by the arena.
       /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
       unsafe fn next_offset<A: $crate::allocator::Allocator>(&self, arena: &A, idx: usize) -> u32 {
-        self.tower(arena, idx).next_offset.load(Ordering::Acquire)
+        unsafe { self.tower(arena, idx).next_offset.load(Ordering::Acquire) }
       }
 
       /// ## Safety
@@ -346,7 +347,7 @@ macro_rules! node_pointer {
       /// - The caller must ensure that the node is allocated by the arena.
       /// - The caller must ensure that the offset is less than the capacity of the arena and larger than 0.
       unsafe fn prev_offset<A: $crate::allocator::Allocator>(&self, arena: &A, idx: usize) -> u32 {
-        self.tower(arena, idx).prev_offset.load(Ordering::Acquire)
+        unsafe { self.tower(arena, idx).prev_offset.load(Ordering::Acquire) }
       }
 
       /// ## Safety
@@ -362,10 +363,12 @@ macro_rules! node_pointer {
         success: Ordering,
         failure: Ordering,
       ) -> Result<u32, u32> {
-        self
-          .tower(arena, idx)
-          .prev_offset
-          .compare_exchange(current, new, success, failure)
+        unsafe {
+          self
+            .tower(arena, idx)
+            .prev_offset
+            .compare_exchange(current, new, success, failure)
+        }
       }
 
       /// ## Safety
@@ -381,10 +384,12 @@ macro_rules! node_pointer {
         success: Ordering,
         failure: Ordering,
       ) -> Result<u32, u32> {
-        self
-          .tower(arena, idx)
-          .next_offset
-          .compare_exchange(current, new, success, failure)
+        unsafe {
+          self
+            .tower(arena, idx)
+            .next_offset
+            .compare_exchange(current, new, success, failure)
+        }
       }
 
       #[inline]

@@ -3,12 +3,12 @@ use core::mem;
 use dbutils::equivalentor::{Ascend, BytesComparator};
 
 use crate::{
+  Arena, Options,
   allocator::Sealed,
   error::Error,
   options::{CompressionPolicy, Freelist},
   traits::Constructable,
   types::{Height, KeySize},
-  Arena, Options,
 };
 
 #[cfg(all(feature = "memmap", not(target_family = "wasm")))]

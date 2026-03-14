@@ -5,7 +5,7 @@ use dbutils::{
   types::{LazyRef, Type},
 };
 
-use crate::{allocator::Node, generic::State, Transfer};
+use crate::{Transfer, allocator::Node, generic::State};
 
 use super::super::{Allocator, EntryRef, NodePointer, RefCounter, SkipList, Version};
 

@@ -8,14 +8,14 @@ use dbutils::{buffer::VacantBuffer, equivalentor::BytesComparator};
 use rarena_allocator::Allocator as _;
 
 use crate::{
+  Active, Header, MaybeTombstone, Version,
   allocator::{Allocator, Meta, Node, NodePointer},
   error::Error,
   random_height,
   types::{Height, ValueBuilder},
-  Active, Header, MaybeTombstone, Version,
 };
 
-use super::{iterator, EntryRef, RefCounter, SkipList};
+use super::{EntryRef, RefCounter, SkipList, iterator};
 
 mod update;
 

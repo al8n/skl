@@ -1,6 +1,6 @@
 use skl::generic::{
-  unique::{sync::SkipMap, Map},
   Builder,
+  unique::{Map, sync::SkipMap},
 };
 
 pub fn key(i: usize) -> String {

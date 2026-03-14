@@ -6,6 +6,7 @@ use either::Either;
 use rarena_allocator::Allocator as _;
 
 use crate::{
+  FindResult, Header, Inserter, MaybeTombstone, Splice, Transfer, Version,
   allocator::{Allocator, Deallocator, Meta, Node, NodePointer, Pointer, ValuePointer},
   encode_key_size_and_height,
   error::Error,
@@ -14,8 +15,7 @@ use crate::{
   random_height,
   ref_counter::RefCounter,
   traits::Constructable,
-  types::{internal::ValuePointer as ValuePointerType, Height, KeyBuilder, ValueBuilder},
-  FindResult, Header, Inserter, MaybeTombstone, Splice, Transfer, Version,
+  types::{Height, KeyBuilder, ValueBuilder, internal::ValuePointer as ValuePointerType},
 };
 
 mod entry;
@@ -241,7 +241,7 @@ where
       match meta.compare_exchange_height_weak(
         list_height,
         height as u8,
-        Ordering::SeqCst,
+        Ordering::Release,
         Ordering::Acquire,
       ) {
         // Successfully increased skiplist.height.
@@ -995,8 +995,8 @@ where
                 i,
                 next_prev_offset,
                 prev_offset,
-                Ordering::SeqCst,
-                Ordering::Acquire,
+                Ordering::Release,
+                Ordering::Relaxed,
               );
             }
           }
@@ -1006,7 +1006,7 @@ where
             i,
             next.offset(),
             unlinked_node.offset(),
-            Ordering::SeqCst,
+            Ordering::Release,
             Ordering::Acquire,
           ) {
             Ok(_) => {
@@ -1025,8 +1025,8 @@ where
                 i,
                 prev_offset,
                 unlinked_node.offset(),
-                Ordering::SeqCst,
-                Ordering::Acquire,
+                Ordering::Release,
+                Ordering::Relaxed,
               );
 
               break;
@@ -1103,10 +1103,15 @@ where
       }
     }
 
-    // If we had to recompute the splice for a level, invalidate the entire
-    // cached splice.
     if invalid_data_splice {
-      ins.height = 0;
+      // If we had to recompute the splice for a level, invalidate the cached
+      // splice above the insertion height. The levels below the insertion height
+      // are still valid because we successfully inserted the node there and can
+      // optimistically update them.
+      for i in 0..(height as usize) {
+        ins.spl[i].prev = unlinked_node;
+      }
+      ins.height = height as u32;
     } else {
       // The splice was valid. We inserted a node between spl[i].prev and
       // spl[i].next. Optimistically update spl[i].prev for use in a subsequent

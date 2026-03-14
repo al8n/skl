@@ -9,22 +9,22 @@ use dbutils::{buffer::VacantBuffer, equivalentor::BytesComparator};
 use either::Either;
 
 use crate::{
+  Active, Arena, Header, Height, KeyBuilder, MIN_VERSION, MaybeTombstone, ValueBuilder,
   allocator::{Allocator, Sealed, WithoutVersion},
   error::Error,
   ref_counter::RefCounter,
-  Active, Arena, Header, Height, KeyBuilder, MaybeTombstone, ValueBuilder, MIN_VERSION,
 };
 
 use super::{
-  list::{iterator::Iter, EntryRef},
   Ascend,
+  list::{EntryRef, iterator::Iter},
 };
 
 /// Implementations for single-threaded environments.
 pub mod unsync {
   use dbutils::equivalentor::Ascend;
 
-  pub use crate::unsync::{map::Allocator, RefCounter};
+  pub use crate::unsync::{RefCounter, map::Allocator};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_unsync_map,))]
   mod tests {
@@ -94,7 +94,7 @@ pub mod unsync {
 pub mod sync {
   use dbutils::equivalentor::Ascend;
 
-  pub use crate::sync::{map::Allocator, RefCounter};
+  pub use crate::sync::{RefCounter, map::Allocator};
 
   #[cfg(any(all(test, not(miri)), all_skl_tests, test_dynamic_sync_map,))]
   mod tests {

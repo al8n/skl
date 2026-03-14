@@ -154,7 +154,7 @@ struct FindResult<P> {
 /// Utility function to generate a random height for a new node.
 #[cfg(feature = "std")]
 pub fn random_height(max_height: Height) -> Height {
-  use rand::{rng, Rng};
+  use rand::{RngExt, rng};
   let mut rng = rng();
   let rnd: u32 = rng.random();
   let mut h = 1;
@@ -169,12 +169,12 @@ pub fn random_height(max_height: Height) -> Height {
 /// Utility function to generate a random height for a new node.
 #[cfg(not(feature = "std"))]
 pub fn random_height(max_height: Height) -> Height {
-  use rand::{rngs::OsRng, TryRngCore};
+  use rand::{TryRngCore, rngs::SysRng};
 
   let max_height = max_height.to_usize();
-  let rnd: u32 = OsRng
+  let rnd: u32 = SysRng
     .try_next_u32()
-    .expect("failed to generate random number through OsRng");
+    .expect("failed to generate random number through SysRng");
   let mut h = 1;
 
   while h < max_height && rnd <= PROBABILITIES[h] {

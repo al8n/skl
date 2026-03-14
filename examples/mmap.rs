@@ -1,6 +1,6 @@
 use skl::dynamic::{
-  unique::{sync::SkipMap, Map},
   Builder,
+  unique::{Map, sync::SkipMap},
 };
 
 pub fn key(i: usize) -> Vec<u8> {
